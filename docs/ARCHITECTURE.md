@@ -88,5 +88,9 @@ the key first.
 * Parameter `id` = its index in the plugin's `params()` list. Built-in instrument
   ids (`"lyra.kick"`) are saved in projects and are never renamed.
 * Knobs everywhere: drag = change, Shift = fine, wheel = nudge, double-click = reset.
+* **egui lock rule:** never call another `ctx`/`ui.ctx()` method inside a
+  `ctx.input(|i| …)` (or `memory`, `data`…) closure. egui's context lock is not
+  re-entrant, so the nested call deadlocks the UI thread. Copy the values out
+  first, then call. (This froze the app on the first click in v0.1.)
 * Theme tokens and textures live only in `lyra-app/src/theme.rs`. Generated
   textures are placeholders for hand-made art.

@@ -9,11 +9,21 @@
 //! | `LYRA_SILENT=1` | engine runs normally, but the sound card gets zeros (see `audio.rs`) |
 //! | `LYRA_OPEN=piano,settings` | open these windows on launch |
 //! | `LYRA_BUFFER=n` | audio ring size in frames (see `audio.rs`) |
+//! | `LYRA_SCRIPT="…"` | synthetic input, one step per frame (see below) |
+//!
+//! Script steps, separated by `;`: `wait N` (frames), `move X Y` (points),
+//! `down` / `up` (left button), `rdown` / `rup` (right button), `click`,
+//! `wheel DY`, `key NAME` (an egui key name, e.g. `Space`, `ArrowUp`),
+//! `log` (print the step counter). Example — drag the first volume knob up:
+//! `LYRA_SCRIPT="wait 30; move 71 134; down; move 71 120; move 71 100; up"`
 
 use egui::{Context, ViewportCommand};
 use std::path::PathBuf;
 
 pub struct DevTools {
+    script: Vec<String>,
+    script_wait: u32,
+    pointer: egui::Pos2,
     screenshot: Option<PathBuf>,
     frames_left: u32,
     requested: bool,
@@ -27,7 +37,13 @@ fn flag(name: &str) -> bool {
 
 impl DevTools {
     pub fn from_env() -> Self {
+        let script = std::env::var("LYRA_SCRIPT")
+            .map(|s| s.split(';').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).rev().collect())
+            .unwrap_or_default();
         Self {
+            script,
+            script_wait: 0,
+            pointer: egui::Pos2::ZERO,
             screenshot: std::env::var_os("LYRA_SCREENSHOT").map(PathBuf::from),
             frames_left: std::env::var("LYRA_SCREENSHOT_FRAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(45),
             requested: false,
@@ -35,6 +51,63 @@ impl DevTools {
             open: std::env::var("LYRA_OPEN")
                 .map(|v| v.split(',').map(|s| s.trim().to_lowercase()).collect())
                 .unwrap_or_default(),
+        }
+    }
+
+    /// Feed one scripted step into this frame's raw input.
+    pub fn inject(&mut self, ctx: &Context, raw: &mut egui::RawInput) {
+        if self.script.is_empty() {
+            return;
+        }
+        ctx.request_repaint();
+        if self.script_wait > 0 {
+            self.script_wait -= 1;
+            return;
+        }
+        let Some(step) = self.script.pop() else { return };
+        let parts: Vec<&str> = step.split_whitespace().collect();
+        let num = |i: usize| parts.get(i).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+        let button = |pressed: bool, button: egui::PointerButton, pos: egui::Pos2| egui::Event::PointerButton {
+            pos,
+            button,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let pos = self.pointer;
+        match parts.first().copied().unwrap_or("") {
+            "wait" => self.script_wait = num(1) as u32,
+            "move" => {
+                self.pointer = egui::pos2(num(1), num(2));
+                raw.events.push(egui::Event::PointerMoved(self.pointer));
+            }
+            "down" => raw.events.push(button(true, egui::PointerButton::Primary, pos)),
+            "up" => raw.events.push(button(false, egui::PointerButton::Primary, pos)),
+            "rdown" => raw.events.push(button(true, egui::PointerButton::Secondary, pos)),
+            "rup" => raw.events.push(button(false, egui::PointerButton::Secondary, pos)),
+            "click" => {
+                raw.events.push(button(true, egui::PointerButton::Primary, pos));
+                raw.events.push(button(false, egui::PointerButton::Primary, pos));
+            }
+            "wheel" => raw.events.push(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, num(1)),
+                modifiers: egui::Modifiers::NONE,
+            }),
+            "key" => {
+                if let Some(key) = parts.get(1).and_then(|n| egui::Key::from_name(n)) {
+                    for pressed in [true, false] {
+                        raw.events.push(egui::Event::Key {
+                            key,
+                            physical_key: Some(key),
+                            pressed,
+                            repeat: false,
+                            modifiers: egui::Modifiers::NONE,
+                        });
+                    }
+                }
+            }
+            "log" => eprintln!("lyra-script: {} steps left", self.script.len()),
+            other => eprintln!("lyra-script: unknown step {other:?}"),
         }
     }
 

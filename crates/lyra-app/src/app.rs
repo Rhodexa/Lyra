@@ -191,14 +191,22 @@ impl LyraApp {
 }
 
 /// Did this click land on this window (and not on something drawn above it)?
+///
+/// ⚠ Never call other `ctx` methods *inside* a `ctx.input(|i| …)` closure: egui
+/// holds its (non-re-entrant) context lock for the whole closure, so a nested
+/// `ctx.layer_id_at()` waits on itself forever. Read first, then ask.
 fn clicked_inside(ctx: &egui::Context, resp: &egui::Response) -> bool {
-    ctx.input(|i| {
-        (i.pointer.primary_pressed() || i.pointer.secondary_pressed())
-            && i.pointer.interact_pos().is_some_and(|pos| ctx.layer_id_at(pos) == Some(resp.layer_id))
-    })
+    let press = ctx.input(|i| {
+        (i.pointer.primary_pressed() || i.pointer.secondary_pressed()).then(|| i.pointer.interact_pos()).flatten()
+    });
+    press.is_some_and(|pos| ctx.layer_id_at(pos) == Some(resp.layer_id))
 }
 
 impl eframe::App for LyraApp {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        self.dev.inject(ctx, raw);
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.read_engine();
         let (playing, playhead) =

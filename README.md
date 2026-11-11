@@ -52,7 +52,8 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 ## Developer switches
 
 `LYRA_BUFFER=512` (audio ring size) · `LYRA_SILENT=1` · `LYRA_PLAY=1` ·
-`LYRA_OPEN=piano,editor` · `LYRA_SCREENSHOT=out.png`. See `crates/lyra-app/src/devtools.rs`.
+`LYRA_OPEN=piano,editor` · `LYRA_SCREENSHOT=out.png` ·
+`LYRA_SCRIPT="wait 30; move 71 134; down; move 71 110; up"` (synthetic input for UI tests). See `crates/lyra-app/src/devtools.rs`.
 
 ## Read more
 
