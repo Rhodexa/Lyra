@@ -18,9 +18,10 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Play / stop | `Space` |
 | Windows | `F6` channel rack · `F7` piano roll · `F8` instrument editor |
 | Patterns | `[` / `]` or the picker in the top bar (new, clone) |
-| Play notes | typing keyboard: `Z`–`M` and `Q`–`P` rows; `-` / `=` octave |
+| Play notes | typing keyboard: `Z`–`M` and `Q`–`P` rows; `-` / `=` octave (shown in the top bar) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Knobs | drag (Shift = fine), wheel, double-click to reset |
+| UI size | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` (starts at 115%, or `LYRA_ZOOM=1.3`) |
 
 **Channel rack**
 
@@ -29,8 +30,10 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Paint steps | click & drag across the rack. Right-drag erases |
 | Velocity / pitch of a step | mouse wheel / Shift + wheel |
 | Select / edit a channel | click its name / double-click it |
-| Piano roll, fill every 2/4/8, delete | right-click a channel name |
-| Mute / solo | click / right-click the channel's light |
+| Piano roll, clone, replace instrument, fill, delete | right-click a channel name |
+| Mute | click a light, or drag across several |
+| Solo | right-click a light (click dark ones to bring them back; right-click again for all) |
+| Pattern length | grows to fit your notes; the bars menu sets the minimum |
 | Open a melody | click its mini piano roll |
 
 **Piano roll**
@@ -42,12 +45,16 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Erase | right-click or right-drag |
 | Select | Ctrl+drag (Shift adds), `Ctrl+A` |
 | Stamp chords that fit the key | "stamp" menu, e.g. *Triad (in key)* |
-| Transpose / nudge | `↑` `↓` (Shift = octave) / `←` `→` |
-| Duplicate after / quantize / delete | `Ctrl+D` / `Ctrl+Q` / `Delete` |
-| No snap | hold `Alt` |
-| Scroll / zoom | wheel, Shift+wheel / Ctrl+wheel |
-| Velocity | drag in the lane at the bottom |
-| Pattern length | drag the gold marker in the ruler |
+| Transpose | `↑` `↓` or `Shift+↑↓` (semitone) / `Ctrl+↑↓` (octave) |
+| Nudge | `←` `→` (snap) / `Ctrl+←→` (beat) |
+| Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` (pastes in place, selected) |
+| Duplicate after / quantize / delete | `Ctrl+D` or `Ctrl+B` / `Ctrl+Q` / `Delete` |
+| No snap | hold `Alt` (stays free for the rest of the drag) |
+| Scroll | wheel, Shift+wheel sideways, or drag the overview bar's thumb |
+| Zoom | Alt+wheel (time) · Ctrl+wheel (pitch) · drag the overview thumb's ends |
+| Velocity | wheel over a note, or drag in the lane at the bottom |
+| Move the playhead | click / drag in the ruler |
+| Key, scale, shading, ghosts | the "View" menu · "full screen" button |
 
 ## Developer switches
 

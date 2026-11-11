@@ -21,13 +21,13 @@ pub fn show(
     playing: bool,
     playhead: f64,
     logo: egui::TextureId,
+    octave: i32,
     actions: &mut Vec<Action>,
 ) {
     ui.horizontal_centered(|ui| {
         ui.add_space(4.0);
         widgets::logo(ui, logo);
-        ui.label(RichText::new("lyra").size(15.0).color(theme::MINT));
-        ui.add_space(16.0);
+        ui.add_space(12.0);
 
         if widgets::transport_button(ui, Icon::Play, playing, "Play / stop  (Space)").clicked() {
             actions.push(Action::TogglePlay);
@@ -76,6 +76,19 @@ pub fn show(
         }
         ui.add_space(14.0);
         pattern_picker(ui, p, h, st);
+        ui.add_space(14.0);
+
+        // Where the typing keyboard sits: Z plays this note (Q is an octave up).
+        ui.label(RichText::new("keys").small().color(theme::TEXT_DIM));
+        if ui.small_button("-").on_hover_text("Octave down  ( - )").clicked() {
+            actions.push(Action::Octave(-1));
+        }
+        let base = lyra_model::theory::note_name((48 + 12 * octave).clamp(0, 127) as u8);
+        ui.label(RichText::new(format!("Z = {base}")).monospace().color(theme::MINT))
+            .on_hover_text("The typing keyboard: Z–M is this octave, Q–P the next one up.");
+        if ui.small_button("+").on_hover_text("Octave up  ( = )").clicked() {
+            actions.push(Action::Octave(1));
+        }
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.add_space(8.0);

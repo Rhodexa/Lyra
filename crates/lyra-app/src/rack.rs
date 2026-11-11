@@ -6,13 +6,16 @@
 //!   Dragging works across rows too.
 //! * **right-drag** — erase.
 //! * **wheel** on a lit step — velocity. **Shift+wheel** — pitch.
+//! * **lights** — click to mute/unmute, **drag across** several to set them all
+//!   the same way · **right-click** — solo (mutes the others; click any dark
+//!   light to bring it back; right-click the soloed one again to unmute all)
 //! * **click a name** — select (the editor and piano roll follow) ·
 //!   **double-click** — open the instrument editor ·
 //!   **right-click** — piano roll, fill every 2/4/8 steps, clear, delete.
 //! * a channel with real melodies shows a mini piano roll instead of steps —
 //!   click it to open the piano roll.
 
-use crate::app::UiState;
+use crate::app::{Focus, UiState};
 use crate::theme::{self, cr, stroke};
 use crate::widgets;
 use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Response, Sense, StrokeKind, Ui};
@@ -46,27 +49,45 @@ pub fn tracked(r: &Response, h: &mut History, p: &Project) -> bool {
     r.changed()
 }
 
-/// "+ Channel" menu contents: drums, then synth presets. Shared with the editor.
-fn add_channel_menu(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+/// Drums, then synth presets. Returns (name, instrument id, params) when one is picked.
+fn instrument_menu(ui: &mut Ui) -> Option<(&'static str, &'static str, Vec<f32>)> {
+    let mut picked = None;
     ui.label(egui::RichText::new("DRUMS").small().color(theme::TEXT_DIM));
     for inst in lyra_dsp::INSTRUMENTS.iter().filter(|i| !i.melodic) {
         if ui.button(inst.name).clicked() {
-            h.checkpoint(p);
-            p.add_channel(inst.name, inst.id, lyra_dsp::default_params(inst.id));
-            st.selected = p.channels.len() - 1;
-            ui.close_menu();
+            picked = Some((inst.name, inst.id, lyra_dsp::default_params(inst.id)));
         }
     }
     ui.separator();
     ui.label(egui::RichText::new("SYNTH").small().color(theme::TEXT_DIM));
     for preset in lyra_dsp::PRESETS {
         if ui.button(preset.name).clicked() {
-            h.checkpoint(p);
-            p.add_channel(preset.name, preset.instrument, preset.params());
-            st.selected = p.channels.len() - 1;
-            st.show_piano = true;
-            ui.close_menu();
+            picked = Some((preset.name, preset.instrument, preset.params()));
         }
+    }
+    picked
+}
+
+fn add_channel_menu(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+    if let Some((name, instrument, params)) = instrument_menu(ui) {
+        h.checkpoint(p);
+        p.add_channel(name, instrument, params);
+        st.selected = p.channels.len() - 1;
+        if lyra_dsp::info(instrument).is_some_and(|i| i.melodic) {
+            st.show_piano = true;
+            st.raise = Some(Focus::Piano);
+        }
+        ui.close_menu();
+    }
+}
+
+/// FL-style solo: mute everyone else. Soloing the channel that is already the
+/// only one playing brings everybody back.
+fn solo(p: &mut Project, ci: usize) {
+    let alone = p.channels.iter().enumerate().all(|(i, c)| (i == ci) != c.mute);
+    for (i, c) in p.channels.iter_mut().enumerate() {
+        c.solo = false; // the old flag; mute flags are the whole truth now
+        c.mute = !alone && i != ci;
     }
 }
 
@@ -75,17 +96,22 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
 
     // ── Header ──
     ui.horizontal(|ui| {
-        let len = p.patterns[pat].length;
+        let len = p.patterns[pat].min_length;
         let mut new_len = len;
         let bars = |n: u32| format!("{} bar{}", n / 16, if n > 16 { "s" } else { "" });
-        egui::ComboBox::from_id_salt("pattern-length").width(64.0).selected_text(bars(len)).show_ui(ui, |ui| {
-            for n in [16, 32, 48, 64] {
-                ui.selectable_value(&mut new_len, n, bars(n));
-            }
-        });
+        egui::ComboBox::from_id_salt("pattern-length")
+            .width(64.0)
+            .selected_text(bars(len))
+            .show_ui(ui, |ui| {
+                for n in [16, 32, 48, 64] {
+                    ui.selectable_value(&mut new_len, n, bars(n));
+                }
+            })
+            .response
+            .on_hover_text("Shortest length. The pattern grows by itself to fit its notes.");
         if new_len != len {
             h.checkpoint(p);
-            p.patterns[pat].length = new_len;
+            p.patterns[pat].min_length = new_len;
         }
         ui.menu_button("+ Channel", |ui| add_channel_menu(ui, p, h, st));
     });
@@ -104,6 +130,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
     });
     if !any_down {
         st.paint = None;
+        st.led_paint = None;
     }
     let any_solo = p.any_solo();
     let mut delete = None;
@@ -111,7 +138,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
     // Long patterns scroll sideways instead of growing the window forever.
     // Row = light, two knobs, name, gap, steps (+ item spacing). Up to ~1000px, then scroll.
     let row_w = 12.0 + 18.0 * 2.0 + NAME_W + 8.0 + 5.0 * ui.spacing().item_spacing.x
-        + step_x(p.patterns[pat].length - 1)
+        + step_x(p.patterns[pat].play_length() - 1)
         + STEP_W;
     egui::ScrollArea::horizontal().min_scrolled_width(row_w.min(1000.0)).max_width(1000.0).show(ui, |ui| {
         for ci in 0..p.channels.len() {
@@ -151,20 +178,23 @@ fn row(
     let id = p.channels[ci].id;
     let color = theme::channel_color(p.channels[ci].color);
     ui.horizontal(|ui| {
-        // Mute / solo
-        let (mute, solo) = (p.channels[ci].mute, p.channels[ci].solo);
-        let audible = !mute && (!any_solo || solo);
-        let r = widgets::led(ui, audible, if solo { theme::GOLD } else { color }, "Click: mute · Right-click: solo");
-        if r.clicked() {
+        // Mute lights. Press one to flip it; keep the button down and sweep over
+        // others to set them the same way (one gesture, one undo step).
+        let mute = p.channels[ci].mute;
+        let audible = !mute && (!any_solo || p.channels[ci].solo);
+        let r = widgets::led(ui, audible, color, "Click / drag: mute · Right-click: solo");
+        let over = pointer.is_some_and(|_| ui.rect_contains_pointer(r.rect));
+        if over && primary {
             h.checkpoint(p);
-            p.channels[ci].mute = !mute;
+            st.led_paint = Some(audible); // audible → we're muting
+        }
+        if let (true, Some(muting)) = (over, st.led_paint) {
+            p.channels[ci].mute = muting;
+            p.channels[ci].solo = false;
         }
         if r.secondary_clicked() {
             h.checkpoint(p);
-            for c in &mut p.channels {
-                c.solo = false;
-            }
-            p.channels[ci].solo = !solo;
+            solo(p, ci);
         }
 
         // Pan & volume
@@ -214,18 +244,48 @@ fn row(
         if r.double_clicked() {
             st.selected = ci;
             st.show_editor = true;
+            st.raise = Some(Focus::Editor);
         }
         r.context_menu(|ui| {
             if ui.button("Piano roll").clicked() {
                 st.selected = ci;
                 st.show_piano = true;
+                st.raise = Some(Focus::Piano);
                 ui.close_menu();
             }
             if ui.button("Edit instrument").clicked() {
                 st.selected = ci;
                 st.show_editor = true;
+                st.raise = Some(Focus::Editor);
                 ui.close_menu();
             }
+            ui.separator();
+            if ui.button("Clone channel").on_hover_text("Same instrument and settings, no notes").clicked() {
+                h.checkpoint(p);
+                let mut copy = p.channels[ci].clone();
+                copy.name = format!("{} 2", copy.name);
+                let id = p.add_channel(&copy.name, &copy.instrument, copy.params.clone());
+                let new = p.channels.pop().expect("just added");
+                copy.id = id;
+                copy.color = new.color;
+                p.channels.insert(ci + 1, copy);
+                st.selected = ci + 1;
+                ui.close_menu();
+            }
+            ui.menu_button("Replace instrument", |ui| {
+                if let Some((name, instrument, params)) = instrument_menu(ui) {
+                    h.checkpoint(p);
+                    let ch = &mut p.channels[ci];
+                    if lyra_dsp::info(&ch.instrument).map(|i| i.name) == Some(ch.name.as_str())
+                        || lyra_dsp::PRESETS.iter().any(|pr| pr.name == ch.name)
+                    {
+                        ch.name = name.to_string(); // only rename channels still named after their instrument
+                    }
+                    ch.instrument = instrument.to_string();
+                    ch.params = params;
+                    ui.close_menu();
+                }
+            });
             ui.separator();
             for every in [2, 4, 8] {
                 if ui.button(format!("Fill every {every} steps")).clicked() {
@@ -248,7 +308,7 @@ fn row(
 
         ui.add_space(4.0);
 
-        let len = p.patterns[pat].length;
+        let len = p.patterns[pat].play_length();
         let (strip, strip_resp) = ui.allocate_exact_size(vec2(step_x(len - 1) + STEP_W, STEP_H), Sense::click_and_drag());
 
         // A melodic channel shows a mini piano roll; click it to open the real one.
@@ -257,6 +317,7 @@ fn row(
             if strip_resp.clicked() {
                 st.selected = ci;
                 st.show_piano = true;
+                st.raise = Some(Focus::Piano);
             }
             strip_resp.on_hover_text("Melody: click to open the piano roll");
             return;
@@ -325,12 +386,12 @@ fn preview(painter: &egui::Painter, r: Rect, p: &Project, pat: usize, ci: usize,
     painter.rect_filled(r, cr(3), theme::INSET);
     painter.rect_stroke(r, cr(3), stroke(1.0, theme::LINE), StrokeKind::Inside);
     let notes = p.patterns[pat].notes(p.channels[ci].id);
-    let len_ticks = (p.patterns[pat].length * TICKS_PER_STEP) as f32;
+    let len_ticks = (p.patterns[pat].play_length() * TICKS_PER_STEP) as f32;
     let (lo, hi) = notes.iter().fold((127u8, 0u8), |(lo, hi), n| (lo.min(n.key), hi.max(n.key)));
     let span = (hi.saturating_sub(lo) as f32).max(12.0);
     let inner = r.shrink2(vec2(3.0, 3.0));
     // Beat dividers so the preview lines up with step rows above and below.
-    for s in (4..p.patterns[pat].length).step_by(4) {
+    for s in (4..p.patterns[pat].play_length()).step_by(4) {
         let x = r.min.x + step_x(s) - (BEAT_GAP - STEP_GAP) * 0.5;
         painter.vline(x, inner.y_range(), stroke(1.0, theme::LINE));
     }

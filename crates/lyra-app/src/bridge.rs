@@ -106,5 +106,5 @@ fn compile(p: &Project, pat: &Pattern) -> Sequence {
         }
     }
     notes.sort_by_key(|n| n.start);
-    Sequence { length: pat.length * TICKS_PER_STEP, notes }
+    Sequence { length: pat.play_length() * TICKS_PER_STEP, notes }
 }

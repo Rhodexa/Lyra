@@ -113,8 +113,12 @@ struct Held {
 }
 
 pub enum Command {
+    /// Start playing from the start marker.
     Play,
+    /// Stop and return to the start marker.
     Stop,
+    /// Move the playhead (and the start marker) to this tick. Works playing or stopped.
+    Seek(f64),
     SetTempo(f64),
     /// 0 = straight, 1 = full triplet shuffle.
     SetSwing(f32),
@@ -231,6 +235,8 @@ pub struct Engine {
     playing: bool,
     /// Position inside the loop, in ticks.
     pos: f64,
+    /// Where Play starts and Stop returns to (set by Seek).
+    start_marker: f64,
     tempo: f64,
     swing: f32,
     master: f32,
@@ -257,6 +263,7 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
         seq: Box::default(),
         playing: false,
         pos: 0.0,
+        start_marker: 0.0,
         tempo: 124.0,
         swing: 0.0,
         master: 0.8,
@@ -304,11 +311,16 @@ impl Engine {
             match cmd {
                 Command::Play => {
                     self.playing = true;
-                    self.pos = 0.0;
+                    self.pos = self.start_marker;
+                }
+                Command::Seek(tick) => {
+                    let len = self.seq.length.max(1) as f64;
+                    self.start_marker = tick.clamp(0.0, len - 1.0);
+                    self.pos = self.start_marker;
                 }
                 Command::Stop => {
                     self.playing = false;
-                    self.pos = 0.0;
+                    self.pos = self.start_marker;
                     for ch in &mut self.channels {
                         ch.held.clear();
                         if ch.pending.len() < ch.pending.capacity() {
@@ -323,6 +335,7 @@ impl Engine {
                     let old = std::mem::replace(&mut self.seq, seq);
                     if self.seq.length > 0 {
                         self.pos %= self.seq.length as f64;
+                        self.start_marker %= self.seq.length as f64;
                     }
                     self.discard(Trash::Sequence(old));
                 }

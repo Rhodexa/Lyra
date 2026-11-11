@@ -10,9 +10,12 @@
 //!  Z X C V B N M ,             C3 … C4
 //! ```
 //!
-//! Editing keys (arrows, Delete, Ctrl+A/D/Q) are *routed* by the app to the
-//! window you last clicked in — e.g. arrows move notes in the piano roll, but
-//! pick channels in the rack.
+//! Editing keys (arrows, Delete, Ctrl+A/C/X/V/D/B/Q) are *routed* by the app
+//! to the window you last clicked in — e.g. arrows move notes in the piano
+//! roll, but pick channels in the rack.
+//!
+//! Arrows: ↑↓ or Shift+↑↓ = one semitone, Ctrl+↑↓ = one octave;
+//! ←→ = one snap step, Ctrl+←→ = one beat.
 
 use egui::{Context, Key};
 use std::collections::HashMap;
@@ -25,13 +28,21 @@ pub enum Action {
     Redo,
     NoteOn(u8),
     NoteOff(u8),
-    /// Arrow keys: (dx, dy) in {-1, 0, 1}; `big` = Shift held.
+    /// Arrow keys: (dx, dy) in {-1, 0, 1}; `big` = Ctrl held (octave / beat).
     Arrow { dx: i32, dy: i32, big: bool },
     Delete,
     SelectAll,
     Deselect,
+    Copy,
+    Cut,
+    Paste,
+    /// Duplicate the selection right after itself (Ctrl+D or Ctrl+B).
     Duplicate,
     Quantize,
+    /// Move the playhead / start marker to a tick (from clicking a timeline).
+    Seek(f64),
+    /// Shift the typing keyboard by this many octaves.
+    Octave(i32),
     PrevPattern,
     NextPattern,
     ToggleRack,
@@ -64,6 +75,9 @@ impl Keyboard {
             return out; // someone is typing into a text field
         }
         let events = ctx.input(|i| i.events.clone());
+        // Space means play/stop, always: take it away from egui so it can never
+        // also "press" whatever button or menu happens to have focus.
+        ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Space));
         for e in events {
             let egui::Event::Key { key, physical_key, pressed, repeat, modifiers, .. } = e else { continue };
             let k = physical_key.unwrap_or(key);
@@ -75,8 +89,15 @@ impl Keyboard {
                         Key::Z => out.push(Action::Undo),
                         Key::Y => out.push(Action::Redo),
                         Key::A => out.push(Action::SelectAll),
-                        Key::D => out.push(Action::Duplicate),
+                        Key::C => out.push(Action::Copy),
+                        Key::X => out.push(Action::Cut),
+                        Key::V => out.push(Action::Paste),
+                        Key::D | Key::B => out.push(Action::Duplicate),
                         Key::Q => out.push(Action::Quantize),
+                        Key::ArrowUp => out.push(Action::Arrow { dx: 0, dy: 1, big: true }),
+                        Key::ArrowDown => out.push(Action::Arrow { dx: 0, dy: -1, big: true }),
+                        Key::ArrowLeft => out.push(Action::Arrow { dx: -1, dy: 0, big: true }),
+                        Key::ArrowRight => out.push(Action::Arrow { dx: 1, dy: 0, big: true }),
                         _ => {}
                     }
                 }
@@ -99,7 +120,7 @@ impl Keyboard {
             if !pressed {
                 continue;
             }
-            let big = modifiers.shift;
+            let big = false; // plain or Shift: the small step
             match k {
                 // Arrows auto-repeat on purpose: hold to keep nudging.
                 Key::ArrowUp => out.push(Action::Arrow { dx: 0, dy: 1, big }),

@@ -74,7 +74,8 @@ pub fn knob(ui: &mut Ui, value: &mut f32, info: &ParamInfo, diameter: f32, color
 
 /// A round status light. `on` glows in `color`.
 pub fn led(ui: &mut Ui, on: bool, color: Color32, hint: &str) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::click());
+    // click_and_drag: a drag that starts on a light must sweep lights, not move the window.
+    let (rect, resp) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::click_and_drag());
     let p = ui.painter();
     let c = rect.center();
     if on {

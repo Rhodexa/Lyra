@@ -14,6 +14,7 @@
 //! Script steps, separated by `;`: `wait N` (frames), `move X Y` (points),
 //! `down` / `up` (left button), `rdown` / `rup` (right button), `click`,
 //! `wheel DY`, `key NAME` (an egui key name, e.g. `Space`, `ArrowUp`),
+//! `mods alt|shift|ctrl|none` (held modifiers, e.g. `mods alt+shift`),
 //! `log` (print the step counter). Example — drag the first volume knob up:
 //! `LYRA_SCRIPT="wait 30; move 71 134; down; move 71 120; move 71 100; up"`
 
@@ -24,6 +25,7 @@ pub struct DevTools {
     script: Vec<String>,
     script_wait: u32,
     pointer: egui::Pos2,
+    mods: egui::Modifiers,
     screenshot: Option<PathBuf>,
     frames_left: u32,
     requested: bool,
@@ -44,6 +46,7 @@ impl DevTools {
             script,
             script_wait: 0,
             pointer: egui::Pos2::ZERO,
+            mods: egui::Modifiers::NONE,
             screenshot: std::env::var_os("LYRA_SCREENSHOT").map(PathBuf::from),
             frames_left: std::env::var("LYRA_SCREENSHOT_FRAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(45),
             requested: false,
@@ -60,6 +63,7 @@ impl DevTools {
             return;
         }
         ctx.request_repaint();
+        raw.modifiers = self.mods;
         if self.script_wait > 0 {
             self.script_wait -= 1;
             return;
@@ -67,11 +71,12 @@ impl DevTools {
         let Some(step) = self.script.pop() else { return };
         let parts: Vec<&str> = step.split_whitespace().collect();
         let num = |i: usize| parts.get(i).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-        let button = |pressed: bool, button: egui::PointerButton, pos: egui::Pos2| egui::Event::PointerButton {
+        let mods = self.mods;
+        let button = move |pressed: bool, button: egui::PointerButton, pos: egui::Pos2| egui::Event::PointerButton {
             pos,
             button,
             pressed,
-            modifiers: egui::Modifiers::NONE,
+            modifiers: mods,
         };
         let pos = self.pointer;
         match parts.first().copied().unwrap_or("") {
@@ -105,6 +110,17 @@ impl DevTools {
                         });
                     }
                 }
+            }
+            "mods" => {
+                let spec = parts.get(1).copied().unwrap_or("none");
+                self.mods = egui::Modifiers {
+                    alt: spec.contains("alt"),
+                    shift: spec.contains("shift"),
+                    ctrl: spec.contains("ctrl"),
+                    command: spec.contains("ctrl"),
+                    mac_cmd: false,
+                };
+                raw.modifiers = self.mods;
             }
             "log" => eprintln!("lyra-script: {} steps left", self.script.len()),
             other => eprintln!("lyra-script: unknown step {other:?}"),

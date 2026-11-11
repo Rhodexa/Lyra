@@ -52,14 +52,15 @@ pub struct Channel {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pattern {
     pub name: String,
-    /// In steps (16 = one bar).
-    pub length: u32,
+    /// The shortest this pattern may be, in steps (16 = one bar). The pattern
+    /// grows by itself to fit its notes — see [`Pattern::play_length`].
+    pub min_length: u32,
     pub notes: BTreeMap<ChannelId, Vec<Note>>,
 }
 
 impl Pattern {
     pub fn new(name: &str) -> Self {
-        Self { name: name.to_string(), length: STEPS_PER_BAR, notes: BTreeMap::new() }
+        Self { name: name.to_string(), min_length: STEPS_PER_BAR, notes: BTreeMap::new() }
     }
 
     pub fn notes(&self, ch: ChannelId) -> &[Note] {
@@ -70,11 +71,13 @@ impl Pattern {
         self.notes.entry(ch).or_default()
     }
 
-    /// Grow the pattern (in whole bars) so every note fits. Never shrinks.
-    pub fn fit_to_notes(&mut self) {
-        let end = self.notes.values().flatten().map(|n| n.start + n.len).max().unwrap_or(0);
-        let bars = end.div_ceil(TICKS_PER_BAR).max(1);
-        self.length = self.length.max(bars * STEPS_PER_BAR);
+    /// How long the pattern plays, in steps: up to the end of the last bar that
+    /// has a note in it, but never shorter than `min_length`. Patterns are
+    /// dynamic — write into bar 3 and the loop becomes 3 bars, delete it and it shrinks.
+    pub fn play_length(&self) -> u32 {
+        // A note "fills" the bar it starts in; a long tail alone doesn't add a bar.
+        let last_bar = self.notes.values().flatten().map(|n| n.start / TICKS_PER_BAR + 1).max().unwrap_or(1);
+        (last_bar * STEPS_PER_BAR).max(self.min_length)
     }
 
     /// True when this channel's notes are all plain steps (one-step long, on
@@ -115,9 +118,10 @@ impl Pattern {
 
     /// Replace a channel's steps with "one every `every` steps".
     pub fn fill_every(&mut self, ch: ChannelId, every: u32) {
+        let length = self.play_length();
         let notes = self.notes.entry(ch).or_default();
         notes.clear();
-        for step in (0..self.length).step_by(every.max(1) as usize) {
+        for step in (0..length).step_by(every.max(1) as usize) {
             notes.push(Note {
                 start: step * TICKS_PER_STEP,
                 len: TICKS_PER_STEP,
@@ -264,6 +268,18 @@ mod tests {
         assert_eq!(p.notes(7)[0].start, 4 * TICKS_PER_STEP);
         assert!(p.set_step(7, 4, false, 0.0));
         assert!(p.notes(7).is_empty());
+    }
+
+    #[test]
+    fn patterns_grow_and_shrink_with_their_notes() {
+        let mut p = Pattern::new("t");
+        assert_eq!(p.play_length(), 16, "empty = one bar");
+        p.notes_mut(1).push(Note { start: 2 * TICKS_PER_BAR + 5, len: 10, key: 60, velocity: 1.0 });
+        assert_eq!(p.play_length(), 48, "a note in bar 3 makes it 3 bars");
+        p.notes_mut(1).clear();
+        assert_eq!(p.play_length(), 16, "and it shrinks back");
+        p.min_length = 32;
+        assert_eq!(p.play_length(), 32, "min_length is a floor");
     }
 
     #[test]

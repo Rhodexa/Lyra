@@ -60,6 +60,14 @@ as commands.
 * For the future video lane, wall-clock time is derived from ticks and tempo.
   The tempo map has to stay seconds-accurate.
 
+## Pattern length
+
+Patterns are dynamic. `Pattern::play_length()` runs to the end of the last bar
+that has a note starting in it, and never below `min_length` (the rack's bars
+menu). The engine gets that length each time the sequence is compiled.
+`Command::Seek` moves the playhead and the start marker: Play starts there and
+Stop returns there.
+
 ## Held notes
 
 Drums ignore note length, synths don't. When the engine plays a sequenced

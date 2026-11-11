@@ -48,7 +48,7 @@ pub fn project() -> Project {
 
     let pat = &mut p.patterns[0];
     pat.name = "Groove".into();
-    pat.length = 32;
+    pat.min_length = 32;
     for bar in [0u32, 16] {
         for s in [0, 4, 8, 12] {
             pat.set_step(kick, bar + s, true, 1.0);
