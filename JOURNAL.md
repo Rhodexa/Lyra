@@ -11,17 +11,13 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Friction
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
-- [ ] Placing or moving notes while playing back plays those notes, which is distracting. Notes should only play previews when the playhead is stopped.
 
 - [ ]
 
 ## Wishes
 *Things you wish Lyra did.*
-- [ ] MMB to pan around.
-- [ ] Notes, more forgiving resize zone, maybe extending a bit beyond/outside the note end. It's too small and hard to hit
+
 - [ ]
-- [ ] Button on toolbar to bring cahnnel rack back into context
-- [ ] Double right-click on ghost note to got to that channel
 
 ## Sound
 *Ears-only notes: "kick too clicky", "pad needs more air", "this preset slaps".*
@@ -37,11 +33,39 @@ what to work on and folds the items into the plan when the time is right.
 ## Noticed by Claude
 *My own small to-dos, kept here so they don't get lost.*
 
-- [ ] Remember the UI size you pick with Ctrl +/- between runs (needs settings saving, comes with project save/load).
+- [ ] Remember sizes / zoom between runs (needs settings saving, comes with project save/load). Until then, "Copy as code" in F12 and I'll make your numbers the defaults.
 - [ ] Wheel-over-note changes velocity only while *hovering* a note. With a selection but no hover, the wheel still scrolls, otherwise you couldn't scroll while anything is selected. Tell me if you want it the other way.
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Journal round 2 → `5ca6d87` (+ `c739b39`)**
+*From the journal:*
+- [x] Placing or moving notes while playing back plays those notes, which is distracting. Notes should only play previews when the playhead is stopped.
+- [x] MMB to pan around.
+  *→ piano roll; the playlist will get it too.*
+- [x] Notes, more forgiving resize zone, maybe extending a bit beyond/outside the note end. It's too small and hard to hit
+  *→ 10 pt inside + 8 pt past the end; both tunable in the Design panel (F12).*
+- [x] Button on toolbar to bring cahnnel rack back into context
+  *→ WINDOWS module: rack, piano roll, instrument.*
+- [x] Double right-click on ghost note to got to that channel → `c739b39`
+
+*From chat (noted here by Claude):*
+- [x] Overview scrollbar 3–4× taller → 34 pt (was 11)
+- [x] Toolbar 1.5–2× taller → 60 pt (was 38)
+- [x] Main buttons and sliders 25–50% bigger; "15% zoom too small to notice"
+  *→ real sizes instead of zoom: controls 26 pt, text 14, rack knobs 24, editor knobs 40, steps 24×30. All on sliders in F12.*
+- [x] `[- Z = C3 +]` visually inconsistent and too technical
+  *→ "TYPING KEYS" module with a mini keyboard, playable range lit in mint.*
+- [x] BPM selector too little padding; pattern `< >` uncontained and different heights
+  *→ every toolbar group is a captioned module; all buttons are the same height.*
+- [x] "We need a way for both of us to design that sort of thing better"
+  *→ F12 Design panel (live sliders + "Copy as code") and `docs/design/` for sketches over screenshots.*
+- [x] Double-click on a channel raises the editor, but the rack fights back and wins
+- [x] Alt+wheel / Ctrl+wheel backwards → Ctrl+wheel = time zoom, Alt+wheel = pitch zoom
+- [x] Copy/paste not working
+  *→ egui sends Ctrl+C/V as clipboard events, not keys, and only sends paste when the system clipboard has text. Fixed both; paste now lands under the mouse.*
+- [x] "+ Channel" shouldn't list 4 configs of the same synth → just "Lyra Synth"; presets live in its editor
 
 **Journal round 1 → `3e78962`**
 - [x] ! ? Slightly bigger UI, more forgiving targets
