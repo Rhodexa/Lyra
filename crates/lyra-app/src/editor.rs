@@ -11,9 +11,6 @@ use egui::{pos2, vec2, Color32, Rect, RichText, Sense, Ui};
 use lyra_model::{History, Project};
 use lyra_plugin::ParamInfo;
 
-const CELL_W: f32 = 50.0;
-const KNOB: f32 = 30.0;
-
 pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     let instrument = p.channels[ch].instrument.clone();
     let params = lyra_dsp::params(&instrument);
@@ -63,14 +60,17 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
             ui.label(RichText::new("choke").small().color(theme::TEXT_DIM));
             let mut choke = p.channels[ch].choke;
             let text = if choke == 0 { "off".to_string() } else { format!("group {choke}") };
-            egui::ComboBox::from_id_salt(("choke", ch)).width(70.0).selected_text(text).show_ui(ui, |ui| {
-                ui.selectable_value(&mut choke, 0, "off");
-                for g in 1..=4 {
-                    ui.selectable_value(&mut choke, g, format!("group {g}"));
-                }
-            })
-            .response
-            .on_hover_text("Channels in the same group cut each other off (closed hat stops open hat).");
+            egui::ComboBox::from_id_salt(("choke", ch))
+                .width(70.0)
+                .selected_text(text)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut choke, 0, "off");
+                    for g in 1..=4 {
+                        ui.selectable_value(&mut choke, g, format!("group {g}"));
+                    }
+                })
+                .response
+                .on_hover_text("Channels in the same group cut each other off (closed hat stops open hat).");
             if choke != p.channels[ch].choke {
                 h.checkpoint(p);
                 p.channels[ch].choke = choke;
@@ -89,15 +89,19 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
                     if !group.name.is_empty() {
                         ui.label(RichText::new(group.name.to_uppercase()).small().color(theme::TEXT_DIM));
                     }
-                    egui::Frame::default().fill(theme::INSET).corner_radius(cr(4)).inner_margin(egui::Margin::same(6)).show(ui, |ui| {
-                        ui.horizontal_top(|ui| {
-                            for id in group.ids.clone() {
-                                if let Some(info) = params.get(id as usize) {
-                                    param_cell(ui, p, h, ch, info, color);
+                    egui::Frame::default()
+                        .fill(theme::INSET)
+                        .corner_radius(cr(4))
+                        .inner_margin(egui::Margin::same(6))
+                        .show(ui, |ui| {
+                            ui.horizontal_top(|ui| {
+                                for id in group.ids.clone() {
+                                    if let Some(info) = params.get(id as usize) {
+                                        param_cell(ui, p, h, ch, info, color);
+                                    }
                                 }
-                            }
+                            });
                         });
-                    });
                 });
                 ui.add_space(4.0);
             }
@@ -114,13 +118,15 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
 fn param_cell(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, info: &ParamInfo, color: Color32) {
     let id = info.id as usize;
     let mut v = p.channels[ch].params[id];
-    ui.allocate_ui(vec2(CELL_W, 64.0), |ui| {
+    let m = theme::m();
+    let cell_w = m.knob_large + 22.0;
+    ui.allocate_ui(vec2(cell_w, m.knob_large + 2.0 * m.text_small + 14.0), |ui| {
         ui.vertical_centered(|ui| {
             if info.is_choice() {
                 ui.add_space(4.0);
                 let mut idx = v.round() as usize;
                 egui::ComboBox::from_id_salt(("param", ch, id))
-                    .width(CELL_W - 4.0)
+                    .width(cell_w - 4.0)
                     .selected_text(info.labels[idx.min(info.labels.len() - 1)])
                     .show_ui(ui, |ui| {
                         for (i, label) in info.labels.iter().enumerate() {
@@ -133,7 +139,7 @@ fn param_cell(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, info: &P
                 }
                 ui.add_space(6.0);
             } else {
-                let r = widgets::knob(ui, &mut v, info, KNOB, color);
+                let r = widgets::knob(ui, &mut v, info, m.knob_large, color);
                 if tracked(&r, h, p) {
                     p.channels[ch].params[id] = v;
                 }
@@ -176,8 +182,15 @@ fn envelope(ui: &mut Ui, params: &[f32], color: Color32) {
         painter.rect_filled(r, cr(0), color.gamma_multiply(0.12));
     }
     painter.add(egui::Shape::line(pts, stroke(1.5, color)));
-    for (t, label) in [(ta * 0.5, "A"), (ta + td * 0.5, "D"), (ta + td + th * 0.5, "S"), (ta + td + th + tr * 0.5, "R")] {
-        painter.text(pos2(x(t), inner.top() + 2.0), egui::Align2::CENTER_TOP, label, egui::FontId::proportional(9.0), theme::TEXT_DIM);
+    for (t, label) in [(ta * 0.5, "A"), (ta + td * 0.5, "D"), (ta + td + th * 0.5, "S"), (ta + td + th + tr * 0.5, "R")]
+    {
+        painter.text(
+            pos2(x(t), inner.top() + 2.0),
+            egui::Align2::CENTER_TOP,
+            label,
+            egui::FontId::proportional(9.0),
+            theme::TEXT_DIM,
+        );
     }
 }
 

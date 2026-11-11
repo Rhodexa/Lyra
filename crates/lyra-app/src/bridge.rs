@@ -96,13 +96,7 @@ fn compile(p: &Project, pat: &Pattern) -> Sequence {
     let mut notes = Vec::new();
     for (index, ch) in p.channels.iter().enumerate() {
         for n in pat.notes(ch.id) {
-            notes.push(SeqNote {
-                start: n.start,
-                len: n.len,
-                channel: index as u16,
-                key: n.key,
-                velocity: n.velocity,
-            });
+            notes.push(SeqNote { start: n.start, len: n.len, channel: index as u16, key: n.key, velocity: n.velocity });
         }
     }
     notes.sort_by_key(|n| n.start);

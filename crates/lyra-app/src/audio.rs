@@ -79,10 +79,8 @@ pub fn start() -> Result<(Audio, EngineHandle), String> {
     }
     let sample_rate = config.sample_rate.0;
 
-    let requested = std::env::var("LYRA_BUFFER")
-        .ok()
-        .and_then(|v| v.trim().parse::<u32>().ok())
-        .unwrap_or(DEFAULT_BUFFER);
+    let requested =
+        std::env::var("LYRA_BUFFER").ok().and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(DEFAULT_BUFFER);
     // Try our size first; if the device refuses it, fall back to the system default.
     let mut last_err = String::new();
     for size in [Some(requested), None] {

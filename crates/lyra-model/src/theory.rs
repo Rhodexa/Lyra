@@ -181,11 +181,11 @@ mod tests {
     #[test]
     fn a_minor_scale_chords() {
         let a = 9; // A
-        // In A minor, the triad on A is A C E; on F it's F A C (major); on E, E G B.
+                   // In A minor, the triad on A is A C E; on F it's F A C (major); on E, E G B.
         assert_eq!(Chord::ScaleTriad.keys(57, Scale::Minor, a), vec![57, 60, 64]);
         assert_eq!(Chord::ScaleTriad.keys(53, Scale::Minor, a), vec![53, 57, 60]);
         assert_eq!(Chord::ScaleSeventh.keys(57, Scale::Minor, a), vec![57, 60, 64, 67]); // Am7
-        // An out-of-key click (A#) snaps into the key first.
+                                                                                         // An out-of-key click (A#) snaps into the key first.
         assert_eq!(Chord::ScaleTriad.keys(58, Scale::Minor, a)[0], 57);
     }
 

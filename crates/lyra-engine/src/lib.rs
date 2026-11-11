@@ -126,11 +126,24 @@ pub enum Command {
     SetSequence(Box<Sequence>),
     AddChannel(Box<ChannelSlot>),
     ClearChannels,
-    SetParam { channel: usize, id: u32, value: f32 },
+    SetParam {
+        channel: usize,
+        id: u32,
+        value: f32,
+    },
     /// `choke`: channels sharing a non-zero group cut each other off (closed hat kills open hat).
-    SetMix { channel: usize, volume: f32, pan: f32, mute: bool, choke: u8 },
+    SetMix {
+        channel: usize,
+        volume: f32,
+        pan: f32,
+        mute: bool,
+        choke: u8,
+    },
     /// Notes played live (typing keyboard, MIDI, clicking a key).
-    Live { channel: usize, event: Event },
+    Live {
+        channel: usize,
+        event: Event,
+    },
 }
 
 enum Trash {
@@ -399,9 +412,7 @@ impl Engine {
             let ChannelSlot { plugin, events, buf_l, buf_r, .. } = &mut **ch;
             // AllNotesOff sorts before a NoteOn at the same sample, so a choke
             // never kills the note that's starting right then. (In-place sort: no allocation.)
-            events.sort_unstable_by_key(|e| {
-                (e.offset, !matches!(e.event, Event::AllNotesOff))
-            });
+            events.sort_unstable_by_key(|e| (e.offset, !matches!(e.event, Event::AllNotesOff)));
             plugin.process(ProcessContext {
                 sample_rate: self.sr,
                 events,
@@ -484,8 +495,7 @@ impl Engine {
 
         for note in &self.seq.notes {
             let Some(ch) = self.channels.get_mut(note.channel as usize) else { continue };
-            let on = note.start as f64
-                + if (note.start / TICKS_PER_STEP) % 2 == 1 { swing_ticks } else { 0.0 };
+            let on = note.start as f64 + if (note.start / TICKS_PER_STEP) % 2 == 1 { swing_ticks } else { 0.0 };
 
             if let Some(o) = offset_of(on) {
                 // Ticks from block start to this note's end (exact, before rounding to a sample).

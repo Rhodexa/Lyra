@@ -72,7 +72,9 @@ pub fn project() -> Project {
     // Bar 1 on A, bar 2 on F.
     for (bar, root) in [(0.0, 45u8), (16.0, 41u8)] {
         let notes = pat.notes_mut(bass);
-        for &(step, len, offset, vel) in &[(2.0, 1.5, 0, 0.9), (6.0, 1.5, 0, 0.8), (10.0, 1.0, 12, 0.85), (11.0, 1.0, 0, 0.7), (14.0, 1.5, 7, 0.8)] {
+        for &(step, len, offset, vel) in
+            &[(2.0, 1.5, 0, 0.9), (6.0, 1.5, 0, 0.8), (10.0, 1.0, 12, 0.85), (11.0, 1.0, 0, 0.7), (14.0, 1.5, 7, 0.8)]
+        {
             notes.push(note(bar + step, len, root + offset, vel));
         }
     }

@@ -16,12 +16,13 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Do | How |
 |---|---|
 | Play / stop | `Space` |
-| Windows | `F6` channel rack · `F7` piano roll · `F8` instrument editor |
+| Windows | `F6` channel rack · `F7` piano roll · `F8` instrument editor (also the WINDOWS module in the top bar) |
+| Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
 | Patterns | `[` / `]` or the picker in the top bar (new, clone) |
 | Play notes | typing keyboard: `Z`–`M` and `Q`–`P` rows; `-` / `=` octave (shown in the top bar) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Knobs | drag (Shift = fine), wheel, double-click to reset |
-| UI size | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` (starts at 115%, or `LYRA_ZOOM=1.3`) |
+| UI size | `F12` Design panel, or `Ctrl+=` / `Ctrl+-` / `Ctrl+0` zoom (`LYRA_ZOOM=1.3` to start bigger) |
 
 **Channel rack**
 
@@ -40,18 +41,18 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 
 | Do | How |
 |---|---|
-| Place a note (uses your last length) | click empty grid, keep holding to drag it |
+| Place a note (uses your last length) | click empty grid, keep holding to drag it (silent while playing) |
 | Move / resize / duplicate | drag a note / drag its right edge / Shift+drag |
 | Erase | right-click or right-drag |
 | Select | Ctrl+drag (Shift adds), `Ctrl+A` |
 | Stamp chords that fit the key | "stamp" menu, e.g. *Triad (in key)* |
 | Transpose | `↑` `↓` or `Shift+↑↓` (semitone) / `Ctrl+↑↓` (octave) |
 | Nudge | `←` `→` (snap) / `Ctrl+←→` (beat) |
-| Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` (pastes in place, selected) |
+| Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` (pastes under the mouse, or at the playhead) |
 | Duplicate after / quantize / delete | `Ctrl+D` or `Ctrl+B` / `Ctrl+Q` / `Delete` |
 | No snap | hold `Alt` (stays free for the rest of the drag) |
-| Scroll | wheel, Shift+wheel sideways, or drag the overview bar's thumb |
-| Zoom | Alt+wheel (time) · Ctrl+wheel (pitch) · drag the overview thumb's ends |
+| Scroll | wheel, Shift+wheel sideways, middle-drag, or drag the overview bar's thumb |
+| Zoom | Ctrl+wheel (time) · Alt+wheel (pitch) · drag the overview thumb's ends |
 | Velocity | wheel over a note, or drag in the lane at the bottom |
 | Move the playhead | click / drag in the ruler |
 | Key, scale, shading, ghosts | the "View" menu · "full screen" button |

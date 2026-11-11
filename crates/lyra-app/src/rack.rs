@@ -22,22 +22,20 @@ use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Response, Sense, StrokeKin
 use lyra_model::{History, Project, DEFAULT_KEY, TICKS_PER_STEP};
 use lyra_plugin::{Curve, ParamInfo};
 
-const STEP_W: f32 = 18.0;
-const STEP_H: f32 = 22.0;
 const STEP_GAP: f32 = 2.0;
 const BEAT_GAP: f32 = 6.0;
-const NAME_W: f32 = 108.0;
 
 pub static VOLUME: ParamInfo = ParamInfo::new(0, "Volume", 0.0, 1.25, 0.8, "%", Curve::Linear);
 pub static PAN: ParamInfo = ParamInfo::new(1, "Pan", -1.0, 1.0, 0.0, "pan", Curve::Linear);
 
 fn step_x(s: u32) -> f32 {
-    s as f32 * (STEP_W + STEP_GAP) + (s / 4) as f32 * (BEAT_GAP - STEP_GAP)
+    s as f32 * (theme::m().step_w + STEP_GAP) + (s / 4) as f32 * (BEAT_GAP - STEP_GAP)
 }
 
 fn step_at(x: f32, len: u32) -> Option<u32> {
     // Each step's hit area includes the small gap after it, so a drag never "falls through".
-    (0..len).find(|&s| x >= step_x(s) && x < step_x(s) + STEP_W + STEP_GAP)
+    let w = theme::m().step_w;
+    (0..len).find(|&s| x >= step_x(s) && x < step_x(s) + w + STEP_GAP)
 }
 
 /// Undo bookkeeping for a continuous control: one checkpoint per gesture.
@@ -49,20 +47,19 @@ pub fn tracked(r: &Response, h: &mut History, p: &Project) -> bool {
     r.changed()
 }
 
-/// Drums, then synth presets. Returns (name, instrument id, params) when one is picked.
+/// Every instrument, once (presets live in each instrument's editor).
+/// Returns (name, instrument id, params) when one is picked.
 fn instrument_menu(ui: &mut Ui) -> Option<(&'static str, &'static str, Vec<f32>)> {
     let mut picked = None;
-    ui.label(egui::RichText::new("DRUMS").small().color(theme::TEXT_DIM));
-    for inst in lyra_dsp::INSTRUMENTS.iter().filter(|i| !i.melodic) {
-        if ui.button(inst.name).clicked() {
-            picked = Some((inst.name, inst.id, lyra_dsp::default_params(inst.id)));
+    for (title, melodic) in [("DRUMS", false), ("INSTRUMENTS", true)] {
+        ui.label(egui::RichText::new(title).small().color(theme::TEXT_DIM));
+        for inst in lyra_dsp::INSTRUMENTS.iter().filter(|i| i.melodic == melodic) {
+            if ui.button(inst.name).clicked() {
+                picked = Some((inst.name, inst.id, lyra_dsp::default_params(inst.id)));
+            }
         }
-    }
-    ui.separator();
-    ui.label(egui::RichText::new("SYNTH").small().color(theme::TEXT_DIM));
-    for preset in lyra_dsp::PRESETS {
-        if ui.button(preset.name).clicked() {
-            picked = Some((preset.name, preset.instrument, preset.params()));
+        if !melodic {
+            ui.separator();
         }
     }
     picked
@@ -137,9 +134,14 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
 
     // Long patterns scroll sideways instead of growing the window forever.
     // Row = light, two knobs, name, gap, steps (+ item spacing). Up to ~1000px, then scroll.
-    let row_w = 12.0 + 18.0 * 2.0 + NAME_W + 8.0 + 5.0 * ui.spacing().item_spacing.x
+    let m = theme::m();
+    let row_w = m.led
+        + m.knob_small * 2.0
+        + m.name_w
+        + 8.0
+        + 5.0 * ui.spacing().item_spacing.x
         + step_x(p.patterns[pat].play_length() - 1)
-        + STEP_W;
+        + m.step_w;
     egui::ScrollArea::horizontal().min_scrolled_width(row_w.min(1000.0)).max_width(1000.0).show(ui, |ui| {
         for ci in 0..p.channels.len() {
             row(ui, p, h, st, ci, pat, play_step, any_solo, (pointer, primary, secondary, wheel, shift), &mut delete);
@@ -154,9 +156,11 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
 
     ui.add_space(6.0);
     ui.label(
-        egui::RichText::new("drag: paint · right-drag: erase · wheel: velocity · shift+wheel: pitch · double-click name: edit")
-            .small()
-            .color(theme::TEXT_DIM),
+        egui::RichText::new(
+            "drag: paint · right-drag: erase · wheel: velocity · shift+wheel: pitch · double-click name: edit",
+        )
+        .small()
+        .color(theme::TEXT_DIM),
     );
 }
 
@@ -177,6 +181,7 @@ fn row(
 ) {
     let id = p.channels[ci].id;
     let color = theme::channel_color(p.channels[ci].color);
+    let m = theme::m();
     ui.horizontal(|ui| {
         // Mute lights. Press one to flip it; keep the button down and sweep over
         // others to set them the same way (one gesture, one undo step).
@@ -199,16 +204,16 @@ fn row(
 
         // Pan & volume
         let mut pan = p.channels[ci].pan;
-        if tracked(&widgets::knob(ui, &mut pan, &PAN, 18.0, color), h, p) {
+        if tracked(&widgets::knob(ui, &mut pan, &PAN, m.knob_small, color), h, p) {
             p.channels[ci].pan = pan;
         }
         let mut vol = p.channels[ci].volume;
-        if tracked(&widgets::knob(ui, &mut vol, &VOLUME, 18.0, color), h, p) {
+        if tracked(&widgets::knob(ui, &mut vol, &VOLUME, m.knob_small, color), h, p) {
             p.channels[ci].volume = vol;
         }
 
         // Name button (flashes on every hit)
-        let (rect, r) = ui.allocate_exact_size(vec2(NAME_W, STEP_H), Sense::click());
+        let (rect, r) = ui.allocate_exact_size(vec2(m.name_w, m.step_h), Sense::click());
         let selected = st.selected == ci;
         let flash = st.flash.get(ci).copied().unwrap_or(0.0);
         let painter = ui.painter().clone();
@@ -235,7 +240,7 @@ fn row(
             rect.left_center() + vec2(9.0, 0.0),
             Align2::LEFT_CENTER,
             &p.channels[ci].name,
-            FontId::proportional(11.5),
+            FontId::proportional(m.text),
             if selected { theme::TEXT } else { theme::TEXT_DIM },
         );
         if r.clicked() {
@@ -276,9 +281,10 @@ fn row(
                 if let Some((name, instrument, params)) = instrument_menu(ui) {
                     h.checkpoint(p);
                     let ch = &mut p.channels[ci];
-                    if lyra_dsp::info(&ch.instrument).map(|i| i.name) == Some(ch.name.as_str())
-                        || lyra_dsp::PRESETS.iter().any(|pr| pr.name == ch.name)
-                    {
+                    let named_after_instrument = lyra_dsp::info(&ch.instrument).map(|i| i.name)
+                        == Some(ch.name.as_str())
+                        || lyra_dsp::PRESETS.iter().any(|pr| pr.name == ch.name);
+                    if named_after_instrument {
                         ch.name = name.to_string(); // only rename channels still named after their instrument
                     }
                     ch.instrument = instrument.to_string();
@@ -309,7 +315,8 @@ fn row(
         ui.add_space(4.0);
 
         let len = p.patterns[pat].play_length();
-        let (strip, strip_resp) = ui.allocate_exact_size(vec2(step_x(len - 1) + STEP_W, STEP_H), Sense::click_and_drag());
+        let (strip, strip_resp) =
+            ui.allocate_exact_size(vec2(step_x(len - 1) + m.step_w, m.step_h), Sense::click_and_drag());
 
         // A melodic channel shows a mini piano roll; click it to open the real one.
         if !p.patterns[pat].is_step_channel(id) {
@@ -323,7 +330,8 @@ fn row(
             return;
         }
 
-        let hover = pointer.filter(|_| ui.rect_contains_pointer(strip)).and_then(|pos| step_at(pos.x - strip.min.x, len));
+        let hover =
+            pointer.filter(|_| ui.rect_contains_pointer(strip)).and_then(|pos| step_at(pos.x - strip.min.x, len));
         if let Some(s) = hover {
             let lit = p.patterns[pat].step(id, s).is_some();
             if primary {
@@ -350,7 +358,7 @@ fn row(
         }
 
         for s in 0..len {
-            let r = Rect::from_min_size(pos2(strip.min.x + step_x(s), strip.min.y), vec2(STEP_W, STEP_H));
+            let r = Rect::from_min_size(pos2(strip.min.x + step_x(s), strip.min.y), vec2(m.step_w, m.step_h));
             let off = if (s / 4) % 2 == 0 { theme::STEP_OFF_A } else { theme::STEP_OFF_B };
             let note = p.patterns[pat].step(id, s);
             let fill = match note {
@@ -382,7 +390,15 @@ fn row(
 }
 
 /// Mini piano roll of a channel's notes, squeezed into one rack row.
-fn preview(painter: &egui::Painter, r: Rect, p: &Project, pat: usize, ci: usize, color: Color32, play_step: Option<u32>) {
+fn preview(
+    painter: &egui::Painter,
+    r: Rect,
+    p: &Project,
+    pat: usize,
+    ci: usize,
+    color: Color32,
+    play_step: Option<u32>,
+) {
     painter.rect_filled(r, cr(3), theme::INSET);
     painter.rect_stroke(r, cr(3), stroke(1.0, theme::LINE), StrokeKind::Inside);
     let notes = p.patterns[pat].notes(p.channels[ci].id);

@@ -29,7 +29,11 @@ pub enum Action {
     NoteOn(u8),
     NoteOff(u8),
     /// Arrow keys: (dx, dy) in {-1, 0, 1}; `big` = Ctrl held (octave / beat).
-    Arrow { dx: i32, dy: i32, big: bool },
+    Arrow {
+        dx: i32,
+        dy: i32,
+        big: bool,
+    },
     Delete,
     SelectAll,
     Deselect,
@@ -48,6 +52,7 @@ pub enum Action {
     ToggleRack,
     TogglePiano,
     ToggleEditor,
+    ToggleDesign,
 }
 
 #[derive(Default)]
@@ -61,9 +66,36 @@ pub struct Keyboard {
 fn semitone(k: Key) -> Option<i32> {
     use Key::*;
     Some(match k {
-        Z => 0, S => 1, X => 2, D => 3, C => 4, V => 5, G => 6, B => 7, H => 8, N => 9, J => 10, M => 11, Comma => 12,
-        Q => 12, Num2 => 13, W => 14, Num3 => 15, E => 16, R => 17, Num5 => 18, T => 19, Num6 => 20,
-        Y => 21, Num7 => 22, U => 23, I => 24, Num9 => 25, O => 26, Num0 => 27, P => 28,
+        Z => 0,
+        S => 1,
+        X => 2,
+        D => 3,
+        C => 4,
+        V => 5,
+        G => 6,
+        B => 7,
+        H => 8,
+        N => 9,
+        J => 10,
+        M => 11,
+        Comma => 12,
+        Q => 12,
+        Num2 => 13,
+        W => 14,
+        Num3 => 15,
+        E => 16,
+        R => 17,
+        Num5 => 18,
+        T => 19,
+        Num6 => 20,
+        Y => 21,
+        Num7 => 22,
+        U => 23,
+        I => 24,
+        Num9 => 25,
+        O => 26,
+        Num0 => 27,
+        P => 28,
         _ => return None,
     })
 }
@@ -79,6 +111,15 @@ impl Keyboard {
         // also "press" whatever button or menu happens to have focus.
         ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Space));
         for e in events {
+            // egui-winit turns Ctrl+C / X / V into these clipboard events instead
+            // of key presses, so they must be caught here (this is why copy/paste
+            // first "did nothing").
+            match e {
+                egui::Event::Copy => out.push(Action::Copy),
+                egui::Event::Cut => out.push(Action::Cut),
+                egui::Event::Paste(_) => out.push(Action::Paste),
+                _ => {}
+            }
             let egui::Event::Key { key, physical_key, pressed, repeat, modifiers, .. } = e else { continue };
             let k = physical_key.unwrap_or(key);
 
@@ -89,9 +130,7 @@ impl Keyboard {
                         Key::Z => out.push(Action::Undo),
                         Key::Y => out.push(Action::Redo),
                         Key::A => out.push(Action::SelectAll),
-                        Key::C => out.push(Action::Copy),
-                        Key::X => out.push(Action::Cut),
-                        Key::V => out.push(Action::Paste),
+                        // Ctrl+C/X/V arrive as Event::Copy/Cut/Paste (above).
                         Key::D | Key::B => out.push(Action::Duplicate),
                         Key::Q => out.push(Action::Quantize),
                         Key::ArrowUp => out.push(Action::Arrow { dx: 0, dy: 1, big: true }),
@@ -138,6 +177,7 @@ impl Keyboard {
                 Key::F6 => out.push(Action::ToggleRack),
                 Key::F7 => out.push(Action::TogglePiano),
                 Key::F8 => out.push(Action::ToggleEditor),
+                Key::F12 => out.push(Action::ToggleDesign),
                 _ => {}
             }
         }

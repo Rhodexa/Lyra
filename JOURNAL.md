@@ -11,13 +11,16 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Friction
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
+- [ ] Placing or moving notes while playing back plays those notes, which is distracting. Notes should only play previews when the playhead is stopped.
 
 - [ ]
 
 ## Wishes
 *Things you wish Lyra did.*
-
+- [ ] MMB to pan around.
+- [ ] Notes, more forgiving resize zone, maybe extending a bit beyond/outside the note end. It's too small and hard to hit
 - [ ]
+- [ ] Button on toolbar to bring cahnnel rack back into context
 
 ## Sound
 *Ears-only notes: "kick too clicky", "pad needs more air", "this preset slaps".*

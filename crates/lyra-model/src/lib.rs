@@ -122,12 +122,7 @@ impl Pattern {
         let notes = self.notes.entry(ch).or_default();
         notes.clear();
         for step in (0..length).step_by(every.max(1) as usize) {
-            notes.push(Note {
-                start: step * TICKS_PER_STEP,
-                len: TICKS_PER_STEP,
-                key: DEFAULT_KEY,
-                velocity: 0.8,
-            });
+            notes.push(Note { start: step * TICKS_PER_STEP, len: TICKS_PER_STEP, key: DEFAULT_KEY, velocity: 0.8 });
         }
     }
 }

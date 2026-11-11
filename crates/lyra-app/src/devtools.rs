@@ -122,6 +122,10 @@ impl DevTools {
                 };
                 raw.modifiers = self.mods;
             }
+            // Clipboard shortcuts arrive from egui-winit as these events, not as keys.
+            "copy" => raw.events.push(egui::Event::Copy),
+            "cut" => raw.events.push(egui::Event::Cut),
+            "paste" => raw.events.push(egui::Event::Paste("lyra: notes".into())),
             "log" => eprintln!("lyra-script: {} steps left", self.script.len()),
             other => eprintln!("lyra-script: unknown step {other:?}"),
         }

@@ -4,6 +4,7 @@ mod app;
 mod audio;
 mod bridge;
 mod demo;
+mod design;
 mod devtools;
 mod editor;
 mod keys;

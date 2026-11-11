@@ -16,8 +16,13 @@
 /// Something that happens to a plugin at a precise sample inside a block.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
-    NoteOn { key: u8, velocity: f32 },
-    NoteOff { key: u8 },
+    NoteOn {
+        key: u8,
+        velocity: f32,
+    },
+    NoteOff {
+        key: u8,
+    },
     /// Silence everything quickly (transport stop, choke groups, panic).
     AllNotesOff,
 }

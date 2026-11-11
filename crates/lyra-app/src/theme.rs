@@ -73,20 +73,100 @@ pub fn stroke(width: f32, color: Color32) -> Stroke {
     Stroke::new(width, color)
 }
 
-/// Dense, small, quiet: a DAW is a cockpit, not a landing page.
+// ── Sizes ──────────────────────────────────────────────────────────────────
+//
+// Every size that shapes how Lyra *feels* lives in `Metrics`, so it can be
+// tuned live in the Design panel (F12) and copied back here as code.
+
+/// All the sizes, in points (1 point = 1 pixel at 100% zoom).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Metrics {
+    pub text: f32,
+    pub text_small: f32,
+    /// Height of buttons, menus, number boxes.
+    pub control_h: f32,
+    pub toolbar_h: f32,
+    /// Inner padding of toolbar modules.
+    pub module_pad: f32,
+    /// Space between toolbar modules.
+    pub module_gap: f32,
+    pub corner: f32,
+    /// Knobs in the channel rack / in the instrument editor.
+    pub knob_small: f32,
+    pub knob_large: f32,
+    pub led: f32,
+    pub step_w: f32,
+    pub step_h: f32,
+    pub name_w: f32,
+    /// Piano roll: overview scrollbar, ruler, keyboard width, row height.
+    pub overview_h: f32,
+    pub ruler_h: f32,
+    pub keys_w: f32,
+    pub row_h: f32,
+    /// How far from a note's right end (inside it) a drag resizes instead of moving.
+    pub edge_grab: f32,
+    /// …and how far *past* the end it still counts.
+    pub edge_reach: f32,
+}
+
+impl Metrics {
+    pub const DEFAULT: Metrics = Metrics {
+        text: 14.0,
+        text_small: 11.0,
+        control_h: 26.0,
+        toolbar_h: 60.0,
+        module_pad: 6.0,
+        module_gap: 8.0,
+        corner: 5.0,
+        knob_small: 24.0,
+        knob_large: 40.0,
+        led: 16.0,
+        step_w: 24.0,
+        step_h: 30.0,
+        name_w: 132.0,
+        overview_h: 34.0,
+        ruler_h: 24.0,
+        keys_w: 64.0,
+        row_h: 16.0,
+        edge_grab: 10.0,
+        edge_reach: 8.0,
+    };
+
+    /// The metrics as Rust source, for pasting back into `Metrics::DEFAULT`.
+    pub fn as_code(&self) -> String {
+        // Debug's pretty form of a plain struct is already a valid Rust literal.
+        format!("pub const DEFAULT: Metrics = {self:#?};")
+    }
+}
+
+static METRICS: std::sync::RwLock<Metrics> = std::sync::RwLock::new(Metrics::DEFAULT);
+
+/// Current sizes (UI thread; cheap copy).
+pub fn m() -> Metrics {
+    *METRICS.read().unwrap_or_else(|e| e.into_inner())
+}
+
+pub fn set_metrics(ctx: &Context, metrics: Metrics) {
+    *METRICS.write().unwrap_or_else(|e| e.into_inner()) = metrics;
+    apply(ctx);
+}
+
+/// A DAW is a cockpit: dense, but every target comfortably hittable.
 pub fn apply(ctx: &Context) {
+    let m = m();
     let mut style = (*ctx.style()).clone();
     style.text_styles = [
-        (TextStyle::Small, FontId::proportional(9.5)),
-        (TextStyle::Body, FontId::proportional(11.5)),
-        (TextStyle::Button, FontId::proportional(11.5)),
-        (TextStyle::Heading, FontId::proportional(14.0)),
-        (TextStyle::Monospace, FontId::monospace(11.0)),
+        (TextStyle::Small, FontId::proportional(m.text_small)),
+        (TextStyle::Body, FontId::proportional(m.text)),
+        (TextStyle::Button, FontId::proportional(m.text)),
+        (TextStyle::Heading, FontId::proportional(m.text + 3.0)),
+        (TextStyle::Monospace, FontId::monospace(m.text - 0.5)),
     ]
     .into();
-    style.spacing.item_spacing = egui::vec2(4.0, 3.0);
-    style.spacing.button_padding = egui::vec2(6.0, 2.0);
-    style.spacing.interact_size = egui::vec2(20.0, 18.0);
+    style.spacing.item_spacing = egui::vec2(5.0, 4.0);
+    style.spacing.button_padding = egui::vec2(8.0, 3.0);
+    style.spacing.interact_size = egui::vec2(m.control_h, m.control_h);
+    style.spacing.combo_height = 320.0;
 
     let v = &mut style.visuals;
     *v = egui::Visuals::dark();

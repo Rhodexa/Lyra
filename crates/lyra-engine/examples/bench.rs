@@ -28,11 +28,20 @@ fn main() {
         h.send(Command::SetMix { channel: i, volume: *volume, pan: 0.0, mute: false, choke: *choke });
     }
     let mut notes = vec![];
-    let mut n = |s: u32, c: u16, v: f32| notes.push(SeqNote { start: s * 24, len: 24, channel: c, key: 60, velocity: v });
+    let mut n =
+        |s: u32, c: u16, v: f32| notes.push(SeqNote { start: s * 24, len: 24, channel: c, key: 60, velocity: v });
     for s in 0..16 {
-        if s % 4 == 0 { n(s, 0, 1.0) }
-        if s == 4 || s == 12 { n(s, 1, 0.9) }
-        if s % 4 == 2 { n(s, 3, 0.7) } else { n(s, 2, 0.5) }
+        if s % 4 == 0 {
+            n(s, 0, 1.0)
+        }
+        if s == 4 || s == 12 {
+            n(s, 1, 0.9)
+        }
+        if s % 4 == 2 {
+            n(s, 3, 0.7)
+        } else {
+            n(s, 2, 0.5)
+        }
     }
     h.send(Command::SetSequence(Box::new(Sequence { length: 16 * 24, notes })));
     h.send(Command::SetTempo(124.0));
