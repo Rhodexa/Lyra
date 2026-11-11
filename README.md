@@ -15,15 +15,44 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 
 | Do | How |
 |---|---|
-| Play / stop | `Space` (or `Esc` to stop) |
-| Paint steps | click & drag across the rack. Right-drag erases |
-| Velocity / pitch of a step | mouse wheel / Shift + wheel |
-| Fill every 2/4/8 steps | right-click a channel name |
+| Play / stop | `Space` |
+| Windows | `F6` channel rack · `F7` piano roll · `F8` instrument editor |
+| Patterns | `[` / `]` or the picker in the top bar (new, clone) |
 | Play notes | typing keyboard: `Z`–`M` and `Q`–`P` rows; `-` / `=` octave |
-| Choose channel | click its name, or `↑` / `↓` |
-| Mute / solo | click / right-click the channel's light |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Knobs | drag (Shift = fine), wheel, double-click to reset |
+
+**Channel rack**
+
+| Do | How |
+|---|---|
+| Paint steps | click & drag across the rack. Right-drag erases |
+| Velocity / pitch of a step | mouse wheel / Shift + wheel |
+| Select / edit a channel | click its name / double-click it |
+| Piano roll, fill every 2/4/8, delete | right-click a channel name |
+| Mute / solo | click / right-click the channel's light |
+| Open a melody | click its mini piano roll |
+
+**Piano roll**
+
+| Do | How |
+|---|---|
+| Place a note (uses your last length) | click empty grid, keep holding to drag it |
+| Move / resize / duplicate | drag a note / drag its right edge / Shift+drag |
+| Erase | right-click or right-drag |
+| Select | Ctrl+drag (Shift adds), `Ctrl+A` |
+| Stamp chords that fit the key | "stamp" menu, e.g. *Triad (in key)* |
+| Transpose / nudge | `↑` `↓` (Shift = octave) / `←` `→` |
+| Duplicate after / quantize / delete | `Ctrl+D` / `Ctrl+Q` / `Delete` |
+| No snap | hold `Alt` |
+| Scroll / zoom | wheel, Shift+wheel / Ctrl+wheel |
+| Velocity | drag in the lane at the bottom |
+| Pattern length | drag the gold marker in the ruler |
+
+## Developer switches
+
+`LYRA_BUFFER=512` (audio ring size) · `LYRA_SILENT=1` · `LYRA_PLAY=1` ·
+`LYRA_OPEN=piano,editor` · `LYRA_SCREENSHOT=out.png`. See `crates/lyra-app/src/devtools.rs`.
 
 ## Read more
 

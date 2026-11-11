@@ -5,7 +5,9 @@ mod audio;
 mod bridge;
 mod demo;
 mod devtools;
+mod editor;
 mod keys;
+mod piano_roll;
 mod rack;
 mod theme;
 mod transport;
@@ -19,7 +21,8 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_title("Lyra")
             .with_app_id("lyra")
-            .with_inner_size([1180.0, 720.0])
+            .with_inner_size([1280.0, 800.0])
+            .with_maximized(true)
             .with_min_inner_size([760.0, 440.0])
             .with_icon(egui::IconData { rgba: theme::ICON_128.to_vec(), width: 128, height: 128 }),
         ..Default::default()

@@ -39,6 +39,8 @@ pub const MAX_CHANNELS: usize = 128;
 pub const BLOCK: usize = 256;
 const MAX_EVENTS_PER_BLOCK: usize = 256;
 const MAX_PENDING_LIVE: usize = 64;
+/// Sequenced notes that can sound at once on one channel (chords + tails).
+const MAX_HELD: usize = 64;
 /// Gain smoothing per sample (avoids zipper noise when a fader moves).
 const SMOOTH: f32 = 0.002;
 
@@ -68,6 +70,10 @@ pub struct ChannelSlot {
     plugin: Box<dyn Plugin>,
     events: Vec<TimedEvent>,
     pending: Vec<Event>,
+    /// Sequenced notes currently sounding, with ticks left until their note-off.
+    /// The engine releases these itself, so deleting a note mid-play (or
+    /// swapping the whole sequence) can never leave it hanging.
+    held: Vec<Held>,
     buf_l: Vec<f32>,
     buf_r: Vec<f32>,
     volume: f32,
@@ -86,6 +92,7 @@ impl ChannelSlot {
             plugin,
             events: Vec::with_capacity(MAX_EVENTS_PER_BLOCK),
             pending: Vec::with_capacity(MAX_PENDING_LIVE),
+            held: Vec::with_capacity(MAX_HELD),
             buf_l: vec![0.0; BLOCK],
             buf_r: vec![0.0; BLOCK],
             volume: 0.8,
@@ -96,6 +103,13 @@ impl ChannelSlot {
             gain_r: 0.0,
         })
     }
+}
+
+#[derive(Clone, Copy)]
+struct Held {
+    key: u8,
+    /// Ticks from the start of the *next* block until note-off.
+    remaining: f64,
 }
 
 pub enum Command {
@@ -296,6 +310,7 @@ impl Engine {
                     self.playing = false;
                     self.pos = 0.0;
                     for ch in &mut self.channels {
+                        ch.held.clear();
                         if ch.pending.len() < ch.pending.capacity() {
                             ch.pending.push(Event::AllNotesOff);
                         }
@@ -422,8 +437,28 @@ impl Engine {
         let len = self.seq.length as f64;
         let start = self.pos;
         let end = start + ticks_per_sample * n as f64;
+        let block_ticks = end - start;
         // Swing pushes every odd 16th late, up to a third of a step (triplet feel).
         let swing_ticks = self.swing as f64 * TICKS_PER_STEP as f64 / 3.0;
+
+        // 1. Release held notes that end inside this block (before new notes
+        //    start, so a re-struck key gets its off first, then its new on).
+        for ch in &mut self.channels {
+            let mut i = 0;
+            while i < ch.held.len() {
+                let h = ch.held[i];
+                if h.remaining < block_ticks {
+                    let off = ((h.remaining / ticks_per_sample) as u32).min(n as u32 - 1);
+                    if ch.events.len() < ch.events.capacity() {
+                        ch.events.push(TimedEvent { offset: off, event: Event::NoteOff { key: h.key } });
+                    }
+                    ch.held.swap_remove(i); // no allocation
+                } else {
+                    ch.held[i].remaining -= block_ticks;
+                    i += 1;
+                }
+            }
+        }
 
         // A tick `t` in the loop sounds in this block if `t` or `t + len`
         // (after wrapping around the loop end) lies in [start, end).
@@ -438,9 +473,20 @@ impl Engine {
             let Some(ch) = self.channels.get_mut(note.channel as usize) else { continue };
             let on = note.start as f64
                 + if (note.start / TICKS_PER_STEP) % 2 == 1 { swing_ticks } else { 0.0 };
-            let off = (on + note.len as f64) % len;
 
             if let Some(o) = offset_of(on) {
+                // Ticks from block start to this note's end (exact, before rounding to a sample).
+                let since_start = if on >= start { on - start } else { on + len - start };
+                let end_tick = since_start + note.len as f64;
+                if end_tick < block_ticks {
+                    // Ends inside this very block.
+                    let off = ((end_tick / ticks_per_sample) as u32).min(n as u32 - 1).max(o);
+                    if ch.events.len() < ch.events.capacity() {
+                        ch.events.push(TimedEvent { offset: off, event: Event::NoteOff { key: note.key } });
+                    }
+                } else if ch.held.len() < ch.held.capacity() {
+                    ch.held.push(Held { key: note.key, remaining: end_tick - block_ticks });
+                }
                 if ch.events.len() < ch.events.capacity() {
                     ch.events.push(TimedEvent {
                         offset: o,
@@ -450,11 +496,6 @@ impl Engine {
                 self.shared.triggers[note.channel as usize].fetch_add(1, Relaxed);
                 if ch.choke > 0 && self.chokes.len() < self.chokes.capacity() {
                     self.chokes.push((o, ch.choke, note.channel as usize));
-                }
-            }
-            if let Some(o) = offset_of(off) {
-                if ch.events.len() < ch.events.capacity() {
-                    ch.events.push(TimedEvent { offset: o, event: Event::NoteOff { key: note.key } });
                 }
             }
         }
@@ -471,5 +512,99 @@ impl Engine {
             }
         }
         self.chokes.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lyra_plugin::ParamInfo;
+    use std::sync::Mutex;
+
+    /// Records every event it receives, with the absolute sample it landed on.
+    struct Recorder {
+        log: Arc<Mutex<Vec<(u64, Event)>>>,
+        clock: u64,
+    }
+
+    impl Plugin for Recorder {
+        fn name(&self) -> &'static str {
+            "recorder"
+        }
+        fn params(&self) -> &'static [ParamInfo] {
+            &[]
+        }
+        fn set_param(&mut self, _: u32, _: f32) {}
+        fn activate(&mut self, _: f32) {}
+        fn process(&mut self, ctx: ProcessContext<'_>) {
+            let mut log = self.log.lock().unwrap(); // a Mutex is fine in a *test* plugin
+            for e in ctx.events {
+                log.push((self.clock + e.offset as u64, e.event));
+            }
+            self.clock += ctx.out_l.len() as u64;
+            ctx.out_l.fill(0.0);
+            ctx.out_r.fill(0.0);
+        }
+    }
+
+    type Log = Arc<Mutex<Vec<(u64, Event)>>>;
+
+    /// 48 kHz at 120 bpm: one tick = 250 samples (96 ticks per 0.5 s beat).
+    fn setup() -> (Engine, EngineHandle, Log) {
+        let (mut eng, mut h) = create(48_000.0);
+        let log = Arc::new(Mutex::new(Vec::new()));
+        h.send(Command::AddChannel(ChannelSlot::new(Box::new(Recorder { log: log.clone(), clock: 0 }), 48_000.0)));
+        h.send(Command::SetTempo(120.0));
+        let mut out = vec![0.0; 2 * 64];
+        eng.process(&mut out, 2); // apply setup commands
+        log.lock().unwrap().clear();
+        (eng, h, log)
+    }
+
+    fn note(start: u32, len: u32) -> SeqNote {
+        SeqNote { start, len, channel: 0, key: 60, velocity: 1.0 }
+    }
+
+    fn run(eng: &mut Engine, samples: usize) {
+        let mut out = vec![0.0; 2 * samples];
+        eng.process(&mut out, 2);
+    }
+
+    #[test]
+    fn note_off_lands_at_note_end() {
+        let (mut eng, mut h, log) = setup();
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(0, 48)] })));
+        h.send(Command::Play);
+        run(&mut eng, 48 * 250 + 1000);
+        let log = log.lock().unwrap();
+        let on = log.iter().find(|(_, e)| matches!(e, Event::NoteOn { .. })).expect("note on").0;
+        let off = log.iter().find(|(_, e)| matches!(e, Event::NoteOff { .. })).expect("note off").0;
+        let len = off - on;
+        assert!((11_990..=12_010).contains(&len), "48 ticks ≈ 12000 samples, got {len}");
+    }
+
+    #[test]
+    fn deleting_a_sounding_note_still_releases_it() {
+        let (mut eng, mut h, log) = setup();
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(0, 96)] })));
+        h.send(Command::Play);
+        run(&mut eng, 5_000); // note is now sounding
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] }))); // user deletes it
+        run(&mut eng, 30_000);
+        let log = log.lock().unwrap();
+        assert!(log.iter().any(|(_, e)| matches!(e, Event::NoteOff { key: 60 })), "the note must not hang");
+    }
+
+    #[test]
+    fn note_crossing_the_loop_end_is_released_after_wrapping() {
+        let (mut eng, mut h, log) = setup();
+        // Starts 24 ticks before the loop end, lasts 48: ends 24 ticks into the next loop.
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(360, 48)] })));
+        h.send(Command::Play);
+        run(&mut eng, 384 * 250 + 24 * 250 + 2_000);
+        let log = log.lock().unwrap();
+        let on = log.iter().find(|(_, e)| matches!(e, Event::NoteOn { .. })).unwrap().0;
+        let off = log.iter().find(|(_, e)| matches!(e, Event::NoteOff { .. })).unwrap().0;
+        assert!((11_990..=12_010).contains(&(off - on)), "got {}", off - on);
     }
 }

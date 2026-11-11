@@ -48,6 +48,15 @@ pub fn channel_color(i: usize) -> Color32 {
 pub const STEP_OFF_A: Color32 = Color32::from_rgb(0x2b, 0x31, 0x3a);
 pub const STEP_OFF_B: Color32 = Color32::from_rgb(0x34, 0x3b, 0x46);
 
+// ── Piano roll ──
+pub const ROLL_WHITE_ROW: Color32 = Color32::from_rgb(0x22, 0x28, 0x2f);
+pub const ROLL_BLACK_ROW: Color32 = Color32::from_rgb(0x1c, 0x21, 0x27);
+/// Rows outside the song's scale (when highlighting is on).
+pub const ROLL_OUT_ROW: Color32 = Color32::from_rgb(0x17, 0x1b, 0x20);
+pub const KEY_WHITE: Color32 = Color32::from_rgb(0xc3, 0xcb, 0xcc);
+pub const KEY_BLACK: Color32 = Color32::from_rgb(0x1a, 0x1e, 0x23);
+pub const KEY_EDGE: Color32 = Color32::from_rgb(0x8d, 0x97, 0x99);
+
 pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
     let t = t.clamp(0.0, 1.0);
     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;

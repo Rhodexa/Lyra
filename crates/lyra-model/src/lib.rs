@@ -7,13 +7,17 @@
 //! channel rack just adds a one-step note at the default key. The piano roll
 //! (milestone 2) edits the very same notes, so the two views never disagree.
 
+pub mod theory;
+
 use std::collections::BTreeMap;
+pub use theory::{Chord, Scale};
 
 /// Musical time unit. Must equal `lyra_engine::TICKS_PER_STEP` (checked in the app).
 pub const TICKS_PER_STEP: u32 = 24;
 pub const STEPS_PER_BAR: u32 = 16;
 /// Steps are placed at this key; drums play at their natural pitch here.
 pub const DEFAULT_KEY: u8 = 60;
+pub const TICKS_PER_BAR: u32 = TICKS_PER_STEP * STEPS_PER_BAR;
 
 pub type ChannelId = u32;
 
@@ -60,6 +64,25 @@ impl Pattern {
 
     pub fn notes(&self, ch: ChannelId) -> &[Note] {
         self.notes.get(&ch).map_or(&[], |v| v.as_slice())
+    }
+
+    pub fn notes_mut(&mut self, ch: ChannelId) -> &mut Vec<Note> {
+        self.notes.entry(ch).or_default()
+    }
+
+    /// Grow the pattern (in whole bars) so every note fits. Never shrinks.
+    pub fn fit_to_notes(&mut self) {
+        let end = self.notes.values().flatten().map(|n| n.start + n.len).max().unwrap_or(0);
+        let bars = end.div_ceil(TICKS_PER_BAR).max(1);
+        self.length = self.length.max(bars * STEPS_PER_BAR);
+    }
+
+    /// True when this channel's notes are all plain steps (one-step long, on
+    /// the grid, one per step), so the channel rack can show them as buttons.
+    pub fn is_step_channel(&self, ch: ChannelId) -> bool {
+        let notes = self.notes(ch);
+        notes.iter().all(|n| n.start % TICKS_PER_STEP == 0 && n.len == TICKS_PER_STEP)
+            && notes.iter().enumerate().all(|(i, a)| notes[..i].iter().all(|b| b.start != a.start))
     }
 
     /// The note sitting exactly on `step`, if any.
@@ -110,6 +133,9 @@ pub struct Project {
     pub bpm: f64,
     pub swing: f32,
     pub master_volume: f32,
+    /// Key of the song (0 = C … 11 = B) and its scale: drives piano-roll help.
+    pub key_root: u8,
+    pub scale: Scale,
     pub channels: Vec<Channel>,
     pub patterns: Vec<Pattern>,
     next_id: ChannelId,
@@ -121,6 +147,8 @@ impl Default for Project {
             bpm: 124.0,
             swing: 0.0,
             master_volume: 0.8,
+            key_root: 9, // A
+            scale: Scale::Minor,
             channels: Vec::new(),
             patterns: vec![Pattern::new("Pattern 1")],
             next_id: 1,
@@ -160,6 +188,21 @@ impl Project {
                 p.notes.remove(&id);
             }
         }
+    }
+
+    /// Adds an empty pattern (one bar) and returns its index.
+    pub fn add_pattern(&mut self) -> usize {
+        let name = format!("Pattern {}", self.patterns.len() + 1);
+        self.patterns.push(Pattern::new(&name));
+        self.patterns.len() - 1
+    }
+
+    /// Duplicates a pattern (notes and length) right after itself; returns the new index.
+    pub fn clone_pattern(&mut self, index: usize) -> usize {
+        let mut copy = self.patterns[index].clone();
+        copy.name = format!("{} copy", copy.name);
+        self.patterns.insert(index + 1, copy);
+        index + 1
     }
 
     /// True when any channel is soloed — then only soloed channels are heard.

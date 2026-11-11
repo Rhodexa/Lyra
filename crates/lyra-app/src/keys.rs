@@ -1,4 +1,4 @@
-//! Global keyboard: transport, undo, and the typing keyboard as a piano.
+//! Global keyboard: transport, undo, editing commands, and the typing keyboard as a piano.
 //!
 //! Keys are read by *physical position*, so the piano layout works on
 //! QWERTY, AZERTY, Dvorak… alike:
@@ -9,10 +9,15 @@
 //!   S D   G H J                (black keys)
 //!  Z X C V B N M ,             C3 … C4
 //! ```
+//!
+//! Editing keys (arrows, Delete, Ctrl+A/D/Q) are *routed* by the app to the
+//! window you last clicked in — e.g. arrows move notes in the piano roll, but
+//! pick channels in the rack.
 
 use egui::{Context, Key};
 use std::collections::HashMap;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Action {
     TogglePlay,
     Stop,
@@ -20,8 +25,18 @@ pub enum Action {
     Redo,
     NoteOn(u8),
     NoteOff(u8),
-    SelectPrev,
-    SelectNext,
+    /// Arrow keys: (dx, dy) in {-1, 0, 1}; `big` = Shift held.
+    Arrow { dx: i32, dy: i32, big: bool },
+    Delete,
+    SelectAll,
+    Deselect,
+    Duplicate,
+    Quantize,
+    PrevPattern,
+    NextPattern,
+    ToggleRack,
+    TogglePiano,
+    ToggleEditor,
 }
 
 #[derive(Default)]
@@ -59,6 +74,9 @@ impl Keyboard {
                         Key::Z if modifiers.shift => out.push(Action::Redo),
                         Key::Z => out.push(Action::Undo),
                         Key::Y => out.push(Action::Redo),
+                        Key::A => out.push(Action::SelectAll),
+                        Key::D => out.push(Action::Duplicate),
+                        Key::Q => out.push(Action::Quantize),
                         _ => {}
                     }
                 }
@@ -78,16 +96,27 @@ impl Keyboard {
                 continue;
             }
 
-            if !pressed || repeat {
+            if !pressed {
                 continue;
             }
+            let big = modifiers.shift;
             match k {
+                // Arrows auto-repeat on purpose: hold to keep nudging.
+                Key::ArrowUp => out.push(Action::Arrow { dx: 0, dy: 1, big }),
+                Key::ArrowDown => out.push(Action::Arrow { dx: 0, dy: -1, big }),
+                Key::ArrowLeft => out.push(Action::Arrow { dx: -1, dy: 0, big }),
+                Key::ArrowRight => out.push(Action::Arrow { dx: 1, dy: 0, big }),
+                _ if repeat => {}
                 Key::Space => out.push(Action::TogglePlay),
-                Key::Escape => out.push(Action::Stop),
-                Key::ArrowUp => out.push(Action::SelectPrev),
-                Key::ArrowDown => out.push(Action::SelectNext),
+                Key::Escape => out.push(Action::Deselect),
+                Key::Delete | Key::Backspace => out.push(Action::Delete),
                 Key::Minus => self.octave = (self.octave - 1).max(-3),
                 Key::Equals => self.octave = (self.octave + 1).min(3),
+                Key::OpenBracket => out.push(Action::PrevPattern),
+                Key::CloseBracket => out.push(Action::NextPattern),
+                Key::F6 => out.push(Action::ToggleRack),
+                Key::F7 => out.push(Action::TogglePiano),
+                Key::F8 => out.push(Action::ToggleEditor),
                 _ => {}
             }
         }

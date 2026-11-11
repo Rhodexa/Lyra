@@ -47,6 +47,8 @@ pub struct ParamInfo {
     /// "Hz", "s", "%", "pan", "st" (semitones) or "" — used for display only.
     pub unit: &'static str,
     pub curve: Curve,
+    /// Non-empty = a choice parameter: the value is an index into these labels.
+    pub labels: &'static [&'static str],
 }
 
 impl ParamInfo {
@@ -59,7 +61,25 @@ impl ParamInfo {
         unit: &'static str,
         curve: Curve,
     ) -> Self {
-        Self { id, name, min, max, default, unit, curve }
+        Self { id, name, min, max, default, unit, curve, labels: &[] }
+    }
+
+    /// A parameter that picks one of `labels` (value = index).
+    pub const fn choice(id: u32, name: &'static str, labels: &'static [&'static str], default: u32) -> Self {
+        Self {
+            id,
+            name,
+            min: 0.0,
+            max: (labels.len() - 1) as f32,
+            default: default as f32,
+            unit: "",
+            curve: Curve::Linear,
+            labels,
+        }
+    }
+
+    pub fn is_choice(&self) -> bool {
+        !self.labels.is_empty()
     }
 
     /// Real value -> knob position (0..1).
@@ -74,9 +94,14 @@ impl ParamInfo {
     /// Knob position (0..1) -> real value.
     pub fn from_normalized(&self, n: f32) -> f32 {
         let n = n.clamp(0.0, 1.0);
-        match self.curve {
+        let v = match self.curve {
             Curve::Linear => self.min + n * (self.max - self.min),
             Curve::Exponential => self.min * (self.max / self.min).powf(n),
+        };
+        if self.is_choice() {
+            v.round()
+        } else {
+            v
         }
     }
 
@@ -87,6 +112,10 @@ impl ParamInfo {
 
     /// Human-readable value, e.g. "1.20 kHz", "45 ms", "L 30".
     pub fn format(&self, v: f32) -> String {
+        if self.is_choice() {
+            let i = (v.round().max(0.0) as usize).min(self.labels.len() - 1);
+            return self.labels[i].to_string();
+        }
         match self.unit {
             "Hz" if v >= 1000.0 => format!("{:.2} kHz", v / 1000.0),
             "Hz" => format!("{v:.0} Hz"),
@@ -102,6 +131,13 @@ impl ParamInfo {
     }
 }
 
+/// A titled run of parameters, for laying out an editor ("Filter": ids 6..11).
+#[derive(Clone, Debug)]
+pub struct ParamGroup {
+    pub name: &'static str,
+    pub ids: std::ops::Range<u32>,
+}
+
 /// Everything a plugin gets for one block of audio.
 pub struct ProcessContext<'a> {
     pub sample_rate: f32,
@@ -115,6 +151,10 @@ pub struct ProcessContext<'a> {
 pub trait Plugin: Send {
     fn name(&self) -> &'static str;
     fn params(&self) -> &'static [ParamInfo];
+    /// Optional layout hint for editors: named groups of parameter ids.
+    fn groups(&self) -> &'static [ParamGroup] {
+        &[]
+    }
     fn set_param(&mut self, id: u32, value: f32);
     /// Called on the UI thread before the plugin is handed to the audio thread.
     fn activate(&mut self, sample_rate: f32);

@@ -3,19 +3,23 @@
 Every milestone ends with something you can *play*. Nothing on a later line gets
 built before the line it depends on.
 
-## M1: First beat (current)
+## M1: First beat ✓
 - [x] Workspace, plugin interface, real-time engine with FIFOs
 - [x] Synth drums: kick, snare, clap, hi-hat (with choke groups)
 - [x] Channel rack: paint/erase steps, velocity and pitch on the wheel, mute/solo, vol/pan
 - [x] Transport: play/stop, tempo, swing, position, beat lights, master meter
 - [x] Typing keyboard as a piano, undo/redo
-- [ ] **First build on a real connection** (`cargo run`), plus fix-ups
+- [x] First build, plus fixing measured audio underruns (512-frame default, live underrun monitor)
 - [ ] Tune the drum sounds by ear
 
-## M2: Patterns & melody
-- Poly synth (saw/square/organ, unison, filter + envelopes)
-- Piano roll (FL-style: click places the last-used length, drag edges, chord stamp, scale highlight)
-- Multiple patterns + playlist arrangement, song mode
+## M2: Patterns & melody (current)
+- [x] Lyra Synth: poly, unison ×7, sub, SVF filter + envelope, ADSR, 7 presets
+- [x] Engine tracks held notes, so notes never hang when edited mid-play
+- [x] Piano roll: FL-style mouse, chord stamp in key, scale highlight, velocity lane, ghosts
+- [x] Instrument editor generated from plugin params (+ envelope view)
+- [x] Multiple patterns (new / clone / switch)
+- [ ] Playlist arrangement + song mode
+- [ ] Organ waveform for M1-style organ bass
 
 ## M3: Mixer
 - Mixer inserts with effect slots; per-channel meters

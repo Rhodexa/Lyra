@@ -60,6 +60,29 @@ as commands.
 * For the future video lane, wall-clock time is derived from ticks and tempo.
   The tempo map has to stay seconds-accurate.
 
+## Held notes
+
+Drums ignore note length, synths don't. When the engine plays a sequenced
+note-on, it records `(key, ticks left)` in the channel's fixed `held` list and
+sends the note-off itself when the time runs out. So deleting a sounding note,
+swapping the whole sequence, or a note crossing the loop end can never leave a
+note hanging. Stop clears the list and sends `AllNotesOff`.
+
+## Plugin parameters
+
+* Continuous: `ParamInfo::new(..)` with a linear or exponential knob curve.
+* Choices: `ParamInfo::choice(id, name, labels, default)`. The value is an index.
+* `Plugin::groups()` names runs of ids ("Filter": 6..11). The instrument
+  editor (`editor.rs`) is generated from `params()` and `groups()` alone, so any
+  future plugin gets an editor for free.
+
+## Music theory
+
+`lyra-model/src/theory.rs` holds the scales and chords. The project stores a
+key root and a scale. The piano roll uses them to highlight rows and to build
+"in key" chords: stacked scale thirds from the clicked note, which snaps into
+the key first.
+
 ## Conventions
 
 * Parameter `id` = its index in the plugin's `params()` list. Built-in instrument

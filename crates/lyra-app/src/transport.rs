@@ -17,7 +17,7 @@ pub fn show(
     ui: &mut Ui,
     p: &mut Project,
     h: &mut History,
-    st: &UiState,
+    st: &mut UiState,
     playing: bool,
     playhead: f64,
     logo: egui::TextureId,
@@ -74,6 +74,8 @@ pub fn show(
         if tracked(&widgets::knob(ui, &mut swing, &SWING, 20.0, theme::LAVENDER), h, p) {
             p.swing = swing;
         }
+        ui.add_space(14.0);
+        pattern_picker(ui, p, h, st);
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.add_space(8.0);
@@ -89,4 +91,33 @@ pub fn show(
             ui.label(RichText::new("master").small().color(theme::TEXT_DIM));
         });
     });
+}
+
+/// `< [Pattern ▾] >  new  clone` — which pattern the rack and piano roll edit (and what plays).
+fn pattern_picker(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+    let n = p.patterns.len();
+    st.pattern = st.pattern.min(n - 1);
+    ui.label(RichText::new("pattern").small().color(theme::TEXT_DIM));
+    if ui.small_button("<").on_hover_text("Previous pattern  ( [ )").clicked() {
+        st.pattern = st.pattern.saturating_sub(1);
+    }
+    egui::ComboBox::from_id_salt("pattern-picker")
+        .width(110.0)
+        .selected_text(RichText::new(&p.patterns[st.pattern].name).color(theme::MINT))
+        .show_ui(ui, |ui| {
+            for i in 0..n {
+                ui.selectable_value(&mut st.pattern, i, &p.patterns[i].name);
+            }
+        });
+    if ui.small_button(">").on_hover_text("Next pattern  ( ] )").clicked() {
+        st.pattern = (st.pattern + 1).min(n - 1);
+    }
+    if ui.small_button("new").on_hover_text("New empty pattern").clicked() {
+        h.checkpoint(p);
+        st.pattern = p.add_pattern();
+    }
+    if ui.small_button("clone").on_hover_text("Duplicate this pattern").clicked() {
+        h.checkpoint(p);
+        st.pattern = p.clone_pattern(st.pattern);
+    }
 }
