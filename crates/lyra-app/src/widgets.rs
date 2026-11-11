@@ -55,7 +55,7 @@ pub fn knob(ui: &mut Ui, value: &mut f32, info: &ParamInfo, diameter: f32, color
     let r = diameter * 0.5;
     let hot = resp.hovered() || resp.dragged();
     p.circle_filled(c, r - 2.5, if hot { theme::mix(theme::RAISED, color, 0.12) } else { theme::RAISED });
-    p.add(Shape::line(arc(c, r - 1.0, KNOB_START, KNOB_START + KNOB_SWEEP), Stroke::new(1.5, theme::LINE)));
+    p.add(Shape::line(arc(c, r - 1.0, KNOB_START, KNOB_START + KNOB_SWEEP), theme::stroke(1.5, theme::LINE)));
     let (a0, a1) = if info.is_bipolar() {
         let mid = info.to_normalized(0.0);
         (KNOB_START + KNOB_SWEEP * mid, KNOB_START + KNOB_SWEEP * n)
@@ -63,11 +63,11 @@ pub fn knob(ui: &mut Ui, value: &mut f32, info: &ParamInfo, diameter: f32, color
         (KNOB_START, KNOB_START + KNOB_SWEEP * n)
     };
     if (a1 - a0).abs() > 0.01 {
-        p.add(Shape::line(arc(c, r - 1.0, a0.min(a1), a0.max(a1)), Stroke::new(1.5, color)));
+        p.add(Shape::line(arc(c, r - 1.0, a0.min(a1), a0.max(a1)), theme::stroke(1.5, color)));
     }
     let a = KNOB_START + KNOB_SWEEP * n;
     let dir = vec2(a.cos(), a.sin());
-    p.line_segment([c + dir * (r * 0.2), c + dir * (r - 3.5)], Stroke::new(1.5, theme::TEXT));
+    p.line_segment([c + dir * (r * 0.2), c + dir * (r - 3.5)], theme::stroke(1.5, theme::TEXT));
 
     resp.on_hover_text(format!("{}: {}", info.name, info.format(*value)))
 }
@@ -82,7 +82,7 @@ pub fn led(ui: &mut Ui, on: bool, color: Color32, hint: &str) -> Response {
         p.circle_filled(c, 3.5, color);
     } else {
         p.circle_filled(c, 3.5, theme::INSET);
-        p.circle_stroke(c, 3.5, Stroke::new(1.0, theme::LINE));
+        p.circle_stroke(c, 3.5, theme::stroke(1.0, theme::LINE));
     }
     resp.on_hover_text(hint)
 }

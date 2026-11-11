@@ -14,9 +14,13 @@ use egui::{Color32, ColorImage, Context, FontId, Painter, Rect, Stroke, TextStyl
 pub const BG: Color32 = Color32::from_rgb(0x16, 0x1a, 0x1f);
 pub const PANEL: Color32 = Color32::from_rgb(0x1e, 0x23, 0x2a);
 pub const PANEL_HI: Color32 = Color32::from_rgb(0x26, 0x2c, 0x34);
+/// Toolbars and status bar: solid, a touch lighter than panels so they read clearly.
+pub const TOOLBAR: Color32 = Color32::from_rgb(0x24, 0x2a, 0x32);
 pub const RAISED: Color32 = Color32::from_rgb(0x2f, 0x36, 0x40);
 pub const INSET: Color32 = Color32::from_rgb(0x12, 0x15, 0x19);
-pub const LINE: Color32 = Color32::from_rgb(0x37, 0x40, 0x4b);
+/// Borders and details are *darker* than the surfaces they sit on (engraved,
+/// not glowing). Only selected/active things get bright edges.
+pub const LINE: Color32 = Color32::from_rgb(0x0e, 0x11, 0x14);
 
 // ── Text ──
 pub const TEXT: Color32 = Color32::from_rgb(0xdc, 0xe4, 0xe2);
@@ -54,6 +58,12 @@ pub fn cr(r: u8) -> egui::CornerRadius {
     egui::CornerRadius::same(r)
 }
 
+/// `Stroke::new` with a concretely typed width (egui's generic width param makes
+/// bare float literals ambiguous on newer Rust).
+pub fn stroke(width: f32, color: Color32) -> Stroke {
+    Stroke::new(width, color)
+}
+
 /// Dense, small, quiet: a DAW is a cockpit, not a landing page.
 pub fn apply(ctx: &Context) {
     let mut style = (*ctx.style()).clone();
@@ -76,18 +86,18 @@ pub fn apply(ctx: &Context) {
     v.window_fill = PANEL;
     v.extreme_bg_color = INSET;
     v.faint_bg_color = PANEL_HI;
-    v.window_stroke = Stroke::new(1.0, LINE);
+    v.window_stroke = stroke(1.0, LINE);
     v.window_shadow = egui::epaint::Shadow::NONE;
     v.popup_shadow = egui::epaint::Shadow::NONE;
     v.selection.bg_fill = MINT_DEEP.gamma_multiply(0.5);
-    v.selection.stroke = Stroke::new(1.0, MINT);
+    v.selection.stroke = stroke(1.0, MINT);
     v.widgets.noninteractive.bg_fill = PANEL;
-    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, LINE);
+    v.widgets.noninteractive.bg_stroke = stroke(1.0, LINE);
     v.widgets.inactive.bg_fill = RAISED;
     v.widgets.inactive.weak_bg_fill = RAISED;
     v.widgets.hovered.bg_fill = mix(RAISED, MINT, 0.15);
     v.widgets.hovered.weak_bg_fill = mix(RAISED, MINT, 0.15);
-    v.widgets.hovered.bg_stroke = Stroke::new(1.0, MINT_DEEP);
+    v.widgets.hovered.bg_stroke = stroke(1.0, MINT_DEEP);
     v.widgets.active.bg_fill = mix(RAISED, MINT, 0.3);
     v.widgets.active.weak_bg_fill = mix(RAISED, MINT, 0.3);
     ctx.set_style(style);
@@ -139,15 +149,15 @@ impl Textures {
     }
 }
 
+/// Tiles a texture over `rect`, anchored to the rect's own corner — so each
+/// surface has its own grain. (Anchoring to the screen made a window's grain line
+/// up with the background's, which read as "the window is see-through".)
 fn tile(painter: &Painter, tex: &TextureHandle, rect: Rect, w: f32, h: f32) {
-    let uv = Rect::from_min_max(
-        egui::pos2(rect.min.x / w, rect.min.y / h),
-        egui::pos2(rect.max.x / w, rect.max.y / h),
-    );
+    let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(rect.width() / w, rect.height() / h));
     painter.image(tex.id(), rect, uv, Color32::WHITE);
 }
 
-/// Placeholder: random light/dark specks at very low alpha.
+/// Placeholder: mostly dark specks, a few faint light ones.
 fn grain_image() -> ColorImage {
     let mut rng = 0x9e3779b9u32;
     let mut px = Vec::with_capacity(GRAIN * GRAIN * 4);
@@ -156,7 +166,7 @@ fn grain_image() -> ColorImage {
         rng ^= rng >> 17;
         rng ^= rng << 5;
         let v = (rng >> 24) as u8;
-        let (c, a) = if v & 1 == 0 { (255, v / 28) } else { (0, v / 20) };
+        let (c, a) = if v.is_multiple_of(4) { (255, v / 64) } else { (0, v / 26) };
         px.extend_from_slice(&[c, c, c, a]);
     }
     ColorImage::from_rgba_unmultiplied([GRAIN, GRAIN], &px)
@@ -186,11 +196,12 @@ fn pattern_image() -> ColorImage {
                 if d <= r {
                     // Three concentric rings per scale.
                     let ring = (d / (r / 3.0)).fract();
-                    alpha = if ring > 0.86 || d > r - 1.2 { 11 } else { 0 };
+                    alpha = if ring > 0.9 || d > r - 1.0 { 26 } else { 0 };
                     break;
                 }
             }
-            px.extend_from_slice(&[0x9d, 0xe9, 0xd2, alpha]);
+            // Dark engraving, not light lines: present when you look, gone when you don't.
+            px.extend_from_slice(&[0, 0, 0, alpha]);
         }
     }
     ColorImage::from_rgba_unmultiplied([w, h], &px)

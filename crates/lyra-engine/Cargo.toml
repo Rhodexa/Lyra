@@ -8,3 +8,6 @@ description = "Real-time audio engine: sequencer, mixer, and the UI<->audio FIFO
 [dependencies]
 lyra-plugin.workspace = true
 rtrb.workspace = true
+
+[dev-dependencies]
+lyra-dsp.workspace = true

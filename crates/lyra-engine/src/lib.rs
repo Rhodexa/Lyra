@@ -208,6 +208,9 @@ pub struct Engine {
     trash: Producer<Trash>,
     shared: Arc<Shared>,
 
+    // Boxed on purpose: channels arrive/leave as one pointer through the FIFOs,
+    // so the audio thread only ever moves 8 bytes, never a whole slot.
+    #[allow(clippy::vec_box)]
     channels: Vec<Box<ChannelSlot>>,
     seq: Box<Sequence>,
 

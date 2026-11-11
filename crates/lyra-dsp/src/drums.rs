@@ -473,3 +473,9 @@ impl Plugin for Hat {
         run_mono(self, ctx);
     }
 }
+
+// `Default` = `new()`, for every drum.
+macro_rules! default_via_new {
+    ($($t:ty),*) => { $(impl Default for $t { fn default() -> Self { Self::new() } })* };
+}
+default_via_new!(Kick, Snare, Clap, Hat);

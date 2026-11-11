@@ -11,7 +11,7 @@
 use crate::app::UiState;
 use crate::theme::{self, cr};
 use crate::widgets;
-use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Response, Sense, Stroke, StrokeKind, Ui};
+use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Response, Sense, StrokeKind, Ui};
 use lyra_model::{History, Project, DEFAULT_KEY};
 use lyra_plugin::{Curve, ParamInfo};
 
@@ -143,7 +143,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
             let tab = Rect::from_min_size(rect.min, vec2(3.0, rect.height()));
             painter.rect_filled(tab, cr(1), theme::mix(theme::mix(theme::PANEL_HI, color, 0.5), color, flash));
             if selected {
-                painter.rect_stroke(rect, cr(3), Stroke::new(1.0, color.gamma_multiply(0.6)), StrokeKind::Inside);
+                painter.rect_stroke(rect, cr(3), theme::stroke(1.0, color.gamma_multiply(0.6)), StrokeKind::Inside);
             }
             painter.text(
                 rect.left_center() + vec2(9.0, 0.0),
@@ -220,9 +220,10 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
                 };
                 painter.rect_filled(r, cr(2), fill);
                 if let Some(n) = note {
+                    // Dark lower lip: the lit step sits slightly raised, no shine.
                     painter.line_segment(
-                        [r.left_top() + vec2(3.0, 2.0), r.right_top() + vec2(-3.0, 2.0)],
-                        Stroke::new(1.0, Color32::WHITE.gamma_multiply(0.35)),
+                        [r.left_bottom() + vec2(2.0, -1.0), r.right_bottom() + vec2(-2.0, -1.0)],
+                        theme::stroke(1.0, Color32::BLACK.gamma_multiply(0.3)),
                     );
                     if n.key != DEFAULT_KEY {
                         painter.text(
@@ -235,9 +236,9 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
                     }
                 }
                 if play_step == Some(s) {
-                    painter.rect_stroke(r.expand(1.0), cr(3), Stroke::new(1.0, theme::MINT), StrokeKind::Outside);
+                    painter.rect_stroke(r.expand(1.0), cr(3), theme::stroke(1.0, theme::MINT), StrokeKind::Outside);
                     if note.is_some() {
-                        painter.rect_filled(r, cr(2), Color32::WHITE.gamma_multiply(0.2));
+                        painter.rect_filled(r, cr(2), Color32::WHITE.gamma_multiply(0.12));
                     }
                 }
             }

@@ -12,6 +12,7 @@ use lyra_plugin::{Curve, ParamInfo};
 static SWING: ParamInfo = ParamInfo::new(0, "Swing", 0.0, 1.0, 0.0, "%", Curve::Linear);
 static MASTER: ParamInfo = ParamInfo::new(0, "Master", 0.0, 1.25, 0.8, "%", Curve::Linear);
 
+#[allow(clippy::too_many_arguments)] // it's a view: it touches many things by design
 pub fn show(
     ui: &mut Ui,
     p: &mut Project,

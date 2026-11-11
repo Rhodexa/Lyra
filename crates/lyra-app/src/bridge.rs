@@ -42,7 +42,7 @@ impl Bridge {
         }
 
         let any_solo = p.any_solo();
-        let solo_changed = last.as_ref().map_or(true, |l| l.any_solo() != any_solo);
+        let solo_changed = last.as_ref().is_none_or(|l| l.any_solo() != any_solo);
         for (i, ch) in p.channels.iter().enumerate() {
             let prev = if rebuild { None } else { last.as_ref().map(|l| &l.channels[i]) };
             if let Some(prev) = prev {
@@ -53,7 +53,7 @@ impl Bridge {
                 }
             }
             let mix_changed = solo_changed
-                || prev.map_or(true, |c| {
+                || prev.is_none_or(|c| {
                     (c.volume, c.pan, c.mute, c.solo, c.choke) != (ch.volume, ch.pan, ch.mute, ch.solo, ch.choke)
                 });
             if mix_changed {
@@ -68,18 +68,18 @@ impl Bridge {
         }
 
         let l = last.as_ref();
-        if l.map_or(true, |l| l.bpm != p.bpm) {
+        if l.is_none_or(|l| l.bpm != p.bpm) {
             eng.send(Command::SetTempo(p.bpm));
         }
-        if l.map_or(true, |l| l.swing != p.swing) {
+        if l.is_none_or(|l| l.swing != p.swing) {
             eng.send(Command::SetSwing(p.swing));
         }
-        if l.map_or(true, |l| l.master_volume != p.master_volume) {
+        if l.is_none_or(|l| l.master_volume != p.master_volume) {
             eng.send(Command::SetMasterVolume(p.master_volume));
         }
         let seq_changed = rebuild
             || pattern != self.last_pattern
-            || l.map_or(true, |l| l.patterns.get(pattern) != p.patterns.get(pattern));
+            || l.is_none_or(|l| l.patterns.get(pattern) != p.patterns.get(pattern));
         if seq_changed {
             if let Some(pat) = p.patterns.get(pattern) {
                 eng.send(Command::SetSequence(Box::new(compile(p, pat))));
