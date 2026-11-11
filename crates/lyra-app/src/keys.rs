@@ -45,6 +45,8 @@ pub enum Action {
     Quantize,
     /// Move the playhead / start marker to a tick (from clicking a timeline).
     Seek(f64),
+    /// Make this channel (by index) the selected one.
+    SelectChannel(usize),
     /// Shift the typing keyboard by this many octaves.
     Octave(i32),
     PrevPattern,

@@ -54,6 +54,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Scroll | wheel, Shift+wheel sideways, middle-drag, or drag the overview bar's thumb |
 | Zoom | Ctrl+wheel (time) · Alt+wheel (pitch) · drag the overview thumb's ends |
 | Velocity | wheel over a note, or drag in the lane at the bottom |
+| Jump to another channel | double right-click one of its ghost notes |
 | Move the playhead | click / drag in the ruler |
 | Key, scale, shading, ghosts | the "View" menu · "full screen" button |
 

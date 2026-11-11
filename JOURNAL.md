@@ -21,6 +21,7 @@ what to work on and folds the items into the plan when the time is right.
 - [ ] Notes, more forgiving resize zone, maybe extending a bit beyond/outside the note end. It's too small and hard to hit
 - [ ]
 - [ ] Button on toolbar to bring cahnnel rack back into context
+- [ ] Double right-click on ghost note to got to that channel
 
 ## Sound
 *Ears-only notes: "kick too clicky", "pad needs more air", "this preset slaps".*

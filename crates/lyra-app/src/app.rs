@@ -196,6 +196,7 @@ impl LyraApp {
                 self.live(Event::NoteOff { key });
             }
             Action::Seek(tick) => self.send(Command::Seek(tick)),
+            Action::SelectChannel(i) => self.ui.selected = i.min(self.project.channels.len().saturating_sub(1)),
             Action::Octave(d) => self.keyboard.octave = (self.keyboard.octave + d).clamp(-3, 3),
             Action::PrevPattern => self.ui.pattern = self.ui.pattern.saturating_sub(1),
             Action::NextPattern => self.ui.pattern = (self.ui.pattern + 1).min(self.project.patterns.len() - 1),

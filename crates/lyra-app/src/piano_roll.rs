@@ -13,6 +13,7 @@
 //!   **Alt+wheel** — zoom pitch · **middle-drag** — pan · **wheel over a note** —
 //!   its velocity (the whole selection's, if the note is selected)
 //! * while playing, placing/moving notes stays silent (no preview over the music)
+//! * **double right-click a ghost note** — switch to that channel
 //! * overview bar (very top) — drag the thumb to pan, drag its ends to zoom
 //! * ruler — click/drag to move the playhead · velocity lane — drag to paint ·
 //!   keyboard (left) — click to listen
@@ -328,12 +329,13 @@ impl PianoRoll {
         let keys_r = Rect::from_min_max(pos2(rect.left(), grid.top()), pos2(grid.left(), grid.bottom()));
         let vel = Rect::from_min_max(pos2(grid.left(), grid.bottom() + 3.0), rect.right_bottom());
 
-        let (pos, pressed_p, pressed_s, pressed_m, down, mods, wheel, zoom) = ui.input(|i| {
+        let (pos, pressed_p, pressed_s, pressed_m, double_r, down, mods, wheel, zoom) = ui.input(|i| {
             (
                 i.pointer.interact_pos(),
                 i.pointer.primary_pressed(),
                 i.pointer.secondary_pressed(),
                 i.pointer.button_pressed(egui::PointerButton::Middle),
+                i.pointer.button_double_clicked(egui::PointerButton::Secondary),
                 i.pointer.any_down(),
                 i.modifiers,
                 i.raw_scroll_delta,
@@ -387,6 +389,20 @@ impl PianoRoll {
         self.scroll_x = self.scroll_x.max(0.0);
         let view = self.view(grid);
         self.hover_tick = pos.filter(|p| hovering && grid.contains(*p)).map(|p| view.tick(p.x));
+
+        // Double right-click on a ghost note: jump to the channel it belongs to.
+        if let (true, true, Some(pos)) = (hovering && double_r, self.show_ghosts, pos) {
+            if grid.contains(pos) && hit(&view, p.patterns[pat].notes(ch_id), pos).is_none() {
+                let ghost_owner = p.channels.iter().enumerate().find(|(i, c)| {
+                    *i != ch
+                        && lyra_dsp::info(&c.instrument).is_some_and(|inst| inst.melodic)
+                        && hit(&view, p.patterns[pat].notes(c.id), pos).is_some()
+                });
+                if let Some((i, _)) = ghost_owner {
+                    out.push(Action::SelectChannel(i));
+                }
+            }
+        }
 
         // ── Mouse ──
         let (scale, root) = (p.scale, p.key_root);
