@@ -60,6 +60,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 - [docs/manual/index.html](docs/manual/index.html): the illustrated manual, all diagrams (open in a browser)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it fits together (terse version)
 - [docs/ROADMAP.md](docs/ROADMAP.md): what's next
+- [JOURNAL.md](JOURNAL.md): wishes and friction from real use (fill it in!)
 
 ## License
 
