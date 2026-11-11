@@ -1,0 +1,19 @@
+[package]
+name = "lyra-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Lyra desktop app."
+
+[[bin]]
+name = "lyra"
+path = "src/main.rs"
+
+[dependencies]
+lyra-plugin.workspace = true
+lyra-dsp.workspace = true
+lyra-engine.workspace = true
+lyra-model.workspace = true
+egui.workspace = true
+eframe.workspace = true
+cpal.workspace = true

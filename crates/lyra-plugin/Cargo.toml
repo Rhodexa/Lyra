@@ -1,0 +1,6 @@
+[package]
+name = "lyra-plugin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The one plugin interface every instrument and effect in Lyra implements."

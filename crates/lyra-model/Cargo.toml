@@ -1,0 +1,6 @@
+[package]
+name = "lyra-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Project data (channels, patterns, notes) and undo. No audio, no UI."

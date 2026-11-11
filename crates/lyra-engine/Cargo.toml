@@ -1,0 +1,10 @@
+[package]
+name = "lyra-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real-time audio engine: sequencer, mixer, and the UI<->audio FIFOs."
+
+[dependencies]
+lyra-plugin.workspace = true
+rtrb.workspace = true

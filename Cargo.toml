@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+lyra-plugin = { path = "crates/lyra-plugin" }
+lyra-dsp    = { path = "crates/lyra-dsp" }
+lyra-engine = { path = "crates/lyra-engine" }
+lyra-model  = { path = "crates/lyra-model" }
+
+# UI: immediate-mode, OpenGL (glow) backend only, to keep downloads small.
+egui   = "=0.31.1"
+eframe = { version = "=0.31.1", default-features = false, features = ["glow", "wayland", "x11", "default_fonts"] }
+# Audio device I/O (ALSA -> PipeWire on Fedora).
+cpal = "0.15"
+# Lock-free single-producer/single-consumer ring buffer: our "ISR <-> main loop FIFO".
+rtrb = "0.3"
+
+# Audio code is unusable unoptimized; keep debug builds fast but debuggable.
+[profile.dev]
+opt-level = 1
+[profile.dev.package."*"]
+opt-level = 3
