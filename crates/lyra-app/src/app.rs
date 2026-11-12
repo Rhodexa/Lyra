@@ -28,6 +28,7 @@ pub enum Focus {
     Piano,
     Editor,
     Playlist,
+    Mixer,
 }
 
 /// View state that isn't part of the project (not saved, not undoable).
@@ -52,6 +53,11 @@ pub struct UiState {
     pub raise: Option<Focus>,
     pub show_design: bool,
     pub show_playlist: bool,
+    pub show_mixer: bool,
+    /// The mixer track whose effects are shown.
+    pub mixer_selected: usize,
+    /// Per mixer track [left, right], decaying (for the strip meters).
+    pub track_meters: Vec<[f32; 2]>,
     /// Space plays the whole playlist (true) or just the current pattern.
     pub song_mode: bool,
 }
@@ -74,6 +80,9 @@ impl Default for UiState {
             raise: None,
             show_design: false,
             show_playlist: true,
+            show_mixer: false,
+            mixer_selected: 1,
+            track_meters: Vec::new(),
             song_mode: false,
         }
     }
@@ -131,6 +140,7 @@ impl LyraApp {
             show_piano: dev.wants("piano"),
             show_editor: dev.wants("editor"),
             show_design: dev.wants("design"),
+            show_mixer: dev.wants("mixer"),
             ..UiState::default()
         };
         if dev.wants("piano") || dev.wants("editor") {
@@ -272,6 +282,13 @@ impl LyraApp {
             }
             let _ = shared.take_peak(i); // per-channel meters arrive with the mixer (M3)
         }
+        self.ui.track_meters.resize(lyra_engine::MIXER_TRACKS, [0.0; 2]);
+        for (t, shown) in self.ui.track_meters.iter_mut().enumerate() {
+            let peak = shared.take_track_peak(t);
+            for c in 0..2 {
+                shown[c] = peak[c].max(shown[c] * 0.86);
+            }
+        }
         let peak = shared.take_master_peak();
         for (shown, new) in self.ui.master_meter.iter_mut().zip(peak) {
             *shown = new.max(*shown * 0.86);
@@ -317,6 +334,10 @@ impl LyraApp {
                 self.ui.raise = Some(Focus::Editor);
             }
             Action::ToggleDesign => self.ui.show_design ^= true,
+            Action::ToggleMixer => {
+                self.ui.show_mixer ^= true;
+                self.ui.raise = Some(Focus::Mixer);
+            }
             Action::TogglePlaylist => {
                 self.ui.show_playlist ^= true;
                 self.ui.raise = Some(Focus::Playlist);
@@ -492,6 +513,7 @@ impl eframe::App for LyraApp {
                 Focus::Piano => "piano",
                 Focus::Editor => "editor",
                 Focus::Playlist => "playlist",
+                Focus::Mixer => "mixer",
             };
             ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, Id::new(id)));
             self.ui.focus = f;
@@ -651,6 +673,22 @@ impl LyraApp {
             self.ui.show_editor = open;
             if win.is_some_and(|w| clicked_inside(ctx, &w.response)) {
                 self.ui.focus = Focus::Editor;
+            }
+        }
+
+        if self.ui.show_mixer {
+            let mut open = true;
+            let win = egui::Window::new("Mixer")
+                .id(Id::new("mixer"))
+                .open(&mut open)
+                .default_pos([16.0, piano_top])
+                .default_size([piano_size[0], piano_size[1]])
+                .resizable(true)
+                .frame(frame)
+                .show(ctx, |ui| crate::mixer::show(ui, &mut self.project, &mut self.history, &mut self.ui));
+            self.ui.show_mixer = open;
+            if win.is_some_and(|w| clicked_inside(ctx, &w.response)) {
+                self.ui.focus = Focus::Mixer;
             }
         }
 

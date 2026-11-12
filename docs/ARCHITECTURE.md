@@ -79,6 +79,23 @@ exactly like a pattern. Song mode added no real-time code at all. The bridge
 compiles the target (pattern or song) on every project change and re-sends it
 only when the result differs. Switching mode seeks to the top.
 
+## Mixer
+
+Channels play into a **mixer track** (`Channel.mixer`; 0 = master, 1–16 =
+inserts). New channels take the next free insert. Per block, the engine:
+
+1. renders each channel and adds it into its track's buffer;
+2. runs every insert's effect chain **in place**, then volume/pan/mute, and
+   adds the result into the master;
+3. runs the master's chain, then the master volume and the safety clamp.
+
+Effect chains (`FxChain`) are built and activated on the UI thread and
+swapped in whole with `SetFxChain`; the old chain goes back as trash. The bridge
+rebuilds a chain only when its list of effects changes. Knob moves are plain
+`SetFxParam`. Tempo-synced effects get `Plugin::transport()` (tempo, playing,
+position) before each block. Effects live in `lyra-dsp/src/effects.rs`, and
+their editors are generated from their parameter tables, like instruments.
+
 ## Project files
 
 `lyra-model/src/file.rs` writes a `.lyra` file as readable JSON:

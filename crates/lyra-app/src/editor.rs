@@ -42,6 +42,20 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
         let label = lyra_dsp::info(&instrument).map_or(instrument.as_str(), |i| i.name);
         ui.label(RichText::new(label).small().color(theme::TEXT_DIM));
 
+        // Which mixer insert this channel plays into.
+        ui.add_space(8.0);
+        ui.label(RichText::new("mixer").small().color(theme::TEXT_DIM));
+        let mut route = p.channels[ch].mixer;
+        let name = |t: usize| p.mixer.get(t).map_or("?".to_string(), |m| m.name.clone());
+        egui::ComboBox::from_id_salt(("route", ch)).width(90.0).selected_text(name(route)).show_ui(ui, |ui| {
+            for t in 0..p.mixer.len() {
+                ui.selectable_value(&mut route, t, name(t));
+            }
+        });
+        if route != p.channels[ch].mixer {
+            h.checkpoint(p);
+            p.channels[ch].mixer = route;
+        }
         let presets: Vec<_> = lyra_dsp::presets_for(&instrument).collect();
         if !presets.is_empty() {
             ui.add_space(8.0);

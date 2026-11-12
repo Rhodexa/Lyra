@@ -143,12 +143,25 @@ pub struct ParamGroup {
     pub ids: std::ops::Range<u32>,
 }
 
+/// Where the song is, given to plugins before each block (see [`Plugin::transport`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Transport {
+    pub tempo: f64,
+    pub playing: bool,
+    /// Position at the start of this block, in ticks (96 per quarter note).
+    pub position: f64,
+}
+
 /// Everything a plugin gets for one block of audio.
+///
+/// * **Instruments** must overwrite every sample of `out_l` / `out_r`.
+/// * **Effects** process *in place*: the buffers arrive holding the input
+///   signal, and the effect writes its result back into them.
 pub struct ProcessContext<'a> {
     pub sample_rate: f32,
     /// Sorted by `offset`.
     pub events: &'a [TimedEvent],
-    /// Output buffers; the plugin must OVERWRITE every sample (not add).
+    /// Output buffers (input too, for effects — see above).
     pub out_l: &'a mut [f32],
     pub out_r: &'a mut [f32],
 }
@@ -165,6 +178,9 @@ pub trait Plugin: Send {
     fn activate(&mut self, sample_rate: f32);
     /// REAL-TIME. See the module docs.
     fn process(&mut self, ctx: ProcessContext<'_>);
+    /// REAL-TIME. Tempo and song position, called right before `process`.
+    /// Tempo-synced plugins (delays, sidechain pumps) override this.
+    fn transport(&mut self, _transport: Transport) {}
 }
 
 /// Default values of a parameter list, in id order.

@@ -156,6 +156,9 @@ pub fn show(
             if widgets::icon_button(ui, Icon::Knob, st.show_editor, "Instrument  (F8)").clicked() {
                 actions.push(Action::ToggleEditor);
             }
+            if widgets::icon_button(ui, Icon::Mixer, st.show_mixer, "Mixer  (F9)").clicked() {
+                actions.push(Action::ToggleMixer);
+            }
         });
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

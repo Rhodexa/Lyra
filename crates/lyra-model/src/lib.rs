@@ -52,6 +52,9 @@ pub struct Channel {
     pub choke: u8,
     /// Index into the theme's channel palette.
     pub color: usize,
+    /// Mixer track this channel plays into (0 = master).
+    #[serde(default)]
+    pub mixer: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -159,6 +162,39 @@ impl Clip {
 }
 
 pub const DEFAULT_TRACKS: usize = 12;
+/// Mixer tracks: 0 = master, 1..=16 inserts (matches the engine).
+pub const MIXER_TRACKS: usize = 17;
+
+/// One effect in a mixer track's chain.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EffectSlot {
+    /// Effect id, e.g. "lyra.reverb".
+    pub effect: String,
+    pub params: Vec<f32>,
+    #[serde(default)]
+    pub bypass: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MixerTrack {
+    pub name: String,
+    pub volume: f32,
+    pub pan: f32,
+    pub mute: bool,
+    pub effects: Vec<EffectSlot>,
+}
+
+impl MixerTrack {
+    fn new(name: &str) -> Self {
+        Self { name: name.into(), volume: 0.8, pan: 0.0, mute: false, effects: Vec::new() }
+    }
+}
+
+pub fn default_mixer() -> Vec<MixerTrack> {
+    let mut v = vec![MixerTrack { volume: 1.0, ..MixerTrack::new("Master") }];
+    v.extend((1..MIXER_TRACKS).map(|i| MixerTrack::new(&format!("Insert {i}"))));
+    v
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)] // a field missing from an older file gets its default
@@ -173,6 +209,7 @@ pub struct Project {
     pub patterns: Vec<Pattern>,
     pub tracks: Vec<Track>,
     pub clips: Vec<Clip>,
+    pub mixer: Vec<MixerTrack>,
     next_id: ChannelId,
     next_pattern_id: PatternId,
 }
@@ -189,6 +226,7 @@ impl Default for Project {
             patterns: vec![Pattern::new(1, "Pattern 1")],
             tracks: (1..=DEFAULT_TRACKS).map(|i| Track { name: format!("Track {i}"), mute: false }).collect(),
             clips: Vec::new(),
+            mixer: default_mixer(),
             next_id: 1,
             next_pattern_id: 2,
         }
@@ -200,6 +238,8 @@ impl Project {
         let id = self.next_id;
         self.next_id += 1;
         let color = self.channels.len();
+        let used: Vec<usize> = self.channels.iter().map(|c| c.mixer).collect();
+        let mixer = (1..MIXER_TRACKS).find(|t| !used.contains(t)).unwrap_or(0);
         self.channels.push(Channel {
             id,
             name: name.to_string(),
@@ -211,6 +251,7 @@ impl Project {
             solo: false,
             choke: 0,
             color,
+            mixer,
         });
         id
     }

@@ -2,7 +2,7 @@
 //! bass, chords, arranged in the playlist), so the very first thing you do is
 //! press Space and nod your head.
 
-use lyra_model::{ChannelId, Clip, Note, Project, TICKS_PER_BAR, TICKS_PER_STEP};
+use lyra_model::{ChannelId, Clip, EffectSlot, Note, Project, TICKS_PER_BAR, TICKS_PER_STEP};
 
 fn add(p: &mut Project, name: &str, instrument: &str, tweaks: &[(usize, f32)], volume: f32, choke: u8) -> ChannelId {
     let mut params = lyra_dsp::default_params(instrument);
@@ -94,6 +94,38 @@ pub fn project() -> Project {
             }
         }
     }
+
+    // Mixer: drums share inserts, bass and chords "breathe" with the kick (Pump),
+    // the chords get an echo and a room.
+    let route = |p: &mut Project, ch: ChannelId, t: usize, name: &str| {
+        if let Some(c) = p.channel_mut(ch) {
+            c.mixer = t;
+        }
+        p.mixer[t].name = name.into();
+    };
+    route(&mut p, kick, 1, "Kick");
+    route(&mut p, clap, 2, "Clap & snare");
+    route(&mut p, snare, 2, "Clap & snare");
+    route(&mut p, hat, 3, "Hats");
+    route(&mut p, open, 3, "Hats");
+    route(&mut p, bass, 4, "Bass");
+    route(&mut p, chords, 5, "Chords");
+    let fx = |id: &str, tweaks: &[(usize, f32)]| {
+        let mut params = lyra_dsp::effects::default_params(id);
+        for &(i, v) in tweaks {
+            params[i] = v;
+        }
+        EffectSlot { effect: id.into(), params, bypass: false }
+    };
+    p.mixer[2].effects = vec![fx("lyra.reverb", &[(0, 0.4), (3, 0.12)])];
+    p.mixer[3].effects = vec![fx("lyra.eq", &[(0, 300.0)])];
+    p.mixer[4].effects = vec![fx("lyra.eq", &[(1, 3.0), (4, -4.0)]), fx("lyra.pump", &[(0, 0.55)])];
+    p.mixer[5].effects = vec![
+        fx("lyra.pump", &[(0, 0.7), (1, 0.6)]),
+        fx("lyra.delay", &[(0, 2.0), (1, 0.4), (4, 0.22)]),
+        fx("lyra.reverb", &[(0, 0.8), (3, 0.28)]),
+    ];
+    p.mixer[0].effects = vec![fx("lyra.comp", &[(0, -10.0), (1, 2.5), (4, 1.5)])];
 
     // A 16-bar song: intro (beat), bass joins, breakdown (chords alone), drop (all).
     let bar = TICKS_PER_BAR;

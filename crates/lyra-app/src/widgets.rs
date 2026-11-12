@@ -105,6 +105,7 @@ pub enum Icon {
     Piano,
     Knob,
     Playlist,
+    Mixer,
 }
 
 /// A captioned, contained group for the toolbar ("module"). Every module has
@@ -219,6 +220,13 @@ fn paint_button(ui: &Ui, rect: Rect, resp: &Response, icon: Icon, active: bool) 
         Icon::Knob => {
             p.circle_stroke(c, 5.5 * u, line);
             p.line_segment([c, c + vec2(3.0, -3.5) * u], line);
+        }
+        Icon::Mixer => {
+            // Three faders at different heights.
+            for (x, cap) in [(-4.5, -2.0), (0.0, 3.0), (4.5, -4.5)] {
+                p.line_segment([c + vec2(x, -6.0) * u, c + vec2(x, 6.0) * u], stroke(1.0, ink));
+                p.rect_filled(Rect::from_center_size(c + vec2(x, cap) * u, vec2(3.5, 2.5) * u), cr(1), ink);
+            }
         }
         Icon::Playlist => {
             // Three tracks with clips on them.

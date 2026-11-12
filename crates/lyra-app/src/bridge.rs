@@ -5,7 +5,7 @@
 //! emits only the commands for what changed. Views never send engine commands
 //! for edits themselves — they just change the project. One direction, one place.
 
-use lyra_engine::{ChannelSlot, Command, EngineHandle, SeqNote, Sequence};
+use lyra_engine::{ChannelSlot, Command, EngineHandle, FxChain, SeqNote, Sequence};
 use lyra_model::{Pattern, Project, TICKS_PER_STEP};
 
 /// What the engine should loop: one pattern, or the whole arrangement.
@@ -74,6 +74,52 @@ impl Bridge {
                     mute: ch.mute || (any_solo && !ch.solo),
                     choke: ch.choke,
                 });
+            }
+        }
+
+        // Routing: which mixer track each channel plays into.
+        for (i, ch) in p.channels.iter().enumerate() {
+            let prev = if rebuild { None } else { last.as_ref().map(|l| l.channels[i].mixer) };
+            if prev != Some(ch.mixer) {
+                eng.send(Command::SetRoute { channel: i, track: ch.mixer });
+            }
+        }
+
+        // Mixer tracks: mix settings, and effect chains (rebuilt only when the
+        // list of effects changes; knob moves are plain parameter updates).
+        for (t, track) in p.mixer.iter().enumerate() {
+            let prev = last.as_ref().and_then(|l| l.mixer.get(t));
+            if prev.is_none_or(|pt| (pt.volume, pt.pan, pt.mute) != (track.volume, track.pan, track.mute)) {
+                eng.send(Command::SetTrackMix { track: t, volume: track.volume, pan: track.pan, mute: track.mute });
+            }
+            let same_chain = prev.is_some_and(|pt| {
+                pt.effects.len() == track.effects.len()
+                    && pt.effects.iter().zip(&track.effects).all(|(a, b)| a.effect == b.effect)
+            });
+            if !same_chain {
+                let slots = track
+                    .effects
+                    .iter()
+                    .filter_map(|slot| {
+                        let mut fx = lyra_dsp::effects::create(&slot.effect)?;
+                        for (id, v) in slot.params.iter().enumerate() {
+                            fx.set_param(id as u32, *v);
+                        }
+                        Some((fx, slot.bypass))
+                    })
+                    .collect();
+                eng.send(Command::SetFxChain { track: t, chain: FxChain::new(slots, eng.sample_rate()) });
+            } else if let Some(pt) = prev {
+                for (slot, (a, b)) in pt.effects.iter().zip(&track.effects).enumerate() {
+                    if a.bypass != b.bypass {
+                        eng.send(Command::SetFxBypass { track: t, slot, bypass: b.bypass });
+                    }
+                    for (id, v) in b.params.iter().enumerate() {
+                        if a.params.get(id) != Some(v) {
+                            eng.send(Command::SetFxParam { track: t, slot, id: id as u32, value: *v });
+                        }
+                    }
+                }
             }
         }
 

@@ -39,6 +39,15 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Mute a track | click its light |
 | Scroll / zoom / pan | wheel, Shift+wheel · Ctrl+wheel (time), Alt+wheel (track height) · middle-drag |
 
+**Mixer** (`F9`)
+
+| Do | How |
+|---|---|
+| Pick a track | click its strip; its effects appear on the right |
+| Volume / pan / mute | fader (drag, wheel, double-click = reset) · knob · light |
+| Effects | "+ add effect"; light = bypass; ^ v reorder; x remove |
+| Route a channel | instrument editor (F8) → "mixer" menu |
+
 **Channel rack**
 
 | Do | How |

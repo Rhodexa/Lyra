@@ -56,6 +56,7 @@ pub enum Action {
     ToggleEditor,
     ToggleDesign,
     TogglePlaylist,
+    ToggleMixer,
     /// Pattern mode ↔ song mode.
     ToggleSongMode,
     SongMode(bool),
@@ -194,6 +195,7 @@ impl Keyboard {
                 Key::F8 => out.push(Action::ToggleEditor),
                 Key::F12 => out.push(Action::ToggleDesign),
                 Key::F5 => out.push(Action::TogglePlaylist),
+                Key::F9 => out.push(Action::ToggleMixer),
                 Key::L => out.push(Action::ToggleSongMode),
                 _ => {}
             }

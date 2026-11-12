@@ -9,6 +9,7 @@ mod devtools;
 mod editor;
 mod files;
 mod keys;
+mod mixer;
 mod piano_roll;
 mod playlist;
 mod rack;

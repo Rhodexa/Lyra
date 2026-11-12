@@ -25,7 +25,7 @@
 //!
 //! That's the whole threading model: two threads, three one-way pipes.
 
-use lyra_plugin::{Event, Plugin, ProcessContext, TimedEvent};
+use lyra_plugin::{Event, Plugin, ProcessContext, TimedEvent, Transport};
 use rtrb::{Consumer, Producer, RingBuffer};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::sync::Arc;
@@ -35,6 +35,10 @@ pub const PPQ: u32 = 96;
 /// A step = one 16th note.
 pub const TICKS_PER_STEP: u32 = PPQ / 4;
 pub const MAX_CHANNELS: usize = 128;
+/// Mixer tracks: 0 = master, 1..=16 = inserts that channels route into.
+pub const MIXER_TRACKS: usize = 17;
+/// Effect slots per mixer track.
+pub const MAX_FX: usize = 8;
 /// The engine renders in slices of at most this many frames.
 pub const BLOCK: usize = 256;
 const MAX_EVENTS_PER_BLOCK: usize = 256;
@@ -80,6 +84,8 @@ pub struct ChannelSlot {
     pan: f32,
     mute: bool,
     choke: u8,
+    /// Mixer track this channel plays into.
+    route: usize,
     gain_l: f32,
     gain_r: f32,
 }
@@ -99,10 +105,43 @@ impl ChannelSlot {
             pan: 0.0,
             mute: false,
             choke: 0,
+            route: 0,
             gain_l: 0.0,
             gain_r: 0.0,
         })
     }
+}
+
+/// One mixer track's effects, in order. Built and activated on the UI thread,
+/// then swapped into the engine whole (the old chain comes back as trash).
+pub struct FxChain {
+    plugins: Vec<Box<dyn Plugin>>,
+    bypass: Vec<bool>,
+}
+
+impl FxChain {
+    /// `plugins` with their bypass flags. Activates each one (UI thread).
+    pub fn new(slots: Vec<(Box<dyn Plugin>, bool)>, sample_rate: f32) -> Box<Self> {
+        let mut plugins = Vec::with_capacity(MAX_FX);
+        let mut bypass = Vec::with_capacity(MAX_FX);
+        for (mut p, b) in slots.into_iter().take(MAX_FX) {
+            p.activate(sample_rate);
+            plugins.push(p);
+            bypass.push(b);
+        }
+        Box::new(Self { plugins, bypass })
+    }
+}
+
+struct MixerTrack {
+    fx: Box<FxChain>,
+    volume: f32,
+    pan: f32,
+    mute: bool,
+    gain_l: f32,
+    gain_r: f32,
+    buf_l: Vec<f32>,
+    buf_r: Vec<f32>,
 }
 
 #[derive(Clone, Copy)]
@@ -132,6 +171,32 @@ pub enum Command {
         value: f32,
     },
     /// `choke`: channels sharing a non-zero group cut each other off (closed hat kills open hat).
+    /// Which mixer track a channel plays into.
+    SetRoute {
+        channel: usize,
+        track: usize,
+    },
+    SetTrackMix {
+        track: usize,
+        volume: f32,
+        pan: f32,
+        mute: bool,
+    },
+    SetFxChain {
+        track: usize,
+        chain: Box<FxChain>,
+    },
+    SetFxParam {
+        track: usize,
+        slot: usize,
+        id: u32,
+        value: f32,
+    },
+    SetFxBypass {
+        track: usize,
+        slot: usize,
+        bypass: bool,
+    },
     SetMix {
         channel: usize,
         volume: f32,
@@ -149,6 +214,7 @@ pub enum Command {
 enum Trash {
     Sequence(#[allow(dead_code)] Box<Sequence>),
     Channel(#[allow(dead_code)] Box<ChannelSlot>),
+    Chain(#[allow(dead_code)] Box<FxChain>),
 }
 
 // ─────────────────────────── data coming back ──────────────────────────────
@@ -160,6 +226,8 @@ pub struct Shared {
     peaks: Vec<AtomicU32>,
     triggers: Vec<AtomicU32>,
     master_peak: [AtomicU32; 2],
+    /// Per mixer track: [left, right] peaks, flattened.
+    track_peaks: Vec<AtomicU32>,
 }
 
 impl Shared {
@@ -170,6 +238,7 @@ impl Shared {
             peaks: (0..MAX_CHANNELS).map(|_| AtomicU32::new(0)).collect(),
             triggers: (0..MAX_CHANNELS).map(|_| AtomicU32::new(0)).collect(),
             master_peak: [AtomicU32::new(0), AtomicU32::new(0)],
+            track_peaks: (0..MIXER_TRACKS * 2).map(|_| AtomicU32::new(0)).collect(),
         }
     }
 
@@ -185,6 +254,11 @@ impl Shared {
     /// Loudest sample on a channel since the last call (resets it).
     pub fn take_peak(&self, channel: usize) -> f32 {
         self.peaks.get(channel).map_or(0.0, |a| f32::from_bits(a.swap(0, Relaxed)))
+    }
+
+    /// Loudest [left, right] on a mixer track since the last call (resets it).
+    pub fn take_track_peak(&self, track: usize) -> [f32; 2] {
+        [0, 1].map(|c| self.track_peaks.get(track * 2 + c).map_or(0.0, |a| f32::from_bits(a.swap(0, Relaxed))))
     }
 
     pub fn take_master_peak(&self) -> [f32; 2] {
@@ -255,6 +329,7 @@ pub struct Engine {
     master: f32,
     master_gain: f32,
 
+    mixer: Vec<MixerTrack>,
     mix_l: Vec<f32>,
     mix_r: Vec<f32>,
     /// (sample offset, choke group, source channel) collected while scheduling.
@@ -281,6 +356,18 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
         swing: 0.0,
         master: 0.8,
         master_gain: 0.8,
+        mixer: (0..MIXER_TRACKS)
+            .map(|_| MixerTrack {
+                fx: FxChain::new(Vec::new(), sample_rate),
+                volume: 1.0,
+                pan: 0.0,
+                mute: false,
+                gain_l: 0.0,
+                gain_r: 0.0,
+                buf_l: vec![0.0; BLOCK],
+                buf_r: vec![0.0; BLOCK],
+            })
+            .collect(),
         mix_l: vec![0.0; BLOCK],
         mix_r: vec![0.0; BLOCK],
         chokes: Vec::with_capacity(64),
@@ -369,6 +456,33 @@ impl Engine {
                         ch.plugin.set_param(id, value);
                     }
                 }
+                Command::SetRoute { channel, track } => {
+                    if let Some(ch) = self.channels.get_mut(channel) {
+                        ch.route = track.min(MIXER_TRACKS - 1);
+                    }
+                }
+                Command::SetTrackMix { track, volume, pan, mute } => {
+                    if let Some(t) = self.mixer.get_mut(track) {
+                        (t.volume, t.pan, t.mute) = (volume, pan, mute);
+                    }
+                }
+                Command::SetFxChain { track, chain } => match self.mixer.get_mut(track) {
+                    Some(t) => {
+                        let old = std::mem::replace(&mut t.fx, chain);
+                        self.discard(Trash::Chain(old));
+                    }
+                    None => self.discard(Trash::Chain(chain)),
+                },
+                Command::SetFxParam { track, slot, id, value } => {
+                    if let Some(p) = self.mixer.get_mut(track).and_then(|t| t.fx.plugins.get_mut(slot)) {
+                        p.set_param(id, value);
+                    }
+                }
+                Command::SetFxBypass { track, slot, bypass } => {
+                    if let Some(b) = self.mixer.get_mut(track).and_then(|t| t.fx.bypass.get_mut(slot)) {
+                        *b = bypass;
+                    }
+                }
                 Command::SetMix { channel, volume, pan, mute, choke } => {
                     if let Some(ch) = self.channels.get_mut(channel) {
                         ch.volume = volume;
@@ -392,6 +506,7 @@ impl Engine {
     }
 
     fn render_block(&mut self, n: usize) {
+        let transport = Transport { tempo: self.tempo, playing: self.playing, position: self.pos };
         // 1. Gather this block's events: live notes first, then the sequencer.
         for ch in &mut self.channels {
             let ChannelSlot { events, pending, .. } = &mut **ch;
@@ -405,9 +520,11 @@ impl Engine {
         }
         self.apply_chokes();
 
-        // 2. Run every instrument, apply volume/pan, sum into the mix.
-        self.mix_l[..n].fill(0.0);
-        self.mix_r[..n].fill(0.0);
+        // 2. Run every instrument, apply volume/pan, add it into its mixer track.
+        for t in &mut self.mixer {
+            t.buf_l[..n].fill(0.0);
+            t.buf_r[..n].fill(0.0);
+        }
         for (i, ch) in self.channels.iter_mut().enumerate() {
             let ChannelSlot { plugin, events, buf_l, buf_r, .. } = &mut **ch;
             // AllNotesOff sorts before a NoteOn at the same sample, so a choke
@@ -434,13 +551,58 @@ impl Engine {
                 let l = ch.buf_l[s] * ch.gain_l;
                 let r = ch.buf_r[s] * ch.gain_r;
                 peak = peak.max(l.abs()).max(r.abs());
-                self.mix_l[s] += l;
-                self.mix_r[s] += r;
+                let track = &mut self.mixer[ch.route];
+                track.buf_l[s] += l;
+                track.buf_r[s] += r;
             }
             raise_peak(&self.shared.peaks[i], peak);
         }
 
-        // 3. Master volume + a hard safety clamp (protects ears and speakers).
+        // 3. Mixer: inserts 1..N run their effects, then volume/pan/mute, into
+        //    the master (track 0), which runs its own effects last.
+        for index in (1..MIXER_TRACKS).chain(std::iter::once(0)) {
+            let MixerTrack { fx, volume, pan, mute, gain_l, gain_r, buf_l, buf_r } = &mut self.mixer[index];
+            for (plugin, bypass) in fx.plugins.iter_mut().zip(&fx.bypass) {
+                if !bypass {
+                    plugin.transport(transport);
+                    plugin.process(ProcessContext {
+                        sample_rate: self.sr,
+                        events: &[],
+                        out_l: &mut buf_l[..n],
+                        out_r: &mut buf_r[..n],
+                    });
+                }
+            }
+            let (target_l, target_r) = if *mute {
+                (0.0, 0.0)
+            } else {
+                let angle = (pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+                (angle.cos() * *volume * std::f32::consts::SQRT_2, angle.sin() * *volume * std::f32::consts::SQRT_2)
+            };
+            let (mut pl, mut pr) = (0.0f32, 0.0f32);
+            for s in 0..n {
+                *gain_l += (target_l - *gain_l) * SMOOTH;
+                *gain_r += (target_r - *gain_r) * SMOOTH;
+                buf_l[s] *= *gain_l;
+                buf_r[s] *= *gain_r;
+                pl = pl.max(buf_l[s].abs());
+                pr = pr.max(buf_r[s].abs());
+            }
+            raise_peak(&self.shared.track_peaks[index * 2], pl);
+            raise_peak(&self.shared.track_peaks[index * 2 + 1], pr);
+            if index != 0 {
+                let (head, tail) = self.mixer.split_at_mut(index);
+                let (master, track) = (&mut head[0], &tail[0]);
+                for s in 0..n {
+                    master.buf_l[s] += track.buf_l[s];
+                    master.buf_r[s] += track.buf_r[s];
+                }
+            }
+        }
+        self.mix_l[..n].copy_from_slice(&self.mixer[0].buf_l[..n]);
+        self.mix_r[..n].copy_from_slice(&self.mixer[0].buf_r[..n]);
+
+        // 4. Master volume + a hard safety clamp (protects ears and speakers).
         let (mut pl, mut pr) = (0.0f32, 0.0f32);
         for s in 0..n {
             self.master_gain += (self.master - self.master_gain) * SMOOTH;

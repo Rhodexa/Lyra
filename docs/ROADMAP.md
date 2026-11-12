@@ -24,6 +24,12 @@ built before the line it depends on.
 
 ## M3: Keep it, mix it
 - [x] Save / open projects (`.lyra`, readable JSON, versioned), backup every 30 s + on quit, reopen the last project
+- [x] Mixer (F9): master + 16 inserts, channel routing, 8 effect slots per track, meters
+- [x] Built-in FX: EQ, Filter, Compressor, Delay (tempo-synced, ping-pong), Reverb, Pump (beat-synced ducking)
+- [ ] WAV export (the same engine, offline)
+- [ ] Sends / sidechain from a real kick
+- [ ] Lyra FM (port of Fluttersine) with a tabbed operator editor
+- [ ] Library folder for samples/plugins + "collect into project" (with M4)
 - Mixer inserts with effect slots; per-channel meters
 - Built-in FX: EQ, compressor, delay, reverb, filter, sidechain pump
 - Save/load projects; render to WAV (the same engine running offline)

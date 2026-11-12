@@ -5,6 +5,7 @@
 //! hosted CLAP plugin will get — so the engine never cares where sound comes from.
 
 pub mod drums;
+pub mod effects;
 pub mod synth;
 pub mod util;
 
