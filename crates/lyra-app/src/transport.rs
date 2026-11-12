@@ -29,7 +29,29 @@ pub fn show(
     let m = theme::m();
     ui.spacing_mut().item_spacing.x = m.module_gap;
     ui.horizontal_centered(|ui| {
-        widgets::logo(ui, logo, m.control_h + 8.0);
+        // The logo is the project menu: implicit, and it earns its place.
+        let size = m.control_h + 8.0;
+        let button = egui::Button::image(egui::Image::new((logo, vec2(size, size)))).frame(false);
+        egui::menu::menu_custom_button(ui, button, |ui| {
+            for (label, keys, action) in [
+                ("New", "Ctrl+N", Action::NewProject),
+                ("Open…", "Ctrl+O", Action::OpenProject),
+                ("Save", "Ctrl+S", Action::Save),
+                ("Save as…", "Ctrl+Shift+S", Action::SaveAs),
+            ] {
+                if ui.add(egui::Button::new(label).shortcut_text(keys)).clicked() {
+                    actions.push(action);
+                    ui.close_menu();
+                }
+            }
+            ui.separator();
+            if ui.button("Open backup").on_hover_text("The copy Lyra keeps of your latest work").clicked() {
+                actions.push(Action::OpenBackup);
+                ui.close_menu();
+            }
+        })
+        .response
+        .on_hover_text("Project: new, open, save");
 
         module(ui, "transport", |ui| {
             ui.spacing_mut().item_spacing.x = 4.0;

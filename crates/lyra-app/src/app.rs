@@ -12,7 +12,7 @@ use crate::keys::{Action, Keyboard};
 use crate::piano_roll::PianoRoll;
 use crate::playlist::Playlist;
 use crate::theme::{self, cr};
-use crate::{audio, demo, editor, rack, transport};
+use crate::{audio, demo, editor, files, rack, transport};
 use egui::{Id, Margin, RichText};
 use lyra_engine::{Command, EngineHandle};
 use lyra_model::{History, Project, TICKS_PER_STEP};
@@ -103,6 +103,16 @@ pub struct LyraApp {
     /// switched pattern/song mode, the new sequence must reach the engine
     /// first, or the seek is clamped to the old length (and then reset to 0).
     pending_seek: Option<f64>,
+    /// Where the project lives on disk (None = never saved).
+    path: Option<std::path::PathBuf>,
+    /// The project as last saved/opened: differs from `project` = unsaved changes.
+    saved: Project,
+    /// The project as last backed up, and when.
+    backed_up: Project,
+    last_backup: std::time::Instant,
+    title: String,
+    /// A short status message (saved, opened, errors) and when it appeared.
+    toast: Option<(String, bool, std::time::Instant)>,
 }
 
 impl LyraApp {
@@ -127,7 +137,14 @@ impl LyraApp {
             ui.selected = 5; // the demo's bass: something melodic to look at
             ui.focus = Focus::Piano;
         }
-        let project = demo::project();
+        // Reopen the last project; first run (or a missing file) gets the demo.
+        let (project, path, toast) = match files::last_project().map(|p| (files::load(&p), p)) {
+            Some((Ok(project), path)) => (project, Some(path), None),
+            Some((Err(e), _)) => (demo::project(), None, Some((e, true, std::time::Instant::now()))),
+            None => (demo::project(), None, None),
+        };
+        let project_for_saved = if path.is_some() { project.clone() } else { Project::default() };
+        let project_for_backup = project.clone();
         ui.song_mode = !project.clips.is_empty(); // a project with an arrangement opens ready to play it
         Self {
             project,
@@ -147,6 +164,12 @@ impl LyraApp {
             frame_count: 0,
             raising: None,
             pending_seek: None,
+            path,
+            saved: project_for_saved,
+            backed_up: project_for_backup,
+            last_backup: std::time::Instant::now(),
+            title: String::new(),
+            toast,
         }
     }
 
@@ -161,6 +184,73 @@ impl LyraApp {
         if self.ui.selected < self.project.channels.len() {
             let channel = self.ui.selected;
             self.send(Command::Live { channel, event });
+        }
+    }
+
+    fn notify(&mut self, text: &str, error: bool) {
+        if error {
+            eprintln!("lyra: {text}");
+        }
+        self.toast = Some((text.to_string(), error, std::time::Instant::now()));
+    }
+
+    /// Swap in another project: fresh undo history, selection back to the start.
+    fn replace_project(&mut self, project: Project, path: Option<std::path::PathBuf>) {
+        self.saved = if path.is_some() { project.clone() } else { Project::default() };
+        self.project = project;
+        self.path = path;
+        self.history = History::default();
+        self.ui.selected = 0;
+        self.ui.pattern = 0;
+        self.ui.song_mode = !self.project.clips.is_empty();
+        self.piano_framed = None;
+        self.pending_seek = Some(0.0);
+    }
+
+    fn open(&mut self, path: std::path::PathBuf) {
+        match files::load(&path) {
+            Ok(p) => {
+                files::backup(&self.project);
+                files::remember(&path);
+                let name = files::display_name(Some(&path));
+                self.replace_project(p, Some(path));
+                self.notify(&format!("Opened {name}"), false);
+            }
+            Err(e) => self.notify(&e, true),
+        }
+    }
+
+    fn save(&mut self, choose: bool) {
+        let path = match (&self.path, choose) {
+            (Some(p), false) => Some(p.clone()),
+            _ => files::pick_save(&files::display_name(self.path.as_deref())),
+        };
+        let Some(path) = path else { return }; // dialog cancelled
+        match files::save(&path, &self.project) {
+            Ok(()) => {
+                files::remember(&path);
+                self.saved = self.project.clone();
+                self.notify(&format!("Saved {}", files::display_name(Some(&path))), false);
+                self.path = Some(path);
+            }
+            Err(e) => self.notify(&e, true),
+        }
+    }
+
+    /// Window title ("My Song • — Lyra" with unsaved changes) and the periodic backup.
+    fn housekeeping(&mut self, ctx: &egui::Context) {
+        let dirty = self.project != self.saved;
+        let title = format!("{}{} — Lyra", files::display_name(self.path.as_deref()), if dirty { " •" } else { "" });
+        if title != self.title {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            self.title = title;
+        }
+        if self.last_backup.elapsed() > Duration::from_secs(30) {
+            self.last_backup = std::time::Instant::now();
+            if self.project != self.backed_up {
+                files::backup(&self.project);
+                self.backed_up = self.project.clone();
+            }
         }
     }
 
@@ -233,6 +323,30 @@ impl LyraApp {
             }
             Action::ToggleSongMode => self.ui.song_mode ^= true,
             Action::SongMode(on) => self.ui.song_mode = on,
+            Action::NewProject => {
+                files::backup(&self.project); // nothing is ever lost, so no "are you sure?"
+                let mut p = Project::default();
+                p.add_channel("Kick", "lyra.kick", lyra_dsp::default_params("lyra.kick"));
+                self.replace_project(p, None);
+                self.notify("New project · the previous one is in Open backup", false);
+            }
+            Action::OpenProject => {
+                if let Some(path) = files::pick_open() {
+                    self.open(path);
+                }
+            }
+            Action::OpenBackup => {
+                let path = files::backup_path();
+                match files::load(&path) {
+                    Ok(p) => {
+                        self.replace_project(p, None);
+                        self.notify("Opened the backup · Save as… to keep it", false);
+                    }
+                    Err(e) => self.notify(&e, true),
+                }
+            }
+            Action::Save => self.save(false),
+            Action::SaveAs => self.save(true),
             // Only keys the playlist actually handles stop here; the rest (copy,
             // paste, quantize…) fall through instead of vanishing.
             _ if self.ui.focus == Focus::Playlist
@@ -299,12 +413,17 @@ fn clicked_inside(ctx: &egui::Context, resp: &egui::Response) -> bool {
 }
 
 impl eframe::App for LyraApp {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        files::backup(&self.project); // quitting never loses anything
+    }
+
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         self.dev.inject(ctx, raw);
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.read_engine();
+        self.housekeeping(ctx);
         let (playing, playhead) =
             self.engine.as_ref().map_or((false, 0.0), |e| (e.shared().is_playing(), e.shared().playhead()));
         let mut actions = self.keyboard.poll(ctx);
@@ -555,6 +674,14 @@ impl LyraApp {
             .frame(egui::Frame::default().fill(theme::TOOLBAR).inner_margin(Margin::symmetric(8, 0)))
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
+                    // A short message (saved, opened, errors) for a few seconds.
+                    if let Some((text, error, at)) = &self.toast {
+                        if at.elapsed() < Duration::from_secs(if *error { 8 } else { 4 }) {
+                            ui.label(RichText::new(text).small().color(if *error { theme::ROSE } else { theme::MINT }));
+                            ui.add_space(12.0);
+                            ctx.request_repaint_after(Duration::from_millis(250));
+                        }
+                    }
                     let late = self.audio.as_ref().map_or(0, |a| a.stats.late.load(Relaxed));
                     let healthy = self.audio.is_some() && late == 0;
                     let (dot, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());

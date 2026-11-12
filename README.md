@@ -16,6 +16,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Do | How |
 |---|---|
 | Play / stop | `Space` |
+| Project | click the logo, or `Ctrl+N` new · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as |
 | Windows | `F5` playlist · `F6` channel rack · `F7` piano roll · `F8` instrument editor (also the WINDOWS module in the top bar) |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |

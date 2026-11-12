@@ -7,6 +7,7 @@ mod demo;
 mod design;
 mod devtools;
 mod editor;
+mod files;
 mod keys;
 mod piano_roll;
 mod playlist;

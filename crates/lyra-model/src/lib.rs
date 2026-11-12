@@ -7,8 +7,10 @@
 //! channel rack just adds a one-step note at the default key. The piano roll
 //! (milestone 2) edits the very same notes, so the two views never disagree.
 
+pub mod file;
 pub mod theory;
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 pub use theory::{Chord, Scale};
 
@@ -24,7 +26,7 @@ pub type ChannelId = u32;
 /// reordering patterns never makes a clip play the wrong one.
 pub type PatternId = u32;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Note {
     /// In ticks from the pattern start.
     pub start: u32,
@@ -33,7 +35,7 @@ pub struct Note {
     pub velocity: f32,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Channel {
     /// Stable identity (survives reordering). Patterns refer to channels by id.
     pub id: ChannelId,
@@ -52,7 +54,7 @@ pub struct Channel {
     pub color: usize,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Pattern {
     pub id: PatternId,
     pub name: String,
@@ -132,7 +134,7 @@ impl Pattern {
 }
 
 /// One row of the playlist.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Track {
     pub name: String,
     pub mute: bool,
@@ -140,7 +142,7 @@ pub struct Track {
 
 /// A pattern placed on the playlist. If the clip is longer than the pattern,
 /// the pattern repeats inside it (stretch a 2-bar beat across 16 bars).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Clip {
     pub pattern: PatternId,
     /// Playlist row.
@@ -158,7 +160,8 @@ impl Clip {
 
 pub const DEFAULT_TRACKS: usize = 12;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)] // a field missing from an older file gets its default
 pub struct Project {
     pub bpm: f64,
     pub swing: f32,

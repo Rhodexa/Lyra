@@ -17,3 +17,4 @@ lyra-model.workspace = true
 egui.workspace = true
 eframe.workspace = true
 cpal.workspace = true
+rfd.workspace = true

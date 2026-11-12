@@ -59,6 +59,11 @@ pub enum Action {
     /// Pattern mode ↔ song mode.
     ToggleSongMode,
     SongMode(bool),
+    NewProject,
+    OpenProject,
+    OpenBackup,
+    Save,
+    SaveAs,
 }
 
 #[derive(Default)]
@@ -138,6 +143,10 @@ impl Keyboard {
                         Key::A => out.push(Action::SelectAll),
                         // Ctrl+C/X/V arrive as Event::Copy/Cut/Paste (above).
                         Key::D | Key::B => out.push(Action::Duplicate),
+                        Key::S if modifiers.shift => out.push(Action::SaveAs),
+                        Key::S => out.push(Action::Save),
+                        Key::O => out.push(Action::OpenProject),
+                        Key::N => out.push(Action::NewProject),
                         Key::Q => out.push(Action::Quantize),
                         Key::ArrowUp => out.push(Action::Arrow { dx: 0, dy: 1, big: true }),
                         Key::ArrowDown => out.push(Action::Arrow { dx: 0, dy: -1, big: true }),

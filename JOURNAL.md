@@ -16,6 +16,12 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Wishes
 *Things you wish Lyra did.*
+- [ ] Less labelling, more implicit design: the TRANSPORT / TEMPO captions aren't needed (the transport already reads as a little cassette deck). Tempo as a bigger, clock-like number ("124.0 BPM" in big letters); no LED imitation, at least not at first.
+- [ ] Number selectors you grab and drag up/down *and* wheel, LCD-style: hover a digit (tens, ones, the decimal) to choose how fine you tune.
+- [ ] Pattern selector: change pattern with the wheel. The separate ◀ ▶ arrows aren't that useful (far apart, bad for touch); keep them for now.
+- [ ] Piano roll: a vertical scrollbar on the right (can be thinner than the top one), great on a touchpad.
+- [ ] ~ Docked layout (Blender / VS Code style areas that don't overlap) for the main views; it would also save the title bars (~5rem). Floating windows stay for plugins.
+- [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
 - [ ] 
 - [ ]
 
@@ -36,7 +42,6 @@ what to work on and folds the items into the plan when the time is right.
 - [ ] Remember sizes / zoom between runs (needs settings saving, comes with project save/load). Until then, "Copy as code" in F12 and I'll make your numbers the defaults.
 - [ ] Wheel-over-note changes velocity only while *hovering* a note. With a selection but no hover, the wheel still scrolls, otherwise you couldn't scroll while anything is selected. Tell me if you want it the other way.
 
-- [ ] **No save/load yet.** Anything you make is lost when Lyra closes. First thing in M3.
 - [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
 - [ ] The piano roll still has its own copy of the overview bar and ruler; move it onto the shared `timeline` module the playlist uses.
 

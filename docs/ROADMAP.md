@@ -22,7 +22,8 @@ built before the line it depends on.
 - [ ] Organ waveform for M1-style organ bass
 - [ ] Piano roll uses the shared `timeline` module (overview + ruler) like the playlist
 
-## M3: Mixer
+## M3: Keep it, mix it
+- [x] Save / open projects (`.lyra`, readable JSON, versioned), backup every 30 s + on quit, reopen the last project
 - Mixer inserts with effect slots; per-channel meters
 - Built-in FX: EQ, compressor, delay, reverb, filter, sidechain pump
 - Save/load projects; render to WAV (the same engine running offline)

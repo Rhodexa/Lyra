@@ -79,6 +79,17 @@ exactly like a pattern. Song mode added no real-time code at all. The bridge
 compiles the target (pattern or song) on every project change and re-sends it
 only when the result differs. Switching mode seeks to the top.
 
+## Project files
+
+`lyra-model/src/file.rs` writes a `.lyra` file as readable JSON:
+`{ format: "lyra-project", version, project }`. Missing fields get their
+defaults, so old files keep opening. Files from a *newer* Lyra are refused
+with a clear message. `lyra-app/src/files.rs` does the disk side: crash-safe
+writes (temp file + rename), native dialogs through the desktop portal (`rfd`),
+`~/.local/share/lyra/backup.lyra` (every 30 s while changed, on quit, and
+before New/Open), and reopening the last project. Tests that run the app set
+`XDG_DATA_HOME` to a scratch folder so they never touch the real backup.
+
 ## Held notes
 
 Drums ignore note length, synths don't. When the engine plays a sequenced

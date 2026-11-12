@@ -258,13 +258,6 @@ pub fn meter(p: &egui::Painter, rect: Rect, level: f32) {
     }
 }
 
-/// The Lyra mark (assets/icon.png, pre-scaled — see theme::Textures).
-pub fn logo(ui: &mut Ui, texture: egui::TextureId, size: f32) {
-    let (rect, _) = ui.allocate_exact_size(vec2(size, size), Sense::hover());
-    let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
-    ui.painter().image(texture, rect, uv, Color32::WHITE);
-}
-
 /// A tiny keyboard showing which notes the typing keyboard plays right now:
 /// four octaves from C1, with the playable range lit. Clicking left/right of
 /// the middle shifts the octave (returned as -1 / +1).
