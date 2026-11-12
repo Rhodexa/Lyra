@@ -11,12 +11,12 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Friction
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
-
+// - [ ] ? bug or missing?
 - [ ]
 
 ## Wishes
 *Things you wish Lyra did.*
-
+- [ ] 
 - [ ]
 
 ## Sound
@@ -38,6 +38,9 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+- [x] bug? Window won't actaully restore after fullscreen → `50dcf29`
+  *→ yes, a bug: full screen overwrote the window's remembered size. Now each mode keeps its own.*
 
 **Journal round 2 → `5ca6d87` (+ `c739b39`)**
 *From the journal:*
