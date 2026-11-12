@@ -56,7 +56,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
             h.checkpoint(p);
             p.channels[ch].mixer = route;
         }
-        let presets: Vec<_> = lyra_dsp::presets_for(&instrument).collect();
+        let presets = lyra_dsp::presets_for(&instrument);
         if !presets.is_empty() {
             ui.add_space(8.0);
             ui.menu_button("Presets", |ui| {
@@ -96,31 +96,65 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     // ── Parameters, group by group ──
     let all = [lyra_plugin::ParamGroup { name: "", ids: 0..params.len() as u32 }];
     let groups = if groups.is_empty() { &all[..] } else { groups };
-    for row in groups.chunks(2) {
-        ui.horizontal_top(|ui| {
-            for group in row {
-                ui.vertical(|ui| {
-                    if !group.name.is_empty() {
-                        ui.label(RichText::new(group.name.to_uppercase()).small().color(theme::TEXT_DIM));
-                    }
-                    egui::Frame::default()
-                        .fill(theme::INSET)
-                        .corner_radius(cr(4))
-                        .inner_margin(egui::Margin::same(6))
-                        .show(ui, |ui| {
-                            ui.horizontal_top(|ui| {
-                                for id in group.ids.clone() {
-                                    if let Some(info) = params.get(id as usize) {
-                                        param_cell(ui, p, h, ch, info, color);
-                                    }
-                                }
-                            });
-                        });
-                });
-                ui.add_space(4.0);
+    if groups.len() > 4 {
+        // Big instruments (Lyra FM: 6 operators + matrix + filter…) get one tab
+        // per group instead of a wall of knobs.
+        let tab_id = egui::Id::new(("editor-tab", instrument.as_str()));
+        let mut tab = ui.ctx().data(|d| d.get_temp::<usize>(tab_id)).unwrap_or(0).min(groups.len() - 1);
+        ui.horizontal_wrapped(|ui| {
+            for (i, g) in groups.iter().enumerate() {
+                if ui.selectable_label(tab == i, g.name).clicked() {
+                    tab = i;
+                }
             }
         });
-        ui.add_space(2.0);
+        ui.ctx().data_mut(|d| d.insert_temp(tab_id, tab));
+        ui.add_space(4.0);
+        let group = &groups[tab];
+        egui::Frame::default().fill(theme::INSET).corner_radius(cr(4)).inner_margin(egui::Margin::same(6)).show(
+            ui,
+            |ui| {
+                if group.name == "Matrix" && group.ids.len() == 36 {
+                    matrix_grid(ui, p, h, ch, params, group.ids.start as usize, color);
+                } else {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.set_max_width(9.0 * (theme::m().knob_large + 22.0));
+                        for id in group.ids.clone() {
+                            if let Some(info) = params.get(id as usize) {
+                                param_cell(ui, p, h, ch, info, color);
+                            }
+                        }
+                    });
+                }
+            },
+        );
+    } else {
+        for row in groups.chunks(2) {
+            ui.horizontal_top(|ui| {
+                for group in row {
+                    ui.vertical(|ui| {
+                        if !group.name.is_empty() {
+                            ui.label(RichText::new(group.name.to_uppercase()).small().color(theme::TEXT_DIM));
+                        }
+                        egui::Frame::default()
+                            .fill(theme::INSET)
+                            .corner_radius(cr(4))
+                            .inner_margin(egui::Margin::same(6))
+                            .show(ui, |ui| {
+                                ui.horizontal_top(|ui| {
+                                    for id in group.ids.clone() {
+                                        if let Some(info) = params.get(id as usize) {
+                                            param_cell(ui, p, h, ch, info, color);
+                                        }
+                                    }
+                                });
+                            });
+                    });
+                    ui.add_space(4.0);
+                }
+            });
+            ui.add_space(2.0);
+        }
     }
 
     if instrument == "lyra.synth" {
@@ -214,4 +248,38 @@ fn h_has_name_checkpoint(ui: &Ui) -> bool {
 }
 fn set_name_checkpoint(ui: &Ui, v: bool) {
     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("rename-checkpoint"), v));
+}
+
+/// The FM matrix as a 6×6 grid: row = modulator, column = carrier, the
+/// diagonal (gold) = an operator's feedback on itself.
+fn matrix_grid(
+    ui: &mut Ui,
+    p: &mut Project,
+    h: &mut History,
+    ch: usize,
+    params: &[ParamInfo],
+    first: usize,
+    color: Color32,
+) {
+    let size = theme::m().knob_small + 4.0;
+    egui::Grid::new(("fm-matrix", ch)).spacing(vec2(6.0, 4.0)).show(ui, |ui| {
+        ui.label(RichText::new("from \\ to").small().color(theme::TEXT_DIM));
+        for col in 1..=6 {
+            ui.label(RichText::new(format!("Op {col}")).small().color(theme::TEXT_DIM));
+        }
+        ui.end_row();
+        for row in 0..6 {
+            ui.label(RichText::new(format!("Op {}", row + 1)).small().color(theme::TEXT_DIM));
+            for col in 0..6 {
+                let id = first + row * 6 + col;
+                let Some(info) = params.get(id) else { continue };
+                let mut v = p.channels[ch].params[id];
+                let c = if row == col { theme::GOLD } else { color };
+                if tracked(&widgets::knob(ui, &mut v, info, size, c), h, p) {
+                    p.channels[ch].params[id] = v;
+                }
+            }
+            ui.end_row();
+        }
+    });
 }

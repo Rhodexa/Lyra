@@ -54,6 +54,12 @@ what to work on and folds the items into the plan when the time is right.
   - The `solo` flag is dead since solo became FL-style mutes. Remove it.
   - `lyra_dsp::params()` builds a whole plugin just to read a static table; the editor does it every frame.
 
+- [ ] *Lyra FM, notes from the port (behaviour kept from Fluttersine for now):*
+  - Saw/pulse stop being band-limited while modulated, so some aliasing on bright FM patches.
+  - An operator that becomes "used" while a note is held (raising a matrix cell) stays silent until the next note.
+  - Mod wheel, pitch bend and sustain pedal aren't wired (Lyra's events don't have them yet). Chorus/delay from Fluttersine presets now belong in mixer effects.
+  - The Ratio knob is continuous (FM Bell needs 5.19). The editor could snap to common ratios unless Alt is held.
+
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 

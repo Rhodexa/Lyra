@@ -6,6 +6,7 @@
 
 pub mod drums;
 pub mod effects;
+pub mod fm;
 pub mod synth;
 pub mod util;
 
@@ -26,6 +27,7 @@ pub const INSTRUMENTS: &[InstrumentInfo] = &[
     InstrumentInfo { id: "lyra.clap", name: "Clap", melodic: false },
     InstrumentInfo { id: "lyra.hat", name: "Hi-hat", melodic: false },
     InstrumentInfo { id: "lyra.synth", name: "Lyra Synth", melodic: true },
+    InstrumentInfo { id: "lyra.fm", name: "Lyra FM", melodic: true },
 ];
 
 pub fn info(id: &str) -> Option<&'static InstrumentInfo> {
@@ -40,6 +42,7 @@ pub fn create(id: &str) -> Option<Box<dyn Plugin>> {
         "lyra.clap" => Box::new(drums::Clap::new()),
         "lyra.hat" => Box::new(drums::Hat::new()),
         "lyra.synth" => Box::new(synth::Synth::new()),
+        "lyra.fm" => Box::new(fm::Fm::new()),
         _ => return None,
     })
 }
@@ -66,6 +69,7 @@ pub fn default_params(id: &str) -> Vec<f32> {
 }
 
 /// A named starting point: an instrument plus the parameters that differ from its defaults.
+#[derive(Clone, Copy)]
 pub struct Preset {
     pub name: &'static str,
     pub instrument: &'static str,
@@ -213,8 +217,15 @@ pub const PRESETS: &[Preset] = &[
     },
 ];
 
-pub fn presets_for(instrument: &str) -> impl Iterator<Item = &'static Preset> + '_ {
-    PRESETS.iter().filter(move |p| p.instrument == instrument)
+/// Presets for one instrument (Lyra Synth's list, or Lyra FM's own table).
+pub fn presets_for(instrument: &str) -> Vec<Preset> {
+    let synth = PRESETS.iter().filter(|p| p.instrument == instrument).map(|p| Preset { ..*p });
+    let fm = fm::FM_PRESETS.iter().filter(|_| instrument == "lyra.fm").map(|&(name, values)| Preset {
+        name,
+        instrument: "lyra.fm",
+        values,
+    });
+    synth.chain(fm).collect()
 }
 
 pub struct Silence;
