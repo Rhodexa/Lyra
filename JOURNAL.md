@@ -60,6 +60,7 @@ what to work on and folds the items into the plan when the time is right.
 - [x] bug? Window won't actaully restore after fullscreen → `50dcf29`
   *→ yes, a bug: full screen overwrote the window's remembered size. Now each mode keeps its own.*
 
+- [x] *(Claude)* No save/load: anything made was lost on quit → `dfe9b12`
 - [x] *(manual pass)* Ruler click that switched PAT/SONG landed at bar 1 instead of where you clicked → `d704b68`
 - [x] *(manual pass)* Copy/paste/quantize vanished while the playlist had focus → `d704b68`
 
