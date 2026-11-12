@@ -311,6 +311,7 @@ impl eframe::App for LyraApp {
         if let Some((f, frames)) = self.raising {
             let id = match f {
                 Focus::Rack => "rack",
+                Focus::Piano if self.piano.maximized => "piano-full",
                 Focus::Piano => "piano",
                 Focus::Editor => "editor",
             };
@@ -389,8 +390,11 @@ impl LyraApp {
             }
             let mut open = true;
             let live_keys = self.ui.live_keys.clone();
+            // Full screen is a *separate* window identity: egui remembers each one's
+            // size and position, so "restore" returns to exactly where it was.
+            let piano_id = if self.piano.maximized { "piano-full" } else { "piano" };
             let mut window = egui::Window::new(format!("Piano roll · {}", self.project.channels[ch].name))
-                .id(Id::new("piano"))
+                .id(Id::new(piano_id))
                 .open(&mut open)
                 .frame(frame);
             window = if self.piano.maximized {
