@@ -40,11 +40,23 @@ what to work on and folds the items into the plan when the time is right.
 - [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
 - [ ] The piano roll still has its own copy of the overview bar and ruler; move it onto the shared `timeline` module the playlist uses.
 
+- [ ] KDE shows a generic "W" icon for Lyra (title bar and taskbar): Wayland takes the icon from a `.desktop` file, which Lyra doesn't have yet. Needs a `lyra.desktop` + icon install (app id `lyra`).
+- [ ] *From the manual pass (verified, not urgent):*
+  - Changing channels (add, remove, reorder, replace) rebuilds every engine channel, which cuts off any tails still ringing. Make it insert/remove just the one channel.
+  - Notes played live from the typing keyboard don't trigger choke groups.
+  - If the engine's command FIFO is ever full, a dropped `SetSequence` goes unnoticed (the bridge thinks it was sent).
+  - Some undo steps do nothing: wheel-velocity checkpoints on every tick, and any press on the piano-roll grid checkpoints even when nothing changes.
+  - The `solo` flag is dead since solo became FL-style mutes. Remove it.
+  - `lyra_dsp::params()` builds a whole plugin just to read a static table; the editor does it every frame.
+
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
 - [x] bug? Window won't actaully restore after fullscreen → `50dcf29`
   *→ yes, a bug: full screen overwrote the window's remembered size. Now each mode keeps its own.*
+
+- [x] *(manual pass)* Ruler click that switched PAT/SONG landed at bar 1 instead of where you clicked → `d704b68`
+- [x] *(manual pass)* Copy/paste/quantize vanished while the playlist had focus → `d704b68`
 
 **Journal round 2 → `5ca6d87` (+ `c739b39`)**
 *From the journal:*
