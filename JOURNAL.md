@@ -36,6 +36,10 @@ what to work on and folds the items into the plan when the time is right.
 - [ ] Remember sizes / zoom between runs (needs settings saving, comes with project save/load). Until then, "Copy as code" in F12 and I'll make your numbers the defaults.
 - [ ] Wheel-over-note changes velocity only while *hovering* a note. With a selection but no hover, the wheel still scrolls, otherwise you couldn't scroll while anything is selected. Tell me if you want it the other way.
 
+- [ ] **No save/load yet.** Anything you make is lost when Lyra closes. First thing in M3.
+- [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
+- [ ] The piano roll still has its own copy of the overview bar and ruler; move it onto the shared `timeline` module the playlist uses.
+
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
