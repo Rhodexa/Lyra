@@ -17,7 +17,6 @@ art replaces it without touching any logic.
 
 | Asset | What it is today | Spec |
 |---|---|---|
-| **UI font** | egui's built-in font (the biggest single cause of the "engineering tool" look) | Pick one or two open-licensed families (OFL). Ideas: *M PLUS Rounded 1c*, *Zen Maru Gothic*, *Nunito*, *Outfit*. One for UI text, optionally one for big numbers (tempo, position). |
 | **Transport icons** | vector shapes in `widgets.rs` | play, stop, record (coming), loop (coming), metronome (coming) |
 | **Window / view icons** | same | playlist, channel rack, piano roll, instrument editor, mixer (coming), browser (coming), design panel |
 | **Edit icons** | same | plus (new), minus, clone/duplicate, previous, next, delete, snap/magnet, chord stamp, scale/key |
@@ -36,6 +35,7 @@ art replaces it without touching any logic.
 
 | Asset | Spec |
 |---|---|
+| UI font | *Optional.* The current fonts look good (2026-11-12). Only if we ever want a distinct face for big numbers (tempo, position). |
 | Cursors | resize-note, pencil (place), eraser, hand (pan): 32×32 PNG with the hotspot marked |
 | Instrument portraits | a small badge per built-in instrument (kick, snare, clap, hat, synth) for the browser, ~48×48 |
 | Splash / empty states | "no notes yet", "drop a sample here" illustrations, any size |
