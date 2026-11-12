@@ -7,7 +7,8 @@
 //! | `LYRA_SCREENSHOT_FRAMES=n` | warm-up frames before the shot (default 45) |
 //! | `LYRA_PLAY=1` | start playing on launch |
 //! | `LYRA_SILENT=1` | engine runs normally, but the sound card gets zeros (see `audio.rs`) |
-//! | `LYRA_OPEN=piano,settings` | open these windows on launch |
+//! | `LYRA_OPEN=piano,editor,design` | open these windows on launch |
+//! | `LYRA_ZOOM=1.3` | starting UI zoom (read in `app.rs`) |
 //! | `LYRA_BUFFER=n` | audio ring size in frames (see `audio.rs`) |
 //! | `LYRA_SCRIPT="…"` | synthetic input, one step per frame (see below) |
 //!

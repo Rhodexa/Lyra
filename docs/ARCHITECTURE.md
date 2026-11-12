@@ -52,7 +52,7 @@ as commands.
 ## Time
 
 * `PPQ = 96` ticks per quarter note, and **1 step = 24 ticks = a 16th note**.
-* A step *is* a note: the rack and (later) the piano roll edit the same `Note`s.
+* A step *is* a note: the rack and the piano roll edit the same `Note`s.
 * The engine schedules sample-accurately. Each block it finds the notes whose
   tick falls in `[pos, pos + block)`, handling the loop wrap, and converts them
   to sample offsets.

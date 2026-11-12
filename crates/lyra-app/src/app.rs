@@ -99,6 +99,10 @@ pub struct LyraApp {
     frame_count: u64,
     /// A window being raised, and for how many more frames (see `windows`).
     raising: Option<(Focus, u8)>,
+    /// A seek waiting until after this frame's sync: if the same click also
+    /// switched pattern/song mode, the new sequence must reach the engine
+    /// first, or the seek is clamped to the old length (and then reset to 0).
+    pending_seek: Option<f64>,
 }
 
 impl LyraApp {
@@ -142,6 +146,7 @@ impl LyraApp {
             textures: theme::Textures::new(&cc.egui_ctx),
             frame_count: 0,
             raising: None,
+            pending_seek: None,
         }
     }
 
@@ -207,7 +212,7 @@ impl LyraApp {
                 self.ui.live_keys.retain(|&k| k != key);
                 self.live(Event::NoteOff { key });
             }
-            Action::Seek(tick) => self.send(Command::Seek(tick)),
+            Action::Seek(tick) => self.pending_seek = Some(tick),
             Action::SelectChannel(i) => self.ui.selected = i.min(self.project.channels.len().saturating_sub(1)),
             Action::Octave(d) => self.keyboard.octave = (self.keyboard.octave + d).clamp(-3, 3),
             Action::PrevPattern => self.ui.pattern = self.ui.pattern.saturating_sub(1),
@@ -228,9 +233,12 @@ impl LyraApp {
             }
             Action::ToggleSongMode => self.ui.song_mode ^= true,
             Action::SongMode(on) => self.ui.song_mode = on,
-            _ if self.ui.focus == Focus::Playlist && self.ui.show_playlist && is_edit(a) => {
-                self.playlist.action(a, &mut self.project, &mut self.history);
-            }
+            // Only keys the playlist actually handles stop here; the rest (copy,
+            // paste, quantize…) fall through instead of vanishing.
+            _ if self.ui.focus == Focus::Playlist
+                && self.ui.show_playlist
+                && is_edit(a)
+                && self.playlist.action(a, &mut self.project, &mut self.history) => {}
             _ if piano_has_focus => {
                 let handled = self.piano.action(a, &mut self.project, &mut self.history, pat, ch);
                 if handled && matches!(a, Action::Copy | Action::Cut) {
@@ -381,6 +389,9 @@ impl eframe::App for LyraApp {
         if let Some(e) = &mut self.engine {
             let target = if self.ui.song_mode { Playing::Song } else { Playing::Pattern(self.ui.pattern) };
             self.bridge.sync(&self.project, target, e);
+            if let Some(tick) = self.pending_seek.take() {
+                e.send(Command::Seek(tick));
+            }
         }
 
         // Animate smoothly while sound is moving; idle gently otherwise.
