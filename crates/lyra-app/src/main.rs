@@ -9,8 +9,10 @@ mod devtools;
 mod editor;
 mod keys;
 mod piano_roll;
+mod playlist;
 mod rack;
 mod theme;
+mod timeline;
 mod transport;
 mod widgets;
 

@@ -16,13 +16,27 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Do | How |
 |---|---|
 | Play / stop | `Space` |
-| Windows | `F6` channel rack · `F7` piano roll · `F8` instrument editor (also the WINDOWS module in the top bar) |
+| Windows | `F5` playlist · `F6` channel rack · `F7` piano roll · `F8` instrument editor (also the WINDOWS module in the top bar) |
+| Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
 | Patterns | `[` / `]` or the picker in the top bar (new, clone) |
 | Play notes | typing keyboard: `Z`–`M` and `Q`–`P` rows; `-` / `=` octave (shown in the top bar) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Knobs | drag (Shift = fine), wheel, double-click to reset |
 | UI size | `F12` Design panel, or `Ctrl+=` / `Ctrl+-` / `Ctrl+0` zoom (`LYRA_ZOOM=1.3` to start bigger) |
+
+**Playlist** (`F5`; `L` or PAT/SONG switches what Space plays)
+
+| Do | How |
+|---|---|
+| Place the current pattern | click an empty spot (the top bar's pattern is the one placed) |
+| Move / resize / duplicate | drag a clip / drag its right end (longer = the pattern repeats) / Shift+drag |
+| Pick a clip's pattern / open it | click a clip / double-click it |
+| Delete | right-click or right-drag, or `Delete` |
+| Select | Ctrl+drag, `Ctrl+A` · duplicate after: `Ctrl+D` / `Ctrl+B` |
+| Play from here | click the ruler (switches to song mode) |
+| Mute a track | click its light |
+| Scroll / zoom / pan | wheel, Shift+wheel · Ctrl+wheel (time), Alt+wheel (track height) · middle-drag |
 
 **Channel rack**
 

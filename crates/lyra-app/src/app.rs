@@ -7,10 +7,12 @@
 //! 4. apply actions (play, undo, live notes, editing keys → focused window)
 //! 5. `bridge.sync` pushes whatever changed to the engine
 
+use crate::bridge::{Bridge, Playing};
 use crate::keys::{Action, Keyboard};
 use crate::piano_roll::PianoRoll;
+use crate::playlist::Playlist;
 use crate::theme::{self, cr};
-use crate::{audio, bridge::Bridge, demo, editor, rack, transport};
+use crate::{audio, demo, editor, rack, transport};
 use egui::{Id, Margin, RichText};
 use lyra_engine::{Command, EngineHandle};
 use lyra_model::{History, Project, TICKS_PER_STEP};
@@ -25,6 +27,7 @@ pub enum Focus {
     Rack,
     Piano,
     Editor,
+    Playlist,
 }
 
 /// View state that isn't part of the project (not saved, not undoable).
@@ -48,6 +51,9 @@ pub struct UiState {
     /// A window that asked to be brought to the front this frame.
     pub raise: Option<Focus>,
     pub show_design: bool,
+    pub show_playlist: bool,
+    /// Space plays the whole playlist (true) or just the current pattern.
+    pub song_mode: bool,
 }
 
 impl Default for UiState {
@@ -67,6 +73,8 @@ impl Default for UiState {
             led_paint: None,
             raise: None,
             show_design: false,
+            show_playlist: true,
+            song_mode: false,
         }
     }
 }
@@ -84,6 +92,7 @@ pub struct LyraApp {
     dev: crate::devtools::DevTools,
     ui: UiState,
     piano: PianoRoll,
+    playlist: Playlist,
     /// (pattern, channel id) the piano roll last framed its view on.
     piano_framed: Option<(usize, u32)>,
     textures: theme::Textures,
@@ -114,8 +123,10 @@ impl LyraApp {
             ui.selected = 5; // the demo's bass: something melodic to look at
             ui.focus = Focus::Piano;
         }
+        let project = demo::project();
+        ui.song_mode = !project.clips.is_empty(); // a project with an arrangement opens ready to play it
         Self {
-            project: demo::project(),
+            project,
             history: History::default(),
             bridge: Bridge::default(),
             engine,
@@ -126,6 +137,7 @@ impl LyraApp {
             dev,
             ui,
             piano: PianoRoll::default(),
+            playlist: Playlist::default(),
             piano_framed: None,
             textures: theme::Textures::new(&cc.egui_ctx),
             frame_count: 0,
@@ -210,6 +222,15 @@ impl LyraApp {
                 self.ui.raise = Some(Focus::Editor);
             }
             Action::ToggleDesign => self.ui.show_design ^= true,
+            Action::TogglePlaylist => {
+                self.ui.show_playlist ^= true;
+                self.ui.raise = Some(Focus::Playlist);
+            }
+            Action::ToggleSongMode => self.ui.song_mode ^= true,
+            Action::SongMode(on) => self.ui.song_mode = on,
+            _ if self.ui.focus == Focus::Playlist && self.ui.show_playlist && is_edit(a) => {
+                self.playlist.action(a, &mut self.project, &mut self.history);
+            }
             _ if piano_has_focus => {
                 let handled = self.piano.action(a, &mut self.project, &mut self.history, pat, ch);
                 if handled && matches!(a, Action::Copy | Action::Cut) {
@@ -226,6 +247,35 @@ impl LyraApp {
             _ => {}
         }
     }
+}
+
+/// Editing keys (as opposed to transport/window keys) — routed to the focused editor.
+fn is_edit(a: Action) -> bool {
+    matches!(
+        a,
+        Action::Arrow { .. }
+            | Action::Delete
+            | Action::SelectAll
+            | Action::Deselect
+            | Action::Copy
+            | Action::Cut
+            | Action::Paste
+            | Action::Duplicate
+            | Action::Quantize
+    )
+}
+
+/// The playhead expressed inside pattern `pat`.
+fn pattern_position(p: &Project, pat: usize, playhead: f64, song_mode: bool) -> Option<f64> {
+    if !song_mode {
+        return Some(playhead);
+    }
+    let pattern = p.patterns.get(pat)?;
+    let loop_len = (pattern.play_length() * TICKS_PER_STEP) as f64;
+    p.clips
+        .iter()
+        .find(|c| c.pattern == pattern.id && (c.start as f64..c.end() as f64).contains(&playhead))
+        .map(|c| (playhead - c.start as f64) % loop_len)
 }
 
 /// Did this click land on this window (and not on something drawn above it)?
@@ -314,6 +364,7 @@ impl eframe::App for LyraApp {
                 Focus::Piano if self.piano.maximized => "piano-full",
                 Focus::Piano => "piano",
                 Focus::Editor => "editor",
+                Focus::Playlist => "playlist",
             };
             ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, Id::new(id)));
             self.ui.focus = f;
@@ -328,7 +379,8 @@ impl eframe::App for LyraApp {
 
         // ── Push changes to the engine ──
         if let Some(e) = &mut self.engine {
-            self.bridge.sync(&self.project, self.ui.pattern, e);
+            let target = if self.ui.song_mode { Playing::Song } else { Playing::Pattern(self.ui.pattern) };
+            self.bridge.sync(&self.project, target, e);
         }
 
         // Animate smoothly while sound is moving; idle gently otherwise.
@@ -349,8 +401,10 @@ impl LyraApp {
     ) {
         let pat = self.ui.pattern.min(self.project.patterns.len() - 1);
         self.ui.pattern = pat;
-        let play_tick = playing.then_some(playhead);
-        let play_step = play_tick.map(|t| (t / TICKS_PER_STEP as f64) as u32);
+        // Where we are *inside the current pattern*: the playhead itself in pattern
+        // mode; in song mode, the position within a clip of this pattern (if one is playing).
+        let local = pattern_position(&self.project, pat, playhead, self.ui.song_mode);
+        let play_step = local.filter(|_| playing).map(|t| (t / TICKS_PER_STEP as f64) as u32);
         let frame = egui::Frame::window(&ctx.style())
             .fill(theme::PANEL)
             .stroke(theme::stroke(1.0, theme::LINE))
@@ -362,6 +416,34 @@ impl LyraApp {
         let screen = ctx.screen_rect();
         let piano_top = (screen.height() * 0.42).max(300.0);
         let piano_size = [screen.width() - 32.0, (screen.height() - piano_top - 28.0).max(240.0)];
+
+        if self.ui.show_playlist {
+            let mut open = true;
+            let win = egui::Window::new("Playlist")
+                .id(Id::new("playlist"))
+                .open(&mut open)
+                .default_pos([16.0, piano_top])
+                .default_size(piano_size)
+                .resizable(true)
+                .frame(frame)
+                .show(ctx, |ui| {
+                    let song_playhead = if self.ui.song_mode { playhead } else { 0.0 };
+                    let song_playing = playing && self.ui.song_mode;
+                    self.playlist.show(
+                        ui,
+                        &mut self.project,
+                        &mut self.history,
+                        &mut self.ui,
+                        song_playhead,
+                        song_playing,
+                        actions,
+                    );
+                });
+            self.ui.show_playlist = open;
+            if win.is_some_and(|w| clicked_inside(ctx, &w.response)) {
+                self.ui.focus = Focus::Playlist;
+            }
+        }
 
         let mut open = self.ui.show_rack;
         let rack_win = egui::Window::new("Channel rack")
@@ -410,8 +492,8 @@ impl LyraApp {
                     &mut self.history,
                     pat,
                     ch,
-                    playhead,
-                    playing,
+                    local.unwrap_or(playhead),
+                    playing && local.is_some(),
                     &live_keys,
                     actions,
                 );

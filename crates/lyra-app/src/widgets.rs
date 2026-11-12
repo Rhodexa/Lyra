@@ -104,6 +104,7 @@ pub enum Icon {
     Rack,
     Piano,
     Knob,
+    Playlist,
 }
 
 /// A captioned, contained group for the toolbar ("module"). Every module has
@@ -218,6 +219,13 @@ fn paint_button(ui: &Ui, rect: Rect, resp: &Response, icon: Icon, active: bool) 
         Icon::Knob => {
             p.circle_stroke(c, 5.5 * u, line);
             p.line_segment([c, c + vec2(3.0, -3.5) * u], line);
+        }
+        Icon::Playlist => {
+            // Three tracks with clips on them.
+            for (row, (x0, x1)) in [(-4.0, (-6.0, 1.0)), (0.0, (-2.0, 6.0)), (4.0, (-6.0, -1.0))] {
+                let r = Rect::from_min_max(c + vec2(x0, row - 1.3) * u, c + vec2(x1, row + 1.3) * u);
+                p.rect_filled(r, cr(1), ink);
+            }
         }
     }
 }

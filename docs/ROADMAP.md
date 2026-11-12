@@ -18,8 +18,9 @@ built before the line it depends on.
 - [x] Piano roll: FL-style mouse, chord stamp in key, scale highlight, velocity lane, ghosts
 - [x] Instrument editor generated from plugin params (+ envelope view)
 - [x] Multiple patterns (new / clone / switch)
-- [ ] Playlist arrangement + song mode
+- [x] Playlist arrangement + song mode (PAT/SONG, `L`, F5); clips repeat their pattern
 - [ ] Organ waveform for M1-style organ bass
+- [ ] Piano roll uses the shared `timeline` module (overview + ruler) like the playlist
 
 ## M3: Mixer
 - Mixer inserts with effect slots; per-channel meters

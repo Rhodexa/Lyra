@@ -669,6 +669,8 @@ impl PianoRoll {
                 self.drag = Drag::Pan { grab: view.visible_ticks() * 0.5 };
             }
         } else if ruler.contains(pos) && primary {
+            // The piano roll's ruler is about *this pattern*: hear it from here.
+            out.push(Action::SongMode(false));
             out.push(Action::Seek(view.tick(pos.x).clamp(0.0, pattern_ticks - 1.0) as f64));
             self.drag = Drag::Seek;
         } else if keys_r.contains(pos) && primary {

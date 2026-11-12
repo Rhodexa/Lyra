@@ -1,7 +1,8 @@
-//! The project Lyra opens with: a two-bar deep-house groove in A minor, so the
-//! very first thing you do is press Space and nod your head.
+//! The project Lyra opens with: a 16-bar deep-house sketch in A minor (beat,
+//! bass, chords, arranged in the playlist), so the very first thing you do is
+//! press Space and nod your head.
 
-use lyra_model::{ChannelId, Note, Project, TICKS_PER_STEP};
+use lyra_model::{ChannelId, Clip, Note, Project, TICKS_PER_BAR, TICKS_PER_STEP};
 
 fn add(p: &mut Project, name: &str, instrument: &str, tweaks: &[(usize, f32)], volume: f32, choke: u8) -> ChannelId {
     let mut params = lyra_dsp::default_params(instrument);
@@ -46,32 +47,38 @@ pub fn project() -> Project {
     let bass = add_with(&mut p, "Bass", "lyra.synth", preset("Deep Bass"), 0.75, 0);
     let chords = add_with(&mut p, "Chords", "lyra.synth", preset("Chord Stab"), 0.5, 0);
 
-    let pat = &mut p.patterns[0];
-    pat.name = "Groove".into();
-    pat.min_length = 32;
+    // Three patterns: drums, bass, chords — so the playlist can arrange them.
+    p.patterns[0].name = "Beat".into();
+    let bass_pat = p.add_pattern();
+    p.patterns[bass_pat].name = "Bass".into();
+    let chord_pat = p.add_pattern();
+    p.patterns[chord_pat].name = "Chords".into();
+
+    let beat = &mut p.patterns[0];
+    beat.min_length = 32;
     for bar in [0u32, 16] {
         for s in [0, 4, 8, 12] {
-            pat.set_step(kick, bar + s, true, 1.0);
+            beat.set_step(kick, bar + s, true, 1.0);
         }
         for s in [4, 12] {
-            pat.set_step(clap, bar + s, true, 0.9);
+            beat.set_step(clap, bar + s, true, 0.9);
         }
         for s in 0..16 {
             if s % 4 == 2 {
-                pat.set_step(open, bar + s, true, 0.7); // offbeat "tss", choked by the next closed hat
+                beat.set_step(open, bar + s, true, 0.7); // offbeat "tss", choked by the next closed hat
             } else {
-                pat.set_step(hat, bar + s, true, if s % 2 == 0 { 0.62 } else { 0.4 });
+                beat.set_step(hat, bar + s, true, if s % 2 == 0 { 0.62 } else { 0.4 });
             }
         }
         for s in [7, 15] {
-            pat.set_step(snare, bar + s, true, 0.3); // ghost notes for groove
+            beat.set_step(snare, bar + s, true, 0.3); // ghost notes for groove
         }
     }
 
     // Bass: offbeat roots with an octave hop, staying out of the kick's way.
     // Bar 1 on A, bar 2 on F.
+    let notes = p.patterns[bass_pat].notes_mut(bass);
     for (bar, root) in [(0.0, 45u8), (16.0, 41u8)] {
-        let notes = pat.notes_mut(bass);
         for &(step, len, offset, vel) in
             &[(2.0, 1.5, 0, 0.9), (6.0, 1.5, 0, 0.8), (10.0, 1.0, 12, 0.85), (11.0, 1.0, 0, 0.7), (14.0, 1.5, 7, 0.8)]
         {
@@ -79,13 +86,24 @@ pub fn project() -> Project {
         }
     }
     // Chords: Am7 then Fmaj7, stabbed in a 3-3-2 rhythm.
+    let notes = p.patterns[chord_pat].notes_mut(chords);
     for (bar, chord) in [(0.0, [57u8, 60, 64, 67]), (16.0, [53u8, 57, 60, 64])] {
-        let notes = pat.notes_mut(chords);
         for &(step, len) in &[(0.0, 2.5), (3.0, 2.5), (6.0, 2.0), (10.0, 2.5), (13.0, 2.0)] {
             for &k in &chord {
                 notes.push(note(bar + step, len, k, 0.75));
             }
         }
+    }
+
+    // A 16-bar song: intro (beat), bass joins, breakdown (chords alone), drop (all).
+    let bar = TICKS_PER_BAR;
+    let ids = [p.patterns[0].id, p.patterns[bass_pat].id, p.patterns[chord_pat].id];
+    let names = ["Drums", "Bass", "Chords"];
+    for (t, name) in names.iter().enumerate() {
+        p.tracks[t].name = name.to_string();
+    }
+    for &(track, start, bars) in &[(0, 0, 8), (0, 10, 6), (1, 4, 4), (1, 10, 6), (2, 8, 8)] {
+        p.clips.push(Clip { pattern: ids[track], track, start: start * bar, len: bars * bar });
     }
     p
 }

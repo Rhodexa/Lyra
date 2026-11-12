@@ -68,6 +68,17 @@ menu). The engine gets that length each time the sequence is compiled.
 `Command::Seek` moves the playhead and the start marker: Play starts there and
 Stop returns there.
 
+## Song mode
+
+Clips (`lyra-model`: pattern id, track, start, length) live on playlist
+tracks. Patterns have stable ids, so cloning or reordering patterns never
+re-points a clip. In song mode, `bridge::compile_song` flattens every clip
+into **one** `Sequence`: a clip repeats its pattern to fill its length, notes
+are cut at the clip's end, and muted tracks are skipped. The engine plays it
+exactly like a pattern. Song mode added no real-time code at all. The bridge
+compiles the target (pattern or song) on every project change and re-sends it
+only when the result differs. Switching mode seeks to the top.
+
 ## Held notes
 
 Drums ignore note length, synths don't. When the engine plays a sequenced

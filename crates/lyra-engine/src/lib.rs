@@ -57,7 +57,7 @@ pub struct SeqNote {
 }
 
 /// A compiled, read-only loop of notes the engine plays.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Sequence {
     /// Loop length in ticks (0 = nothing to play).
     pub length: u32,

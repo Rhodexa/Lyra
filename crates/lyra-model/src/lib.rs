@@ -20,6 +20,9 @@ pub const DEFAULT_KEY: u8 = 60;
 pub const TICKS_PER_BAR: u32 = TICKS_PER_STEP * STEPS_PER_BAR;
 
 pub type ChannelId = u32;
+/// Stable pattern identity: clips refer to patterns by id, so cloning or
+/// reordering patterns never makes a clip play the wrong one.
+pub type PatternId = u32;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Note {
@@ -51,6 +54,7 @@ pub struct Channel {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pattern {
+    pub id: PatternId,
     pub name: String,
     /// The shortest this pattern may be, in steps (16 = one bar). The pattern
     /// grows by itself to fit its notes — see [`Pattern::play_length`].
@@ -59,8 +63,8 @@ pub struct Pattern {
 }
 
 impl Pattern {
-    pub fn new(name: &str) -> Self {
-        Self { name: name.to_string(), min_length: STEPS_PER_BAR, notes: BTreeMap::new() }
+    pub fn new(id: PatternId, name: &str) -> Self {
+        Self { id, name: name.to_string(), min_length: STEPS_PER_BAR, notes: BTreeMap::new() }
     }
 
     pub fn notes(&self, ch: ChannelId) -> &[Note] {
@@ -127,6 +131,33 @@ impl Pattern {
     }
 }
 
+/// One row of the playlist.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Track {
+    pub name: String,
+    pub mute: bool,
+}
+
+/// A pattern placed on the playlist. If the clip is longer than the pattern,
+/// the pattern repeats inside it (stretch a 2-bar beat across 16 bars).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Clip {
+    pub pattern: PatternId,
+    /// Playlist row.
+    pub track: usize,
+    /// Song position and length, in ticks.
+    pub start: u32,
+    pub len: u32,
+}
+
+impl Clip {
+    pub fn end(&self) -> u32 {
+        self.start + self.len
+    }
+}
+
+pub const DEFAULT_TRACKS: usize = 12;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Project {
     pub bpm: f64,
@@ -137,7 +168,10 @@ pub struct Project {
     pub scale: Scale,
     pub channels: Vec<Channel>,
     pub patterns: Vec<Pattern>,
+    pub tracks: Vec<Track>,
+    pub clips: Vec<Clip>,
     next_id: ChannelId,
+    next_pattern_id: PatternId,
 }
 
 impl Default for Project {
@@ -149,8 +183,11 @@ impl Default for Project {
             key_root: 9, // A
             scale: Scale::Minor,
             channels: Vec::new(),
-            patterns: vec![Pattern::new("Pattern 1")],
+            patterns: vec![Pattern::new(1, "Pattern 1")],
+            tracks: (1..=DEFAULT_TRACKS).map(|i| Track { name: format!("Track {i}"), mute: false }).collect(),
+            clips: Vec::new(),
             next_id: 1,
+            next_pattern_id: 2,
         }
     }
 }
@@ -192,7 +229,9 @@ impl Project {
     /// Adds an empty pattern (one bar) and returns its index.
     pub fn add_pattern(&mut self) -> usize {
         let name = format!("Pattern {}", self.patterns.len() + 1);
-        self.patterns.push(Pattern::new(&name));
+        let id = self.next_pattern_id;
+        self.next_pattern_id += 1;
+        self.patterns.push(Pattern::new(id, &name));
         self.patterns.len() - 1
     }
 
@@ -200,8 +239,24 @@ impl Project {
     pub fn clone_pattern(&mut self, index: usize) -> usize {
         let mut copy = self.patterns[index].clone();
         copy.name = format!("{} copy", copy.name);
+        copy.id = self.next_pattern_id;
+        self.next_pattern_id += 1;
         self.patterns.insert(index + 1, copy);
         index + 1
+    }
+
+    pub fn pattern_index(&self, id: PatternId) -> Option<usize> {
+        self.patterns.iter().position(|p| p.id == id)
+    }
+
+    pub fn pattern(&self, id: PatternId) -> Option<&Pattern> {
+        self.patterns.iter().find(|p| p.id == id)
+    }
+
+    /// The song runs to the end of the last clip (whole bars, at least one bar).
+    pub fn song_length(&self) -> u32 {
+        let end = self.clips.iter().map(Clip::end).max().unwrap_or(0);
+        end.div_ceil(TICKS_PER_BAR).max(1) * TICKS_PER_BAR
     }
 
     /// True when any channel is soloed — then only soloed channels are heard.
@@ -257,7 +312,7 @@ mod tests {
 
     #[test]
     fn steps_are_notes() {
-        let mut p = Pattern::new("t");
+        let mut p = Pattern::new(1, "t");
         assert!(p.set_step(7, 4, true, 0.8));
         assert!(!p.set_step(7, 4, true, 0.8), "lighting twice changes nothing");
         assert_eq!(p.notes(7)[0].start, 4 * TICKS_PER_STEP);
@@ -267,7 +322,7 @@ mod tests {
 
     #[test]
     fn patterns_grow_and_shrink_with_their_notes() {
-        let mut p = Pattern::new("t");
+        let mut p = Pattern::new(1, "t");
         assert_eq!(p.play_length(), 16, "empty = one bar");
         p.notes_mut(1).push(Note { start: 2 * TICKS_PER_BAR + 5, len: 10, key: 60, velocity: 1.0 });
         assert_eq!(p.play_length(), 48, "a note in bar 3 makes it 3 bars");
@@ -275,6 +330,20 @@ mod tests {
         assert_eq!(p.play_length(), 16, "and it shrinks back");
         p.min_length = 32;
         assert_eq!(p.play_length(), 32, "min_length is a floor");
+    }
+
+    #[test]
+    fn clips_keep_pointing_at_the_right_pattern() {
+        let mut proj = Project::default();
+        let a = proj.patterns[0].id;
+        proj.clips.push(Clip { pattern: a, track: 0, start: 0, len: TICKS_PER_BAR });
+        proj.add_pattern();
+        let b = proj.patterns[1].id;
+        proj.clone_pattern(0); // inserts at index 1, shifting "b" to index 2
+        assert_eq!(proj.pattern(a).unwrap().name, "Pattern 1");
+        assert_eq!(proj.pattern_index(b), Some(2));
+        assert_ne!(proj.patterns[1].id, a, "a clone gets its own id");
+        assert_eq!(proj.song_length(), TICKS_PER_BAR);
     }
 
     #[test]

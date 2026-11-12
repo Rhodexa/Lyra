@@ -33,6 +33,26 @@ pub fn show(
 
         module(ui, "transport", |ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
+            // What Space plays: the current pattern, or the whole song (L toggles).
+            for (label, song) in [("PAT", false), ("SONG", true)] {
+                let on = st.song_mode == song;
+                let text =
+                    RichText::new(label).size(m.text_small).color(if on { theme::INSET } else { theme::TEXT_DIM });
+                let fill = if on {
+                    if song {
+                        theme::GOLD
+                    } else {
+                        theme::MINT
+                    }
+                } else {
+                    theme::RAISED
+                };
+                let b = egui::Button::new(text).fill(fill).min_size(vec2(m.control_h * 1.6, m.control_h));
+                if ui.add(b).on_hover_text("Play the current pattern / the whole playlist  ( L )").clicked() {
+                    actions.push(Action::SongMode(song));
+                }
+            }
+            ui.add_space(4.0);
             if widgets::transport_button(ui, Icon::Play, playing, "Play / stop  (Space)").clicked() {
                 actions.push(Action::TogglePlay);
             }
@@ -102,6 +122,9 @@ pub fn show(
 
         module(ui, "windows", |ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
+            if widgets::icon_button(ui, Icon::Playlist, st.show_playlist, "Playlist  (F5)").clicked() {
+                actions.push(Action::TogglePlaylist);
+            }
             if widgets::icon_button(ui, Icon::Rack, st.show_rack, "Channel rack  (F6)").clicked() {
                 actions.push(Action::ToggleRack);
             }
