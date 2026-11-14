@@ -299,50 +299,105 @@ fn pattern_image() -> ColorImage {
 // ── Material: bezel-mounted backlit buttons (being evaluated, Design panel) ──
 //
 // The user's recipe, seen straight from the top (nothing extrudes or tilts):
-// 1. a recessed bezel ring around the button: bottom brighter than top
-//    (light from above falls into the well and catches its lower edge);
+// 1. a recessed bezel ring around the button, lit from above: its top wall in
+//    shade, its bottom wall catching light;
 // 2. the button face: flat, backlit colour;
-// 3. a bevel ring just inside the face: top brighter than bottom (the
-//    polycarbonate cap's edge catching the light).
-// Square corners. No extrusion, no drop shadow, no aggressive glow.
+// 3. a bevel ring inside the face: bright along the top, deeper at the bottom.
+// Small rounded corners. Light keeps the hue: shading *multiplies* the colour
+// (like subsurface scattering) instead of mixing towards grey. Gradients come
+// in three bands (constant dark, short ramp, brighter end) so they read as
+// flat bevels, not rounded pillows. A lit button lights its own recess.
 
-/// A rectangular ring between `outer` and `inner`, shaded top → bottom.
-fn gradient_ring(p: &Painter, outer: Rect, inner: Rect, top: Color32, bottom: Color32) {
+/// Scale a colour's brightness, keeping hue and saturation (k > 1 = brighter).
+pub fn shade(c: Color32, k: f32) -> Color32 {
+    let f = |v: u8| (v as f32 * k).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgb(f(c.r()), f(c.g()), f(c.b()))
+}
+
+/// Three-band vertical ramp: `top` held until 40 %, `mid` at 70 %, `bottom` at the end.
+fn three_band(t: f32, top: Color32, mid: Color32, bottom: Color32) -> Color32 {
+    if t < 0.4 {
+        top
+    } else if t < 0.7 {
+        mix(top, mid, (t - 0.4) / 0.3)
+    } else {
+        mix(mid, bottom, (t - 0.7) / 0.3)
+    }
+}
+
+/// Outline of a rounded rectangle, clockwise from the top-left arc, with extra
+/// points down the straight sides at the gradient's band edges, so the bands
+/// survive linear interpolation. Every rect yields the same point count, so
+/// two outlines can be stitched into a ring.
+fn rounded_outline(r: Rect, radius: f32, out: &mut Vec<egui::Pos2>) {
+    use std::f32::consts::{FRAC_PI_2, PI};
+    const ARC: usize = 4;
+    let rad = radius.min(r.width() * 0.5).min(r.height() * 0.5).max(0.0);
+    let arc = |out: &mut Vec<egui::Pos2>, c: egui::Pos2, from: f32| {
+        for i in 0..=ARC {
+            let a = from + FRAC_PI_2 * i as f32 / ARC as f32;
+            out.push(c + egui::vec2(a.cos(), a.sin()) * rad);
+        }
+    };
+    let side = |y: f32| y.clamp(r.top() + rad, r.bottom() - rad);
+    arc(out, egui::pos2(r.left() + rad, r.top() + rad), PI);
+    arc(out, egui::pos2(r.right() - rad, r.top() + rad), 1.5 * PI);
+    for f in [0.4, 0.7] {
+        out.push(egui::pos2(r.right(), side(r.top() + f * r.height())));
+    }
+    arc(out, egui::pos2(r.right() - rad, r.bottom() - rad), 0.0);
+    arc(out, egui::pos2(r.left() + rad, r.bottom() - rad), FRAC_PI_2);
+    for f in [0.7, 0.4] {
+        out.push(egui::pos2(r.left(), side(r.top() + f * r.height())));
+    }
+}
+
+/// A rounded ring between two outlines, coloured by height (0 = top of `outer`).
+fn shaded_ring(p: &Painter, outer: Rect, inner: Rect, r_out: f32, r_in: f32, color: impl Fn(f32) -> Color32) {
+    let (mut a, mut b) = (Vec::new(), Vec::new());
+    rounded_outline(outer, r_out, &mut a);
+    rounded_outline(inner, r_in, &mut b);
     let mut mesh = egui::Mesh::default();
-    let at = |y: f32| mix(top, bottom, (y - outer.top()) / outer.height().max(1.0));
-    for pt in [outer.left_top(), outer.right_top(), outer.right_bottom(), outer.left_bottom()] {
-        mesh.colored_vertex(pt, at(pt.y));
+    for pt in a.iter().chain(&b) {
+        mesh.colored_vertex(*pt, color((pt.y - outer.top()) / outer.height().max(1.0)));
     }
-    for pt in [inner.left_top(), inner.right_top(), inner.right_bottom(), inner.left_bottom()] {
-        mesh.colored_vertex(pt, at(pt.y));
-    }
-    // Four quads (top, right, bottom, left), each between an outer and an inner edge.
-    for i in 0..4u32 {
-        let j = (i + 1) % 4;
-        mesh.add_triangle(i, j, 4 + j);
-        mesh.add_triangle(i, 4 + j, 4 + i);
+    let n = a.len() as u32;
+    for i in 0..n {
+        let j = (i + 1) % n;
+        mesh.add_triangle(i, j, n + j);
+        mesh.add_triangle(i, n + j, n + i);
     }
     p.add(egui::Shape::mesh(mesh));
 }
 
-/// A backlit button mounted in a bezel. `lit` = light on (saturated face);
-/// `hot` = a little brighter (hover, or the step under the playhead).
+/// A backlit button mounted in a bezel. `lit` = light on; `hot` = a little
+/// brighter (hover, or the step under the playhead).
 pub fn key(p: &Painter, rect: Rect, face: Color32, lit: bool, hot: bool) {
     let size = rect.width().min(rect.height());
-    let bezel = (size * 0.08).clamp(1.5, 3.0);
-    let bevel = (size * 0.07).clamp(1.0, 2.5);
-    // 1. The recess: dark at the top, catching light at the bottom.
+    let radius = (size * 0.14).clamp(2.0, 5.0);
+    let bezel = (size * 0.06).clamp(1.0, 2.0);
+    let bevel = (size * 0.05).clamp(1.0, 1.5);
     let button = rect.shrink(bezel);
-    gradient_ring(p, rect, button, Color32::from_black_alpha(150), Color32::from_white_alpha(22));
-    // 2. The face, backlit when on.
-    let mut fill = if lit { face } else { mix(face, Color32::BLACK, 0.1) };
+
+    // 1. The recess: the surface's own tone, lit from above; a lit button
+    //    spills its colour into the well.
+    let wall = if lit { mix(PANEL, shade(face, 0.55), 0.55) } else { PANEL };
+    let (top, mid, bottom) = (shade(wall, 0.55), shade(wall, 0.8), shade(wall, 1.12));
+    shaded_ring(p, rect, button, radius, (radius - bezel).max(1.0), |t| three_band(t, top, mid, bottom));
+
+    // 2. The face.
+    let mut fill = if lit { face } else { shade(face, 0.92) };
     if hot {
-        fill = mix(fill, Color32::WHITE, 0.14);
+        fill = shade(fill, 1.12);
     }
-    p.rect_filled(button, cr(1), fill);
-    // 3. The cap's bevel: bright at the top, shaded at the bottom.
-    let (hi, lo) = if lit { (60, 60) } else { (26, 70) };
-    gradient_ring(p, button, button.shrink(bevel), Color32::from_white_alpha(hi), Color32::from_black_alpha(lo));
+    let r_in = (radius - bezel).max(1.0);
+    p.rect_filled(button, cr(r_in as u8), fill);
+
+    // 3. The cap's bevel, in the face's own hue.
+    let (hi, lo) = if lit { (1.16, 0.82) } else { (1.22, 0.78) };
+    shaded_ring(p, button, button.shrink(bevel), r_in, (r_in - bevel).max(0.5), |t| {
+        three_band(1.0 - t, shade(fill, lo), fill, shade(fill, hi))
+    });
 }
 
 /// The ink for an icon or label printed on a key: dark on a lit key, light on
