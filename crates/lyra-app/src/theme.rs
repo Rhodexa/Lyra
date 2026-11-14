@@ -296,49 +296,41 @@ fn pattern_image() -> ColorImage {
     ColorImage::from_rgba_unmultiplied([w, h], &px)
 }
 
-// ── Material: "dark matte rubber" (being evaluated, see the Design panel) ──
+// ── Material: backlit membrane keys (being evaluated, see the Design panel) ──
 //
-// Nothing glows. Light falls *on* things from above: a faint sheen on the
-// upper part, a darker lip at the bottom, a soft shadow underneath. Colour is
-// the material (dusty pastel), not light.
+// References: docs/design/Glowing Mint Piano Buttons.png. Flat faces, small
+// corners, and relief from geometry: light from above (a thin bright rim on
+// the top edge), the key's side wall visible at the bottom, a crisp shadow.
+// Lit keys are backlit: saturated face, a faint glow escaping at the edges.
 
-/// A pastel, dulled toward the surface colour, so it reads as material.
-pub fn matte(c: Color32) -> Color32 {
-    mix(c, PANEL_HI, 0.38)
-}
-
-/// A rubber pad resting on the surface (`pressed` = pushed in: no shadow, darker sheen).
-pub fn rubber_pad(p: &Painter, rect: Rect, base: Color32, pressed: bool) {
-    let r = (rect.width().min(rect.height()) * 0.3).clamp(3.0, 12.0) as u8;
+/// Draw a membrane key filling `rect`. `face` is the key colour; `lit` adds
+/// the backlight glow; `pressed` sinks the key (shorter wall, no shadow).
+pub fn key(p: &Painter, rect: Rect, face: Color32, lit: bool, pressed: bool) {
+    let r = (rect.width().min(rect.height()) * 0.12).clamp(2.0, 6.0) as u8;
+    let depth = (rect.height() * 0.11).clamp(2.0, 5.0) * if pressed { 0.4 } else { 1.0 };
+    if lit {
+        let glow = egui::epaint::Shadow { offset: [0, 0], blur: 10, spread: 1, color: face.gamma_multiply(0.35) };
+        p.add(glow.as_shape(rect, cr(r)));
+    }
     if !pressed {
-        let shadow = egui::epaint::Shadow { offset: [0, 2], blur: 6, spread: 0, color: Color32::from_black_alpha(120) };
+        let shadow = egui::epaint::Shadow { offset: [0, 3], blur: 4, spread: 0, color: Color32::from_black_alpha(150) };
         p.add(shadow.as_shape(rect, cr(r)));
     }
-    p.rect_filled(rect, cr(r), if pressed { mix(base, Color32::BLACK, 0.12) } else { base });
-    // Soft sheen: a vertical gradient fading out by the middle (inset from the
-    // rounded corners so it never pokes outside them).
-    let inset = r as f32 * 0.6 + 1.0;
-    let (x0, x1) = (rect.left() + inset, rect.right() - inset);
-    let (y0, y1) = (rect.top() + 1.0, rect.top() + rect.height() * 0.6);
-    let top_color = Color32::from_white_alpha(if pressed { 4 } else { 16 });
-    let mut mesh = egui::Mesh::default();
-    for (x, y, c) in
-        [(x0, y0, top_color), (x1, y0, top_color), (x1, y1, Color32::TRANSPARENT), (x0, y1, Color32::TRANSPARENT)]
-    {
-        mesh.colored_vertex(egui::pos2(x, y), c);
-    }
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(0, 2, 3);
-    p.add(egui::Shape::mesh(mesh));
-    p.rect_stroke(rect, cr(r), stroke(1.0, Color32::from_black_alpha(70)), egui::StrokeKind::Inside);
+    // Side wall: the whole key in a darker shade; the face sits on top of it.
+    p.rect_filled(rect, cr(r), mix(face, Color32::BLACK, if lit { 0.38 } else { 0.5 }));
+    let face_rect = Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y - depth));
+    p.rect_filled(face_rect, cr(r), face);
+    // Desk-lamp rim along the top edge.
+    let rim = Color32::from_white_alpha(if lit { 70 } else { 34 });
+    p.hline((face_rect.left() + r as f32)..=(face_rect.right() - r as f32), face_rect.top() + 0.5, stroke(1.0, rim));
 }
 
-/// A matte indicator dot: no halo, just a coloured bead with a tiny highlight.
-pub fn rubber_dot(p: &Painter, center: egui::Pos2, radius: f32, color: Color32, on: bool) {
-    let base = if on { matte(color) } else { INSET };
-    p.circle_filled(center + egui::vec2(0.0, 1.0), radius, Color32::from_black_alpha(90));
-    p.circle_filled(center, radius, base);
-    if on {
-        p.circle_filled(center - egui::vec2(radius * 0.3, radius * 0.35), radius * 0.35, Color32::from_white_alpha(28));
+/// The ink for an icon or label sitting on a key: dark cut-out on a lit key,
+/// light print on an unlit one.
+pub fn key_ink(lit: bool) -> Color32 {
+    if lit {
+        Color32::from_rgb(0x14, 0x18, 0x1c)
+    } else {
+        Color32::from_rgb(0xd8, 0xde, 0xdd)
     }
 }

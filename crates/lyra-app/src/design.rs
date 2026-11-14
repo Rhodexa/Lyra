@@ -57,7 +57,7 @@ pub fn show(ui: &mut Ui) {
         ui.add(Slider::new(&mut m.edge_reach, 0.0..=24.0).text("resize zone past note end"));
     });
 
-    section(ui, "Material: plasma (now) vs matte rubber", material_swatch);
+    section(ui, "Material: plasma (now) vs membrane keys", material_swatch);
 
     if m != before {
         theme::set_metrics(&ctx, m);
@@ -82,23 +82,25 @@ fn section(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
     ui.add_space(4.0);
 }
 
-/// Side by side: today's glowing look and the proposed matte-rubber material,
-/// on the same things (steps off/on/playing, a mute light, a button).
+/// Side by side: today's flat "plasma" look and backlit membrane keys, on the
+/// same things (steps off / on / playing, a light, a button with an icon).
 fn material_swatch(ui: &mut Ui) {
     let m = theme::m();
     let (w, h) = (m.step_w * 1.4, m.step_h * 1.2);
-    for rubber in [false, true] {
+    for keys in [false, true] {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(if rubber { "rubber" } else { "plasma" }).small().color(theme::TEXT_DIM));
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(w * 7.0 + 60.0, h + 10.0), egui::Sense::hover());
+            ui.label(RichText::new(if keys { "keys" } else { "plasma" }).small().color(theme::TEXT_DIM));
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(w * 7.5 + 70.0, h + 14.0), egui::Sense::hover());
             let p = ui.painter();
             let colors = [None, Some(theme::MINT), Some(theme::ROSE), Some(theme::SKY), Some(theme::BUTTER)];
             for (i, c) in colors.iter().enumerate() {
-                let r = egui::Rect::from_min_size(rect.min + egui::vec2(i as f32 * (w + 6.0), 4.0), egui::vec2(w, h));
+                let r = egui::Rect::from_min_size(rect.min + egui::vec2(i as f32 * (w + 8.0), 4.0), egui::vec2(w, h));
                 let playing = i == 3;
-                if rubber {
-                    let base = c.map_or(theme::STEP_OFF_B, theme::matte);
-                    theme::rubber_pad(p, r, base, playing);
+                if keys {
+                    match c {
+                        Some(c) => theme::key(p, r, *c, true, playing),
+                        None => theme::key(p, r, theme::STEP_OFF_B, false, false),
+                    }
                 } else {
                     let fill = c.map_or(theme::STEP_OFF_B, |c| theme::mix(theme::PANEL_HI, c, 0.95));
                     p.rect_filled(r, theme::cr(2), fill);
@@ -113,17 +115,42 @@ fn material_swatch(ui: &mut Ui) {
                     }
                 }
             }
-            let c = rect.min + egui::vec2(5.0 * (w + 6.0) + 16.0, 4.0 + h / 2.0);
-            if rubber {
-                theme::rubber_dot(p, c, m.led * 0.32, theme::MINT, true);
-                let b = egui::Rect::from_min_size(c + egui::vec2(18.0, -h / 2.0), egui::vec2(w * 1.3, h));
-                theme::rubber_pad(p, b, theme::RAISED, false);
-            } else {
-                p.circle_filled(c, m.led * 0.43, theme::MINT.gamma_multiply(0.18));
-                p.circle_filled(c, m.led * 0.27, theme::MINT);
-                let b = egui::Rect::from_min_size(c + egui::vec2(18.0, -h / 2.0), egui::vec2(w * 1.3, h));
-                p.rect_filled(b, theme::cr(4), theme::mix(theme::RAISED, theme::MINT, 0.22));
+            let x = rect.min.x + 5.0 * (w + 8.0) + 8.0;
+            for (k, lit) in [false, true].into_iter().enumerate() {
+                let b = egui::Rect::from_min_size(
+                    egui::pos2(x + k as f32 * (h + 10.0), rect.min.y + 4.0),
+                    egui::vec2(h, h),
+                );
+                if keys {
+                    theme::key(p, b, if lit { theme::MINT } else { theme::RAISED }, lit, false);
+                    piano_glyph(p, b.shrink(h * 0.25), theme::key_ink(lit));
+                } else {
+                    p.rect_filled(
+                        b,
+                        theme::cr(4),
+                        if lit { theme::mix(theme::RAISED, theme::MINT, 0.22) } else { theme::RAISED },
+                    );
+                    piano_glyph(p, b.shrink(h * 0.25), if lit { theme::MINT } else { theme::TEXT_DIM });
+                }
             }
         });
+    }
+}
+
+/// The piano icon from the reference, drawn simply (until the real SVG lands).
+fn piano_glyph(p: &egui::Painter, r: egui::Rect, ink: egui::Color32) {
+    let s = theme::stroke((r.height() * 0.1).max(1.5), ink);
+    p.rect_stroke(r, theme::cr(2), s, egui::StrokeKind::Inside);
+    for i in 1..4 {
+        let x = r.left() + r.width() * i as f32 / 4.0;
+        p.vline(x, (r.center().y)..=r.bottom(), theme::stroke(s.width * 0.8, ink));
+    }
+    for i in [1.0, 2.0, 3.0] {
+        let x = r.left() + r.width() * i / 4.0;
+        let key = egui::Rect::from_center_size(
+            egui::pos2(x, r.top() + r.height() * 0.32),
+            egui::vec2(r.width() * 0.13, r.height() * 0.55),
+        );
+        p.rect_filled(key, theme::cr(1), ink);
     }
 }
