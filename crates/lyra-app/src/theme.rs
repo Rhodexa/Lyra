@@ -295,3 +295,50 @@ fn pattern_image() -> ColorImage {
     }
     ColorImage::from_rgba_unmultiplied([w, h], &px)
 }
+
+// ── Material: "dark matte rubber" (being evaluated, see the Design panel) ──
+//
+// Nothing glows. Light falls *on* things from above: a faint sheen on the
+// upper part, a darker lip at the bottom, a soft shadow underneath. Colour is
+// the material (dusty pastel), not light.
+
+/// A pastel, dulled toward the surface colour, so it reads as material.
+pub fn matte(c: Color32) -> Color32 {
+    mix(c, PANEL_HI, 0.38)
+}
+
+/// A rubber pad resting on the surface (`pressed` = pushed in: no shadow, darker sheen).
+pub fn rubber_pad(p: &Painter, rect: Rect, base: Color32, pressed: bool) {
+    let r = (rect.width().min(rect.height()) * 0.3).clamp(3.0, 12.0) as u8;
+    if !pressed {
+        let shadow = egui::epaint::Shadow { offset: [0, 2], blur: 6, spread: 0, color: Color32::from_black_alpha(120) };
+        p.add(shadow.as_shape(rect, cr(r)));
+    }
+    p.rect_filled(rect, cr(r), if pressed { mix(base, Color32::BLACK, 0.12) } else { base });
+    // Soft sheen: a vertical gradient fading out by the middle (inset from the
+    // rounded corners so it never pokes outside them).
+    let inset = r as f32 * 0.6 + 1.0;
+    let (x0, x1) = (rect.left() + inset, rect.right() - inset);
+    let (y0, y1) = (rect.top() + 1.0, rect.top() + rect.height() * 0.6);
+    let top_color = Color32::from_white_alpha(if pressed { 4 } else { 16 });
+    let mut mesh = egui::Mesh::default();
+    for (x, y, c) in
+        [(x0, y0, top_color), (x1, y0, top_color), (x1, y1, Color32::TRANSPARENT), (x0, y1, Color32::TRANSPARENT)]
+    {
+        mesh.colored_vertex(egui::pos2(x, y), c);
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    p.add(egui::Shape::mesh(mesh));
+    p.rect_stroke(rect, cr(r), stroke(1.0, Color32::from_black_alpha(70)), egui::StrokeKind::Inside);
+}
+
+/// A matte indicator dot: no halo, just a coloured bead with a tiny highlight.
+pub fn rubber_dot(p: &Painter, center: egui::Pos2, radius: f32, color: Color32, on: bool) {
+    let base = if on { matte(color) } else { INSET };
+    p.circle_filled(center + egui::vec2(0.0, 1.0), radius, Color32::from_black_alpha(90));
+    p.circle_filled(center, radius, base);
+    if on {
+        p.circle_filled(center - egui::vec2(radius * 0.3, radius * 0.35), radius * 0.35, Color32::from_white_alpha(28));
+    }
+}
