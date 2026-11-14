@@ -296,37 +296,57 @@ fn pattern_image() -> ColorImage {
     ColorImage::from_rgba_unmultiplied([w, h], &px)
 }
 
-// ── Material: backlit membrane keys (being evaluated, see the Design panel) ──
+// ── Material: bezel-mounted backlit buttons (being evaluated, Design panel) ──
 //
-// References: docs/design/Glowing Mint Piano Buttons.png. Flat faces, small
-// corners, and relief from geometry: light from above (a thin bright rim on
-// the top edge), the key's side wall visible at the bottom, a crisp shadow.
-// Lit keys are backlit: saturated face, a faint glow escaping at the edges.
+// The user's recipe, seen straight from the top (nothing extrudes or tilts):
+// 1. a recessed bezel ring around the button: bottom brighter than top
+//    (light from above falls into the well and catches its lower edge);
+// 2. the button face: flat, backlit colour;
+// 3. a bevel ring just inside the face: top brighter than bottom (the
+//    polycarbonate cap's edge catching the light).
+// Square corners. No extrusion, no drop shadow, no aggressive glow.
 
-/// Draw a membrane key filling `rect`. `face` is the key colour; `lit` adds
-/// the backlight glow; `pressed` sinks the key (shorter wall, no shadow).
-pub fn key(p: &Painter, rect: Rect, face: Color32, lit: bool, pressed: bool) {
-    let r = (rect.width().min(rect.height()) * 0.12).clamp(2.0, 6.0) as u8;
-    let depth = (rect.height() * 0.11).clamp(2.0, 5.0) * if pressed { 0.4 } else { 1.0 };
-    if lit {
-        let glow = egui::epaint::Shadow { offset: [0, 0], blur: 10, spread: 1, color: face.gamma_multiply(0.35) };
-        p.add(glow.as_shape(rect, cr(r)));
+/// A rectangular ring between `outer` and `inner`, shaded top → bottom.
+fn gradient_ring(p: &Painter, outer: Rect, inner: Rect, top: Color32, bottom: Color32) {
+    let mut mesh = egui::Mesh::default();
+    let at = |y: f32| mix(top, bottom, (y - outer.top()) / outer.height().max(1.0));
+    for pt in [outer.left_top(), outer.right_top(), outer.right_bottom(), outer.left_bottom()] {
+        mesh.colored_vertex(pt, at(pt.y));
     }
-    if !pressed {
-        let shadow = egui::epaint::Shadow { offset: [0, 3], blur: 4, spread: 0, color: Color32::from_black_alpha(150) };
-        p.add(shadow.as_shape(rect, cr(r)));
+    for pt in [inner.left_top(), inner.right_top(), inner.right_bottom(), inner.left_bottom()] {
+        mesh.colored_vertex(pt, at(pt.y));
     }
-    // Side wall: the whole key in a darker shade; the face sits on top of it.
-    p.rect_filled(rect, cr(r), mix(face, Color32::BLACK, if lit { 0.38 } else { 0.5 }));
-    let face_rect = Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y - depth));
-    p.rect_filled(face_rect, cr(r), face);
-    // Desk-lamp rim along the top edge.
-    let rim = Color32::from_white_alpha(if lit { 70 } else { 34 });
-    p.hline((face_rect.left() + r as f32)..=(face_rect.right() - r as f32), face_rect.top() + 0.5, stroke(1.0, rim));
+    // Four quads (top, right, bottom, left), each between an outer and an inner edge.
+    for i in 0..4u32 {
+        let j = (i + 1) % 4;
+        mesh.add_triangle(i, j, 4 + j);
+        mesh.add_triangle(i, 4 + j, 4 + i);
+    }
+    p.add(egui::Shape::mesh(mesh));
 }
 
-/// The ink for an icon or label sitting on a key: dark cut-out on a lit key,
-/// light print on an unlit one.
+/// A backlit button mounted in a bezel. `lit` = light on (saturated face);
+/// `hot` = a little brighter (hover, or the step under the playhead).
+pub fn key(p: &Painter, rect: Rect, face: Color32, lit: bool, hot: bool) {
+    let size = rect.width().min(rect.height());
+    let bezel = (size * 0.08).clamp(1.5, 3.0);
+    let bevel = (size * 0.07).clamp(1.0, 2.5);
+    // 1. The recess: dark at the top, catching light at the bottom.
+    let button = rect.shrink(bezel);
+    gradient_ring(p, rect, button, Color32::from_black_alpha(150), Color32::from_white_alpha(22));
+    // 2. The face, backlit when on.
+    let mut fill = if lit { face } else { mix(face, Color32::BLACK, 0.1) };
+    if hot {
+        fill = mix(fill, Color32::WHITE, 0.14);
+    }
+    p.rect_filled(button, cr(1), fill);
+    // 3. The cap's bevel: bright at the top, shaded at the bottom.
+    let (hi, lo) = if lit { (60, 60) } else { (26, 70) };
+    gradient_ring(p, button, button.shrink(bevel), Color32::from_white_alpha(hi), Color32::from_black_alpha(lo));
+}
+
+/// The ink for an icon or label printed on a key: dark on a lit key, light on
+/// an unlit one.
 pub fn key_ink(lit: bool) -> Color32 {
     if lit {
         Color32::from_rgb(0x14, 0x18, 0x1c)

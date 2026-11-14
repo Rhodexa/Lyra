@@ -57,7 +57,7 @@ pub fn show(ui: &mut Ui) {
         ui.add(Slider::new(&mut m.edge_reach, 0.0..=24.0).text("resize zone past note end"));
     });
 
-    section(ui, "Material: plasma (now) vs membrane keys", material_swatch);
+    section(ui, "Material: plasma (now) vs bezel buttons", material_swatch);
 
     if m != before {
         theme::set_metrics(&ctx, m);
@@ -89,7 +89,7 @@ fn material_swatch(ui: &mut Ui) {
     let (w, h) = (m.step_w * 1.4, m.step_h * 1.2);
     for keys in [false, true] {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(if keys { "keys" } else { "plasma" }).small().color(theme::TEXT_DIM));
+            ui.label(RichText::new(if keys { "bezel" } else { "plasma" }).small().color(theme::TEXT_DIM));
             let (rect, _) = ui.allocate_exact_size(egui::vec2(w * 7.5 + 70.0, h + 14.0), egui::Sense::hover());
             let p = ui.painter();
             let colors = [None, Some(theme::MINT), Some(theme::ROSE), Some(theme::SKY), Some(theme::BUTTER)];
