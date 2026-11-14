@@ -107,7 +107,7 @@ impl DevTools {
                             physical_key: Some(key),
                             pressed,
                             repeat: false,
-                            modifiers: egui::Modifiers::NONE,
+                            modifiers: self.mods, // so `mods ctrl; key Z` is Ctrl+Z
                         });
                     }
                 }

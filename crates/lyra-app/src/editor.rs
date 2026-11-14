@@ -57,7 +57,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
             p.channels[ch].mixer = route;
         }
         let presets = lyra_dsp::presets_for(&instrument);
-        if !presets.is_empty() {
+        if !presets.is_empty() && instrument != "lyra.fm" {
             ui.add_space(8.0);
             ui.menu_button("Presets", |ui| {
                 for preset in presets {
@@ -92,6 +92,12 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
         }
     });
     ui.add_space(6.0);
+
+    // Hand-made editors (they have their own preset browser).
+    if instrument == "lyra.fm" {
+        crate::fm_editor::show(ui, p, h, ch);
+        return;
+    }
 
     // ── Parameters, group by group ──
     let all = [lyra_plugin::ParamGroup { name: "", ids: 0..params.len() as u32 }];

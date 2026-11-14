@@ -28,7 +28,8 @@ fn arc(center: Pos2, radius: f32, from: f32, to: f32) -> Vec<Pos2> {
 /// when the value moved; check `drag_started()` to take an undo checkpoint.
 pub fn knob(ui: &mut Ui, value: &mut f32, info: &ParamInfo, diameter: f32, color: Color32) -> Response {
     let (rect, mut resp) = ui.allocate_exact_size(vec2(diameter, diameter), Sense::click_and_drag());
-    let mut n = info.to_normalized(*value);
+    let n0 = info.to_normalized(*value);
+    let mut n = n0;
     let before = *value;
 
     if resp.dragged() {
@@ -41,7 +42,12 @@ pub fn knob(ui: &mut Ui, value: &mut f32, info: &ParamInfo, diameter: f32, color
             n += wheel.signum() * 0.02;
         }
     }
-    *value = info.from_normalized(n);
+    // Only convert back when the knob actually moved: the round trip through the
+    // knob position isn't exact on exponential params (250 Hz came back as 250.00002),
+    // which counted as an edit (and an undo step) just from being drawn.
+    if n != n0 {
+        *value = info.from_normalized(n);
+    }
     if resp.double_clicked() {
         *value = info.default;
     }

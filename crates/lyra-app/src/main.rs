@@ -8,6 +8,7 @@ mod design;
 mod devtools;
 mod editor;
 mod files;
+mod fm_editor;
 mod keys;
 mod mixer;
 mod piano_roll;
