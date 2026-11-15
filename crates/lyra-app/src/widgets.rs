@@ -27,7 +27,24 @@ fn arc(center: Pos2, radius: f32, from: f32, to: f32) -> Vec<Pos2> {
 /// A knob for any plugin parameter. Returns a response that is `changed()`
 /// when the value moved; check `drag_started()` to take an undo checkpoint.
 pub fn knob(ui: &mut Ui, value: &mut f32, info: &ParamInfo, diameter: f32, color: Color32) -> Response {
-    let (rect, mut resp) = ui.allocate_exact_size(vec2(diameter, diameter), Sense::click_and_drag());
+    let (rect, resp) = ui.allocate_exact_size(vec2(diameter, diameter), Sense::click_and_drag());
+    knob_with(ui, resp, rect, value, info, color)
+}
+
+/// A knob in a rect you already have (for custom-painted panels); `id` must be unique.
+pub fn knob_at(ui: &mut Ui, id: egui::Id, rect: Rect, value: &mut f32, info: &ParamInfo, color: Color32) -> Response {
+    let resp = ui.interact(rect, id, Sense::click_and_drag());
+    knob_with(ui, resp, rect, value, info, color)
+}
+
+fn knob_with(
+    ui: &mut Ui,
+    mut resp: Response,
+    rect: Rect,
+    value: &mut f32,
+    info: &ParamInfo,
+    color: Color32,
+) -> Response {
     let n0 = info.to_normalized(*value);
     let mut n = n0;
     let before = *value;
@@ -77,7 +94,7 @@ pub enum KnobStyle {
 impl KnobStyle {
     pub fn for_size(diameter: f32, bipolar: bool) -> Self {
         match diameter {
-            d if d < 34.0 && bipolar => KnobStyle::Pan,
+            d if d < 44.0 && bipolar => KnobStyle::Pan,
             d if d < 34.0 => KnobStyle::Tiny,
             d if d < 62.0 => KnobStyle::Rubber,
             _ => KnobStyle::Polymer,
