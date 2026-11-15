@@ -16,9 +16,6 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Wishes
 *Things you wish Lyra did.*
-- [ ] Less labelling, more implicit design: the TRANSPORT / TEMPO captions aren't needed (the transport already reads as a little cassette deck). Tempo as a bigger, clock-like number ("124.0 BPM" in big letters); no LED imitation, at least not at first.
-- [ ] Number selectors you grab and drag up/down *and* wheel, LCD-style: hover a digit (tens, ones, the decimal) to choose how fine you tune.
-- [ ] Pattern selector: change pattern with the wheel. The separate ◀ ▶ arrows aren't that useful (far apart, bad for touch); keep them for now.
 - [ ] Piano roll: a vertical scrollbar on the right (can be thinner than the top one), great on a touchpad.
 - [ ] ~ Docked layout (Blender / VS Code style areas that don't overlap) for the main views; it would also save the title bars (~5rem). Floating windows stay for plugins.
 - [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
@@ -62,6 +59,15 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Control library → `0e5a746`, `65905c9`**
+- [x] Less labelling, more implicit design: the TRANSPORT / TEMPO captions aren't needed (the transport already reads as a little cassette deck). Tempo as a bigger, clock-like number ("124.0 BPM" in big letters); no LED imitation, at least not at first.
+  *→ all toolbar captions are gone (hover anything for its name). Tempo is the backlit LCD from your studies, since they came later than this wish.*
+- [x] Number selectors you grab and drag up/down *and* wheel, LCD-style: hover a digit (tens, ones, the decimal) to choose how fine you tune.
+  *→ the tempo LCD: the hovered digit gets underlined; drag or scroll changes that digit; double-click to type. Reusable as `widgets::lcd_number` for other numbers.*
+- [x] Pattern selector: change pattern with the wheel. The separate ◀ ▶ arrows aren't that useful (far apart, bad for touch); keep them for now.
+  *→ scroll over the pattern name; click it for the list. Arrows kept.*
+- [x] *(your HTML studies)* Silicone keys in eight lights, round LEDs, LCDs, wells, three knob families, the channel strip → steps, toolbar, rack, mixer.
 
 - [x] bug? Window won't actaully restore after fullscreen → `50dcf29`
   *→ yes, a bug: full screen overwrote the window's remembered size. Now each mode keeps its own.*

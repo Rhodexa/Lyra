@@ -98,4 +98,6 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 ## License
 
 Dual-licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+
+Icons: [Phosphor](https://phosphoricons.com) (MIT), via the `egui-phosphor` crate.
 Contributions are accepted under the same terms.

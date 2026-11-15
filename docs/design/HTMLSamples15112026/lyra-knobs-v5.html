@@ -1,0 +1,32 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lyra knob studies v5</title><style>
+:root{--bg:#20272c;--panel:#282f34;--mint:#a4c8b7;--muted:#526963;--ink:#c5d0cb}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui;padding:24px}h1{font-size:20px;font-weight:600;margin:0 0 8px}p{color:#9ca9a6;max-width:700px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;max-width:950px;margin-top:24px}.card{background:var(--panel);border-radius:18px;padding:20px 10px;text-align:center;min-width:0}.card h2{font-size:14px;font-weight:600;margin:0 0 16px}.mount{height:188px;display:flex;align-items:center;justify-content:center}.knob{display:block;touch-action:none;cursor:ns-resize;user-select:none;overflow:visible}.label{color:#9ca9a6;margin:12px 0 3px}.value{font-size:16px;font-variant-numeric:tabular-nums}.note{margin-top:22px;font-size:12px}@media(max-width:650px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:14px 6px}.mount{height:160px}}@media(max-width:360px){.grid{grid-template-columns:1fr}}
+</style><h1>Lyra · knob family / revision 5</h1><p>Three deliberately different constructions, at three real sizes. Drag vertically, scroll, or use arrow keys. Stepped positions are shown by discrete dots.</p><div class="grid" id="grid"></div><p class="note">Pure SVG. No filters, no textures, no raster assets. The big dial is the only one allowed a restrained metallic finish.</p><script>
+const NS='http://www.w3.org/2000/svg',grid=document.querySelector('#grid');
+const sizes=[{id:'small',title:'Small · flat encoder',px:88},{id:'normal',title:'Normal · rubber cap',px:132},{id:'big',title:'Big · machined dial',px:174}];
+function el(name,attrs={},parent){const n=document.createElementNS(NS,name);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);parent?.appendChild(n);return n}
+function polar(r,deg){const a=deg*Math.PI/180;return [100+Math.sin(a)*r,100-Math.cos(a)*r]}
+function arc(r,start,end){const [x1,y1]=polar(r,start),[x2,y2]=polar(r,end);return `M${x1} ${y1} A${r} ${r} 0 ${end-start>180?1:0} 1 ${x2} ${y2}`}
+function build(size,stepped){let val=stepped?4:.55;const card=document.createElement('section');card.className='card';card.innerHTML=`<h2>${size.title}</h2><div class="mount"></div><div class="label">${stepped?'Stepped · 9 positions':'Continuous'}</div><div class="value"></div>`;grid.append(card);const svg=el('svg',{viewBox:'0 0 200 200',width:size.px,height:size.px,tabindex:0,role:'slider','aria-label':`${size.id} ${stepped?'stepped':'continuous'} knob`},card.querySelector('.mount'));svg.classList.add('knob');const defs=el('defs',{},svg);if(size.id==='big'){const g=el('linearGradient',{id:`metal-${stepped}`,x1:'0',y1:'0',x2:'1',y2:'1'},defs);[['0%','#697377'],['23%','#525d61'],['52%','#3c464a'],['78%','#505b5e'],['100%','#323b3f']].forEach(([offset,color])=>el('stop',{offset,'stop-color':color},g))}
+let indicator,activeArc,dots=[];
+if(size.id==='small'){
+  el('circle',{cx:100,cy:100,r:67,fill:'#30383b'},svg);
+  el('circle',{cx:100,cy:100,r:60,fill:'#343d3f'},svg);
+  indicator=el('circle',{r:5.5,fill:'var(--mint)'},svg);
+}else if(size.id==='normal'){
+  el('circle',{cx:100,cy:100,r:73,fill:'#161d20'},svg);
+  el('circle',{cx:100,cy:100,r:65,fill:'#394143',stroke:'#596262','stroke-width':4},svg);
+  el('circle',{cx:100,cy:100,r:56,fill:'#3b4345'},svg);
+  indicator=el('line',{'stroke':'var(--mint)','stroke-width':6,'stroke-linecap':'round'},svg);
+}else{
+  el('circle',{cx:100,cy:100,r:84,fill:'#151b1e'},svg);
+  el('circle',{cx:100,cy:100,r:75,fill:`url(#metal-${stepped})`,stroke:'#737e80','stroke-width':2.5},svg);
+  el('circle',{cx:100,cy:100,r:64,fill:'#424b4e'},svg);
+  el('circle',{cx:100,cy:100,r:53,fill:'#353e41'},svg);
+  indicator=el('path',{fill:'#b6c9c1'},svg);
+}
+if(stepped){for(let i=0;i<9;i++){const [x,y]=polar(size.id==='small'?83:size.id==='normal'?86:94,-135+i*270/8);dots.push(el('circle',{cx:x,cy:y,r:size.id==='small'?3.6:4.3,fill:'var(--muted)'},svg))}}
+else{const r=size.id==='small'?81:size.id==='normal'?85:93;el('path',{d:arc(r,-135,135),fill:'none',stroke:'#3c5150','stroke-width':size.id==='small'?4:5,'stroke-linecap':'round'},svg);activeArc=el('path',{fill:'none',stroke:'var(--mint)','stroke-width':size.id==='small'?4:5,'stroke-linecap':'round'},svg)}
+const valueText=card.querySelector('.value');function render(){const t=stepped?val/8:val,angle=-135+270*t;const [x,y]=polar(size.id==='small'?42:size.id==='normal'?44:44,angle);if(size.id==='small'){indicator.setAttribute('cx',x);indicator.setAttribute('cy',y)}else if(size.id==='normal'){const [x2,y2]=polar(32,angle);indicator.setAttribute('x1',x);indicator.setAttribute('y1',y);indicator.setAttribute('x2',x2);indicator.setAttribute('y2',y2)}else{const [a,b]=polar(51,angle),[c,d]=polar(36,angle);indicator.setAttribute('d',`M${a-3} ${b} L${c-2} ${d} L${c+2} ${d} L${a+3} ${b} Z`)}if(stepped){dots.forEach((d,i)=>{d.setAttribute('fill',i===val?'var(--mint)':'var(--muted)');d.setAttribute('r',i===val?6:4)})}else{activeArc.setAttribute('d',arc(size.id==='small'?81:size.id==='normal'?85:93,-135,Math.max(-134.8,angle)))}valueText.textContent=stepped?`Position ${val+1} / 9`:`${Math.round(val*100)}%`;svg.setAttribute('aria-valuemin',stepped?1:0);svg.setAttribute('aria-valuemax',stepped?9:100);svg.setAttribute('aria-valuenow',stepped?val+1:Math.round(val*100))}function update(delta){val=stepped?Math.max(0,Math.min(8,val+Math.round(delta))):Math.max(0,Math.min(1,val+delta));render()}
+let last=null;svg.addEventListener('pointerdown',e=>{last=e.clientY;svg.setPointerCapture(e.pointerId)});svg.addEventListener('pointermove',e=>{if(last===null)return;const dy=last-e.clientY;last=e.clientY;if(stepped){acc+=dy;const steps=Math.trunc(acc/12);if(steps){update(steps);acc-=steps*12}}else update(dy/180)});let acc=0;svg.addEventListener('pointerup',()=>{last=null;acc=0});svg.addEventListener('pointercancel',()=>{last=null;acc=0});svg.addEventListener('wheel',e=>{e.preventDefault();update(stepped?(e.deltaY<0?1:-1):(e.deltaY<0?.025:-.025))},{passive:false});svg.addEventListener('keydown',e=>{if(['ArrowUp','ArrowRight','ArrowDown','ArrowLeft'].includes(e.key)){e.preventDefault();update(stepped?(e.key==='ArrowUp'||e.key==='ArrowRight'?1:-1):(e.key==='ArrowUp'||e.key==='ArrowRight'?.02:-.02))}});render()}
+for(const size of sizes){build(size,false);build(size,true)}
+</script></html>

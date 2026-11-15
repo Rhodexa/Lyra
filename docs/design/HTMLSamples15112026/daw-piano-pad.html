@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DAW silicone piano pad</title>
+<style>
+  :root {color-scheme:dark;font-family:system-ui,sans-serif}
+  body{min-height:100vh;margin:0;display:grid;place-content:center;background:#252525}
+  .demo{display:flex;flex-direction:column;align-items:center;gap:18px}
+  .recess{display:block;width:108px;height:108px;padding:2px;border:0;border-radius:13px;background:#141414;cursor:pointer;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  .pad{display:block;width:100%;height:100%;padding:5px;box-sizing:border-box;border-radius:11px;background:linear-gradient(to bottom,#494949 0%,#383838 10%,#383838 90%,#292929 100%);transition:background .20s ease-out}
+  .face{display:flex;align-items:center;justify-content:center;position:relative;width:100%;height:100%;border-radius:7px;overflow:hidden;background:#292929;box-shadow:inset 0 2px 5px rgba(0,0,0,.14)}
+  .light{position:absolute;inset:0;border-radius:inherit;opacity:0;background:radial-gradient(ellipse 85% 82% at 50% 49%,#adbf7e 0%,#a1b574 45%,#879e67 83%,#778e5c 100%);transition:opacity .10s ease-out}
+  .piano-icon{position:relative;z-index:1;width:76px;height:76px;color:#a3a69a;transition:color .20s ease-out}
+  .recess.on .pad{background:linear-gradient(to bottom,#72865a 0%,#64784e 10%,#64784e 90%,#536846 100%)}
+  .recess.on .light{opacity:1}
+  .recess.on .piano-icon{color:#303827}
+  .status{font-size:12px;font-weight:600;letter-spacing:2px;color:#999}
+  .recess:focus-visible{outline:2px solid #a1b574;outline-offset:5px}
+</style>
+<div class="demo">
+  <button class="recess" id="piano-toggle" aria-label="Toggle piano pad" aria-pressed="false">
+    <span class="pad"><span class="face"><span class="light"></span>
+      <svg class="piano-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <rect x="8" y="14" width="48" height="36" rx="3" stroke="currentColor" stroke-width="3"/>
+        <path d="M20 50V15M32 50V15M44 50V15" stroke="currentColor" stroke-width="2.5"/>
+        <path d="M17 14V34H23V14M29 14V34H35V14M41 14V34H47V14" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/>
+      </svg>
+    </span></span>
+  </button>
+  <div class="status" id="piano-status">OFF</div>
+</div>
+<script>
+const pad=document.getElementById('piano-toggle');
+const status=document.getElementById('piano-status');
+pad.addEventListener('click',()=>{const on=pad.classList.toggle('on');pad.setAttribute('aria-pressed',String(on));status.textContent=on?'ON':'OFF';});
+</script>
+</html>
