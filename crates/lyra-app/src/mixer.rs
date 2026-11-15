@@ -1,5 +1,6 @@
 //! The mixer (F9): one strip per mixer track (master + inserts), and the
-//! selected track's effect chain on the right.
+//! selected track's effect rack on the right: eight fixed slots, each opening
+//! its effect in the effect window (like channel rack → instrument).
 //!
 //! Channels pick their insert in the instrument editor (new channels get the
 //! next free one). Faders and knobs: drag (Shift = fine), wheel, double-click
@@ -29,11 +30,20 @@ const FADER_H: f32 = 210.0;
 const LOWER_H: f32 = 170.0;
 const STRIP_H: f32 = 8.0 + FADER_H + 6.0 + LOWER_H + 6.0;
 
+/// Width of the effect rack beside the strips (inside its padding).
+const RACK_W: f32 = 240.0;
+const RACK_PAD: f32 = 8.0;
+
 pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
     st.mixer_selected = st.mixer_selected.min(p.mixer.len() - 1);
     let seam = theme::SEAM;
     ui.horizontal_top(|ui| {
-        egui::ScrollArea::horizontal().id_salt("mixer-strips").max_width(ui.available_width() - 340.0).show(ui, |ui| {
+        // Every width here adds up exactly to what the window offers. (When it
+        // didn't, the content asked for a few pixels more each frame and the
+        // window crept back open after you shrank it.)
+        ui.spacing_mut().item_spacing.x = 0.0;
+        let strips_w = (ui.available_width() - seam - RACK_W - 2.0 * RACK_PAD).max(STRIP_W);
+        egui::ScrollArea::horizontal().id_salt("mixer-strips").max_width(strips_w).show(ui, |ui| {
             // The window's own background is the rack frame; strips are
             // plates on it, a seam apart.
             let n = p.mixer.len();
@@ -45,10 +55,13 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
             }
         });
         ui.add_space(seam);
-        egui::Frame::default().fill(theme::PANEL).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
-            ui.set_width(320.0);
-            ui.set_min_height(STRIP_H - 16.0);
-            ui.vertical(|ui| chain(ui, p, h, st));
+        egui::Frame::default().fill(theme::PANEL).inner_margin(egui::Margin::same(RACK_PAD as i8)).show(ui, |ui| {
+            ui.set_width(RACK_W);
+            ui.set_height(STRIP_H - 2.0 * RACK_PAD);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                effect_rack(ui, p, h, st);
+            });
         });
     });
 }
@@ -289,117 +302,265 @@ fn meter(ui: &Ui, id: egui::Id, rect: Rect, fader: Rect, levels: [f32; 2]) {
     }
 }
 
-/// The selected track's effects, top to bottom, each with its knobs.
-fn chain(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+/// The selected track's effect rack: always eight slots, in signal order,
+/// so every effect has a fixed place. Click a slot to open its effect; click
+/// an empty slot to plug one in; drag a slot to move it; right-click for more.
+fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
     let m = theme::m();
     let t = st.mixer_selected;
-    ui.label(RichText::new(&p.mixer[t].name).heading());
-    let feeding: Vec<String> = p.channels.iter().filter(|c| c.mixer == t).map(|c| c.name.clone()).collect();
-    let from = if feeding.is_empty() && t != 0 {
-        "nothing routed here yet".to_string()
-    } else if t == 0 {
-        "everything ends here".into()
-    } else {
-        feeding.join(", ")
+    let light = p.channels.iter().find(|c| c.mixer == t).map_or(theme::L_MINT, |c| theme::channel_light(c.color));
+    ui.label(RichText::new(&p.mixer[t].name).size(m.text + 1.0).color(theme::TEXT));
+    let feeding: Vec<&str> = p.channels.iter().filter(|c| c.mixer == t).map(|c| c.name.as_str()).collect();
+    let from = match (t, feeding.is_empty()) {
+        (0, _) => "everything ends here".to_string(),
+        (_, true) => "nothing routed here yet".to_string(),
+        _ => feeding.join(", "),
     };
-    ui.label(RichText::new(from).small().color(theme::TEXT_DIM));
+    ui.add(egui::Label::new(RichText::new(from).small().color(theme::TEXT_DIM)).truncate());
     ui.add_space(6.0);
 
-    let mut remove = None;
-    let mut swap = None;
-    let count = p.mixer[t].effects.len();
-    egui::ScrollArea::vertical().id_salt("mixer-chain").max_height(ui.available_height() - 40.0).show(ui, |ui| {
-        for i in 0..count {
-            let slot = p.mixer[t].effects[i].clone();
-            let name = lyra_dsp::effects::info(&slot.effect).map_or("Missing effect", |e| e.name);
-            egui::Frame::default()
-                .fill(theme::PANEL_HI)
-                .stroke(theme::stroke(1.0, theme::LINE))
-                .corner_radius(cr(3))
-                .inner_margin(egui::Margin::same(6))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        if widgets::led(ui, !slot.bypass, theme::L_MINT, "On / bypass").clicked() {
-                            h.checkpoint(p);
-                            p.mixer[t].effects[i].bypass ^= true;
-                        }
-                        ui.label(RichText::new(name).strong());
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("x").on_hover_text("Remove").clicked() {
-                                remove = Some(i);
-                            }
-                            if i + 1 < count && ui.small_button("v").on_hover_text("Move down").clicked() {
-                                swap = Some((i, i + 1));
-                            }
-                            if i > 0 && ui.small_button("^").on_hover_text("Move up").clicked() {
-                                swap = Some((i - 1, i));
-                            }
-                        });
-                    });
-                    let infos = lyra_dsp::effects::params(&slot.effect);
-                    ui.horizontal_wrapped(|ui| {
-                        for info in infos {
-                            let id = info.id as usize;
-                            let Some(&value) = p.mixer[t].effects[i].params.get(id) else { continue };
-                            ui.allocate_ui(vec2(m.knob_large + 18.0, m.knob_large + 2.0 * m.text_small + 12.0), |ui| {
-                                ui.vertical_centered(|ui| {
-                                    let mut v = value;
-                                    if info.is_choice() {
-                                        let mut idx = v.round() as usize;
-                                        egui::ComboBox::from_id_salt(("fx", t, i, id))
-                                            .width(m.knob_large + 12.0)
-                                            .selected_text(info.labels[idx.min(info.labels.len() - 1)])
-                                            .show_ui(ui, |ui| {
-                                                for (k, label) in info.labels.iter().enumerate() {
-                                                    ui.selectable_value(&mut idx, k, *label);
-                                                }
-                                            });
-                                        if idx as f32 != v.round() {
-                                            h.checkpoint(p);
-                                            p.mixer[t].effects[i].params[id] = idx as f32;
-                                        }
-                                    } else if tracked(
-                                        &widgets::knob(ui, &mut v, info, m.knob_large * 0.8, theme::MINT),
-                                        h,
-                                        p,
-                                    ) {
-                                        p.mixer[t].effects[i].params[id] = v;
-                                    }
-                                    ui.label(RichText::new(info.name).small());
-                                    ui.label(
-                                        RichText::new(info.format(p.mixer[t].effects[i].params[id]))
-                                            .small()
-                                            .color(theme::TEXT_DIM),
-                                    );
-                                });
-                            });
+    let (pointer, released) = ui.input(|i| (i.pointer.hover_pos(), i.pointer.any_released()));
+    let row_h = m.control_h + 4.0;
+    let mut action: Option<SlotAction> = None;
+    let mut drop_at: Option<usize> = None;
+    for i in 0..lyra_engine::MAX_FX {
+        let slot = p.mixer[t].effects.get(i).cloned();
+        let (row, _) = ui.allocate_exact_size(vec2(RACK_W, row_h), Sense::hover());
+        let painter = ui.painter().clone();
+        // Slot number: the signal runs 1 → 8.
+        painter.text(
+            row.left_center() + vec2(7.0, 0.0),
+            Align2::CENTER_CENTER,
+            format!("{}", i + 1),
+            egui::FontId::monospace(m.text_small),
+            theme::TEXT_DIM,
+        );
+        let led_c = pos2(row.left() + 26.0, row.center().y);
+        let plate = Rect::from_min_max(pos2(row.left() + 40.0, row.top() + 2.0), pos2(row.right(), row.bottom() - 2.0));
+        let resp = ui.interact(plate, ui.id().with(("fx-slot", t, i)), Sense::click_and_drag());
+        let open = st.effect == Some((t, i));
+
+        match &slot {
+            Some(s) => {
+                let led_r = Rect::from_center_size(led_c, vec2(m.led, m.led));
+                let led = ui.interact(led_r, ui.id().with(("fx-led", t, i)), Sense::click());
+                theme::led(&painter, led_c, m.led, (!s.bypass).then_some(light), led.hovered());
+                if led.clicked() {
+                    action = Some(SlotAction::Bypass(i));
+                }
+                led.on_hover_text("On / bypass");
+                let name = lyra_dsp::effects::info(&s.effect).map_or("Missing effect", |e| e.name);
+                let fill = if open || resp.hovered() {
+                    theme::PANEL_HI
+                } else {
+                    theme::mix(theme::PANEL, theme::PANEL_HI, 0.5)
+                };
+                painter.rect_filled(plate, cr(3), fill);
+                painter.rect_stroke(plate, cr(3), theme::stroke(1.0, theme::LINE), egui::StrokeKind::Inside);
+                if open {
+                    painter.rect_filled(Rect::from_min_size(plate.min, vec2(3.0, plate.height())), cr(1), light.mid);
+                }
+                painter.text(
+                    plate.left_center() + vec2(10.0, 0.0),
+                    Align2::LEFT_CENTER,
+                    name,
+                    egui::FontId::proportional(m.text),
+                    if s.bypass { theme::TEXT_DIM } else { theme::TEXT },
+                );
+                if resp.clicked() {
+                    action = Some(SlotAction::Open(i));
+                }
+                if resp.drag_started() {
+                    st.fx_drag = Some(i);
+                }
+                resp.context_menu(|ui| {
+                    if ui.button("Open").clicked() {
+                        action = Some(SlotAction::Open(i));
+                        ui.close_menu();
+                    }
+                    ui.menu_button("Replace with", |ui| {
+                        if let Some(id) = effect_menu(ui) {
+                            action = Some(SlotAction::Put(i, id));
+                            ui.close_menu();
                         }
                     });
+                    if i > 0 && ui.button("Move up").clicked() {
+                        action = Some(SlotAction::Move(i, i - 1));
+                        ui.close_menu();
+                    }
+                    if i + 1 < p.mixer[t].effects.len() && ui.button("Move down").clicked() {
+                        action = Some(SlotAction::Move(i, i + 1));
+                        ui.close_menu();
+                    }
+                    ui.separator();
+                    if ui.button("Remove").clicked() {
+                        action = Some(SlotAction::Remove(i));
+                        ui.close_menu();
+                    }
                 });
-            ui.add_space(4.0);
+                resp.on_hover_text("Click: open · drag: move · right-click: more");
+            }
+            None => {
+                theme::led(&painter, led_c, m.led * 0.7, None, false);
+                theme::well(&painter, plate);
+                if resp.hovered() {
+                    painter.text(
+                        plate.center(),
+                        Align2::CENTER_CENTER,
+                        "+",
+                        egui::FontId::proportional(m.text + 2.0),
+                        theme::TEXT_DIM,
+                    );
+                }
+                let popup = ui.id().with(("fx-add", t, i));
+                if resp.clicked() {
+                    ui.memory_mut(|mem| mem.toggle_popup(popup));
+                }
+                egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+                    ui.set_min_width(plate.width());
+                    if let Some(id) = effect_menu(ui) {
+                        action = Some(SlotAction::Put(i, id));
+                        ui.memory_mut(|mem| mem.close_popup());
+                    }
+                });
+            }
         }
-    });
-    if let Some(i) = remove {
-        h.checkpoint(p);
-        p.mixer[t].effects.remove(i);
-    }
-    if let Some((a, b)) = swap {
-        h.checkpoint(p);
-        p.mixer[t].effects.swap(a, b);
-    }
-    if count < lyra_engine::MAX_FX {
-        ui.menu_button("+ add effect", |ui| {
-            for e in lyra_dsp::effects::EFFECTS {
-                if ui.button(e.name).clicked() {
-                    h.checkpoint(p);
-                    p.mixer[t].effects.push(EffectSlot {
-                        effect: e.id.into(),
-                        params: lyra_dsp::effects::default_params(e.id),
-                        bypass: false,
-                    });
-                    ui.close_menu();
+
+        // Dragging a slot: show where it would land.
+        if let (Some(from), Some(pos)) = (st.fx_drag, pointer) {
+            if row.contains(pos) && from != i {
+                let last = p.mixer[t].effects.len().saturating_sub(1);
+                let to = i.min(last);
+                let y = if i > last {
+                    // Past the end: the line goes under the last effect (rows are evenly spaced).
+                    plate.bottom() + 1.0 - (i - last) as f32 * (row_h + ui.spacing().item_spacing.y)
+                } else if to > from {
+                    plate.bottom() + 1.0
+                } else {
+                    plate.top() - 1.0
+                };
+                painter.hline(plate.x_range(), y, theme::stroke(2.0, light.mid));
+                if released {
+                    drop_at = Some(to);
                 }
             }
-        });
+        }
     }
+    if released {
+        if let (Some(from), Some(to)) = (st.fx_drag, drop_at) {
+            action = Some(SlotAction::Move(from, to));
+        }
+        st.fx_drag = None;
+    }
+
+    let fx = &mut p.mixer[t].effects;
+    match action {
+        Some(SlotAction::Open(i)) => {
+            st.effect = Some((t, i));
+            st.raise = Some(crate::app::Focus::Effect);
+        }
+        Some(SlotAction::Bypass(i)) => {
+            h.checkpoint(p);
+            p.mixer[t].effects[i].bypass ^= true;
+        }
+        Some(SlotAction::Put(i, id)) => {
+            h.checkpoint(p);
+            let fx = &mut p.mixer[t].effects;
+            let slot = EffectSlot { effect: id.into(), params: lyra_dsp::effects::default_params(id), bypass: false };
+            if i < fx.len() {
+                fx[i] = slot;
+            } else {
+                fx.push(slot); // effects are packed: an empty slot means "add at the end"
+            }
+            st.effect = Some((t, i.min(fx.len() - 1)));
+            st.raise = Some(crate::app::Focus::Effect);
+        }
+        Some(SlotAction::Move(from, to)) if from != to && from < fx.len() && to < fx.len() => {
+            h.checkpoint(p);
+            let fx = &mut p.mixer[t].effects;
+            let e = fx.remove(from);
+            fx.insert(to, e);
+            // The open effect follows its slot.
+            if let Some((et, ei)) = st.effect.filter(|&(et, _)| et == t) {
+                let moved = if ei == from {
+                    to
+                } else if from < ei && ei <= to {
+                    ei - 1
+                } else if to <= ei && ei < from {
+                    ei + 1
+                } else {
+                    ei
+                };
+                st.effect = Some((et, moved));
+            }
+        }
+        Some(SlotAction::Remove(i)) => {
+            h.checkpoint(p);
+            p.mixer[t].effects.remove(i);
+            st.effect = match st.effect {
+                Some((et, ei)) if et == t && ei == i => None,
+                Some((et, ei)) if et == t && ei > i => Some((et, ei - 1)),
+                other => other,
+            };
+        }
+        _ => {}
+    }
+}
+
+enum SlotAction {
+    Open(usize),
+    Bypass(usize),
+    Put(usize, &'static str),
+    Move(usize, usize),
+    Remove(usize),
+}
+
+/// Every built-in effect, once. Returns the id picked.
+fn effect_menu(ui: &mut Ui) -> Option<&'static str> {
+    let mut picked = None;
+    for e in lyra_dsp::effects::EFFECTS {
+        if ui.button(e.name).clicked() {
+            picked = Some(e.id);
+        }
+    }
+    picked
+}
+
+/// One effect's controls, in a fixed grid (the effect window).
+pub fn effect_editor(ui: &mut Ui, p: &mut Project, h: &mut History, t: usize, i: usize) {
+    let m = theme::m();
+    let Some(slot) = p.mixer[t].effects.get(i).cloned() else { return };
+    let light = p.channels.iter().find(|c| c.mixer == t).map_or(theme::L_MINT, |c| theme::channel_light(c.color));
+    ui.horizontal(|ui| {
+        if widgets::led(ui, !slot.bypass, light, "On / bypass").clicked() {
+            h.checkpoint(p);
+            p.mixer[t].effects[i].bypass ^= true;
+        }
+        ui.label(RichText::new(format!("slot {}", i + 1)).small().color(theme::TEXT_DIM));
+    });
+    ui.add_space(4.0);
+    let infos = lyra_dsp::effects::params(&slot.effect);
+    let cell = vec2(m.knob_large + 30.0, m.knob_large + 2.0 * m.text_small + 14.0);
+    egui::Grid::new(("fx-grid", t, i)).spacing(vec2(4.0, 6.0)).show(ui, |ui| {
+        for (k, info) in infos.iter().enumerate() {
+            let id = info.id as usize;
+            let Some(&value) = p.mixer[t].effects[i].params.get(id) else { continue };
+            ui.allocate_ui(cell, |ui| {
+                ui.set_min_size(cell);
+                ui.vertical_centered(|ui| {
+                    let mut v = value;
+                    if tracked(&widgets::knob(ui, &mut v, info, m.knob_large, light.mid), h, p) {
+                        p.mixer[t].effects[i].params[id] = v;
+                    }
+                    ui.label(RichText::new(info.name).small());
+                    ui.label(
+                        RichText::new(info.format(p.mixer[t].effects[i].params[id])).small().color(theme::TEXT_DIM),
+                    );
+                });
+            });
+            if k % 5 == 4 {
+                ui.end_row();
+            }
+        }
+    });
 }

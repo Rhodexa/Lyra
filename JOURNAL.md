@@ -60,6 +60,13 @@ what to work on and folds the items into the plan when the time is right.
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Mixer & toolbar round 3 → (this commit)**
+- [x] *(chat)* Mixer window: resizing it shrank it, then it slowly grew back.
+  *→ the strips asked for "the window's width minus 340 px", but the panel beside them was a few px wider than that, so every frame the window grew a little to fit. The widths now add up exactly; tested shrinking and growing with synthetic drags.*
+- [x] *(chat)* Effects as a rack: predictable slots that open each effect, like channel rack → instrument.
+  *→ each mixer track shows 8 fixed slots in signal order. Click: open the effect window · empty slot: plug one in · drag: move · right-click: replace / move / remove · light: bypass. The open effect follows its slot when you move it.*
+- [x] *(chat)* PAT / SONG looked like two keys with bad spacing → one radio key, square where the faces meet.
+
 **Control library → `0e5a746`, `65905c9`**
 - [x] Less labelling, more implicit design: the TRANSPORT / TEMPO captions aren't needed (the transport already reads as a little cassette deck). Tempo as a bigger, clock-like number ("124.0 BPM" in big letters); no LED imitation, at least not at first.
   *→ all toolbar captions are gone (hover anything for its name). Tempo is the backlit LCD from your studies, since they came later than this wish.*

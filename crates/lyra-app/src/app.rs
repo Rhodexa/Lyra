@@ -29,6 +29,7 @@ pub enum Focus {
     Editor,
     Playlist,
     Mixer,
+    Effect,
 }
 
 /// View state that isn't part of the project (not saved, not undoable).
@@ -56,6 +57,10 @@ pub struct UiState {
     pub show_mixer: bool,
     /// The mixer track whose effects are shown.
     pub mixer_selected: usize,
+    /// The effect open in the effect window: (mixer track, slot).
+    pub effect: Option<(usize, usize)>,
+    /// An effect slot being dragged to a new place in the rack.
+    pub fx_drag: Option<usize>,
     /// Per mixer track [left, right], decaying (for the strip meters).
     pub track_meters: Vec<[f32; 2]>,
     /// Space plays the whole playlist (true) or just the current pattern.
@@ -82,6 +87,8 @@ impl Default for UiState {
             show_playlist: true,
             show_mixer: false,
             mixer_selected: 1,
+            effect: None,
+            fx_drag: None,
             track_meters: Vec::new(),
             song_mode: false,
         }
@@ -509,6 +516,7 @@ impl eframe::App for LyraApp {
                 Focus::Editor => "editor",
                 Focus::Playlist => "playlist",
                 Focus::Mixer => "mixer",
+                Focus::Effect => "effect",
             };
             ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, Id::new(id)));
             self.ui.focus = f;
@@ -685,6 +693,30 @@ impl LyraApp {
             self.ui.show_mixer = open;
             if win.is_some_and(|w| clicked_inside(ctx, &w.response)) {
                 self.ui.focus = Focus::Mixer;
+            }
+        }
+
+        // The effect window: one effect from a mixer track's rack, like the
+        // instrument window is one channel from the channel rack.
+        let fx = self.ui.effect.filter(|&(t, i)| self.project.mixer.get(t).is_some_and(|m| i < m.effects.len()));
+        self.ui.effect = fx;
+        if let Some((t, i)) = fx {
+            let mut open = true;
+            let name =
+                lyra_dsp::effects::info(&self.project.mixer[t].effects[i].effect).map_or("Missing effect", |e| e.name);
+            let win = egui::Window::new(format!("{name} · {}", self.project.mixer[t].name))
+                .id(Id::new("effect"))
+                .open(&mut open)
+                .pivot(egui::Align2::RIGHT_TOP)
+                .default_pos([screen.right() - 16.0, piano_top])
+                .resizable(false)
+                .frame(frame)
+                .show(ctx, |ui| crate::mixer::effect_editor(ui, &mut self.project, &mut self.history, t, i));
+            if !open {
+                self.ui.effect = None;
+            }
+            if win.is_some_and(|w| clicked_inside(ctx, &w.response)) {
+                self.ui.focus = Focus::Effect;
             }
         }
 

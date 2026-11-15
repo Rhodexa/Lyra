@@ -34,7 +34,7 @@ pub fn show(
     ui.spacing_mut().item_spacing.x = theme::SEAM;
     ui.horizontal_centered(|ui| {
         let big = widgets::toolbar_key();
-        let small = (big * 0.8).round();
+        let small = (big * 0.9).round();
         let gap = 4.0;
 
         // The logo module, which is also the project menu.

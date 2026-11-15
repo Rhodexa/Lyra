@@ -119,7 +119,7 @@ impl Metrics {
         text: 14.0,
         text_small: 11.0,
         control_h: 26.0,
-        toolbar_h: 52.0,
+        toolbar_h: 56.0,
         module_pad: 6.0,
         module_gap: 8.0,
         corner: 5.0,
@@ -398,32 +398,62 @@ pub fn ramp(stops: &[(f32, Color32)], t: f32) -> Color32 {
     stops[stops.len() - 1].1
 }
 
+/// Corner radii for the left pair and the right pair of corners. Keys that
+/// sit flush against a neighbour (radio keys) square off the touching side.
+#[derive(Clone, Copy, Debug)]
+pub struct Sides {
+    pub left: f32,
+    pub right: f32,
+}
+
+impl Sides {
+    /// Keep `left` / `right` rounded, square the other side.
+    pub fn only(r: f32, left: bool, right: bool) -> Self {
+        Sides { left: if left { r } else { 0.0 }, right: if right { r } else { 0.0 } }
+    }
+    fn clamped(self, r: Rect) -> Self {
+        let max = (r.width() * 0.5).min(r.height() * 0.5);
+        Sides { left: self.left.clamp(0.0, max), right: self.right.clamp(0.0, max) }
+    }
+    fn shrunk(self, d: f32) -> Self {
+        Sides { left: (self.left - d).max(0.0), right: (self.right - d).max(0.0) }
+    }
+    fn corners(self) -> egui::CornerRadius {
+        let (l, r) = (self.left.round() as u8, self.right.round() as u8);
+        egui::CornerRadius { nw: l, sw: l, ne: r, se: r }
+    }
+}
+
 /// Left/right extent of a rounded rect at height `y`.
-fn rounded_span(r: Rect, rad: f32, y: f32) -> (f32, f32) {
-    let dy = if y < r.top() + rad {
-        r.top() + rad - y
-    } else if y > r.bottom() - rad {
-        y - (r.bottom() - rad)
-    } else {
-        0.0
+fn rounded_span(r: Rect, rad: Sides, y: f32) -> (f32, f32) {
+    let inset = |rad: f32| {
+        let dy = if y < r.top() + rad {
+            r.top() + rad - y
+        } else if y > r.bottom() - rad {
+            y - (r.bottom() - rad)
+        } else {
+            0.0
+        };
+        rad - (rad * rad - dy.min(rad).powi(2)).max(0.0).sqrt()
     };
-    let inset = rad - (rad * rad - dy.min(rad).powi(2)).max(0.0).sqrt();
-    (r.left() + inset, r.right() - inset)
+    (r.left() + inset(rad.left), r.right() - inset(rad.right))
 }
 
 /// A rounded rect filled with a vertical gradient (exact at every stop).
-pub fn vgradient(p: &Painter, r: Rect, radius: f32, stops: &[(f32, Color32)]) {
-    let rad = radius.min(r.width() * 0.5).min(r.height() * 0.5).max(0.0);
+pub fn vgradient_sides(p: &Painter, r: Rect, rad: Sides, stops: &[(f32, Color32)]) {
+    let rad = rad.clamped(r);
     // Anti-aliased base in the middle colour hides the mesh's hard edge.
-    p.rect_filled(r, cr(rad.round() as u8), ramp(stops, 0.5));
+    p.rect_filled(r, rad.corners(), ramp(stops, 0.5));
     let r = r.shrink(0.4);
-    let rad = (rad - 0.4).max(0.0);
-    let mut ys: Vec<f32> = Vec::with_capacity(24);
+    let rad = rad.shrunk(0.4);
+    let mut ys: Vec<f32> = Vec::with_capacity(32);
     const ARC: usize = 5;
-    for i in 0..=ARC {
-        let f = i as f32 / ARC as f32;
-        ys.push(r.top() + rad * (1.0 - (f * std::f32::consts::FRAC_PI_2).cos()));
-        ys.push(r.bottom() - rad * (1.0 - (f * std::f32::consts::FRAC_PI_2).cos()));
+    for radius in [rad.left, rad.right] {
+        for i in 0..=ARC {
+            let f = i as f32 / ARC as f32;
+            ys.push(r.top() + radius * (1.0 - (f * std::f32::consts::FRAC_PI_2).cos()));
+            ys.push(r.bottom() - radius * (1.0 - (f * std::f32::consts::FRAC_PI_2).cos()));
+        }
     }
     ys.extend(stops.iter().map(|(t, _)| r.top() + t * r.height()));
     ys.retain(|y| (r.top()..=r.bottom()).contains(y));
@@ -445,21 +475,23 @@ pub fn vgradient(p: &Painter, r: Rect, radius: f32, stops: &[(f32, Color32)]) {
 }
 
 /// Outline of a rounded rect, clockwise from the left end of the top edge.
-fn rounded_loop(r: Rect, rad: f32, arc: usize) -> Vec<egui::Pos2> {
+fn rounded_loop(r: Rect, rad: Sides, arc: usize) -> Vec<egui::Pos2> {
     use std::f32::consts::{FRAC_PI_2, PI};
     let mut out = Vec::with_capacity(4 * (arc + 1) + 4);
+    let (l, rr) = (rad.left, rad.right);
     let corners = [
-        (egui::pos2(r.left() + rad, r.top() + rad), PI),
-        (egui::pos2(r.right() - rad, r.top() + rad), 1.5 * PI),
-        (egui::pos2(r.right() - rad, r.bottom() - rad), 0.0),
-        (egui::pos2(r.left() + rad, r.bottom() - rad), FRAC_PI_2),
+        (egui::pos2(r.left() + l, r.top() + l), PI, l),
+        (egui::pos2(r.right() - rr, r.top() + rr), 1.5 * PI, rr),
+        (egui::pos2(r.right() - rr, r.bottom() - rr), 0.0, rr),
+        (egui::pos2(r.left() + l, r.bottom() - l), FRAC_PI_2, l),
     ];
-    for (c, from) in corners {
+    for (c, from, radius) in corners {
         for i in 0..=arc {
             let a = from + FRAC_PI_2 * i as f32 / arc as f32;
-            out.push(c + egui::vec2(a.cos(), a.sin()) * rad);
+            out.push(c + egui::vec2(a.cos(), a.sin()) * radius);
         }
     }
+    out.dedup_by(|a, b| a.distance(*b) < 0.01);
     // Extra points halfway along each side keep long sides smooth inside.
     let n = out.len();
     let mut with_mids = Vec::with_capacity(n * 2);
@@ -476,13 +508,13 @@ fn rounded_loop(r: Rect, rad: f32, arc: usize) -> Vec<egui::Pos2> {
 /// A rounded rect filled with an elliptical radial gradient, like CSS
 /// `radial-gradient(ellipse rx% ry% at cx% cy%, stops…)`. `at` and `radii`
 /// are fractions of the rect's size.
-pub fn radial_rect(p: &Painter, r: Rect, radius: f32, at: egui::Vec2, radii: egui::Vec2, stops: &[(f32, Color32)]) {
-    let rad = radius.min(r.width() * 0.5).min(r.height() * 0.5).max(0.0);
+pub fn radial_rect(p: &Painter, r: Rect, radius: Sides, at: egui::Vec2, radii: egui::Vec2, stops: &[(f32, Color32)]) {
+    let rad = radius.clamped(r);
     let focus = r.min + r.size() * at;
     let (rx, ry) = ((r.width() * radii.x).max(1.0), (r.height() * radii.y).max(1.0));
     let color = |q: egui::Pos2| ramp(stops, (((q.x - focus.x) / rx).powi(2) + ((q.y - focus.y) / ry).powi(2)).sqrt());
     let outline = rounded_loop(r, rad, 5);
-    p.rect_filled(r, cr(rad.round() as u8), color(outline[0]));
+    p.rect_filled(r, rad.corners(), color(outline[0]));
     radial_fan(p, focus, outline.iter().map(|q| *q + (focus - *q).normalized() * 0.4), color);
 }
 
@@ -568,50 +600,70 @@ pub fn key(p: &Painter, rect: Rect, light: Option<Light>, hot: bool, tone: f32) 
     let g = key_geom(rect.width().min(rect.height()));
     p.rect_filled(rect, cr(g.r_out.round() as u8), KEY_RECESS);
     let pad = rect.shrink(g.recess);
-    key_layers(p, pad, pad.shrink(g.pad), &g, light, hot, tone);
+    key_layers(p, pad, pad.shrink(g.pad), &g, (true, true), light, hot, tone);
 }
 
-/// Pad and face of a key (everything inside the recess).
-fn key_layers(p: &Painter, pad: Rect, face: Rect, g: &KeyGeom, light: Option<Light>, hot: bool, tone: f32) {
+/// Pad and face of a key (everything inside the recess). `round` says which
+/// sides (left, right) keep their rounded corners.
+#[allow(clippy::too_many_arguments)]
+fn key_layers(
+    p: &Painter,
+    pad: Rect,
+    face: Rect,
+    g: &KeyGeom,
+    (l, r): (bool, bool),
+    light: Option<Light>,
+    hot: bool,
+    tone: f32,
+) {
+    let r_pad = Sides::only(g.r_pad, l, r);
+    let r_face = Sides::only(g.r_face, l, r);
     match light {
-        Some(l) => {
-            let l = if hot { l.scaled(1.06) } else { l };
-            vgradient(p, pad, g.r_pad, &[(0.0, l.rim), (0.12, l.edge), (0.88, l.edge), (1.0, l.rim)]);
+        Some(lt) => {
+            let lt = if hot { lt.scaled(1.06) } else { lt };
+            vgradient_sides(p, pad, r_pad, &[(0.0, lt.rim), (0.12, lt.edge), (0.88, lt.edge), (1.0, lt.rim)]);
             radial_rect(
                 p,
                 face,
-                g.r_face,
+                r_face,
                 egui::vec2(0.5, 0.49),
                 egui::vec2(0.85, 0.82),
-                &[(0.0, l.hi), (0.38, l.mid), (0.76, l.low), (1.0, l.edge)],
+                &[(0.0, lt.hi), (0.38, lt.mid), (0.76, lt.low), (1.0, lt.edge)],
             );
         }
         None => {
             let k = tone * if hot { 1.14 } else { 1.0 };
             let (top, mid, bottom) = (shade(PAD_TOP, k), shade(PAD_MID, k), shade(PAD_BOTTOM, k));
-            vgradient(p, pad, g.r_pad, &[(0.0, top), (0.12, mid), (0.88, mid), (1.0, bottom)]);
-            p.rect_filled(face, cr(g.r_face.round() as u8), shade(KEY_FACE, k));
+            vgradient_sides(p, pad, r_pad, &[(0.0, top), (0.12, mid), (0.88, mid), (1.0, bottom)]);
+            p.rect_filled(face, r_face.corners(), shade(KEY_FACE, k));
         }
     }
 }
 
-/// Radio keys: `n` faces side by side in one shared recess, split by thin
-/// recess walls. `state(i)` gives each face's (light, hot). Returns the faces.
+/// Radio keys: `n` faces side by side in one shared recess, split by a thin
+/// recess wall. Only the group's outer corners are rounded; where two faces
+/// meet, the corners are square. `state(i)` gives each face's (light, hot).
+/// Returns the faces.
 pub fn radio_keys(p: &Painter, rect: Rect, n: usize, state: impl Fn(usize) -> (Option<Light>, bool)) -> Vec<Rect> {
     let n = n.max(1);
     let g = key_geom(rect.height().min(rect.width() / n as f32));
     p.rect_filled(rect, cr(g.r_out.round() as u8), KEY_RECESS);
     let inner = rect.shrink(g.recess);
-    let w = (inner.width() - g.recess * (n - 1) as f32) / n as f32;
+    let wall = g.recess.max(1.5);
+    let w = (inner.width() - wall * (n - 1) as f32) / n as f32;
     (0..n)
         .map(|i| {
             let pad = Rect::from_min_size(
-                egui::pos2(inner.left() + i as f32 * (w + g.recess), inner.top()),
+                egui::pos2(inner.left() + i as f32 * (w + wall), inner.top()),
                 egui::vec2(w, inner.height()),
             );
-            let face = pad.shrink(g.pad);
+            // The pad runs flush to the wall; only the outer sides keep their bezel.
+            let face = Rect::from_min_max(
+                egui::pos2(if i == 0 { pad.left() + g.pad } else { pad.left() }, pad.top() + g.pad),
+                egui::pos2(if i == n - 1 { pad.right() - g.pad } else { pad.right() }, pad.bottom() - g.pad),
+            );
             let (light, hot) = state(i);
-            key_layers(p, pad, face, &g, light, hot, 1.0);
+            key_layers(p, pad, face, &g, (i == 0, i == n - 1), light, hot, 1.0);
             face
         })
         .collect()

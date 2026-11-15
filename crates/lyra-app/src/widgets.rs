@@ -628,7 +628,7 @@ pub fn keyboard_map(ui: &mut Ui, first_key: u8, last_key: u8) -> Option<i32> {
     let (lo, hi) = (24u8, 96u8); // C1 .. C7
     let white: Vec<u8> = (lo..hi).filter(|k| !lyra_model::theory::is_black(*k)).collect();
     let key_w = 4.0;
-    let size = vec2(white.len() as f32 * key_w + 6.0, toolbar_key() * 0.8);
+    let size = vec2(white.len() as f32 * key_w + 6.0, toolbar_key() * 0.9);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     let p = ui.painter();
     theme::well(p, rect);
