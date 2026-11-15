@@ -60,7 +60,7 @@ what to work on and folds the items into the plan when the time is right.
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
-**Mixer & toolbar round 3 → (this commit)**
+**Mixer & toolbar round 3 → `a46fefa`**
 - [x] *(chat)* Mixer window: resizing it shrank it, then it slowly grew back.
   *→ the strips asked for "the window's width minus 340 px", but the panel beside them was a few px wider than that, so every frame the window grew a little to fit. The widths now add up exactly; tested shrinking and growing with synthetic drags.*
 - [x] *(chat)* Effects as a rack: predictable slots that open each effect, like channel rack → instrument.
