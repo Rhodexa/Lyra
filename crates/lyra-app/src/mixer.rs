@@ -75,7 +75,7 @@ fn strip(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, t: usi
                     }
                 });
                 ui.label(RichText::new(db_text(p.mixer[t].volume)).small().color(theme::TEXT_DIM));
-                let r = widgets::led(ui, !p.mixer[t].mute, color, "Mute this track");
+                let r = widgets::led(ui, !p.mixer[t].mute, theme::L_MINT, "Mute this track");
                 if r.clicked() {
                     h.checkpoint(p);
                     p.mixer[t].mute ^= true;
@@ -183,7 +183,7 @@ fn chain(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
                 .inner_margin(egui::Margin::same(6))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        if widgets::led(ui, !slot.bypass, theme::MINT, "On / bypass").clicked() {
+                        if widgets::led(ui, !slot.bypass, theme::L_MINT, "On / bypass").clicked() {
                             h.checkpoint(p);
                             p.mixer[t].effects[i].bypass ^= true;
                         }

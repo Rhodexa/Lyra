@@ -180,14 +180,15 @@ fn row(
     delete: &mut Option<usize>,
 ) {
     let id = p.channels[ci].id;
-    let color = theme::channel_color(p.channels[ci].color);
+    let light = theme::channel_light(p.channels[ci].color);
+    let color = light.mid;
     let m = theme::m();
     ui.horizontal(|ui| {
         // Mute lights. Press one to flip it; keep the button down and sweep over
         // others to set them the same way (one gesture, one undo step).
         let mute = p.channels[ci].mute;
         let audible = !mute && (!any_solo || p.channels[ci].solo);
-        let r = widgets::led(ui, audible, color, "Click / drag: mute · Right-click: solo");
+        let r = widgets::led(ui, audible, light, "Click / drag: mute · Right-click: solo");
         let over = pointer.is_some_and(|_| ui.rect_contains_pointer(r.rect));
         if over && primary {
             h.checkpoint(p);
@@ -359,30 +360,22 @@ fn row(
 
         for s in 0..len {
             let r = Rect::from_min_size(pos2(strip.min.x + step_x(s), strip.min.y), vec2(m.step_w, m.step_h));
-            let off = if (s / 4) % 2 == 0 { theme::STEP_OFF_A } else { theme::STEP_OFF_B };
             let note = p.patterns[pat].step(id, s);
-            let fill = match note {
-                Some(n) => theme::mix(theme::PANEL_HI, color, 0.3 + 0.7 * n.velocity),
-                None if hover == Some(s) => theme::mix(off, color, 0.18),
-                None => off,
-            };
-            painter.rect_filled(r, cr(2), fill);
-            painter.rect_stroke(r, cr(2), stroke(1.0, theme::LINE), StrokeKind::Inside);
+            let playing = play_step == Some(s);
+            // Every other beat sits a shade lighter, so the bar reads in fours.
+            let tone = if (s / 4) % 2 == 0 { 1.0 } else { 1.13 } * if playing { 1.25 } else { 1.0 };
+            // Softer notes glow dimmer.
+            let lit = note.map(|n| light.scaled(0.72 + 0.28 * n.velocity));
+            theme::key(&painter, r, lit, playing || hover == Some(s), tone);
             if let Some(n) = note {
                 if n.key != DEFAULT_KEY {
                     painter.text(
                         r.center(),
                         Align2::CENTER_CENTER,
                         format!("{:+}", n.key as i32 - DEFAULT_KEY as i32),
-                        FontId::proportional(8.5),
-                        theme::INSET,
+                        FontId::monospace(9.0),
+                        theme::key_ink(true),
                     );
-                }
-            }
-            if play_step == Some(s) {
-                painter.rect_stroke(r.expand(1.0), cr(3), stroke(1.0, theme::MINT), StrokeKind::Outside);
-                if note.is_some() {
-                    painter.rect_filled(r, cr(2), Color32::WHITE.gamma_multiply(0.12));
                 }
             }
         }

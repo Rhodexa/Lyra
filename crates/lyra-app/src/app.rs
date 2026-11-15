@@ -126,6 +126,7 @@ pub struct LyraApp {
 
 impl LyraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        theme::install_fonts(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx);
         // Sizes live in theme::Metrics (tunable live with F12). Zoom on top of that
         // stays available: Ctrl +/- at runtime, LYRA_ZOOM for the starting value.
