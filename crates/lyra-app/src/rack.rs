@@ -366,7 +366,7 @@ fn row(
             let tone = if (s / 4) % 2 == 0 { 1.0 } else { 1.13 } * if playing { 1.25 } else { 1.0 };
             // Softer notes glow dimmer.
             let lit = note.map(|n| light.scaled(0.72 + 0.28 * n.velocity));
-            theme::key(&painter, r, lit, playing || hover == Some(s), tone);
+            theme::flat_key(&painter, r, lit, playing || hover == Some(s), tone);
             if let Some(n) = note {
                 if n.key != DEFAULT_KEY {
                     painter.text(

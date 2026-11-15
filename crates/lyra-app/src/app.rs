@@ -126,7 +126,6 @@ pub struct LyraApp {
 
 impl LyraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        theme::install_fonts(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx);
         // Sizes live in theme::Metrics (tunable live with F12). Zoom on top of that
         // stays available: Ctrl +/- at runtime, LYRA_ZOOM for the starting value.
@@ -457,9 +456,8 @@ impl eframe::App for LyraApp {
         // ── Top bar ──
         egui::TopBottomPanel::top("transport")
             .exact_height(theme::m().toolbar_h)
-            .frame(egui::Frame::default().fill(theme::TOOLBAR).inner_margin(Margin::symmetric(6, 0)))
+            .frame(egui::Frame::default().fill(theme::TOOLBAR).inner_margin(Margin::ZERO))
             .show(ctx, |ui| {
-                let r = ui.max_rect();
                 let logo = self.textures.logo();
                 let octave = self.keyboard.octave;
                 transport::show(
@@ -473,10 +471,6 @@ impl eframe::App for LyraApp {
                     octave,
                     &mut actions,
                 );
-                // Engraved double hairline: a small deco accent, dark not bright.
-                let y = r.max.y;
-                ui.painter().hline(r.x_range(), y - 0.5, theme::stroke(1.0, theme::LINE));
-                ui.painter().hline(r.x_range(), y - 3.0, theme::stroke(1.0, theme::LINE.gamma_multiply(0.5)));
             });
 
         self.status_bar(ctx);
@@ -685,7 +679,8 @@ impl LyraApp {
                 .default_pos([16.0, piano_top])
                 .default_size([piano_size[0], piano_size[1]])
                 .resizable(true)
-                .frame(frame)
+                // The mixer's background is the rack frame its strips sit in.
+                .frame(frame.fill(theme::BG))
                 .show(ctx, |ui| crate::mixer::show(ui, &mut self.project, &mut self.history, &mut self.ui));
             self.ui.show_mixer = open;
             if win.is_some_and(|w| clicked_inside(ctx, &w.response)) {

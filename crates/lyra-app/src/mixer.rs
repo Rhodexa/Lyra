@@ -16,38 +16,39 @@ use lyra_plugin::{Curve, ParamInfo};
 static PAN: ParamInfo = ParamInfo::new(0, "Pan", -1.0, 1.0, 0.0, "pan", Curve::Linear);
 const FADER_MAX: f32 = 1.25;
 
-/// Strip geometry, from the single-channel-strip study (scaled a little
-/// narrower so all seventeen strips fit a wide screen).
-const FADER_W: f32 = 64.0;
-const METER_W: f32 = 36.0;
-const STRIP_PAD: f32 = 4.0;
-const STRIP_W: f32 = FADER_W + METER_W + 2.0 * STRIP_PAD;
-/// Height of the lower cells (vertical name | pan + mute).
-const LOWER_H: f32 = 150.0;
-/// Chassis gap between strips; the master stands a little apart.
-const GAP: f32 = 4.0;
-const MASTER_GAP: f32 = 8.0;
+/// Strip geometry, from the single-channel-strip study at about 60 % of its
+/// size, with a little more air on the right (the meter side) and a taller
+/// lower part for the name.
+const FADER_W: f32 = 40.0;
+const METER_W: f32 = 22.0;
+const PAD_L: f32 = 4.0;
+const PAD_R: f32 = 7.0;
+const STRIP_W: f32 = PAD_L + FADER_W + METER_W + PAD_R;
+const FADER_H: f32 = 210.0;
+/// The lower part: vertical name on the left, pan and mute on the right.
+const LOWER_H: f32 = 170.0;
+const STRIP_H: f32 = 8.0 + FADER_H + 6.0 + LOWER_H + 6.0;
 
 pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
     st.mixer_selected = st.mixer_selected.min(p.mixer.len() - 1);
+    let seam = theme::SEAM;
     ui.horizontal_top(|ui| {
-        let height = (ui.available_height() - 2.0).clamp(380.0, 900.0);
         egui::ScrollArea::horizontal().id_salt("mixer-strips").max_width(ui.available_width() - 340.0).show(ui, |ui| {
+            // The window's own background is the rack frame; strips are
+            // plates on it, a seam apart.
             let n = p.mixer.len();
-            let width = n as f32 * (STRIP_W + GAP) + GAP + MASTER_GAP;
-            let (rack, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-            ui.painter().rect_filled(rack, cr(2), theme::CHASSIS);
-            let mut x = rack.left() + GAP;
+            let width = n as f32 * (STRIP_W + seam) - seam;
+            let (rack, _) = ui.allocate_exact_size(vec2(width, STRIP_H), Sense::hover());
             for t in 0..n {
-                let r = Rect::from_min_size(pos2(x, rack.top() + GAP), vec2(STRIP_W, height - 2.0 * GAP));
-                strip(ui, r, p, h, st, t);
-                x += STRIP_W + GAP + if t == 0 { MASTER_GAP } else { 0.0 };
+                let x = rack.left() + t as f32 * (STRIP_W + seam);
+                strip(ui, Rect::from_min_size(pos2(x, rack.top()), vec2(STRIP_W, STRIP_H)), p, h, st, t);
             }
         });
-        ui.separator();
-        ui.vertical(|ui| {
+        ui.add_space(seam);
+        egui::Frame::default().fill(theme::PANEL).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
             ui.set_width(320.0);
-            chain(ui, p, h, st);
+            ui.set_min_height(STRIP_H - 16.0);
+            ui.vertical(|ui| chain(ui, p, h, st));
         });
     });
 }
@@ -57,7 +58,7 @@ fn hex(v: u32) -> Color32 {
 }
 
 /// One channel strip: fader and stereo meter on top; below, the vertical
-/// name beside pan and mute.
+/// name beside pan and mute. One flat surface, no outline.
 fn strip(ui: &mut Ui, r: Rect, p: &mut Project, h: &mut History, st: &mut UiState, t: usize) {
     let id = ui.id().with(("strip", t));
     let selected = st.mixer_selected == t;
@@ -76,14 +77,11 @@ fn strip(ui: &mut Ui, r: Rect, p: &mut Project, h: &mut History, st: &mut UiStat
         painter.rect_filled(Rect::from_min_size(r.min, vec2(r.width(), 2.0)), cr(0), fill);
     }
 
-    let top = r.top() + 7.0;
+    let fader_r = Rect::from_min_size(pos2(r.left() + PAD_L, r.top() + 8.0), vec2(FADER_W, FADER_H));
+    let meter_r = Rect::from_min_size(pos2(fader_r.right(), fader_r.top()), vec2(METER_W, FADER_H));
     let lower =
-        Rect::from_min_max(pos2(r.left() + STRIP_PAD, r.bottom() - 8.0 - LOWER_H), r.max - vec2(STRIP_PAD, 8.0));
-    let fader_r =
-        Rect::from_min_max(pos2(r.left() + STRIP_PAD, top), pos2(r.left() + STRIP_PAD + FADER_W, lower.top() - 4.0));
-    let meter_r = Rect::from_min_max(pos2(fader_r.right(), top), pos2(r.right() - STRIP_PAD, fader_r.bottom()));
+        Rect::from_min_max(pos2(r.left() + PAD_L, fader_r.bottom() + 6.0), pos2(r.right() - PAD_R, r.bottom() - 6.0));
 
-    // Fader.
     let mut vol = p.mixer[t].volume;
     if tracked(&fader(ui, id.with("fader"), fader_r, &mut vol, fill), h, p) {
         p.mixer[t].volume = vol;
@@ -91,55 +89,42 @@ fn strip(ui: &mut Ui, r: Rect, p: &mut Project, h: &mut History, st: &mut UiStat
     if ui.input(|i| i.pointer.primary_pressed()) && ui.rect_contains_pointer(r) {
         st.mixer_selected = t;
     }
-
-    // Stereo meter with peak hold.
     let levels = st.track_meters.get(t).copied().unwrap_or_default();
     meter(ui, id.with("meter"), meter_r, fader_r, levels);
 
-    // Lower cells.
-    let name_cell = Rect::from_min_max(lower.min, pos2(lower.left() + FADER_W, lower.bottom()));
-    let ctrl_cell = Rect::from_min_max(pos2(name_cell.right(), lower.top()), lower.max);
-    for c in [name_cell, ctrl_cell] {
-        painter.rect_filled(c, cr(0), hex(0x232a2e));
-    }
+    // Lower part: name | pan, mute.
+    let name_cell = Rect::from_min_max(lower.min, pos2(lower.left() + 24.0, lower.bottom()));
+    let ctrl = Rect::from_min_max(pos2(name_cell.right(), lower.top()), lower.max);
     vertical_name(&painter, name_cell, &p.mixer[t].name, selected);
-    // Which channels feed this track, as small coloured dots at the top of the name.
-    for (k, &c) in routed.iter().take(6).enumerate() {
-        let at = pos2(
-            name_cell.center().x + (k as f32 - (routed.len().min(6) as f32 - 1.0) / 2.0) * 6.0,
-            name_cell.top() + 7.0,
-        );
+    // Which channels feed this track: small coloured dots above the name.
+    for (k, &c) in routed.iter().take(4).enumerate() {
+        let at = pos2(name_cell.center().x, name_cell.top() + 5.0 + k as f32 * 6.0);
         painter.circle_filled(at, 2.2, theme::channel_color(p.channels[c].color));
     }
 
-    let mut y = ctrl_cell.top() + 8.0;
-    let pan_r = Rect::from_center_size(pos2(ctrl_cell.center().x, y + 16.0), vec2(32.0, 32.0));
+    let label = hex(0xa6a6a6);
+    let small = egui::FontId::proportional(9.0);
+    let cx = ctrl.center().x;
+    let pan_r = Rect::from_center_size(pos2(cx, ctrl.top() + 16.0), vec2(28.0, 28.0));
     let mut pan = p.mixer[t].pan;
     if tracked(&widgets::knob_at(ui, id.with("pan"), pan_r, &mut pan, &PAN, theme::MINT), h, p) {
         p.mixer[t].pan = pan;
     }
-    y = pan_r.bottom() + 6.0;
-    let small = egui::FontId::proportional(9.0);
-    painter.text(pos2(ctrl_cell.center().x, y), Align2::CENTER_TOP, "PAN", small.clone(), hex(0x9ea9a3));
-    y += 13.0;
+    let mut y = pan_r.bottom() + 4.0;
+    painter.text(pos2(cx, y), Align2::CENTER_TOP, "PAN", small.clone(), label);
+    y += 12.0;
     let pan_text = match (pan * 100.0).round() as i32 {
         0 => "C".to_string(),
         v if v < 0 => format!("L{}", -v),
         v => format!("R{v}"),
     };
-    painter.text(
-        pos2(ctrl_cell.center().x, y),
-        Align2::CENTER_TOP,
-        pan_text,
-        egui::FontId::proportional(11.0),
-        theme::MINT,
-    );
+    painter.text(pos2(cx, y), Align2::CENTER_TOP, pan_text, egui::FontId::proportional(10.5), theme::MINT);
     y += 22.0;
 
     // Mute: lit = audible, like every light in Lyra. Alt-click: solo (again: everyone back).
-    let led_r = Rect::from_center_size(pos2(ctrl_cell.center().x, y + 13.0), vec2(26.0, 26.0));
+    let led_r = Rect::from_center_size(pos2(cx, y + 11.0), vec2(22.0, 22.0));
     let led = ui.interact(led_r, id.with("mute"), Sense::click());
-    theme::led(&painter, led_r.center(), 26.0, (!p.mixer[t].mute).then_some(theme::L_MINT), led.hovered());
+    theme::led(&painter, led_r.center(), 22.0, (!p.mixer[t].mute).then_some(theme::L_MINT), led.hovered());
     if led.clicked() {
         h.checkpoint(p);
         if ui.input(|i| i.modifiers.alt) {
@@ -149,13 +134,12 @@ fn strip(ui: &mut Ui, r: Rect, p: &mut Project, h: &mut History, st: &mut UiStat
         }
     }
     led.on_hover_text("Mute (lit = on) · Alt-click: solo");
-    y = led_r.bottom() + 6.0;
-    painter.text(pos2(ctrl_cell.center().x, y), Align2::CENTER_TOP, "MUTE", small, hex(0x9ea9a3));
+    painter.text(pos2(cx, led_r.bottom() + 4.0), Align2::CENTER_TOP, "MUTE", small, label);
 
     let fx = p.mixer[t].effects.len();
     if fx > 0 {
         painter.text(
-            pos2(ctrl_cell.center().x, ctrl_cell.bottom() - 6.0),
+            pos2(cx, ctrl.bottom()),
             Align2::CENTER_BOTTOM,
             format!("{fx} fx"),
             egui::FontId::proportional(9.0),
@@ -183,12 +167,12 @@ fn vertical_name(p: &egui::Painter, cell: Rect, name: &str, selected: bool) {
         egui::TextFormat {
             font_id: egui::FontId::proportional(12.0),
             extra_letter_spacing: 1.2,
-            color: if selected { theme::TEXT } else { hex(0xb5c4bd) },
+            color: if selected { theme::TEXT } else { hex(0xc0c0c0) },
             ..Default::default()
         },
     );
     job.wrap = egui::text::TextWrapping {
-        max_width: cell.height() - 26.0,
+        max_width: cell.height() - 30.0,
         max_rows: 1,
         break_anywhere: true,
         overflow_character: Some('…'),
@@ -196,19 +180,18 @@ fn vertical_name(p: &egui::Painter, cell: Rect, name: &str, selected: bool) {
     let galley = p.layout_job(job);
     let size = galley.size();
     // Rotated -90°: the text's top-left lands at the bottom-left of its box.
-    let center = pos2(cell.center().x, cell.center().y + 6.0);
-    let pos = pos2(center.x - size.y / 2.0, center.y + size.x / 2.0);
+    // Anchored at the bottom, so names line up from the floor of the strip.
+    let pos = pos2(cell.center().x - size.y / 2.0, cell.bottom() - 4.0);
     p.add(egui::epaint::TextShape::new(pos, galley, theme::TEXT).with_angle(-std::f32::consts::FRAC_PI_2));
 }
 
-/// The study's fader: ticks on the left, a recessed track lit from the bottom
-/// up to a three-layer cap with grip lines. Drag (Shift = fine), wheel,
-/// double-click = back to 0.8 (about -2 dB).
+/// The study's fader, scaled: ticks on the left, a recessed track lit from
+/// the bottom up to a three-layer cap with grip lines. Drag (Shift = fine),
+/// wheel, double-click = back to 0.8 (about -2 dB).
 fn fader(ui: &mut Ui, id: egui::Id, rect: Rect, value: &mut f32, fill: Color32) -> egui::Response {
     let mut resp = ui.interact(rect, id, Sense::click_and_drag());
     let before = *value;
-    // The travel, in the study's proportions (26 … 318 of 350).
-    let (y0, y1) = (rect.top() + 19.0, rect.bottom() - 14.0);
+    let (y0, y1) = (rect.top() + 10.0, rect.bottom() - 9.0);
     let span = (y1 - y0).max(10.0);
     if resp.dragged() {
         let fine = ui.input(|i| i.modifiers.shift);
@@ -229,45 +212,35 @@ fn fader(ui: &mut Ui, id: egui::Id, rect: Rect, value: &mut f32, fill: Color32) 
     }
 
     let p = ui.painter();
-    let u = rect.width() / 76.0;
-    let cx = rect.left() + 38.0 * u;
+    let cx = rect.left() + rect.width() * 0.55;
     for k in 0..=10 {
         let y = y0 + k as f32 * span / 10.0;
         let major = k % 5 == 0;
-        let (x1, x2) = (rect.left() + 11.0 * u, rect.left() + if major { 19.0 } else { 16.0 } * u);
-        p.hline(x1..=x2, y, theme::stroke(if major { 1.7 } else { 1.0 }, hex(if major { 0x687573 } else { 0x475255 })));
+        let (x1, x2) = (rect.left() + 3.0, rect.left() + if major { 8.0 } else { 6.0 });
+        p.hline(x1..=x2, y, theme::stroke(if major { 1.4 } else { 1.0 }, hex(if major { 0x737373 } else { 0x505050 })));
     }
-    let outer = Rect::from_min_max(pos2(cx - 5.0, y0), pos2(cx + 5.0, y1));
-    p.rect_filled(outer, cr(5), hex(0x11181b));
-    let inner = outer.shrink2(vec2(2.0, 3.0));
-    p.rect_filled(inner, cr(3), hex(0x232e30));
+    let outer = Rect::from_min_max(pos2(cx - 4.0, y0), pos2(cx + 4.0, y1));
+    p.rect_filled(outer, cr(4), hex(0x161616));
+    let inner = outer.shrink2(vec2(2.0, 2.0));
+    p.rect_filled(inner, cr(2), hex(0x2b2b2b));
     let y = y1 - *value / FADER_MAX * span;
     if inner.bottom() - y > 0.5 {
-        p.rect_filled(Rect::from_min_max(pos2(inner.left(), y.max(inner.top())), inner.max), cr(3), fill);
+        p.rect_filled(Rect::from_min_max(pos2(inner.left(), y.max(inner.top())), inner.max), cr(2), fill);
     }
     // Cap: dark rim, body, face, three grip lines; a soft shadow under it.
     let hot = resp.hovered() || resp.dragged();
     let lift = |c: u32| if hot { theme::shade(hex(c), 1.08) } else { hex(c) };
-    let cap_w = 64.0 * u;
-    let shadow = Rect::from_center_size(pos2(cx, y + 2.0), vec2(cap_w, 27.0));
-    p.rect_filled(shadow, cr(6), Color32::from_black_alpha(60));
-    p.rect_filled(Rect::from_center_size(pos2(cx, y + 0.5), vec2(cap_w, 27.0)), cr(6), hex(0x1a2224));
-    p.rect_filled(Rect::from_center_size(pos2(cx, y), vec2(cap_w - 4.0, 24.0)), cr(5), lift(0x3d4648));
-    p.rect_filled(Rect::from_center_size(pos2(cx, y), vec2(cap_w - 10.0, 18.0)), cr(4), lift(0x485152));
+    let w = rect.width() - 6.0;
+    p.rect_filled(Rect::from_center_size(pos2(cx, y + 1.5), vec2(w, 17.0)), cr(4), Color32::from_black_alpha(60));
+    p.rect_filled(Rect::from_center_size(pos2(cx, y + 0.5), vec2(w, 17.0)), cr(4), hex(0x202020));
+    p.rect_filled(Rect::from_center_size(pos2(cx, y), vec2(w - 2.0, 15.0)), cr(3), lift(0x444444));
+    p.rect_filled(Rect::from_center_size(pos2(cx, y), vec2(w - 6.0, 11.0)), cr(3), lift(0x4f4f4f));
     for k in -1..=1 {
-        let c = if k == 0 {
-            mix_alpha(hex(0x788380), lift(0x485152), 0.78)
-        } else {
-            mix_alpha(hex(0x697472), lift(0x485152), 0.55)
-        };
-        p.hline(cx - 13.0 * u..=cx + 13.0 * u, y + k as f32 * 4.0, theme::stroke(1.2, c));
+        let c =
+            theme::mix(lift(0x4f4f4f), hex(if k == 0 { 0x818181 } else { 0x727272 }), if k == 0 { 0.78 } else { 0.55 });
+        p.hline(cx - 7.0..=cx + 7.0, y + k as f32 * 2.5, theme::stroke(1.0, c));
     }
     resp.on_hover_text(db_text(*value))
-}
-
-/// `fg` at `alpha` over `bg`, as an opaque colour.
-fn mix_alpha(fg: Color32, bg: Color32, alpha: f32) -> Color32 {
-    theme::mix(bg, fg, alpha)
 }
 
 fn db_text(v: f32) -> String {
@@ -282,16 +255,16 @@ fn db_text(v: f32) -> String {
 /// gradient (-60 … 0 dB), and a pale peak-hold line that waits, then falls.
 fn meter(ui: &Ui, id: egui::Id, rect: Rect, fader: Rect, levels: [f32; 2]) {
     let p = ui.painter();
-    let (y0, y1) = (fader.top() + 19.0, fader.bottom() - 14.0);
-    let well = Rect::from_min_max(pos2(rect.left() + 1.0, y0 - 3.0), pos2(rect.right() - 1.0, y1 + 3.0));
-    p.rect_filled(well, cr(2), hex(0x101719));
-    let inner = well.shrink2(vec2(3.0, 3.0));
-    p.rect_filled(inner, cr(1), hex(0x182123));
+    let (y0, y1) = (fader.top() + 10.0, fader.bottom() - 9.0);
+    let well = Rect::from_min_max(pos2(rect.left() + 1.0, y0 - 2.0), pos2(rect.right() - 1.0, y1 + 2.0));
+    p.rect_filled(well, cr(2), hex(0x151515));
+    let inner = well.shrink(2.0);
+    p.rect_filled(inner, cr(1), hex(0x1f1f1f));
     let now = ui.input(|i| i.time);
-    let bar_w = (inner.width() - 9.0) / 2.0;
+    let bar_w = (inner.width() - 6.0) / 2.0;
     for (k, level) in levels.into_iter().enumerate() {
         let bar = Rect::from_min_size(
-            pos2(inner.left() + 3.0 + k as f32 * (bar_w + 3.0), inner.top() + 2.0),
+            pos2(inner.left() + 2.0 + k as f32 * (bar_w + 2.0), inner.top() + 2.0),
             vec2(bar_w, inner.height() - 4.0),
         );
         let frac = widgets::meter_fraction(level);

@@ -29,46 +29,46 @@ pub fn show(
     octave: i32,
     actions: &mut Vec<Action>,
 ) {
-    let m = theme::m();
-    ui.spacing_mut().item_spacing.x = m.module_gap;
+    // The toolbar is a rack: modules mounted flush, a hairline seam between
+    // them, and a blank plate filling whatever is left.
+    ui.spacing_mut().item_spacing.x = theme::SEAM;
     ui.horizontal_centered(|ui| {
-        // The logo is the project menu: implicit, and it earns its place.
-        let size = m.control_h + 8.0;
-        let button = egui::Button::image(egui::Image::new((logo, vec2(size, size)))).frame(false);
-        egui::menu::menu_custom_button(ui, button, |ui| {
-            for (label, keys, action) in [
-                ("New", "Ctrl+N", Action::NewProject),
-                ("Open…", "Ctrl+O", Action::OpenProject),
-                ("Save", "Ctrl+S", Action::Save),
-                ("Save as…", "Ctrl+Shift+S", Action::SaveAs),
-            ] {
-                if ui.add(egui::Button::new(label).shortcut_text(keys)).clicked() {
-                    actions.push(action);
-                    ui.close_menu();
-                }
-            }
-            ui.separator();
-            if ui.button("Open backup").on_hover_text("The copy Lyra keeps of your latest work").clicked() {
-                actions.push(Action::OpenBackup);
-                ui.close_menu();
-            }
-        })
-        .response
-        .on_hover_text("Project: new, open, save");
-
         let big = widgets::toolbar_key();
         let small = (big * 0.8).round();
         let gap = 4.0;
 
+        // The logo module, which is also the project menu.
+        module(ui, |ui| {
+            let button = egui::Button::image(egui::Image::new((logo, vec2(big, big)))).frame(false);
+            egui::menu::menu_custom_button(ui, button, |ui| {
+                for (label, keys, action) in [
+                    ("New", "Ctrl+N", Action::NewProject),
+                    ("Open…", "Ctrl+O", Action::OpenProject),
+                    ("Save", "Ctrl+S", Action::Save),
+                    ("Save as…", "Ctrl+Shift+S", Action::SaveAs),
+                ] {
+                    if ui.add(egui::Button::new(label).shortcut_text(keys)).clicked() {
+                        actions.push(action);
+                        ui.close_menu();
+                    }
+                }
+                ui.separator();
+                if ui.button("Open backup").on_hover_text("The copy Lyra keeps of your latest work").clicked() {
+                    actions.push(Action::OpenBackup);
+                    ui.close_menu();
+                }
+            })
+            .response
+            .on_hover_text("Project: new, open, save");
+        });
+
         // The deck: what plays, play / stop, where we are, the beat.
         module(ui, |ui| {
             ui.spacing_mut().item_spacing.x = gap;
-            for (label, song, light) in [("PAT", false, theme::L_MINT), ("SONG", true, theme::L_AMBER)] {
-                let on = st.song_mode == song;
-                let hint = "Play the current pattern / the whole playlist  ( L )";
-                if widgets::key(ui, vec2(big * 1.3, big), Legend::Text(label), on, light, hint).clicked() {
-                    actions.push(Action::SongMode(song));
-                }
+            let options = [(Legend::Text("PAT"), theme::L_MINT), (Legend::Text("SONG"), theme::L_AMBER)];
+            let hint = "Play the current pattern / the whole playlist  ( L )";
+            if let Some(i) = widgets::radio_keys(ui, vec2(big * 1.3, big), &options, st.song_mode as usize, hint) {
+                actions.push(Action::SongMode(i == 1));
             }
             ui.add_space(gap);
             if widgets::key(
@@ -180,6 +180,9 @@ pub fn show(
                     p.master_volume = master;
                 }
             });
+            // A blank plate over the empty bays.
+            let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::m().toolbar_h), Sense::hover());
+            ui.painter().rect_filled(r, theme::cr(0), theme::PANEL);
         });
     });
 }

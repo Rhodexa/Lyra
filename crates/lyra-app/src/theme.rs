@@ -10,30 +10,32 @@
 
 use egui::{Color32, ColorImage, Context, FontId, Painter, Rect, Stroke, TextStyle, TextureHandle};
 
-// ── Surfaces: charcoal, the faintest teal ──
-// From the control-library studies; the background is nudged from the
-// studies' blue-slate towards charcoal, as the user asked.
-pub const BG: Color32 = Color32::from_rgb(0x1b, 0x1f, 0x21);
-pub const PANEL: Color32 = Color32::from_rgb(0x25, 0x2a, 0x2d);
-pub const PANEL_HI: Color32 = Color32::from_rgb(0x2b, 0x31, 0x34);
-/// The rack frame things are mounted in: toolbar background, gaps between
-/// mixer strips.
-pub const CHASSIS: Color32 = Color32::from_rgb(0x11, 0x16, 0x18);
-/// Toolbars and status bar.
-pub const TOOLBAR: Color32 = CHASSIS;
+// ── Two levels: background and surface, both neutral charcoal ──
+// The keys from the studies are neutral greys, so every surface is too: a
+// tinted surface next to a neutral key looked "off".
+/// The background: the workspace, the rack frame behind toolbar modules and
+/// mixer strips (seen as thin seams between them).
+pub const BG: Color32 = Color32::from_rgb(0x16, 0x16, 0x16);
+/// The surface: windows, toolbar modules, mixer strips.
+pub const PANEL: Color32 = Color32::from_rgb(0x29, 0x29, 0x29);
+pub const PANEL_HI: Color32 = Color32::from_rgb(0x30, 0x30, 0x30);
+/// Toolbars and status bar sit on the background.
+pub const TOOLBAR: Color32 = BG;
+/// Hairline between rack modules / mixer strips.
+pub const SEAM: f32 = 2.0;
 /// Small flat buttons (M / S, menus).
-pub const RAISED: Color32 = Color32::from_rgb(0x34, 0x3e, 0x40);
-pub const INSET: Color32 = Color32::from_rgb(0x15, 0x1b, 0x1e);
+pub const RAISED: Color32 = Color32::from_rgb(0x3b, 0x3b, 0x3b);
+pub const INSET: Color32 = Color32::from_rgb(0x1a, 0x1a, 0x1a);
 /// Recessed wells: dropdowns, displays.
-pub const WELL: Color32 = Color32::from_rgb(0x15, 0x1b, 0x20);
-pub const WELL_EDGE: Color32 = Color32::from_rgb(0x10, 0x15, 0x19);
+pub const WELL: Color32 = Color32::from_rgb(0x1a, 0x1a, 0x1a);
+pub const WELL_EDGE: Color32 = Color32::from_rgb(0x14, 0x14, 0x14);
 /// Borders and details are *darker* than the surfaces they sit on (engraved,
 /// not glowing). Only selected/active things get bright edges.
-pub const LINE: Color32 = Color32::from_rgb(0x0e, 0x12, 0x14);
+pub const LINE: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
 
 // ── Text ──
-pub const TEXT: Color32 = Color32::from_rgb(0xc9, 0xd2, 0xce);
-pub const TEXT_DIM: Color32 = Color32::from_rgb(0x8d, 0x9b, 0x96);
+pub const TEXT: Color32 = Color32::from_rgb(0xcf, 0xcf, 0xcf);
+pub const TEXT_DIM: Color32 = Color32::from_rgb(0x96, 0x96, 0x96);
 
 // ── Accents (the lights' mid tones; see `Light` below) ──
 pub const MINT: Color32 = Color32::from_rgb(0xa6, 0xe7, 0xc9);
@@ -52,13 +54,13 @@ pub fn channel_color(i: usize) -> Color32 {
 }
 
 // ── Piano roll ──
-pub const ROLL_WHITE_ROW: Color32 = Color32::from_rgb(0x24, 0x29, 0x2c);
-pub const ROLL_BLACK_ROW: Color32 = Color32::from_rgb(0x1e, 0x22, 0x25);
+pub const ROLL_WHITE_ROW: Color32 = Color32::from_rgb(0x28, 0x28, 0x28);
+pub const ROLL_BLACK_ROW: Color32 = Color32::from_rgb(0x21, 0x21, 0x21);
 /// Rows outside the song's scale (when highlighting is on).
-pub const ROLL_OUT_ROW: Color32 = Color32::from_rgb(0x19, 0x1c, 0x1e);
-pub const KEY_WHITE: Color32 = Color32::from_rgb(0xc3, 0xcb, 0xcc);
-pub const KEY_BLACK: Color32 = Color32::from_rgb(0x1a, 0x1e, 0x20);
-pub const KEY_EDGE: Color32 = Color32::from_rgb(0x8d, 0x97, 0x99);
+pub const ROLL_OUT_ROW: Color32 = Color32::from_rgb(0x1b, 0x1b, 0x1b);
+pub const KEY_WHITE: Color32 = Color32::from_rgb(0xc9, 0xc9, 0xc9);
+pub const KEY_BLACK: Color32 = Color32::from_rgb(0x1d, 0x1d, 0x1d);
+pub const KEY_EDGE: Color32 = Color32::from_rgb(0x94, 0x94, 0x94);
 
 pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
     let t = t.clamp(0.0, 1.0);
@@ -117,7 +119,7 @@ impl Metrics {
         text: 14.0,
         text_small: 11.0,
         control_h: 26.0,
-        toolbar_h: 60.0,
+        toolbar_h: 52.0,
         module_pad: 6.0,
         module_gap: 8.0,
         corner: 5.0,
@@ -186,13 +188,13 @@ pub fn apply(ctx: &Context) {
     v.widgets.noninteractive.bg_fill = PANEL;
     v.widgets.noninteractive.bg_stroke = stroke(1.0, LINE);
     // Plain buttons: the small flat M / S buttons from the mixer study.
-    let edge = stroke(1.0, Color32::from_rgb(0x16, 0x1d, 0x1f));
+    let edge = stroke(1.0, Color32::from_rgb(0x1b, 0x1b, 0x1b));
     let corner = cr(4);
     for (w, fill) in [
         (&mut v.widgets.inactive, RAISED),
-        (&mut v.widgets.hovered, Color32::from_rgb(0x3b, 0x48, 0x49)),
+        (&mut v.widgets.hovered, Color32::from_rgb(0x44, 0x44, 0x44)),
         (&mut v.widgets.active, MINT_DEEP),
-        (&mut v.widgets.open, Color32::from_rgb(0x3b, 0x48, 0x49)),
+        (&mut v.widgets.open, Color32::from_rgb(0x44, 0x44, 0x44)),
     ] {
         w.bg_fill = fill;
         w.weak_bg_fill = fill;
@@ -203,23 +205,6 @@ pub fn apply(ctx: &Context) {
     v.widgets.noninteractive.corner_radius = corner;
     v.slider_trailing_fill = true;
     ctx.set_style(style);
-}
-
-/// Icon fonts: Phosphor (MIT), bold for line icons and fill for solid ones.
-/// Both weights share codepoints, so `egui_phosphor::bold::PLAY` works with either.
-pub fn install_fonts(ctx: &Context) {
-    use egui::FontFamily;
-    let mut fonts = egui::FontDefinitions::default();
-    for (name, variant) in [("ph-bold", egui_phosphor::Variant::Bold), ("ph-fill", egui_phosphor::Variant::Fill)] {
-        fonts.font_data.insert(name.into(), std::sync::Arc::new(variant.font_data()));
-        fonts.families.insert(FontFamily::Name(name.into()), vec![name.into()]);
-    }
-    ctx.set_fonts(fonts);
-}
-
-/// A Phosphor glyph at `size` points; `solid` picks the filled weight.
-pub fn icon_font(size: f32, solid: bool) -> FontId {
-    FontId::new(size, egui::FontFamily::Name(if solid { "ph-fill" } else { "ph-bold" }.into()))
 }
 
 /// The textures every surface is printed on, plus the logo.
@@ -583,7 +568,11 @@ pub fn key(p: &Painter, rect: Rect, light: Option<Light>, hot: bool, tone: f32) 
     let g = key_geom(rect.width().min(rect.height()));
     p.rect_filled(rect, cr(g.r_out.round() as u8), KEY_RECESS);
     let pad = rect.shrink(g.recess);
-    let face = pad.shrink(g.pad);
+    key_layers(p, pad, pad.shrink(g.pad), &g, light, hot, tone);
+}
+
+/// Pad and face of a key (everything inside the recess).
+fn key_layers(p: &Painter, pad: Rect, face: Rect, g: &KeyGeom, light: Option<Light>, hot: bool, tone: f32) {
     match light {
         Some(l) => {
             let l = if hot { l.scaled(1.06) } else { l };
@@ -606,12 +595,52 @@ pub fn key(p: &Painter, rect: Rect, light: Option<Light>, hot: bool, tone: f32) 
     }
 }
 
+/// Radio keys: `n` faces side by side in one shared recess, split by thin
+/// recess walls. `state(i)` gives each face's (light, hot). Returns the faces.
+pub fn radio_keys(p: &Painter, rect: Rect, n: usize, state: impl Fn(usize) -> (Option<Light>, bool)) -> Vec<Rect> {
+    let n = n.max(1);
+    let g = key_geom(rect.height().min(rect.width() / n as f32));
+    p.rect_filled(rect, cr(g.r_out.round() as u8), KEY_RECESS);
+    let inner = rect.shrink(g.recess);
+    let w = (inner.width() - g.recess * (n - 1) as f32) / n as f32;
+    (0..n)
+        .map(|i| {
+            let pad = Rect::from_min_size(
+                egui::pos2(inner.left() + i as f32 * (w + g.recess), inner.top()),
+                egui::vec2(w, inner.height()),
+            );
+            let face = pad.shrink(g.pad);
+            let (light, hot) = state(i);
+            key_layers(p, pad, face, &g, light, hot, 1.0);
+            face
+        })
+        .collect()
+}
+
+/// A flat key for dense grids (the channel rack's steps): the dark recess
+/// outline and a flat fill, no gradients. Lit = the light's flat colour.
+pub fn flat_key(p: &Painter, rect: Rect, light: Option<Light>, hot: bool, tone: f32) {
+    let r_out = (rect.width().min(rect.height()) * 0.12 + 1.5).min(6.0);
+    p.rect_filled(rect, cr(r_out.round() as u8), KEY_RECESS);
+    let fill = match light {
+        Some(l) => {
+            if hot {
+                shade(l.mid, 1.05)
+            } else {
+                l.mid
+            }
+        }
+        None => shade(hex(0x303030), tone * if hot { 1.15 } else { 1.0 }),
+    };
+    p.rect_filled(rect.shrink(1.0), cr((r_out - 1.0).max(1.0).round() as u8), fill);
+}
+
 /// Ink for a legend or icon printed on a key.
 pub fn key_ink(lit: bool) -> Color32 {
     if lit {
-        hex(0x25302c)
+        hex(0x2c2c2c)
     } else {
-        hex(0xa3a69a)
+        hex(0xa4a4a4)
     }
 }
 
@@ -629,9 +658,9 @@ pub fn led(p: &Painter, c: egui::Pos2, d: f32, light: Option<Light>, hot: bool) 
             radial_circle(p, c, bead, focus, &[(0.0, l.hi), (0.55, l.mid), (1.0, l.edge)]);
         }
         None => {
-            p.circle_filled(c, r, hex(0x11181b));
-            p.circle_stroke(c, r - ring * 0.5, stroke(ring, hex(0x171f21)));
-            let bead_c = if hot { hex(0x4a5755) } else { hex(0x404c4a) };
+            p.circle_filled(c, r, hex(0x161616));
+            p.circle_stroke(c, r - ring * 0.5, stroke(ring, hex(0x1d1d1d)));
+            let bead_c = if hot { hex(0x535353) } else { hex(0x484848) };
             p.circle_filled(c, bead, bead_c);
             // A faint top highlight on the bead (inset 0 1px 1px).
             let arc: Vec<egui::Pos2> = (0..=8)
@@ -640,15 +669,15 @@ pub fn led(p: &Painter, c: egui::Pos2, d: f32, light: Option<Light>, hot: bool) 
                     c + egui::vec2(a.cos(), a.sin()) * (bead - 0.8)
                 })
                 .collect();
-            p.add(egui::Shape::line(arc, stroke(0.8, mix(bead_c, hex(0x63706a), 0.35))));
+            p.add(egui::Shape::line(arc, stroke(0.8, mix(bead_c, hex(0x6b6b6b), 0.35))));
         }
     }
 }
 
 /// LCD colours: pale backlight, dark ink.
-pub const LCD: Color32 = hex(0xd5ddda);
-pub const LCD_INK: Color32 = hex(0x27332f);
-pub const LCD_INK_DIM: Color32 = hex(0x53635e);
+pub const LCD: Color32 = hex(0xdadada);
+pub const LCD_INK: Color32 = hex(0x2f2f2f);
+pub const LCD_INK_DIM: Color32 = hex(0x5e5e5e);
 
 /// The LCD panel itself (text goes on top).
 pub fn lcd_panel(p: &Painter, r: Rect) {
@@ -656,7 +685,7 @@ pub fn lcd_panel(p: &Painter, r: Rect) {
     p.rect_filled(r, cr(rad as u8), LCD);
     // inset 0 1px 2px: a faint shadow under the top edge.
     let top = Rect::from_min_size(r.min + egui::vec2(rad * 0.6, 0.0), egui::vec2(r.width() - rad * 1.2, 1.0));
-    p.rect_filled(top, cr(0), mix(LCD, hex(0x19231e), 0.13));
+    p.rect_filled(top, cr(0), mix(LCD, hex(0x1f1f1f), 0.13));
 }
 
 /// A recessed well (dropdowns, displays): darker than the panel, an inner

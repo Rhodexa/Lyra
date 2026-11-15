@@ -119,36 +119,36 @@ pub fn paint_knob(p: &egui::Painter, rect: Rect, info: &ParamInfo, value: f32, c
     let angle = KNOB_START + KNOB_SWEEP * n;
     let dir = vec2(angle.cos(), angle.sin());
     let (arc_r, arc_w, track) = match style {
-        KnobStyle::Pan => (133.5, 15.0, hex(0x1c2929)),
-        KnobStyle::Tiny => (119.0, 6.0, hex(0x1a2526)),
-        KnobStyle::Rubber => (124.0, 6.0, hex(0x1a2526)),
-        KnobStyle::Polymer => (125.0, 7.0, hex(0x171e21)),
+        KnobStyle::Pan => (133.5, 15.0, hex(0x252525)),
+        KnobStyle::Tiny => (119.0, 6.0, hex(0x222222)),
+        KnobStyle::Rubber => (124.0, 6.0, hex(0x222222)),
+        KnobStyle::Polymer => (125.0, 7.0, hex(0x1c1c1c)),
     };
     let (arc_r, arc_w) = (arc_r * u, (arc_w * u).max(1.6));
 
     // Body.
     match style {
         KnobStyle::Pan => {
-            p.circle_filled(c, 132.0 * u, hex(0x141b1d));
-            p.circle_filled(c, 117.0 * u, lift(hex(0x3e4849)));
-            p.circle_filled(c, 99.0 * u, lift(hex(0x465051)));
-            p.circle_filled(c, 84.0 * u, lift(hex(0x414a4b)));
+            p.circle_filled(c, 132.0 * u, hex(0x191919));
+            p.circle_filled(c, 117.0 * u, lift(hex(0x454545)));
+            p.circle_filled(c, 99.0 * u, lift(hex(0x4d4d4d)));
+            p.circle_filled(c, 84.0 * u, lift(hex(0x474747)));
         }
         KnobStyle::Tiny => {
-            p.circle_filled(c, 94.0 * u, lift(hex(0x30383b)));
-            p.circle_filled(c, 85.0 * u, lift(hex(0x343d3f)));
+            p.circle_filled(c, 94.0 * u, lift(hex(0x363636)));
+            p.circle_filled(c, 85.0 * u, lift(hex(0x3b3b3b)));
         }
         KnobStyle::Rubber => {
-            p.circle_filled(c, 108.0 * u, hex(0x161d20));
-            p.circle_filled(c, 98.5 * u, lift(hex(0x596262)));
-            p.circle_filled(c, 93.5 * u, lift(hex(0x394143)));
-            p.circle_filled(c, 83.0 * u, lift(hex(0x3b4345)));
+            p.circle_filled(c, 108.0 * u, hex(0x1b1b1b));
+            p.circle_filled(c, 98.5 * u, lift(hex(0x5f5f5f)));
+            p.circle_filled(c, 93.5 * u, lift(hex(0x3f3f3f)));
+            p.circle_filled(c, 83.0 * u, lift(hex(0x414141)));
         }
         KnobStyle::Polymer => {
-            p.circle_filled(c, 110.0 * u, hex(0x171d20));
-            p.circle_filled(c, 106.0 * u, lift(hex(0x30383b)));
-            p.circle_filled(c, 101.0 * u, hex(0x171d20));
-            p.circle_filled(c, 96.0 * u, lift(hex(0x353d3f)));
+            p.circle_filled(c, 110.0 * u, hex(0x1c1c1c));
+            p.circle_filled(c, 106.0 * u, lift(hex(0x363636)));
+            p.circle_filled(c, 101.0 * u, hex(0x1c1c1c));
+            p.circle_filled(c, 96.0 * u, lift(hex(0x3b3b3b)));
             // The fixed light: four quadrants, lighter top-right and bottom-left.
             let r = 88.0 * u;
             for (q, col) in [(2, 0x41494b), (3, 0x474f51), (1, 0x474f51), (0, 0x41494b)] {
@@ -172,7 +172,7 @@ pub fn paint_knob(p: &egui::Painter, rect: Rect, info: &ParamInfo, value: f32, c
             p.circle_filled(
                 c + vec2(a.cos(), a.sin()) * arc_r,
                 r.max(if on { 1.8 } else { 1.2 }),
-                if on { color } else { hex(0x26312f) },
+                if on { color } else { hex(0x2d2d2d) },
             );
         }
     } else {
@@ -215,9 +215,9 @@ pub fn paint_knob(p: &egui::Painter, rect: Rect, info: &ParamInfo, value: f32, c
         KnobStyle::Polymer => {
             let w = 10.0 * u;
             let (a, b) = (c + dir * (58.0 * u + w * 0.5), c + dir * (90.0 * u - w * 0.5));
-            p.line_segment([a, b], stroke(w, lift(hex(0xa3aca5))));
-            p.circle_filled(a, w * 0.5, lift(hex(0xa3aca5)));
-            p.circle_filled(b, w * 0.5, lift(hex(0xa3aca5)));
+            p.line_segment([a, b], stroke(w, lift(hex(0xa9a9a9))));
+            p.circle_filled(a, w * 0.5, lift(hex(0xa9a9a9)));
+            p.circle_filled(b, w * 0.5, lift(hex(0xa9a9a9)));
         }
     }
 }
@@ -247,46 +247,103 @@ pub enum Icon {
     Mixer,
 }
 
-impl Icon {
-    /// The Phosphor glyph, and whether it uses the solid weight.
-    fn glyph(self) -> (&'static str, bool) {
-        use egui_phosphor::bold as ph;
-        match self {
-            Icon::Play => (ph::PLAY, true),
-            Icon::Stop => (ph::STOP, true),
-            Icon::Prev => (ph::CARET_LEFT, false),
-            Icon::Next => (ph::CARET_RIGHT, false),
-            Icon::Plus => (ph::PLUS, false),
-            Icon::Minus => (ph::MINUS, false),
-            Icon::Clone => (ph::COPY, false),
-            Icon::Rack => (ph::DOTS_NINE, false),
-            Icon::Piano => (ph::PIANO_KEYS, false),
-            Icon::Knob => (ph::WAVE_SINE, false),
-            Icon::Playlist => (ph::PLAYLIST, false),
-            Icon::Mixer => (ph::FADERS, false),
+/// Draw an icon centred in `r` (a key's face). Hand-drawn vectors until the
+/// user's own icon set lands; `bg` is the face colour (for cut-outs).
+pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, bg: Color32) {
+    let c = r.center();
+    let u = r.height().min(r.width()) / 19.0; // icons are drawn on a ±6-unit grid
+    let line = stroke((1.7 * u).max(1.2), ink);
+    let tri = |pts: [Pos2; 3]| Shape::convex_polygon(pts.to_vec(), ink, egui::Stroke::NONE);
+    match icon {
+        Icon::Play => {
+            p.add(tri([c + vec2(-4.0, -5.5) * u, c + vec2(6.0, 0.0) * u, c + vec2(-4.0, 5.5) * u]));
+        }
+        Icon::Stop => {
+            p.rect_filled(Rect::from_center_size(c, vec2(9.0, 9.0) * u), cr(2), ink);
+        }
+        Icon::Prev | Icon::Next => {
+            let s = if matches!(icon, Icon::Prev) { -1.0 } else { 1.0 };
+            let pts = vec![c + vec2(-1.5 * s, -4.5) * u, c + vec2(2.5 * s, 0.0) * u, c + vec2(-1.5 * s, 4.5) * u];
+            p.add(Shape::line(pts, line));
+        }
+        Icon::Plus | Icon::Minus => {
+            p.line_segment([c - vec2(5.0, 0.0) * u, c + vec2(5.0, 0.0) * u], line);
+            if matches!(icon, Icon::Plus) {
+                p.line_segment([c - vec2(0.0, 5.0) * u, c + vec2(0.0, 5.0) * u], line);
+            }
+        }
+        Icon::Clone => {
+            let a = Rect::from_center_size(c + vec2(-1.8, -1.8) * u, vec2(8.0, 8.0) * u);
+            let b = a.translate(vec2(3.6, 3.6) * u);
+            p.rect_stroke(a, cr(2), line, egui::StrokeKind::Middle);
+            p.rect_filled(b, cr(2), bg);
+            p.rect_stroke(b, cr(2), line, egui::StrokeKind::Middle);
+        }
+        Icon::Rack => {
+            for row in 0..3 {
+                for col in 0..3 {
+                    let at = c + vec2(col as f32 - 1.0, row as f32 - 1.0) * 4.2 * u;
+                    let r = Rect::from_center_size(at, vec2(3.0, 3.0) * u);
+                    if (row + col) % 2 == 0 {
+                        p.rect_filled(r, cr(1), ink);
+                    } else {
+                        p.rect_stroke(r, cr(1), stroke(u.max(1.0), ink), egui::StrokeKind::Inside);
+                    }
+                }
+            }
+        }
+        Icon::Piano => {
+            // From the user's reference: a rounded frame, three black keys, key lines below.
+            let body = Rect::from_center_size(c, vec2(14.0, 10.5) * u);
+            p.rect_stroke(body, cr((2.0 * u) as u8), line, egui::StrokeKind::Middle);
+            for i in 1..4 {
+                let x = body.left() + body.width() * i as f32 / 4.0;
+                p.vline(x, body.center().y..=body.bottom(), stroke(line.width * 0.75, ink));
+                let key =
+                    Rect::from_min_max(pos2(x - 1.3 * u, body.top()), pos2(x + 1.3 * u, body.center().y + 0.8 * u));
+                p.rect_filled(key, cr(1), ink);
+            }
+        }
+        Icon::Knob => {
+            p.circle_stroke(c, 5.5 * u, line);
+            p.line_segment([c, c + vec2(3.0, -3.5) * u], line);
+        }
+        Icon::Mixer => {
+            // Three faders at different heights.
+            for (x, cap) in [(-4.5, -2.0), (0.0, 3.0), (4.5, -4.5)] {
+                p.line_segment([c + vec2(x, -6.0) * u, c + vec2(x, 6.0) * u], stroke(u.max(1.0), ink));
+                p.rect_filled(Rect::from_center_size(c + vec2(x, cap) * u, vec2(3.6, 2.6) * u), cr(1), ink);
+            }
+        }
+        Icon::Playlist => {
+            // Three tracks with clips on them.
+            for (row, (x0, x1)) in [(-4.0, (-6.0, 1.0)), (0.0, (-2.0, 6.0)), (4.0, (-6.0, -1.0))] {
+                let r = Rect::from_min_max(c + vec2(x0, row - 1.4) * u, c + vec2(x1, row + 1.4) * u);
+                p.rect_filled(r, cr(1), ink);
+            }
         }
     }
 }
 
-/// A toolbar module: a flat panel mounted in the dark chassis. No caption:
-/// what's inside says what it is (hover anything for its name and keys).
+/// A toolbar module: a flat, square-cornered plate mounted flush in the rack,
+/// as tall as the toolbar. No caption: what's inside says what it is (hover
+/// anything for its name and keys).
 pub fn module<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
     let m = theme::m();
     egui::Frame::default()
         .fill(theme::PANEL)
-        .corner_radius(cr(3))
-        .inner_margin(egui::Margin::symmetric(m.module_pad as i8, m.module_pad as i8))
+        .inner_margin(egui::Margin::symmetric(m.module_pad as i8, 0))
         .show(ui, |ui| {
-            ui.set_height(toolbar_key());
+            ui.set_height(m.toolbar_h);
             ui.horizontal_centered(add).inner
         })
         .inner
 }
 
-/// The big toolbar key: as tall as a module's inside.
+/// The big toolbar key: the toolbar's height less a module's padding.
 pub fn toolbar_key() -> f32 {
     let m = theme::m();
-    (m.toolbar_h - 2.0 * m.module_pad - 10.0).max(m.control_h)
+    (m.toolbar_h - 2.0 * m.module_pad).max(m.control_h)
 }
 
 /// What's printed on a key.
@@ -296,32 +353,91 @@ pub enum Legend<'a> {
     Text(&'a str),
 }
 
-/// A silicone key that lights in `light` when `on`.
-pub fn key(ui: &mut Ui, size: egui::Vec2, legend: Legend, on: bool, light: theme::Light, hint: &str) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let p = ui.painter();
-    let pressed = resp.is_pointer_button_down_on();
-    theme::key(p, rect, on.then_some(light), resp.hovered() && !pressed, if pressed { 0.9 } else { 1.0 });
-    let face = theme::key_face(rect);
-    let ink = theme::key_ink(on);
+fn paint_legend(p: &egui::Painter, face: Rect, legend: Legend, lit: Option<theme::Light>) {
+    let ink = theme::key_ink(lit.is_some());
     match legend {
         Legend::Icon(icon) => {
-            let (glyph, solid) = icon.glyph();
-            let size = (face.height() * 0.62).round();
-            p.text(face.center(), egui::Align2::CENTER_CENTER, glyph, theme::icon_font(size, solid), ink);
+            let bg = lit.map_or(theme::KEY_FACE, |l| l.mid);
+            paint_icon(p, face.shrink(face.height() * 0.12), icon, ink, bg);
         }
         Legend::Text(t) => {
             let size = (face.height() * 0.42).clamp(9.0, 13.0);
             p.text(face.center(), egui::Align2::CENTER_CENTER, t, egui::FontId::monospace(size), ink);
         }
     }
+}
+
+/// A silicone key that lights in `light` when `on`.
+pub fn key(ui: &mut Ui, size: egui::Vec2, legend: Legend, on: bool, light: theme::Light, hint: &str) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    let p = ui.painter();
+    let pressed = resp.is_pointer_button_down_on();
+    let lit = on.then_some(light);
+    theme::key(p, rect, lit, resp.hovered() && !pressed, if pressed { 0.9 } else { 1.0 });
+    paint_legend(p, theme::key_face(rect), legend, lit);
     resp.on_hover_text(hint)
+}
+
+/// Radio keys: one recess holding several faces; the chosen one is lit in
+/// its own light. Returns the index clicked this frame.
+pub fn radio_keys(
+    ui: &mut Ui,
+    size: egui::Vec2,
+    options: &[(Legend, theme::Light)],
+    chosen: usize,
+    hint: &str,
+) -> Option<usize> {
+    let total = vec2(size.x * options.len() as f32, size.y);
+    let (rect, resp) = ui.allocate_exact_size(total, Sense::click());
+    let p = ui.painter();
+    let hover = resp.hover_pos().map(|pos| (((pos.x - rect.left()) / size.x) as usize).min(options.len() - 1));
+    let pressed = resp.is_pointer_button_down_on();
+    let faces = theme::radio_keys(p, rect, options.len(), |i| {
+        let lit = (i == chosen).then_some(options[i].1);
+        let hot = hover == Some(i) && !pressed;
+        (lit, hot)
+    });
+    for (i, face) in faces.into_iter().enumerate() {
+        paint_legend(p, face, options[i].0, (i == chosen).then_some(options[i].1));
+    }
+    let clicked = resp.clicked().then_some(()).and(hover);
+    resp.on_hover_text(hint);
+    clicked
 }
 
 /// A square icon key, `control_h` big, lit mint when `active`.
 pub fn icon_button(ui: &mut Ui, icon: Icon, active: bool, hint: &str) -> Response {
     let h = theme::m().control_h;
     key(ui, vec2(h, h), Legend::Icon(icon), active, theme::L_MINT, hint)
+}
+
+/// LCD text, laid out tight like the studies (letter-spacing -0.06em).
+fn lcd_galley(ui: &Ui, text: &str, size: f32) -> std::sync::Arc<egui::Galley> {
+    let job = egui::text::LayoutJob::single_section(
+        text.to_owned(),
+        egui::TextFormat {
+            font_id: egui::FontId::monospace(size),
+            extra_letter_spacing: -0.06 * size,
+            color: theme::LCD_INK,
+            ..Default::default()
+        },
+    );
+    ui.fonts(|f| f.layout_job(job))
+}
+
+fn lcd_caption(p: &egui::Painter, rect: Rect, caption: &str) {
+    p.text(
+        rect.center_bottom() - vec2(0.0, rect.height() * 0.16),
+        egui::Align2::CENTER_CENTER,
+        caption,
+        egui::FontId::proportional((rect.height() * 0.23).clamp(9.0, 11.0)),
+        theme::LCD_INK_DIM,
+    );
+}
+
+/// The digits sit a little above centre, leaving room for the caption.
+fn lcd_digits_center(rect: Rect) -> Pos2 {
+    rect.center() - vec2(0.0, rect.height() * 0.11)
 }
 
 /// A number on a backlit LCD. Hover a digit to pick how fine you tune, then
@@ -339,20 +455,24 @@ pub fn lcd_number(
     let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
     let id = resp.id;
     let before = *value;
-    let digit_size = (size.y * 0.5).round();
-    let font = egui::FontId::monospace(digit_size);
+    let digit_size = (size.y * 0.6).round();
     let text = format!("{:.*}", decimals, *value);
-    let char_w = ui.fonts(|f| f.glyph_width(&font, '0'));
-    let text_w = char_w * text.chars().count() as f32;
-    let text_center = rect.center() - vec2(0.0, size.y * 0.1);
-    let x0 = text_center.x - text_w * 0.5;
+    let galley = lcd_galley(ui, &text, digit_size);
+    let center = lcd_digits_center(rect);
+    let origin = center - galley.size() * 0.5;
+    // Each character's x range, from the laid-out glyphs.
+    let glyphs: Vec<(f32, f32)> =
+        galley.rows[0].glyphs.iter().map(|g| (origin.x + g.pos.x, origin.x + g.pos.x + g.advance_width)).collect();
+    let dot = text.find('.').unwrap_or(text.len());
 
     // Which decimal place the pointer is over (10^place), kept during a drag.
     let place_id = id.with("place");
     let place_of = |x: f32| -> i32 {
-        let i = (((x - x0) / char_w).floor() as i32).clamp(0, text.len() as i32 - 1) as usize;
-        let dot = text.find('.').unwrap_or(text.len());
-        let i = if i == dot { i + 1 } else { i }.min(text.len() - 1);
+        let mut i = glyphs.iter().position(|&(_, x1)| x < x1).unwrap_or(glyphs.len() - 1);
+        if i == dot {
+            i += 1;
+        }
+        let i = i.min(text.len() - 1);
         if i < dot {
             (dot - i - 1) as i32
         } else {
@@ -393,16 +513,16 @@ pub fn lcd_number(
     theme::lcd_panel(&p, rect);
     if let Some(mut buf) = editing.take() {
         let edit = egui::TextEdit::singleline(&mut buf)
-            .font(font.clone())
+            .font(egui::FontId::monospace(digit_size))
             .text_color(theme::LCD_INK)
             .frame(false)
             .horizontal_align(egui::Align::Center);
-        let inner = Rect::from_center_size(text_center, vec2(size.x - 8.0, digit_size + 4.0));
+        let inner = Rect::from_center_size(center, vec2(size.x - 8.0, digit_size + 4.0));
         let r = ui.put(inner, edit);
         r.request_focus();
-        let done = ui.input(|i| i.key_pressed(egui::Key::Enter));
-        if done || r.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-            if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+        if ui.input(|i| i.key_pressed(egui::Key::Enter)) || r.lost_focus() || escape {
+            if !escape {
                 if let Ok(v) = buf.trim().parse::<f64>() {
                     *value = v;
                 }
@@ -411,27 +531,21 @@ pub fn lcd_number(
             editing = Some(buf);
         }
     } else {
-        p.text(text_center, egui::Align2::CENTER_CENTER, &text, font, theme::LCD_INK);
+        p.galley(origin, galley.clone(), theme::LCD_INK);
         // Underline the digit being tuned.
         if resp.hovered() || resp.dragged() {
-            let dot = text.find('.').unwrap_or(text.len()) as i32;
-            let i = if place >= 0 { dot - 1 - place } else { dot - place };
-            let x = x0 + i as f32 * char_w;
-            let y = text_center.y + digit_size * 0.55;
-            p.hline(x + 1.0..=x + char_w - 1.0, y, stroke(1.5, theme::LCD_INK_DIM));
+            let i = if place >= 0 { dot as i32 - 1 - place } else { dot as i32 - place };
+            if let Some(&(x0, x1)) = glyphs.get(i.max(0) as usize) {
+                let y = origin.y + galley.size().y - 1.0;
+                p.hline(x0 + 1.0..=x1 - 1.0, y, stroke(1.5, theme::LCD_INK_DIM));
+            }
         }
     }
     ui.data_mut(|d| match &editing {
         Some(b) => d.insert_temp(editing_id, b.clone()),
         None => d.remove::<String>(editing_id),
     });
-    p.text(
-        rect.center_bottom() - vec2(0.0, size.y * 0.15),
-        egui::Align2::CENTER_CENTER,
-        caption,
-        egui::FontId::proportional((size.y * 0.2).clamp(8.0, 10.0)),
-        theme::LCD_INK_DIM,
-    );
+    lcd_caption(&p, rect, caption);
 
     let factor = 10f64.powi(decimals as i32);
     *value = ((*value * factor).round() / factor).clamp(*range.start(), *range.end());
@@ -446,21 +560,9 @@ pub fn lcd_text(ui: &mut Ui, text: &str, caption: &str, size: egui::Vec2) -> Res
     let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
     let p = ui.painter();
     theme::lcd_panel(p, rect);
-    let digit = (size.y * 0.42).round();
-    p.text(
-        rect.center() - vec2(0.0, size.y * 0.1),
-        egui::Align2::CENTER_CENTER,
-        text,
-        egui::FontId::monospace(digit),
-        theme::LCD_INK,
-    );
-    p.text(
-        rect.center_bottom() - vec2(0.0, size.y * 0.15),
-        egui::Align2::CENTER_CENTER,
-        caption,
-        egui::FontId::proportional((size.y * 0.2).clamp(8.0, 10.0)),
-        theme::LCD_INK_DIM,
-    );
+    let galley = lcd_galley(ui, text, (size.y * 0.5).round());
+    p.galley(lcd_digits_center(rect) - galley.size() * 0.5, galley, theme::LCD_INK);
+    lcd_caption(p, rect, caption);
     resp
 }
 
@@ -481,7 +583,7 @@ pub fn meter_fraction(level: f32) -> f32 {
 /// A bar of the fixed meter gradient lit up to `frac`, horizontal (left → right)
 /// or vertical (bottom → top). Each colour stays put; the light only reveals it.
 pub fn meter_bar(p: &egui::Painter, r: Rect, frac: f32, vertical: bool) {
-    p.rect_filled(r, cr(0), Color32::from_rgb(0x20, 0x2b, 0x2b));
+    p.rect_filled(r, cr(0), Color32::from_rgb(0x28, 0x28, 0x28));
     if frac <= 0.0 {
         return;
     }
@@ -510,7 +612,7 @@ pub fn meter_bar(p: &egui::Painter, r: Rect, frac: f32, vertical: bool) {
 
 /// A horizontal stereo meter in its well (`levels` are linear amplitudes).
 pub fn meter_stereo_h(p: &egui::Painter, r: Rect, levels: [f32; 2]) {
-    p.rect_filled(r, cr(2), Color32::from_rgb(0x10, 0x17, 0x19));
+    p.rect_filled(r, cr(2), Color32::from_rgb(0x15, 0x15, 0x15));
     let inner = r.shrink(2.0);
     let h = (inner.height() - 2.0) / 2.0;
     for (k, level) in levels.into_iter().enumerate() {
@@ -534,7 +636,7 @@ pub fn keyboard_map(ui: &mut Ui, first_key: u8, last_key: u8) -> Option<i32> {
     let lit = |k: u8| (first_key..=last_key).contains(&k);
     for (i, &k) in white.iter().enumerate() {
         let r = Rect::from_min_size(pos2(keys.left() + i as f32 * key_w, keys.top()), vec2(key_w - 1.0, keys.height()));
-        let c = if lit(k) { theme::L_MINT.low } else { Color32::from_rgb(0x3e, 0x48, 0x49) };
+        let c = if lit(k) { theme::L_MINT.low } else { Color32::from_rgb(0x45, 0x45, 0x45) };
         p.rect_filled(r, cr(1), c);
     }
     for k in (lo..hi).filter(|k| lyra_model::theory::is_black(*k)) {
