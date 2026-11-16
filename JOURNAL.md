@@ -64,7 +64,7 @@ Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
-**Journal batch → (hash)**
+**Journal batch → `298b3d5`**
 - [x] Swap UI PAT/SONG but not their colors. SONG/PAT, SONG is green. Clicking either toggles
   *→ SONG (green) | PAT (amber); clicking either face flips the mode.*
 - [x] 1, 2, 3, 4 LEDs are unnecessary, could be a simple flashing LED with different colors, potentially also following the song's measure in the future. They use space right now.
