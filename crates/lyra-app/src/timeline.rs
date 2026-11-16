@@ -3,7 +3,7 @@
 //! its vertical twin for rows (`VBar`), and the bar ruler.
 
 use crate::theme::{self, cr, stroke};
-use egui::{pos2, Align2, FontId, Painter, Pos2, Rect, StrokeKind};
+use egui::{pos2, Align2, FontId, Painter, Pos2, Rect};
 use lyra_model::TICKS_PER_BAR;
 
 /// The horizontal view of a time editor: where it starts and how zoomed it is.
@@ -107,15 +107,13 @@ impl Overview {
     }
 
     pub fn paint(&self, painter: &Painter, v: &TimeView, hot: bool) {
-        painter.rect_filled(self.rect, cr(3), theme::INSET);
-        let thumb = self.thumb(v);
-        let fill = if hot { theme::mix(theme::RAISED, theme::MINT, 0.15) } else { theme::RAISED };
-        painter.rect_filled(thumb, cr(4), fill);
-        painter.rect_stroke(thumb, cr(4), stroke(1.0, theme::LINE), StrokeKind::Inside);
+        theme::well(painter, self.rect);
+        let thumb = self.thumb(v).shrink2(egui::vec2(0.0, 2.0));
+        paint_thumb(painter, thumb, hot);
         // Grips on both ends: "drag me to zoom".
-        for x in [thumb.left() + 5.0, thumb.right() - 5.0] {
+        for x in [thumb.left() + 6.0, thumb.right() - 6.0] {
             for dx in [-1.5, 1.5] {
-                painter.vline(x + dx, thumb.shrink(5.0).y_range(), stroke(1.0, theme::MINT.gamma_multiply(0.6)));
+                painter.vline(x + dx, thumb.shrink(6.0).y_range(), stroke(1.0, theme::TEXT_DIM));
             }
         }
     }
@@ -242,16 +240,21 @@ impl VBar {
     }
 
     pub fn paint(&self, painter: &Painter, v: &RowView, hot: bool) {
-        painter.rect_filled(self.rect, cr(3), theme::INSET);
-        let thumb = self.thumb(v);
-        let fill = if hot { theme::mix(theme::RAISED, theme::MINT, 0.15) } else { theme::RAISED };
-        painter.rect_filled(thumb, cr(4), fill);
-        painter.rect_stroke(thumb, cr(4), stroke(1.0, theme::LINE), StrokeKind::Inside);
+        theme::well(painter, self.rect);
+        let thumb = self.thumb(v).shrink2(egui::vec2(2.0, 0.0));
+        paint_thumb(painter, thumb, hot);
         // Grips on both ends: "drag me to zoom".
-        for y in [thumb.top() + 5.0, thumb.bottom() - 5.0] {
+        for y in [thumb.top() + 6.0, thumb.bottom() - 6.0] {
             for dy in [-1.5, 1.5] {
-                painter.hline(thumb.shrink(4.0).x_range(), y + dy, stroke(1.0, theme::MINT.gamma_multiply(0.6)));
+                painter.hline(thumb.shrink(4.0).x_range(), y + dy, stroke(1.0, theme::TEXT_DIM));
             }
         }
     }
+}
+
+/// A scrollbar thumb: a flat plate in the well, with the keys' dark outline.
+fn paint_thumb(painter: &Painter, thumb: Rect, hot: bool) {
+    painter.rect_filled(thumb, cr(4), theme::KEY_RECESS);
+    let fill = if hot { egui::Color32::from_rgb(0x4a, 0x4a, 0x4a) } else { egui::Color32::from_rgb(0x3a, 0x3a, 0x3a) };
+    painter.rect_filled(thumb.shrink(1.0), cr(3), fill);
 }

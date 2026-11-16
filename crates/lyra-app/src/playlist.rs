@@ -19,6 +19,7 @@ use crate::app::{Focus, UiState};
 use crate::keys::Action;
 use crate::theme::{self, cr, stroke};
 use crate::timeline::{self, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag};
+use crate::widgets;
 use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, StrokeKind, Ui};
 use lyra_model::{Clip, History, Project, TICKS_PER_BAR, TICKS_PER_STEP};
 
@@ -271,6 +272,23 @@ impl Playlist {
         self.scroll_y = self.scroll_y.clamp(0.0, (p.tracks.len() as f32 - rows).max(0.0));
         let view = self.view(grid);
 
+        // Track headers mute like every row of lights: press one, sweep over the others.
+        for t in 0..p.tracks.len() {
+            let y = view.y(t);
+            let row = Rect::from_min_max(pos2(headers.left(), y), pos2(headers.right(), y + self.track_h));
+            if !row.intersects(headers) || !hovering {
+                continue;
+            }
+            match widgets::sweep(ui, row.intersect(headers), "track-mute", !p.tracks[t].mute) {
+                Some(widgets::Sweep::Begin(on)) => {
+                    h.checkpoint(p);
+                    p.tracks[t].mute = !on;
+                }
+                Some(widgets::Sweep::Continue(on)) => p.tracks[t].mute = !on,
+                None => {}
+            }
+        }
+
         // ── Mouse ──
         if hovering && pressed_m {
             if let Some(pos) = pos {
@@ -288,11 +306,8 @@ impl Playlist {
                     out.push(Action::SongMode(true));
                     out.push(Action::Seek(view.tick(pos.x).clamp(0.0, song_len - 1.0) as f64));
                     self.drag = Drag::Seek;
-                } else if headers.contains(pos) && pressed_p {
-                    if let Some(t) = usize::try_from(view.track(pos.y)).ok().filter(|t| *t < p.tracks.len()) {
-                        h.checkpoint(p);
-                        p.tracks[t].mute ^= true;
-                    }
+                } else if headers.contains(pos) {
+                    // Track mutes are handled by the sweep below.
                 } else if grid.contains(pos) {
                     self.press_grid(pos, pressed_p, double, mods, &view, p, h, st);
                 }
@@ -347,11 +362,10 @@ impl Playlist {
             let x1 = overview.x_of(&self.time, c.end() as f32);
             let y =
                 overview_r.top() + 3.0 + (c.track as f32 / p.tracks.len().max(1) as f32) * (overview_r.height() - 6.0);
-            let color = clip_color(p, c);
             painter.rect_filled(
                 Rect::from_min_max(pos2(x0, y), pos2(x1.max(x0 + 1.0), y + 2.0)),
                 cr(0),
-                color.gamma_multiply(0.6),
+                clip_light(p, c).mid.gamma_multiply(0.8),
             );
         }
         timeline::paint_ruler(&painter, &self.time, ruler, song_len, Some((playhead as f32, playing)), grid);
@@ -578,6 +592,8 @@ impl Playlist {
         }
     }
 
+    /// Clips are flat keys: a dark recess outline, a body tinted with the
+    /// pattern's light, and a flat title strip in that light with dark ink.
     fn paint_clips(&self, painter: &egui::Painter, v: &View, p: &Project, st: &UiState, playhead: Option<f64>) {
         let m = theme::m();
         for (i, c) in p.clips.iter().enumerate() {
@@ -586,48 +602,48 @@ impl Playlist {
                 continue;
             }
             let Some(pat) = p.pattern(c.pattern) else { continue };
-            let color = clip_color(p, c);
+            let light = clip_light(p, c);
             let current = p.pattern_index(c.pattern) == Some(st.pattern);
             let playing = playhead.is_some_and(|t| (c.start as f64..c.end() as f64).contains(&t));
-            let mut body = theme::mix(theme::PANEL_HI, color, if current { 0.32 } else { 0.22 });
+            let selected = self.selection.contains(&i);
+            painter.rect_filled(r, cr(4), theme::KEY_RECESS);
+            let inner = r.shrink(1.0);
+            let mut body = theme::mix(theme::PANEL, light.low, if current { 0.34 } else { 0.24 });
             if playing {
-                body = theme::mix(body, Color32::WHITE, 0.1);
+                body = theme::shade(body, 1.12);
             }
-            painter.rect_filled(r, cr(4), body);
+            painter.rect_filled(inner, cr(3), body);
             // Title strip.
-            let strip_h = (m.text_small + 6.0).min(r.height() * 0.45);
-            let strip = Rect::from_min_max(r.min, pos2(r.right(), r.top() + strip_h));
-            painter.rect_filled(
-                strip,
-                egui::CornerRadius { nw: 4, ne: 4, sw: 0, se: 0 },
-                theme::mix(theme::PANEL_HI, color, 0.7),
-            );
+            let strip_h = (m.text_small + 6.0).min(inner.height() * 0.45);
+            let strip = Rect::from_min_max(inner.min, pos2(inner.right(), inner.top() + strip_h));
+            let strip_fill = if playing { theme::shade(light.mid, 1.04) } else { light.mid };
+            painter.rect_filled(strip, egui::CornerRadius { nw: 3, ne: 3, sw: 0, se: 0 }, strip_fill);
             if r.width() > 24.0 {
                 painter.with_clip_rect(strip.intersect(v.grid)).text(
                     strip.left_center() + vec2(5.0, 0.0),
                     Align2::LEFT_CENTER,
                     &pat.name,
                     FontId::proportional(m.text_small),
-                    theme::INSET,
+                    theme::key_ink(true),
                 );
             }
             // Note silhouettes of every channel, repeated across the clip.
-            let body_r =
-                Rect::from_min_max(pos2(r.left() + 2.0, strip.bottom() + 2.0), r.right_bottom() - vec2(2.0, 2.0));
+            let body_r = Rect::from_min_max(
+                pos2(inner.left() + 2.0, strip.bottom() + 2.0),
+                inner.right_bottom() - vec2(2.0, 2.0),
+            );
             let loop_len = (pat.play_length() * TICKS_PER_STEP).max(1);
             let (lo, hi) =
                 pat.notes.values().flatten().fold((127u8, 0u8), |(lo, hi), n| (lo.min(n.key), hi.max(n.key)));
             let span = (hi.saturating_sub(lo) as f32).max(12.0);
             let clipped = painter.with_clip_rect(body_r.intersect(v.grid));
             for (ch_i, ch) in p.channels.iter().enumerate() {
-                let ink = theme::channel_color(ch.color).gamma_multiply(0.85);
+                let ink = theme::channel_light(ch.color).mid;
                 for rep in (0..c.len).step_by(loop_len as usize) {
-                    if rep > 0 {
+                    if rep > 0 && ch_i == 0 {
+                        // Where the pattern repeats.
                         let x = v.x((c.start + rep) as f32);
-                        if ch_i == 0 {
-                            clipped.vline(x, body_r.y_range(), stroke(1.0, Color32::from_black_alpha(90)));
-                            // repeat seam
-                        }
+                        clipped.vline(x, body_r.y_range(), stroke(1.0, Color32::from_black_alpha(90)));
                     }
                     for n in pat.notes(ch.id).iter().filter(|n| rep + n.start < c.len) {
                         let x0 = v.x((c.start + rep + n.start) as f32);
@@ -641,44 +657,42 @@ impl Playlist {
                     }
                 }
             }
-            let edge = if self.selection.contains(&i) { stroke(1.5, theme::TEXT) } else { stroke(1.0, theme::LINE) };
-            painter.rect_stroke(r, cr(4), edge, StrokeKind::Inside);
+            if selected {
+                painter.rect_stroke(r, cr(4), stroke(1.5, theme::TEXT), StrokeKind::Inside);
+            }
         }
     }
 
+    /// Track headers: plates in a rack, a seam apart, each with its round light.
     fn paint_headers(&self, painter: &egui::Painter, v: &View, r: Rect, p: &Project) {
         let m = theme::m();
-        painter.rect_filled(r, cr(0), theme::TOOLBAR);
+        painter.rect_filled(r, cr(0), theme::BG);
         let clipped = painter.with_clip_rect(r);
         for (t, track) in p.tracks.iter().enumerate() {
             let y = v.y(t);
             if y > r.bottom() || y + v.track_h < r.top() {
                 continue;
             }
-            let row = Rect::from_min_max(pos2(r.left(), y), pos2(r.right(), y + v.track_h));
-            let led = row.left_center() + vec2(14.0, 0.0);
+            let plate =
+                Rect::from_min_max(pos2(r.left(), y), pos2(r.right() - theme::SEAM, y + v.track_h - theme::SEAM));
+            clipped.rect_filled(plate, cr(0), theme::PANEL);
             let lit = !track.mute;
-            if lit {
-                clipped.circle_filled(led, m.led * 0.43, theme::MINT.gamma_multiply(0.18));
-                clipped.circle_filled(led, m.led * 0.27, theme::MINT);
-            } else {
-                clipped.circle_filled(led, m.led * 0.27, theme::INSET);
-                clipped.circle_stroke(led, m.led * 0.27, stroke(1.0, theme::LINE));
-            }
+            // The track's light takes the colour of what plays on it first.
+            let light = p.clips.iter().find(|c| c.track == t).map_or(theme::L_MINT, |c| clip_light(p, c));
+            let led = plate.left_center() + vec2(m.led * 0.5 + 8.0, 0.0);
+            theme::led(&clipped, led, m.led, lit.then_some(light), false);
             clipped.text(
-                led + vec2(14.0, 0.0),
+                led + vec2(m.led * 0.5 + 8.0, 0.0),
                 Align2::LEFT_CENTER,
                 &track.name,
                 FontId::proportional(m.text),
                 if lit { theme::TEXT } else { theme::TEXT_DIM },
             );
-            clipped.hline(r.x_range(), y + v.track_h, stroke(1.0, theme::LINE));
         }
-        painter.vline(r.right() - 0.5, r.y_range(), stroke(1.0, theme::LINE));
     }
 }
 
-/// Clips are coloured by pattern, so the same pattern looks the same everywhere.
-pub fn clip_color(p: &Project, c: &Clip) -> Color32 {
-    theme::channel_color(p.pattern_index(c.pattern).unwrap_or(0))
+/// Clips are lit by pattern, so the same pattern looks the same everywhere.
+pub fn clip_light(p: &Project, c: &Clip) -> theme::Light {
+    theme::channel_light(p.pattern_index(c.pattern).unwrap_or(0))
 }

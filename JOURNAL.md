@@ -16,7 +16,6 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Wishes
 *Things you wish Lyra did.*
-- [ ] Putting Arrenger/Playlist up to date with the visual language. 
 - [ ] ~ Docked layout (Blender / VS Code style areas that don't overlap) for the main views; it would also save the title bars (~5rem). Floating windows stay for plugins.
 - [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
 - [ ] ~ Start building docked windows for essential panels. Eg:
@@ -59,6 +58,10 @@ Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Playlist → (hash)**
+- [x] Putting Arrenger/Playlist up to date with the visual language. 
+  *→ clips are flat keys (dark outline, body tinted with the pattern's light, a flat title strip with dark ink); track headers are plates with round lights, and mute with press-and-sweep; the overview and vertical bars are a recessed well with a flat thumb (also in the piano roll).*
 
 **Scrollbars → `19c4d0c`**
 - [x] hover over horizontal scroll bar should zoom. That zoom is better to have its origin at the viewport's left edge rather than the cursor's location
