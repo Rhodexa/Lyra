@@ -745,7 +745,7 @@ impl LyraApp {
                     // A short message (saved, opened, errors) for a few seconds.
                     if let Some((text, error, at)) = &self.toast {
                         if at.elapsed() < Duration::from_secs(if *error { 8 } else { 4 }) {
-                            ui.label(RichText::new(text).small().color(if *error { theme::ROSE } else { theme::MINT }));
+                            ui.label(RichText::new(text).small().color(if *error { theme::ROSE } else { theme::TEXT }));
                             ui.add_space(12.0);
                             ctx.request_repaint_after(Duration::from_millis(250));
                         }

@@ -65,12 +65,13 @@ pub fn show(
         // The deck: what plays, play / stop, where we are, the beat.
         module(ui, |ui| {
             ui.spacing_mut().item_spacing.x = gap;
-            // SONG / PAT: the left face is green, the right amber; clicking either flips the mode.
+            // SONG / PAT, a radio: SONG (mint) plays the playlist, PAT (Lyra's gold)
+            // plays the current pattern. L toggles between them.
             let options = [(Legend::Text("SONG"), theme::L_MINT), (Legend::Text("PAT"), theme::L_AMBER)];
-            let hint = "Play the whole playlist / the current pattern  ( L )";
+            let hint = "SONG: play the whole playlist · PAT: play the current pattern  ( L toggles )";
             let chosen = if st.song_mode { 0 } else { 1 };
-            if widgets::radio_keys(ui, vec2(big * 1.3, big), &options, chosen, hint).is_some() {
-                actions.push(Action::SongMode(!st.song_mode));
+            if let Some(i) = widgets::radio_keys(ui, vec2(big * 1.3, big), &options, chosen, hint) {
+                actions.push(Action::SongMode(i == 0));
             }
             ui.add_space(gap);
             if widgets::key(
@@ -211,7 +212,7 @@ fn pattern_picker(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiStat
     // A small chevron, like the dropdown in the studies.
     let c = r.right_center() - vec2(13.0, 1.5);
     let chevron = vec![c + vec2(-3.5, -1.5), c + vec2(0.0, 2.0), c + vec2(3.5, -1.5)];
-    ui.painter().add(egui::Shape::line(chevron, theme::stroke(1.6, theme::mix(theme::TEXT_DIM, theme::MINT, 0.3))));
+    ui.painter().add(egui::Shape::line(chevron, theme::stroke(1.6, theme::TEXT_DIM)));
     let wheel = if resp.hovered() { ui.input(|i| i.raw_scroll_delta.y) } else { 0.0 };
     if wheel > 0.0 {
         st.pattern = st.pattern.saturating_sub(1);

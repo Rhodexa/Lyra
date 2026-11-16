@@ -636,7 +636,7 @@ pub fn keyboard_map(ui: &mut Ui, first_key: u8, last_key: u8) -> Option<i32> {
     let lit = |k: u8| (first_key..=last_key).contains(&k);
     for (i, &k) in white.iter().enumerate() {
         let r = Rect::from_min_size(pos2(keys.left() + i as f32 * key_w, keys.top()), vec2(key_w - 1.0, keys.height()));
-        let c = if lit(k) { theme::L_MINT.low } else { Color32::from_rgb(0x45, 0x45, 0x45) };
+        let c = if lit(k) { theme::TEXT } else { Color32::from_rgb(0x45, 0x45, 0x45) };
         p.rect_filled(r, cr(1), c);
     }
     for k in (lo..hi).filter(|k| lyra_model::theory::is_black(*k)) {

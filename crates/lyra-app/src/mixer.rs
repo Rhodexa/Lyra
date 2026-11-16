@@ -143,7 +143,7 @@ fn strip(ui: &mut Ui, r: Rect, p: &mut Project, h: &mut History, st: &mut UiStat
         v if v < 0 => format!("L{}", -v),
         v => format!("R{v}"),
     };
-    painter.text(pos2(cx, y), Align2::CENTER_TOP, pan_text, egui::FontId::proportional(10.5), theme::MINT);
+    painter.text(pos2(cx, y), Align2::CENTER_TOP, pan_text, egui::FontId::proportional(10.5), theme::TEXT);
     y += 22.0;
 
     // Mute: lit = audible, like every light in Lyra. Alt-click: solo (again: everyone back).
