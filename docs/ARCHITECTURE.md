@@ -45,6 +45,13 @@ lyra-app ──────────► lyra-model     project data + undo   
    sends `Command::SetSequence`.
 3. On its next callback, the engine swaps the sequence in and returns the old one as trash.
 
+**Layout** (`app.rs` `docked`, `areas.rs`): browser left, plugin rack right
+(both fold), and the centre split into two *areas*. Each `Area` holds one
+editor kind plus its own state for every editor (`Playlist`, `PianoRoll`), so
+areas remember their scroll/zoom and two can show the same editor. Editing
+keys go to the area under the mouse (`key_target`); F5/F7/F9 open or fold the
+bottom area on an editor. Instrument and effect editors stay floating windows.
+
 Views **only edit the project**. `bridge.rs` is the only file that talks to the
 engine about edits. Live playing (notes, play/stop) goes straight to the engine
 as commands.

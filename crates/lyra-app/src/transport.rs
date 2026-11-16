@@ -6,6 +6,7 @@
 //! the controls say what they are, and every one has a hover hint.
 
 use crate::app::UiState;
+use crate::areas::Editor;
 use crate::keys::Action;
 use crate::rack::tracked;
 use crate::theme;
@@ -159,13 +160,14 @@ pub fn show(
         // Windows: a key lights while its window is open.
         module(ui, |ui| {
             ui.spacing_mut().item_spacing.x = gap;
+            let vis = |e: Editor| st.visible.contains(&e);
             for (icon, open, hint, action) in [
                 (Icon::Browser, st.show_browser, "Browser  (F4)", Action::ToggleBrowser),
-                (Icon::Playlist, st.show_playlist, "Arranger  (F5)", Action::TogglePlaylist),
-                (Icon::Rack, st.show_rack, "Instrument rack  (F6)", Action::ToggleRack),
-                (Icon::Piano, st.show_piano, "Piano roll  (F7)", Action::TogglePiano),
+                (Icon::Playlist, vis(Editor::Arrangement), "Arrangement  (F5)", Action::TogglePlaylist),
+                (Icon::Rack, st.show_plugins, "Plugin rack  (F6)", Action::ToggleRack),
+                (Icon::Piano, vis(Editor::PianoRoll), "Piano roll  (F7)", Action::TogglePiano),
                 (Icon::Knob, st.show_editor, "Instrument  (F8)", Action::ToggleEditor),
-                (Icon::Mixer, st.show_mixer, "Mixer  (F9)", Action::ToggleMixer),
+                (Icon::Mixer, vis(Editor::Mixer), "Mixer  (F9)", Action::ToggleMixer),
             ] {
                 if widgets::key(ui, vec2(big, big), Legend::Icon(icon), open, theme::L_MINT, hint).clicked() {
                     actions.push(action);

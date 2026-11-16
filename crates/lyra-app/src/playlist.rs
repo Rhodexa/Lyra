@@ -7,7 +7,7 @@
 //!   resize (longer than the pattern = the pattern repeats) · **Shift+drag** — duplicate
 //! * **click a clip** — makes its pattern the current one · **double-click** — open it in the rack
 //! * **right-drag** — delete · **Ctrl+drag** — box select (Shift adds) · **Alt** — no snap
-//! * **wheel** — scroll tracks · **Shift+wheel** — sideways · **Ctrl+wheel** — zoom time ·
+//! * **wheel** — scroll tracks · **Shift+wheel** — zoom time · **Ctrl+wheel** — sideways ·
 //!   **Alt+wheel** — track height · **middle-drag** — pan
 //! * overview bar — drag the thumb to pan, its ends to zoom · ruler — click to
 //!   play the song from there · track lights — mute a track
@@ -15,7 +15,7 @@
 //! Keys (when this window was clicked last): Delete, Ctrl+A, Ctrl+D/B (duplicate
 //! after), ←→ move by snap (Ctrl = 4 bars), ↑↓ move to the track above/below, Esc.
 
-use crate::app::{Focus, UiState};
+use crate::app::UiState;
 use crate::keys::Action;
 use crate::theme::{self, cr, stroke};
 use crate::timeline::{self, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag};
@@ -202,8 +202,6 @@ impl Playlist {
     ) {
         let m = theme::m();
         self.selection.retain(|&i| i < p.clips.len());
-        self.toolbar(ui, p, st);
-        ui.add_space(3.0);
 
         let size = ui.available_size().max(vec2(420.0, 200.0));
         // Hover only: the editor reads the mouse itself, and a sensing canvas would
@@ -251,21 +249,25 @@ impl Playlist {
                 self.set_rows(rv, grid);
             }
         } else if hovering {
-            if zoom != 1.0 {
-                self.time.zoom_at(grid, zoom, pos.map_or(grid.left(), |p| p.x), 0.01, 2.0);
+            // egui turns Shift+wheel into sideways scroll, so with a modifier the
+            // wheel's amount is whichever axis it arrived on.
+            let amount = wheel.x + wheel.y;
+            let _ = zoom; // Ctrl+wheel is sideways scrolling now (raw delta below)
+            let over_ruler = pos.is_some_and(|p| ruler.contains(p));
+            if (mods.shift || over_ruler) && amount != 0.0 {
+                // Shift+wheel, or the wheel over the ruler: zoom time around the mouse.
+                self.time.zoom_at(grid, (amount * 0.004).exp(), pos.map_or(grid.left(), |p| p.x), 0.01, 2.0);
+            } else if mods.command && amount != 0.0 {
+                // Ctrl+wheel: sideways.
+                self.time.scroll = (self.time.scroll - amount / self.time.ppt).max(0.0);
             } else if wheel.y != 0.0 && mods.alt {
                 self.track_h = (self.track_h * (wheel.y * 0.004).exp()).clamp(24.0, 140.0);
             } else {
-                let sideways = if wheel.x != 0.0 {
-                    wheel.x
-                } else if mods.shift {
-                    wheel.y
-                } else {
-                    0.0
-                };
-                if sideways != 0.0 {
-                    self.time.scroll = (self.time.scroll - sideways / self.time.ppt).max(0.0);
-                } else if wheel.y != 0.0 {
+                // Plain wheel: up and down. A touchpad's sideways swipe: sideways.
+                if wheel.x != 0.0 {
+                    self.time.scroll = (self.time.scroll - wheel.x / self.time.ppt).max(0.0);
+                }
+                if wheel.y != 0.0 {
                     self.scroll_y -= wheel.y / self.track_h * 0.5;
                 }
             }
@@ -373,7 +375,8 @@ impl Playlist {
         timeline::paint_ruler(&painter, &self.time, ruler, song_len, Some((playhead as f32, playing)), grid);
     }
 
-    fn toolbar(&mut self, ui: &mut Ui, p: &Project, st: &UiState) {
+    /// The arrangement's controls; the area draws them on its header row.
+    pub fn toolbar(&mut self, ui: &mut Ui, p: &Project, st: &UiState) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("snap").small().color(theme::TEXT_DIM));
             let name = SNAPS.iter().find(|s| s.1 == self.snap).map_or("?", |s| s.0);
@@ -432,8 +435,7 @@ impl Playlist {
                 st.pattern = idx;
             }
             if double {
-                st.show_rack = true;
-                st.raise = Some(Focus::Rack);
+                st.show_plugins = true;
                 self.drag = Drag::None;
                 return;
             }

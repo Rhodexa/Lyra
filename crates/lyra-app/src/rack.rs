@@ -1,5 +1,6 @@
-//! The instrument rack (FL calls it the channel rack): one row per
-//! instrument, one button per step.
+//! The plugin rack: one row per instrument (mute light, pan, volume, name,
+//! mixer insert). It lives in the right panel; the same rows *with* a step
+//! grid are the "Step sequencer" editor, which any area can show.
 //!
 //! Mouse grammar ("it knows what you mean"):
 //! * **click / drag** across steps — paint. The first step you touch decides
@@ -17,6 +18,7 @@
 //!   click it to open the piano roll.
 
 use crate::app::{Focus, UiState};
+use crate::areas::Editor;
 use crate::theme::{self, cr, stroke};
 use crate::widgets;
 use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Response, Sense, StrokeKind, Ui};
@@ -72,8 +74,7 @@ fn add_channel_menu(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiSt
         p.add_channel(name, instrument, params);
         st.selected = p.channels.len() - 1;
         if lyra_dsp::info(instrument).is_some_and(|i| i.melodic) {
-            st.show_piano = true;
-            st.raise = Some(Focus::Piano);
+            st.show = Some(Editor::PianoRoll);
         }
         ui.close_menu();
     }
@@ -89,11 +90,21 @@ fn solo(p: &mut Project, ci: usize) {
     }
 }
 
-pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, play_step: Option<u32>) {
+/// The plugin rack (right panel): the rows, without steps.
+pub fn plugins(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+    show(ui, p, h, st, None, false);
+}
+
+/// `steps`: also show each row's step grid (the Step sequencer editor).
+pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, play_step: Option<u32>, steps: bool) {
     let pat = st.pattern.min(p.patterns.len() - 1);
 
     // ── Header ──
     ui.horizontal(|ui| {
+        if !steps {
+            ui.menu_button("+ Instrument", |ui| add_channel_menu(ui, p, h, st));
+            return;
+        }
         let len = p.patterns[pat].min_length;
         let mut new_len = len;
         let bars = |n: u32| format!("{} bar{}", n / 16, if n > 16 { "s" } else { "" });
@@ -143,11 +154,20 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
         + 5.0 * ui.spacing().item_spacing.x
         + step_x(p.patterns[pat].play_length() - 1)
         + m.step_w;
-    egui::ScrollArea::horizontal().min_scrolled_width(row_w.min(1000.0)).max_width(1000.0).show(ui, |ui| {
-        for ci in 0..p.channels.len() {
-            row(ui, p, h, st, ci, pat, play_step, any_solo, (pointer, primary, secondary, wheel, shift), &mut delete);
-        }
-    });
+    let input = (pointer, primary, secondary, wheel, shift);
+    if steps {
+        egui::ScrollArea::horizontal().min_scrolled_width(row_w.min(1000.0)).show(ui, |ui| {
+            for ci in 0..p.channels.len() {
+                row(ui, p, h, st, ci, pat, play_step, any_solo, input, true, &mut delete);
+            }
+        });
+    } else {
+        egui::ScrollArea::vertical().id_salt("plugin-rack").auto_shrink([false, true]).show(ui, |ui| {
+            for ci in 0..p.channels.len() {
+                row(ui, p, h, st, ci, pat, None, any_solo, input, false, &mut delete);
+            }
+        });
+    }
 
     if let Some(ci) = delete {
         h.checkpoint(p);
@@ -155,14 +175,16 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
         st.selected = st.selected.min(p.channels.len().saturating_sub(1));
     }
 
-    ui.add_space(6.0);
-    ui.label(
-        egui::RichText::new(
-            "drag: paint · right-drag: erase · wheel: velocity · shift+wheel: pitch · double-click name: edit",
-        )
-        .small()
-        .color(theme::TEXT_DIM),
-    );
+    if steps {
+        ui.add_space(6.0);
+        ui.label(
+            egui::RichText::new(
+                "drag: paint · right-drag: erase · wheel: velocity · shift+wheel: pitch · double-click name: edit",
+            )
+            .small()
+            .color(theme::TEXT_DIM),
+        );
+    }
 }
 
 type Input = (Option<egui::Pos2>, bool, bool, f32, bool);
@@ -178,6 +200,7 @@ fn row(
     play_step: Option<u32>,
     any_solo: bool,
     (pointer, primary, secondary, wheel, shift): Input,
+    steps: bool,
     delete: &mut Option<usize>,
 ) {
     let id = p.channels[ci].id;
@@ -259,8 +282,7 @@ fn row(
         r.context_menu(|ui| {
             if ui.button("Piano roll").clicked() {
                 st.selected = ci;
-                st.show_piano = true;
-                st.raise = Some(Focus::Piano);
+                st.show = Some(Editor::PianoRoll);
                 ui.close_menu();
             }
             if ui.button("Edit instrument").clicked() {
@@ -331,6 +353,9 @@ fn row(
             p.channels[ci].mixer = insert;
         }
         r.on_hover_text("Mixer insert: drag or scroll to route (M = master)");
+        if !steps {
+            return;
+        }
 
         ui.add_space(4.0);
 
@@ -343,8 +368,7 @@ fn row(
             preview(&painter, strip, p, pat, ci, color, play_step);
             if strip_resp.clicked() {
                 st.selected = ci;
-                st.show_piano = true;
-                st.raise = Some(Focus::Piano);
+                st.show = Some(Editor::PianoRoll);
             }
             strip_resp.on_hover_text("Melody: click to open the piano roll");
             return;

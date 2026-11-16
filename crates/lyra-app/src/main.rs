@@ -1,6 +1,7 @@
 //! Lyra — a pattern-based DAW that makes you want to play.
 
 mod app;
+mod areas;
 mod audio;
 mod bridge;
 mod browser;

@@ -17,7 +17,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 |---|---|
 | Play / stop | `Space` |
 | Project | click the logo, or `Ctrl+N` new · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as |
-| Views | Docked: `F4` browser (left, folds to a strip) · `F5` arranger (centre) · `F7` piano roll (docked under the arranger; its "full screen" hides the arranger). Floating: `F6` instrument rack · `F8` instrument editor · `F9` mixer. Also the window keys in the top bar. |
+| Layout | Browser on the left (`F4`), plugin rack on the right (`F6`); both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
 | Patterns | `[` / `]` or the picker in the top bar (new, clone) |
@@ -37,7 +37,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Select | Ctrl+drag, `Ctrl+A` · duplicate after: `Ctrl+D` / `Ctrl+B` |
 | Play from here | click the ruler (switches to song mode) |
 | Mute a track | click its light |
-| Scroll / zoom / pan | wheel, Shift+wheel · Ctrl+wheel (time), Alt+wheel (track height) · middle-drag |
+| Scroll / zoom / pan | wheel (up/down), Ctrl+wheel (sideways) · Shift+wheel or wheel over the ruler (time, around the mouse), wheel over a scrollbar (that axis), Alt+wheel (track height) · middle-drag |
 
 **Mixer** (`F9`)
 
@@ -48,11 +48,11 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Effects | "+ add effect"; light = bypass; ^ v reorder; x remove |
 | Route a channel | instrument editor (F8) → "mixer" menu |
 
-**Instrument rack**
+**Plugin rack** (right panel; the step grid lives in the *Step sequencer* editor)
 
 | Do | How |
 |---|---|
-| Paint steps | click & drag across the rack. Right-drag erases |
+| Paint steps (Step sequencer) | click & drag across the steps. Right-drag erases |
 | Velocity / pitch of a step | mouse wheel / Shift + wheel |
 | Select / edit a channel | click its name / double-click it |
 | Piano roll, clone, replace instrument, fill, delete | right-click a channel name |
@@ -75,8 +75,8 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` (pastes under the mouse, or at the playhead) |
 | Duplicate after / quantize / delete | `Ctrl+D` or `Ctrl+B` / `Ctrl+Q` / `Delete` |
 | No snap | hold `Alt` (stays free for the rest of the drag) |
-| Scroll | wheel, Shift+wheel sideways, middle-drag, or drag the overview bar's thumb |
-| Zoom | Ctrl+wheel (time) · Alt+wheel (pitch) · drag the overview thumb's ends |
+| Scroll | wheel (up/down), Ctrl+wheel (sideways), middle-drag, or the scrollbars |
+| Zoom | Shift+wheel or wheel over the ruler (time) · Alt+wheel (pitch) · wheel over a scrollbar · drag a scrollbar thumb's ends |
 | Velocity | wheel over a note, or drag in the lane at the bottom |
 | Jump to another channel | double right-click one of its ghost notes |
 | Move the playhead | click / drag in the ruler |

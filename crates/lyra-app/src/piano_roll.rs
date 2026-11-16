@@ -9,7 +9,7 @@
 //! * **right-drag** — erase · **Ctrl+drag** — box select (Shift adds)
 //! * **Alt** — no snap. Once a drag has gone unsnapped it *stays* unsnapped,
 //!   so letting go of Alt a moment early never re-snaps your note.
-//! * **wheel** — scroll · **Shift+wheel** — sideways · **Ctrl+wheel** — zoom time ·
+//! * **wheel** — scroll · **Shift+wheel** — zoom time · **Ctrl+wheel** — sideways ·
 //!   **Alt+wheel** — zoom pitch · **middle-drag** — pan · **wheel over a note** —
 //!   its velocity (the whole selection's, if the note is selected)
 //! * while playing, placing/moving notes stays silent (no preview over the music)
@@ -79,8 +79,6 @@ pub struct PianoRoll {
     pub chord: Chord,
     pub show_scale: bool,
     pub show_ghosts: bool,
-    /// Fill the whole workspace (toggled from the toolbar).
-    pub maximized: bool,
     selection: Vec<usize>,
     /// Default lengths for new notes: [drum channels, melodic channels].
     last_len: [u32; 2],
@@ -108,7 +106,6 @@ impl Default for PianoRoll {
             chord: Chord::Single,
             show_scale: true,
             show_ghosts: true,
-            maximized: false,
             selection: Vec::new(),
             last_len: [TICKS_PER_STEP, TICKS_PER_STEP * 2],
             last_vel: 0.8,
@@ -303,9 +300,6 @@ impl PianoRoll {
         self.playhead = playhead;
         let m = theme::m();
 
-        self.toolbar(ui, p, h, color, ch);
-        ui.add_space(3.0);
-
         // ── Layout ──
         let size = ui.available_size().max(vec2(320.0, 220.0));
         // Hover only: the editor reads the mouse itself, and a sensing canvas would
@@ -358,9 +352,17 @@ impl PianoRoll {
             let hovered_note =
                 pos.filter(|p| grid.contains(*p)).and_then(|pos| hit(&view, p.patterns[pat].notes(ch_id), pos));
             let vertical = wheel.y;
-            if zoom != 1.0 {
-                // Ctrl+wheel (egui reports it as zoom): time zoom around the mouse.
-                self.zoom_time(zoom, pos.map_or(grid.left(), |p| p.x), grid);
+            // egui turns Shift+wheel into sideways scroll, so with a modifier the
+            // wheel's amount is whichever axis it arrived on.
+            let amount = wheel.x + wheel.y;
+            let _ = zoom; // Ctrl+wheel is sideways scrolling now (raw delta below)
+            let over_ruler = pos.is_some_and(|p| ruler.contains(p));
+            if (mods.shift || over_ruler) && amount != 0.0 {
+                // Shift+wheel, or the wheel over the ruler: zoom time around the mouse.
+                self.zoom_time((amount * 0.004).exp(), pos.map_or(grid.left(), |p| p.x), grid);
+            } else if mods.command && amount != 0.0 {
+                // Ctrl+wheel: sideways.
+                self.time.scroll -= amount / self.time.ppt;
             } else if vertical != 0.0 && mods.alt {
                 // Alt+wheel: pitch zoom, keeping the key under the mouse in place.
                 if let Some(pos) = pos {
@@ -368,7 +370,7 @@ impl PianoRoll {
                     self.row_h = (self.row_h * (vertical * 0.004).exp()).clamp(6.0, 36.0);
                     self.view_top = anchor + (pos.y - grid.top()) / self.row_h;
                 }
-            } else if let (Some(i), true) = (hovered_note, vertical != 0.0 && !mods.shift) {
+            } else if let (Some(i), true) = (hovered_note, vertical != 0.0) {
                 // Wheel over a note: velocity (of the selection, if that note is in it).
                 h.checkpoint(p);
                 let targets = if self.selection.contains(&i) { self.selection.clone() } else { vec![i] };
@@ -377,16 +379,11 @@ impl PianoRoll {
                     notes[t].velocity = (notes[t].velocity + vertical.signum() * 0.05).clamp(0.05, 1.0);
                 }
             } else {
-                let sideways = if wheel.x != 0.0 {
-                    wheel.x
-                } else if mods.shift {
-                    vertical
-                } else {
-                    0.0
-                };
-                if sideways != 0.0 {
-                    self.time.scroll -= sideways / self.time.ppt;
-                } else if vertical != 0.0 {
+                // Plain wheel: up and down. A touchpad's sideways swipe: sideways.
+                if wheel.x != 0.0 {
+                    self.time.scroll -= wheel.x / self.time.ppt;
+                }
+                if vertical != 0.0 {
                     self.view_top += vertical / self.row_h * 0.5;
                 }
             }
@@ -532,7 +529,8 @@ impl PianoRoll {
         self.view_top = 128.0 - rv.start;
     }
 
-    fn toolbar(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, color: Color32, ch: usize) {
+    /// The piano roll's controls; the area draws them on its header row.
+    pub fn toolbar(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, color: Color32, ch: usize) {
         ui.horizontal(|ui| {
             let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
             ui.painter().circle_filled(r.center(), 4.0, color);
@@ -591,14 +589,6 @@ impl PianoRoll {
                 ui.checkbox(&mut self.show_scale, "Shade notes outside the key");
                 ui.checkbox(&mut self.show_ghosts, "Show other channels (ghost notes)");
             });
-
-            // (Inline on purpose: a right-aligned layout here would claim all
-            // available width and make the resizable window balloon.)
-            ui.add_space(8.0);
-            let label = if self.maximized { "restore" } else { "full screen" };
-            if ui.small_button(label).on_hover_text("Fill the workspace with the piano roll").clicked() {
-                self.maximized ^= true;
-            }
         });
     }
 

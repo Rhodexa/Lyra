@@ -7,10 +7,9 @@
 //! 4. apply actions (play, undo, live notes, editing keys → focused window)
 //! 5. `bridge.sync` pushes whatever changed to the engine
 
+use crate::areas::{self, Area, Editor};
 use crate::bridge::{Bridge, Playing};
 use crate::keys::{Action, Keyboard};
-use crate::piano_roll::PianoRoll;
-use crate::playlist::Playlist;
 use crate::theme::{self, cr};
 use crate::{audio, demo, editor, files, rack, transport};
 use egui::{Id, Margin, RichText};
@@ -20,15 +19,11 @@ use lyra_plugin::Event;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 
-/// Which window gets editing keys (arrows, Delete, Ctrl+A/D/Q).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// A floating window to bring to the front. (Editing keys don't follow
+/// windows: they go to the area under the mouse, see `key_target`.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Focus {
-    #[default]
-    Rack,
-    Piano,
     Editor,
-    Playlist,
-    Mixer,
     Effect,
 }
 
@@ -42,18 +37,20 @@ pub struct UiState {
     pub flash: Vec<f32>,
     last_triggers: Vec<u32>,
     pub master_meter: [f32; 2],
-    pub show_rack: bool,
-    pub show_piano: bool,
+    /// The plugin rack, docked on the right (F6).
+    pub show_plugins: bool,
     pub show_editor: bool,
-    pub focus: Focus,
     /// Keys currently held on the typing keyboard (lights the piano roll's keys).
     pub live_keys: Vec<u8>,
 
     /// A window that asked to be brought to the front this frame.
     pub raise: Option<Focus>,
     pub show_design: bool,
-    pub show_playlist: bool,
-    pub show_mixer: bool,
+    /// "Show this editor": a widget asks, the app makes sure an area shows it
+    /// (opening the bottom area if neither does).
+    pub show: Option<Editor>,
+    /// The editors on screen this frame (lights the toolbar keys).
+    pub visible: Vec<Editor>,
     /// The browser panel on the left (F4).
     pub show_browser: bool,
     /// The mixer track whose effects are shown.
@@ -77,15 +74,13 @@ impl Default for UiState {
             flash: Vec::new(),
             last_triggers: Vec::new(),
             master_meter: [0.0; 2],
-            show_rack: true,
-            show_piano: false,
+            show_plugins: true,
             show_editor: false,
-            focus: Focus::Rack,
             live_keys: Vec::new(),
             raise: None,
             show_design: false,
-            show_playlist: true,
-            show_mixer: false,
+            show: None,
+            visible: Vec::new(),
             show_browser: true,
             mixer_selected: 1,
             effect: None,
@@ -108,10 +103,14 @@ pub struct LyraApp {
     keyboard: Keyboard,
     dev: crate::devtools::DevTools,
     ui: UiState,
-    piano: PianoRoll,
-    playlist: Playlist,
-    /// (pattern, channel id) the piano roll last framed its view on.
-    piano_framed: Option<(usize, u32)>,
+    /// The top and bottom areas of the centre (see `areas`).
+    areas: [Area; 2],
+    /// The bottom area is shown (F5 / F7 / F9 open it on an editor).
+    bottom_open: bool,
+    /// Where each area was drawn last frame (for "keys go to the area under the mouse").
+    area_rects: [Option<egui::Rect>; 2],
+    /// The area editing keys go to while the mouse is outside both areas.
+    key_area: usize,
     textures: theme::Textures,
     frame_count: u64,
     /// A window being raised, and for how many more frames (see `windows`).
@@ -146,17 +145,16 @@ impl LyraApp {
             Err(e) => (None, None, Some(format!("no audio: {e}"))),
         };
         let dev = crate::devtools::DevTools::from_env();
-        let mut ui = UiState {
-            show_piano: dev.wants("piano"),
-            show_editor: dev.wants("editor"),
-            show_design: dev.wants("design"),
-            show_mixer: dev.wants("mixer"),
-            ..UiState::default()
-        };
+        let mut ui =
+            UiState { show_editor: dev.wants("editor"), show_design: dev.wants("design"), ..UiState::default() };
         if dev.wants("piano") || dev.wants("editor") {
             ui.selected = 5; // the demo's bass: something melodic to look at
-            ui.focus = Focus::Piano;
         }
+        // LYRA_OPEN=piano / mixer / steps opens the bottom area on that editor.
+        let bottom = [("piano", Editor::PianoRoll), ("mixer", Editor::Mixer), ("steps", Editor::Steps)]
+            .into_iter()
+            .find(|(name, _)| dev.wants(name))
+            .map(|(_, e)| e);
         // Reopen the last project; first run (or a missing file) gets the demo.
         let (project, path, toast) = match files::last_project().map(|p| (files::load(&p), p)) {
             Some((Ok(project), path)) => (project, Some(path), None),
@@ -177,9 +175,10 @@ impl LyraApp {
             keyboard: Keyboard::default(),
             dev,
             ui,
-            piano: PianoRoll::default(),
-            playlist: Playlist::default(),
-            piano_framed: None,
+            areas: [Area::new(Editor::Arrangement), Area::new(bottom.unwrap_or(Editor::PianoRoll))],
+            bottom_open: bottom.is_some(),
+            area_rects: [None; 2],
+            key_area: 0,
             textures: theme::Textures::new(&cc.egui_ctx),
             frame_count: 0,
             raising: None,
@@ -224,7 +223,9 @@ impl LyraApp {
         self.ui.selected = 0;
         self.ui.pattern = 0;
         self.ui.song_mode = !self.project.clips.is_empty();
-        self.piano_framed = None;
+        for a in &mut self.areas {
+            a.framed = None;
+        }
         self.pending_seek = Some(0.0);
     }
 
@@ -345,10 +346,60 @@ impl LyraApp {
         }
     }
 
-    fn apply(&mut self, ctx: &egui::Context, a: Action, playing: bool) {
+    /// Which area editing keys go to: the one under the mouse; while the mouse
+    /// is elsewhere (browser, plugin rack, toolbar), the last one it was over.
+    /// None while the mouse is over a floating window or a menu.
+    fn key_target(&mut self, ctx: &egui::Context) -> Option<usize> {
+        if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
+            if ctx.layer_id_at(pos).is_some_and(|l| l.order != egui::Order::Background) {
+                return None;
+            }
+            if let Some(i) = (0..2).find(|&i| self.area_rects[i].is_some_and(|r| r.contains(pos))) {
+                self.key_area = i;
+            }
+        }
+        if !self.bottom_open {
+            self.key_area = 0;
+        }
+        Some(self.key_area)
+    }
+
+    /// F5 / F7 / F9: open the bottom area on `editor`; again folds it away.
+    fn toggle_bottom(&mut self, editor: Editor) {
+        if self.bottom_open && self.areas[1].editor == editor {
+            self.bottom_open = false;
+        } else {
+            self.areas[1].editor = editor;
+            self.bottom_open = true;
+        }
+    }
+
+    /// An editing key, for the area `target`. Returns true when that area's
+    /// editor used it.
+    fn edit_in_area(&mut self, ctx: &egui::Context, a: Action, target: Option<usize>) -> bool {
+        let Some(i) = target else { return false };
         let ch = self.ui.selected.min(self.project.channels.len().saturating_sub(1));
         let pat = self.ui.pattern.min(self.project.patterns.len() - 1);
-        let piano_has_focus = self.ui.focus == Focus::Piano && self.ui.show_piano && !self.project.channels.is_empty();
+        let area = &mut self.areas[i];
+        match area.editor {
+            Editor::Arrangement => area.playlist.action(a, &mut self.project, &mut self.history),
+            Editor::PianoRoll if !self.project.channels.is_empty() => {
+                let handled = area.piano.action(a, &mut self.project, &mut self.history, pat, ch);
+                if handled && matches!(a, Action::Copy | Action::Cut) {
+                    // egui only reports Ctrl+V when the *system* clipboard holds text, so
+                    // leave a marker there; the notes themselves stay in Lyra's clipboard.
+                    ctx.copy_text("lyra: notes".to_string());
+                }
+                handled
+            }
+            _ => false,
+        }
+    }
+
+    fn apply(&mut self, ctx: &egui::Context, a: Action, playing: bool, target: Option<usize>) {
+        if is_edit(a) && self.edit_in_area(ctx, a, target) {
+            return;
+        }
         match a {
             Action::TogglePlay => self.send(if playing { Command::Stop } else { Command::Play }),
             Action::Stop => self.send(Command::Stop),
@@ -371,25 +422,16 @@ impl LyraApp {
             Action::Octave(d) => self.keyboard.octave = (self.keyboard.octave + d).clamp(-3, 3),
             Action::PrevPattern => self.ui.pattern = self.ui.pattern.saturating_sub(1),
             Action::NextPattern => self.ui.pattern = (self.ui.pattern + 1).min(self.project.patterns.len() - 1),
-            Action::ToggleRack => self.ui.show_rack ^= true,
-            Action::TogglePiano => {
-                self.ui.show_piano ^= true;
-                self.ui.raise = Some(Focus::Piano);
-            }
+            Action::ToggleRack => self.ui.show_plugins ^= true,
+            Action::TogglePiano => self.toggle_bottom(Editor::PianoRoll),
             Action::ToggleEditor => {
                 self.ui.show_editor ^= true;
                 self.ui.raise = Some(Focus::Editor);
             }
             Action::ToggleDesign => self.ui.show_design ^= true,
             Action::ToggleBrowser => self.ui.show_browser ^= true,
-            Action::ToggleMixer => {
-                self.ui.show_mixer ^= true;
-                self.ui.raise = Some(Focus::Mixer);
-            }
-            Action::TogglePlaylist => {
-                self.ui.show_playlist ^= true;
-                self.ui.raise = Some(Focus::Playlist);
-            }
+            Action::ToggleMixer => self.toggle_bottom(Editor::Mixer),
+            Action::TogglePlaylist => self.toggle_bottom(Editor::Arrangement),
             Action::ToggleSongMode => self.ui.song_mode ^= true,
             Action::SongMode(on) => self.ui.song_mode = on,
             Action::NewProject => {
@@ -416,20 +458,6 @@ impl LyraApp {
             }
             Action::Save => self.save(false),
             Action::SaveAs => self.save(true),
-            // Only keys the playlist actually handles stop here; the rest (copy,
-            // paste, quantize…) fall through instead of vanishing.
-            _ if self.ui.focus == Focus::Playlist
-                && self.ui.show_playlist
-                && is_edit(a)
-                && self.playlist.action(a, &mut self.project, &mut self.history) => {}
-            _ if piano_has_focus => {
-                let handled = self.piano.action(a, &mut self.project, &mut self.history, pat, ch);
-                if handled && matches!(a, Action::Copy | Action::Cut) {
-                    // egui only reports Ctrl+V when the *system* clipboard holds text, so
-                    // leave a marker there; the notes themselves stay in Lyra's clipboard.
-                    ctx.copy_text("lyra: notes".to_string());
-                }
-            }
             Action::Arrow { dy, .. } if dy != 0 => {
                 let last = self.project.channels.len().saturating_sub(1);
                 self.ui.selected =
@@ -469,23 +497,21 @@ fn pattern_position(p: &Project, pat: usize, playhead: f64, song_mode: bool) -> 
         .map(|c| (playhead - c.start as f64) % loop_len)
 }
 
-/// Did this click land on this window (and not on something drawn above it)?
-///
-/// ⚠ Never call other `ctx` methods *inside* a `ctx.input(|i| …)` closure: egui
-/// holds its (non-re-entrant) context lock for the whole closure, so a nested
-/// `ctx.layer_id_at()` waits on itself forever. Read first, then ask.
-fn clicked_inside(ctx: &egui::Context, resp: &egui::Response) -> bool {
-    let press = ctx.input(|i| {
-        (i.pointer.primary_pressed() || i.pointer.secondary_pressed()).then(|| i.pointer.interact_pos()).flatten()
+/// A folded side panel: a thin strip with an arrow; click it to unfold.
+fn folded_strip(ctx: &egui::Context, id: &'static str, left: bool, hint: &str, open: &mut bool) {
+    let panel = if left { egui::SidePanel::left(id) } else { egui::SidePanel::right(id) };
+    panel.resizable(false).exact_width(14.0).frame(egui::Frame::default().fill(theme::PANEL)).show(ctx, |ui| {
+        let r = ui.max_rect();
+        let resp = ui.interact(r, Id::new(id).with("unfold"), egui::Sense::click());
+        let c = egui::pos2(r.center().x, r.top() + 20.0);
+        let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+        let d = if left { 1.0 } else { -1.0 }; // the arrow points to where the panel unfolds
+        let pts = vec![c + egui::vec2(-1.5 * d, -4.0), c + egui::vec2(2.5 * d, 0.0), c + egui::vec2(-1.5 * d, 4.0)];
+        ui.painter().add(egui::Shape::line(pts, theme::stroke(1.5, ink)));
+        if resp.on_hover_text(hint).clicked() {
+            *open = true;
+        }
     });
-    press.is_some_and(|pos| ctx.layer_id_at(pos) == Some(resp.layer_id))
-}
-
-/// Like [`clicked_inside`], for docked panels. They all share egui's one
-/// background layer, so the layer alone can't tell them apart: the press must
-/// also land inside this panel's own rect.
-fn clicked_in_panel(ctx: &egui::Context, resp: &egui::Response) -> bool {
-    clicked_inside(ctx, resp) && ctx.input(|i| i.pointer.interact_pos()).is_some_and(|pos| resp.rect.contains(pos))
 }
 
 impl eframe::App for LyraApp {
@@ -507,6 +533,11 @@ impl eframe::App for LyraApp {
         if std::mem::take(&mut self.dev.autoplay) && !playing {
             actions.push(Action::TogglePlay);
         }
+
+        self.ui.visible = [Some(self.areas[0].editor), self.bottom_open.then_some(self.areas[1].editor)]
+            .into_iter()
+            .flatten()
+            .collect();
 
         // ── Top bar ──
         egui::TopBottomPanel::top("transport")
@@ -533,7 +564,7 @@ impl eframe::App for LyraApp {
             });
 
         self.status_bar(ctx);
-        // ── Docked: browser (left), arranger (centre), piano roll (below it) ──
+        // ── Docked: browser (left), plugin rack (right), the two areas (centre) ──
         self.docked(ctx, playing, playhead, &mut actions);
 
         // ── Windows ──
@@ -544,7 +575,7 @@ impl eframe::App for LyraApp {
         if self.frame_count <= 2 {
             ctx.request_repaint();
         } else {
-            self.windows(ctx, playing, playhead);
+            self.windows(ctx);
         }
 
         // Bring a window forward when something asked for it ("open the piano
@@ -556,23 +587,18 @@ impl eframe::App for LyraApp {
         }
         if let Some((f, frames)) = self.raising {
             let id = match f {
-                Focus::Rack => "rack",
-                Focus::Piano if self.piano.maximized => "piano-full",
-                Focus::Piano => "piano",
                 Focus::Editor => "editor",
-                Focus::Playlist => "playlist",
-                Focus::Mixer => "mixer",
                 Focus::Effect => "effect",
             };
             ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, Id::new(id)));
-            self.ui.focus = f;
             self.raising = (frames > 1).then_some((f, frames - 1));
             ctx.request_repaint();
         }
 
         // ── Actions ──
+        let target = self.key_target(ctx);
         for a in actions {
-            self.apply(ctx, a, playing);
+            self.apply(ctx, a, playing, target);
         }
 
         // ── Push changes to the engine ──
@@ -591,11 +617,10 @@ impl eframe::App for LyraApp {
 }
 
 impl LyraApp {
-    /// The docked views. The browser sits on the left (collapses to a thin
-    /// strip); the arranger is always in the centre, with the piano roll
-    /// docked below it on a draggable split. The piano roll's "full screen"
-    /// hides the arranger; F5 / F7 show and hide each view (if both are
-    /// hidden, the arranger stays: it's the main view).
+    /// The docked layout: browser on the left and plugin rack on the right
+    /// (both fold to a thin strip), and the centre split into two areas, each
+    /// showing the editor picked in its top-left corner (see `areas`). The
+    /// bottom area opens and folds with F5 / F7 / F9.
     fn docked(&mut self, ctx: &egui::Context, playing: bool, playhead: f64, actions: &mut Vec<Action>) {
         let m = theme::m();
         let panel = egui::Frame::default().fill(theme::PANEL).inner_margin(Margin::same(8));
@@ -620,135 +645,125 @@ impl LyraApp {
                     crate::browser::show(ui, &mut self.project, &mut self.history, &mut self.ui);
                 });
         } else {
-            // Folded: a thin strip you click to unfold.
-            egui::SidePanel::left("browser-folded")
-                .resizable(false)
-                .exact_width(14.0)
-                .frame(egui::Frame::default().fill(theme::PANEL))
-                .show(ctx, |ui| {
-                    let r = ui.max_rect();
-                    let resp = ui.interact(r, Id::new("browser-unfold"), egui::Sense::click());
-                    let c = egui::pos2(r.center().x, r.top() + 20.0);
-                    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
-                    let pts = vec![c + egui::vec2(-1.5, -4.0), c + egui::vec2(2.5, 0.0), c + egui::vec2(-1.5, 4.0)];
-                    ui.painter().add(egui::Shape::line(pts, theme::stroke(1.5, ink)));
-                    if resp.on_hover_text("Unfold the browser  (F4)").clicked() {
-                        self.ui.show_browser = true;
-                    }
-                });
+            folded_strip(ctx, "browser-folded", true, "Unfold the browser  (F4)", &mut self.ui.show_browser);
         }
 
-        // ── Arranger and piano roll ──
+        // ── Plugin rack (right) ──
+        if self.ui.show_plugins {
+            egui::SidePanel::right("plugins")
+                .resizable(true)
+                .default_width(300.0)
+                .width_range(220.0..=520.0)
+                .frame(panel)
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("PLUGINS").size(m.text_small).color(theme::TEXT_DIM));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button(">").on_hover_text("Fold the plugin rack away  (F6)").clicked() {
+                                self.ui.show_plugins = false;
+                            }
+                        });
+                    });
+                    rack::plugins(ui, &mut self.project, &mut self.history, &mut self.ui);
+                });
+        } else {
+            folded_strip(ctx, "plugins-folded", false, "Unfold the plugin rack  (F6)", &mut self.ui.show_plugins);
+        }
+
+        // ── The two areas ──
+        // Ask-to-show from widgets ("open the piano roll"): fine if an area
+        // already shows it, otherwise the bottom area opens on it.
+        if let Some(e) = self.ui.show.take() {
+            let shown = self.areas[0].editor == e || (self.bottom_open && self.areas[1].editor == e);
+            if !shown {
+                self.areas[1].editor = e;
+                self.bottom_open = true;
+            }
+        }
+        let avail = ctx.available_rect().height();
+        let r = egui::TopBottomPanel::bottom("area-bottom")
+            .resizable(true)
+            .default_height(avail * 0.5)
+            .height_range(160.0..=(avail - 160.0).max(160.0))
+            .frame(panel)
+            .show_animated(ctx, self.bottom_open, |ui| self.area_ui(1, ui, playing, playhead, actions));
+        self.area_rects[1] = r.map(|r| r.response.rect).filter(|_| self.bottom_open);
+        let r =
+            egui::CentralPanel::default().frame(panel).show(ctx, |ui| self.area_ui(0, ui, playing, playhead, actions));
+        self.area_rects[0] = Some(r.response.rect);
+    }
+
+    /// One area: its header (editor picker + the editor's own controls) and
+    /// the editor, with this area's own memory for it.
+    fn area_ui(&mut self, i: usize, ui: &mut egui::Ui, playing: bool, playhead: f64, actions: &mut Vec<Action>) {
         let pat = self.ui.pattern.min(self.project.patterns.len() - 1);
         self.ui.pattern = pat;
         let has_channel = !self.project.channels.is_empty();
         let ch = self.ui.selected.min(self.project.channels.len().saturating_sub(1));
         self.ui.selected = ch;
-        let piano = self.ui.show_piano && has_channel;
-        let arranger = !piano || (self.ui.show_playlist && !self.piano.maximized);
-
-        if piano {
-            let ch_id = self.project.channels[ch].id;
-            if self.piano_framed != Some((pat, ch_id)) {
-                self.piano.frame_notes(self.project.patterns[pat].notes(ch_id));
-                self.piano_framed = Some((pat, ch_id));
-            }
-        } else {
-            self.piano_framed = None;
-        }
-
-        if piano && arranger {
-            let avail = ctx.available_rect().height();
-            let r = egui::TopBottomPanel::bottom("piano-dock")
-                .resizable(true)
-                .default_height(avail * 0.5)
-                .height_range(200.0..=(avail - 160.0).max(200.0))
-                .frame(panel)
-                .show(ctx, |ui| self.piano_view(ui, playing, playhead, actions));
-            if clicked_in_panel(ctx, &r.response) {
-                self.ui.focus = Focus::Piano;
-            }
-        }
-        let r = egui::CentralPanel::default().frame(panel).show(ctx, |ui| {
-            if arranger {
-                self.arranger_view(ui, playing, playhead, actions);
-            } else {
-                self.piano_view(ui, playing, playhead, actions);
-            }
-        });
-        if clicked_in_panel(ctx, &r.response) {
-            self.ui.focus = if arranger { Focus::Playlist } else { Focus::Piano };
-        }
-    }
-
-    fn arranger_view(&mut self, ui: &mut egui::Ui, playing: bool, playhead: f64, actions: &mut Vec<Action>) {
-        let song_playhead = if self.ui.song_mode { playhead } else { 0.0 };
-        let song_playing = playing && self.ui.song_mode;
-        self.playlist.show(
-            ui,
-            &mut self.project,
-            &mut self.history,
-            &mut self.ui,
-            song_playhead,
-            song_playing,
-            actions,
-        );
-    }
-
-    fn piano_view(&mut self, ui: &mut egui::Ui, playing: bool, playhead: f64, actions: &mut Vec<Action>) {
-        let pat = self.ui.pattern;
-        let ch = self.ui.selected;
         // Where we are *inside the current pattern* (see `pattern_position`).
         let local = pattern_position(&self.project, pat, playhead, self.ui.song_mode);
         let live_keys = self.ui.live_keys.clone();
-        self.piano.show(
-            ui,
-            &mut self.project,
-            &mut self.history,
-            pat,
-            ch,
-            local.unwrap_or(playhead),
-            playing && local.is_some(),
-            &live_keys,
-            actions,
-        );
+        let LyraApp { areas, project: p, history: h, ui: st, .. } = self;
+        let area = &mut areas[i];
+        ui.push_id(("area", i), |ui| {
+            ui.horizontal(|ui| {
+                areas::picker(ui, &mut area.editor);
+                ui.add_space(6.0);
+                match area.editor {
+                    Editor::Arrangement => area.playlist.toolbar(ui, p, st),
+                    Editor::PianoRoll if has_channel => {
+                        let color = theme::channel_color(p.channels[ch].color);
+                        area.piano.toolbar(ui, p, h, color, ch);
+                    }
+                    _ => {}
+                }
+            });
+            ui.add_space(4.0);
+            match area.editor {
+                Editor::Arrangement => {
+                    let song_playhead = if st.song_mode { playhead } else { 0.0 };
+                    let song_playing = playing && st.song_mode;
+                    area.playlist.show(ui, p, h, st, song_playhead, song_playing, actions);
+                }
+                Editor::PianoRoll if has_channel => {
+                    let ch_id = p.channels[ch].id;
+                    if area.framed != Some((pat, ch_id)) {
+                        area.piano.frame_notes(p.patterns[pat].notes(ch_id));
+                        area.framed = Some((pat, ch_id));
+                    }
+                    let (tick, sounding) = (local.unwrap_or(playhead), playing && local.is_some());
+                    area.piano.show(ui, p, h, pat, ch, tick, sounding, &live_keys, actions);
+                }
+                Editor::PianoRoll => {
+                    ui.label(RichText::new("Add an instrument in the plugin rack first.").color(theme::TEXT_DIM));
+                }
+                Editor::Mixer => {
+                    // The mixer's strips sit on the background, like a rack frame.
+                    ui.painter().rect_filled(ui.available_rect_before_wrap(), cr(0), theme::BG);
+                    egui::ScrollArea::vertical().id_salt("mixer-v").show(ui, |ui| crate::mixer::show(ui, p, h, st));
+                }
+                Editor::Steps => {
+                    let play_step = local.filter(|_| playing).map(|t| (t / TICKS_PER_STEP as f64) as u32);
+                    egui::ScrollArea::vertical()
+                        .id_salt("steps-v")
+                        .show(ui, |ui| rack::show(ui, p, h, st, play_step, true));
+                }
+            }
+        });
     }
 
-    /// The floating windows: channel rack, piano roll, instrument editor.
-    fn windows(&mut self, ctx: &egui::Context, playing: bool, playhead: f64) {
-        let pat = self.ui.pattern.min(self.project.patterns.len() - 1);
-        self.ui.pattern = pat;
-        // Where we are *inside the current pattern*: the playhead itself in pattern
-        // mode; in song mode, the position within a clip of this pattern (if one is playing).
-        let local = pattern_position(&self.project, pat, playhead, self.ui.song_mode);
-        let play_step = local.filter(|_| playing).map(|t| (t / TICKS_PER_STEP as f64) as u32);
+    /// The floating windows: instrument editor, effect, design panel.
+    fn windows(&mut self, ctx: &egui::Context) {
         let frame = egui::Frame::window(&ctx.style())
             .fill(theme::PANEL)
             .stroke(theme::stroke(1.0, theme::LINE))
             .corner_radius(cr(5))
             .inner_margin(Margin::same(8));
 
-        // Default layout (first open only): rack top-left, editor top-right,
-        // piano roll filling the lower part of the screen.
+        // Default spots (first open only): instrument editor top-right, effect below it.
         let screen = ctx.screen_rect();
         let piano_top = (screen.height() * 0.42).max(300.0);
-        let piano_size = [screen.width() - 32.0, (screen.height() - piano_top - 28.0).max(240.0)];
-
-        let mut open = self.ui.show_rack;
-        let rack_win = egui::Window::new("Instrument rack")
-            .id(Id::new("rack"))
-            .open(&mut open)
-            // Right of the docked browser, over the arranger.
-            .default_pos([250.0, 70.0])
-            .resizable(false)
-            .frame(frame)
-            .show(ctx, |ui| {
-                rack::show(ui, &mut self.project, &mut self.history, &mut self.ui, play_step);
-            });
-        self.ui.show_rack = open;
-        if rack_win.is_some_and(|w| clicked_inside(ctx, &w.response)) {
-            self.ui.focus = Focus::Rack;
-        }
 
         let has_channel = !self.project.channels.is_empty();
         let ch = self.ui.selected.min(self.project.channels.len().saturating_sub(1));
@@ -756,7 +771,7 @@ impl LyraApp {
 
         if self.ui.show_editor && has_channel {
             let mut open = true;
-            let win = egui::Window::new(format!("Instrument · {}", self.project.channels[ch].name))
+            egui::Window::new(format!("Instrument · {}", self.project.channels[ch].name))
                 .id(Id::new("editor"))
                 .open(&mut open)
                 .pivot(egui::Align2::RIGHT_TOP)
@@ -767,26 +782,6 @@ impl LyraApp {
                     editor::show(ui, &mut self.project, &mut self.history, ch);
                 });
             self.ui.show_editor = open;
-            if win.is_some_and(|w| clicked_inside(ctx, &w.response)) {
-                self.ui.focus = Focus::Editor;
-            }
-        }
-
-        if self.ui.show_mixer {
-            let mut open = true;
-            let win = egui::Window::new("Mixer")
-                .id(Id::new("mixer"))
-                .open(&mut open)
-                .default_pos([16.0, piano_top])
-                .default_size([piano_size[0], piano_size[1]])
-                .resizable(true)
-                // The mixer's background is the rack frame its strips sit in.
-                .frame(frame.fill(theme::BG))
-                .show(ctx, |ui| crate::mixer::show(ui, &mut self.project, &mut self.history, &mut self.ui));
-            self.ui.show_mixer = open;
-            if win.is_some_and(|w| clicked_inside(ctx, &w.response)) {
-                self.ui.focus = Focus::Mixer;
-            }
         }
 
         // The effect window: one effect from a mixer track's rack, like the
@@ -797,7 +792,7 @@ impl LyraApp {
             let mut open = true;
             let name =
                 lyra_dsp::effects::info(&self.project.mixer[t].effects[i].effect).map_or("Missing effect", |e| e.name);
-            let win = egui::Window::new(format!("{name} · {}", self.project.mixer[t].name))
+            egui::Window::new(format!("{name} · {}", self.project.mixer[t].name))
                 .id(Id::new("effect"))
                 .open(&mut open)
                 .pivot(egui::Align2::RIGHT_TOP)
@@ -807,9 +802,6 @@ impl LyraApp {
                 .show(ctx, |ui| crate::mixer::effect_editor(ui, &mut self.project, &mut self.history, t, i));
             if !open {
                 self.ui.effect = None;
-            }
-            if win.is_some_and(|w| clicked_inside(ctx, &w.response)) {
-                self.ui.focus = Focus::Effect;
             }
         }
 
@@ -876,7 +868,7 @@ impl LyraApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
                             RichText::new(format!(
-                                "Z-M Q-P play · -/= octave {:+} · [ ] pattern · F6 F7 F8 windows",
+                                "Z-M Q-P play · -/= octave {:+} · [ ] pattern · F5 F7 F9 bottom area · F4 F6 panels",
                                 self.keyboard.octave
                             ))
                             .small()
@@ -893,7 +885,7 @@ impl LyraApp {
 /// without this a press on the edge also placed a clip or a note.
 pub fn on_panel_edge(ctx: &egui::Context) -> bool {
     let pos = ctx.input(|i| i.pointer.interact_pos());
-    ["browser", "piano-dock"].iter().any(|panel| {
+    ["browser", "plugins", "area-bottom"].iter().any(|panel| {
         ctx.read_response(Id::new(*panel).with("__resize")).is_some_and(|r| {
             r.hovered() || r.dragged() || r.is_pointer_button_down_on() || pos.is_some_and(|p| r.rect.contains(p))
         })

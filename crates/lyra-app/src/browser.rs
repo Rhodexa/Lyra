@@ -71,7 +71,6 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
                         bypass: false,
                     });
                     st.effect = Some((t, p.mixer[t].effects.len() - 1));
-                    st.show_mixer = true;
                     st.raise = Some(Focus::Effect);
                 }
             }
@@ -86,8 +85,7 @@ fn add_instrument(p: &mut Project, h: &mut History, st: &mut UiState, name: &str
     h.checkpoint(p);
     p.add_channel(name, id, params);
     st.selected = p.channels.len() - 1;
-    st.show_rack = true;
-    st.raise = Some(Focus::Rack);
+    st.show_plugins = true;
 }
 
 /// A section header (click to fold). Returns whether it's open.
