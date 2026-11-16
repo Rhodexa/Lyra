@@ -48,6 +48,8 @@ const SS_DETUNE: [f32; 6] = [-0.110, -0.063, -0.020, 0.020, 0.062, 0.107];
 
 /// Padding inside a plate.
 const PAD: f32 = 8.0;
+/// Space between the matrix and its OUT column.
+const OUT_GAP: f32 = 6.0;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -134,7 +136,7 @@ struct Sizes {
     key_h: f32,
     /// Inner width of the left column (preset row, tabs, page).
     left_w: f32,
-    /// Inner width of the right column (logo, matrix, voice).
+    /// Inner width of the right column (voice, matrix, logo).
     right_w: f32,
     preset_h: f32,
     tab_h: f32,
@@ -153,20 +155,21 @@ fn sizes() -> Sizes {
     let key_h = m.control_h;
     let gap = 6.0;
     let display_h = 104.0;
-    // One small knob per matrix cell, with a little air around it.
-    let mcell = vec2(m.knob_small + 10.0, m.knob_small + 5.0);
-    let mlabel_w = 50.0;
+    // Matrix cells: square, side by side with no gaps, a small knob in each.
+    let mcell = Vec2::splat(m.knob_small + 6.0);
+    let mlabel_w = 30.0;
     let header_h = 16.0;
     Sizes {
         cell_w,
         cell_h,
         key_h,
         left_w: 7.0 * cell_w + 6.0 * 5.0,
-        right_w: mlabel_w + 6.0 * (mcell.x + 3.0) + 6.0 + mcell.x,
-        preset_h: m.control_h + 12.0,
+        right_w: mlabel_w + 6.0 * mcell.x + OUT_GAP + mcell.x,
+        // Tall enough that the voice plate beside it (preset row + tabs) fits a row of knobs.
+        preset_h: m.control_h + 14.0,
         tab_h: m.control_h + 8.0,
         page_h: key_h + gap + 32.0 + gap + display_h + gap + 2.0 * cell_h + gap,
-        matrix_h: header_h + 3.0 + 6.0 * (mcell.y + 3.0) - 3.0,
+        matrix_h: header_h + 2.0 + 6.0 * mcell.y,
         mcell,
         mlabel_w,
         display_h,
@@ -194,20 +197,20 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     let preset_r = Rect::from_min_size(pos2(x0, y0), vec2(lw, preset_h));
     let tabs_r = Rect::from_min_size(pos2(x0, preset_r.bottom() + seam), vec2(lw, s.tab_h));
     let page_r = Rect::from_min_size(pos2(x0, tabs_r.bottom() + seam), vec2(lw, page_h));
-    // The rack's dark frame is L-shaped: the top-right corner is open window
-    // surface, and the logo sits on it with no frame of its own.
+    // Right column: voice beside the preset row and tabs, the matrix beside the
+    // page, and below it open window surface where the logo sits, unframed.
+    let voice_r = Rect::from_min_max(pos2(x1, y0), pos2(x1 + rw, tabs_r.bottom()));
+    let matrix_r = Rect::from_min_size(pos2(x1, page_r.top()), vec2(rw, outer(s.matrix_h)));
     let frame_left = Rect::from_min_max(rack.min, pos2(x1, rack.bottom()));
-    let frame_right = Rect::from_min_max(pos2(x1 - seam, page_r.top() - seam), rack.max);
+    let frame_right = Rect::from_min_max(pos2(x1 - seam, rack.top()), pos2(rack.right(), matrix_r.bottom() + seam));
     ui.painter().rect_filled(frame_left, cr(3), theme::BG);
     ui.painter().rect_filled(frame_right, cr(3), theme::BG);
-    let logo_r = Rect::from_min_max(pos2(x1, rack.top()), pos2(rack.right(), page_r.top() - seam));
-    let matrix_r = Rect::from_min_size(pos2(x1, page_r.top()), vec2(rw, outer(s.matrix_h)));
-    let voice_r = Rect::from_min_max(pos2(x1, matrix_r.bottom() + seam), pos2(x1 + rw, page_r.bottom()));
+    let logo_r = Rect::from_min_max(pos2(x1, matrix_r.bottom() + seam), pos2(rack.right(), rack.bottom()));
 
     plate(ui, preset_r, "fm-preset-plate", |ui| preset_row(ui, &mut ed));
-    tabs(ui, tabs_r, &ed, &mut page, &used);
+    tabs(ui, tabs_r, &mut page);
     plate(ui, page_r, ("fm-page-plate", page.index()), |ui| match page {
-        Page::Op(i) => op_page(ui, &mut ed, i, &used),
+        Page::Op(i) => op_page(ui, &mut ed, i),
         Page::Filter => filter_page(ui, &mut ed),
         Page::Lfo => lfo_page(ui, &mut ed),
     });
@@ -229,11 +232,10 @@ fn plate<R>(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash, add: impl FnOnce(&
 
 /// The Fluttersine wordmark, straight on the window's surface (no plate, no frame).
 fn logo(ui: &mut Ui, r: Rect) {
-    let [w, h] = theme::FLUTTERSINE_LOGO_SIZE;
-    let room = r.shrink2(vec2(10.0, 2.0));
+    let (tex, [w, h]) = theme::fluttersine_logo(ui.ctx());
+    let room = r.shrink(2.0 * PAD);
     let scale = (room.width() / w as f32).min(room.height() / h as f32);
     let img = Rect::from_center_size(room.center(), vec2(w as f32, h as f32) * scale);
-    let tex = theme::fluttersine_logo(ui.ctx());
     ui.painter().image(tex, img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
     ui.interact(r, Id::new("fm-logo"), Sense::hover()).on_hover_text("Fluttersine · FM synthesizer");
 }
@@ -358,46 +360,12 @@ fn used_ops(ed: &Ed) -> [bool; OPS] {
     used
 }
 
-/// "carrier · modulates OP2" etc.
-fn op_status(ed: &Ed, i: usize, used: &[bool; OPS]) -> String {
-    if !used[i] {
-        return "silent: raise OUT or send it into an operator".into();
-    }
-    let mut parts = Vec::new();
-    if ed.v(p::out(i)) > 0.0 {
-        parts.push("carrier".to_string());
-    }
-    let targets: Vec<String> =
-        (0..OPS).filter(|&j| j != i && ed.v(p::matrix(i, j)) > 0.0).map(|j| format!("OP{}", j + 1)).collect();
-    if !targets.is_empty() {
-        parts.push(format!("modulates {}", targets.join(", ")));
-    }
-    let fb = ed.v(p::matrix(i, i));
-    if fb > 0.0 {
-        parts.push(format!("feedback {:.0}%", fb * 100.0));
-    }
-    parts.join(" · ")
-}
-
-/// Is this page doing anything audible? (Its tab's light is on.)
-fn page_active(ed: &Ed, page: Page, used: &[bool; OPS]) -> bool {
-    match page {
-        Page::Op(i) => used[i],
-        Page::Filter => ed.on(p::LP_ON) || ed.on(p::HP_ON),
-        Page::Lfo => {
-            ed.v(p::VIBRATO) > 0.0
-                || (ed.on(p::LP_ON) && ed.v(p::F_LFO) != 0.0)
-                || (0..OPS).any(|i| ed.v(op(i, p::OP_PWM)) > 0.0)
-        }
-    }
-}
-
 // ───────────────────────────────────────────────────────────── tabs
 
 /// The tabs: square blocks side by side, a seam apart. The open one is a
-/// brighter plate with a thin line of its light on top; each block's LED says
-/// whether that part is doing anything.
-fn tabs(ui: &mut Ui, r: Rect, ed: &Ed, page: &mut Page, used: &[bool; OPS]) {
+/// brighter plate with a thin line of its light on top. (Whether an operator is
+/// in use shows once, on the matrix's LEDs.)
+fn tabs(ui: &mut Ui, r: Rect, page: &mut Page) {
     let seam = theme::SEAM;
     let w = (r.width() - seam * (Page::COUNT - 1) as f32) / Page::COUNT as f32;
     let font = FontId::proportional(theme::m().text_small + 1.0);
@@ -418,17 +386,8 @@ fn tabs(ui: &mut Ui, r: Rect, ed: &Ed, page: &mut Page, used: &[bool; OPS]) {
         if open {
             painter.rect_filled(Rect::from_min_size(b.min, vec2(b.width(), 2.0)), cr(0), pg.light().mid);
         }
-        // LED + name, centred together.
-        let name = pg.name();
         let ink = if open || resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
-        let galley = painter.layout_no_wrap(name, font.clone(), ink);
-        let led_d = 11.0;
-        let total = led_d + 6.0 + galley.size().x;
-        let left = b.center().x - total * 0.5;
-        let cy = b.center().y + 1.0;
-        let lit = page_active(ed, pg, used).then_some(pg.light());
-        theme::led(painter, pos2(left + led_d * 0.5, cy), led_d, lit, false);
-        painter.galley(pos2(left + led_d + 6.0, cy - galley.size().y * 0.5), galley, ink);
+        painter.text(b.center() + vec2(0.0, 1.0), Align2::CENTER_CENTER, pg.name(), font.clone(), ink);
         if resp.clicked() {
             *page = pg;
         }
@@ -457,42 +416,42 @@ fn draw_glyph(painter: &egui::Painter, rect: Rect, glyph: Glyph, color: Color32,
 
 // ───────────────────────────────────────────────────────────── operator page
 
-/// A page's top line: its name, a short status, and switches on the right.
-fn page_header(ui: &mut Ui, title: &str, status: &str, right: impl FnOnce(&mut Ui)) {
+/// A page's top line: just its switches. (No title: the tab already says
+/// which page this is, and the matrix shows what an operator does.)
+fn switch_row(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
     let s = sizes();
     ui.allocate_ui_with_layout(vec2(s.left_w, s.key_h), Layout::left_to_right(Align::Center), |ui| {
-        ui.label(RichText::new(title).color(theme::TEXT).strong());
-        ui.label(RichText::new(status).small().color(theme::TEXT_DIM));
-        ui.with_layout(Layout::right_to_left(Align::Center), right);
+        ui.spacing_mut().item_spacing.x = 8.0;
+        add(ui);
     });
 }
 
-/// Merged radio keys with text legends; returns the clicked option.
+/// Merged radio keys with text legends; returns the clicked option. Every
+/// switch in the editor has the same key size, whatever its labels say.
 fn switch(ui: &mut Ui, labels: &[&str], chosen: usize, light: Light, hint: &str) -> Option<usize> {
     let s = sizes();
-    let w = labels.iter().map(|l| l.len()).max().unwrap_or(4) as f32 * 6.2 + 20.0;
+    let w = 6.0 * 6.2 + 20.0; // room for six letters
     let options: Vec<(Legend, Light)> = labels.iter().map(|l| (Legend::Text(l), light)).collect();
     widgets::radio_keys(ui, vec2(w, s.key_h), &options, chosen, hint)
 }
 
-fn op_page(ui: &mut Ui, ed: &mut Ed, i: usize, used: &[bool; OPS]) {
+fn op_page(ui: &mut Ui, ed: &mut Ed, i: usize) {
     let s = sizes();
     let lt = OP_LIGHTS[i];
     let c = lt.mid;
     let at = |k: usize| op(i, k);
     let wave = ed.choice(at(p::OP_WAVE));
 
-    let status = op_status(ed, i, used);
     let (phase, pitch) = (ed.choice(at(p::OP_RESET)), ed.choice(at(p::OP_FIXED)));
     let mut set = None;
-    page_header(ui, &format!("OPERATOR {}", i + 1), &status, |ui| {
-        let hint = "Free: the phase keeps running between notes.\nReset: every note starts the wave from zero (punchier, repeatable).";
-        if let Some(k) = switch(ui, &["FREE", "RESET"], phase, lt, hint) {
-            set = Some((at(p::OP_RESET), k));
-        }
+    switch_row(ui, |ui| {
         let hint = "Ratio: follows the key you play (×1 = the note).\nFixed: always the same frequency, for bells, drums and metal.";
         if let Some(k) = switch(ui, &["RATIO", "FIXED"], pitch, lt, hint) {
             set = Some((at(p::OP_FIXED), k));
+        }
+        let hint = "Free: the phase keeps running between notes.\nReset: every note starts the wave from zero (punchier, repeatable).";
+        if let Some(k) = switch(ui, &["FREE", "RESET"], phase, lt, hint) {
+            set = Some((at(p::OP_RESET), k));
         }
     });
     if let Some((id, k)) = set {
@@ -536,7 +495,6 @@ fn op_page(ui: &mut Ui, ed: &mut Ed, i: usize, used: &[bool; OPS]) {
             1.8,
             Some(inner.center().y),
         );
-        lcd_caption(&painter, rect, labels[wave.min(labels.len() - 1)]);
         envelope(
             ui,
             ed,
@@ -581,18 +539,17 @@ fn filter_page(ui: &mut Ui, ed: &mut Ed) {
     let (lp, hp) = (ed.on(p::LP_ON), ed.on(p::HP_ON));
     let slope = ed.choice(p::LP_SLOPE);
     let mut set = None;
-    page_header(ui, "FILTER", "", |ui| {
-        if widgets::key(ui, vec2(78.0, s.key_h), Legend::Text("HIGH-PASS"), hp, lt, "High-pass on / off").clicked() {
-            set = Some((p::HP_ON, if hp { 0 } else { 1 }));
+    switch_row(ui, |ui| {
+        if widgets::key(ui, vec2(78.0, s.key_h), Legend::Text("LOW-PASS"), lp, lt, "Low-pass on / off").clicked() {
+            set = Some((p::LP_ON, if lp { 0 } else { 1 }));
         }
-        ui.add_space(6.0);
         ui.add_enabled_ui(lp, |ui| {
             if let Some(k) = switch(ui, &["12 dB", "24 dB"], slope, lt, "Low-pass slope") {
                 set = Some((p::LP_SLOPE, k));
             }
         });
-        if widgets::key(ui, vec2(78.0, s.key_h), Legend::Text("LOW-PASS"), lp, lt, "Low-pass on / off").clicked() {
-            set = Some((p::LP_ON, if lp { 0 } else { 1 }));
+        if widgets::key(ui, vec2(78.0, s.key_h), Legend::Text("HIGH-PASS"), hp, lt, "High-pass on / off").clicked() {
+            set = Some((p::HP_ON, if hp { 0 } else { 1 }));
         }
     });
     if let Some((id, k)) = set {
@@ -739,7 +696,7 @@ fn lfo_page(ui: &mut Ui, ed: &mut Ed) {
     let shape = ed.choice(p::LFO_SHAPE);
     let retrig = ed.choice(p::LFO_RETRIG);
     let mut set = None;
-    page_header(ui, "LFO", "", |ui| {
+    switch_row(ui, |ui| {
         if let Some(k) = switch(ui, &["FREE", "RETRIG"], retrig, lt, "Retrigger: the LFO restarts on every note.") {
             set = Some((p::LFO_RETRIG, k));
         }
@@ -782,7 +739,7 @@ fn lfo_page(ui: &mut Ui, ed: &mut Ed) {
     ui.horizontal(|ui| {
         for (i, lt) in OP_LIGHTS.iter().enumerate() {
             let warps = ed.choice(op(i, p::OP_WAVE)) <= W_PULSE;
-            knob_cell(ui, ed, op(i, p::OP_PWM), &format!("OP{} PWM", i + 1), lt.mid, warps)
+            knob_cell(ui, ed, op(i, p::OP_PWM), &format!("PWM {}", i + 1), lt.mid, warps)
         }
     });
 }
@@ -793,9 +750,9 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, page: &mut Page, used: &[bool; OPS]) {
     let s = sizes();
     let small = FontId::proportional(theme::m().text_small);
     let origin = ui.cursor().min;
-    let col_x =
-        |col: usize| origin.x + s.mlabel_w + col as f32 * (s.mcell.x + 3.0) + if col == OPS { 6.0 } else { 0.0 };
-    let row_y = |row: usize| origin.y + 19.0 + row as f32 * (s.mcell.y + 3.0);
+    // Square cells, packed edge to edge.
+    let col_x = |col: usize| origin.x + s.mlabel_w + col as f32 * s.mcell.x + if col == OPS { OUT_GAP } else { 0.0 };
+    let row_y = |row: usize| origin.y + 18.0 + row as f32 * s.mcell.y;
     let (area, _) = ui.allocate_exact_size(vec2(s.right_w, s.matrix_h), Sense::hover());
     ui.interact(Rect::from_min_size(area.min, vec2(s.mlabel_w - 4.0, 16.0)), Id::new("fm-matrix-help"), Sense::hover())
         .on_hover_text(
@@ -810,8 +767,9 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, page: &mut Page, used: &[bool; OPS]) {
     }
     for row in 0..OPS {
         let lt = OP_LIGHTS[row];
-        // Row name: LED + "OP1"; the open operator's name sits on a brighter plate.
-        let name_r = Rect::from_min_size(pos2(origin.x, row_y(row)), vec2(s.mlabel_w - 6.0, s.mcell.y));
+        // Row name: the operator's LED (lit = it can be heard) and its number;
+        // the open operator's row name sits on a brighter plate.
+        let name_r = Rect::from_min_size(pos2(origin.x, row_y(row)), vec2(s.mlabel_w - 3.0, s.mcell.y));
         let resp = ui.interact(name_r, Id::new(("fm-matrix-row", row)), Sense::click());
         let open = *page == Page::Op(row);
         let painter = ui.painter();
@@ -825,19 +783,19 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, page: &mut Page, used: &[bool; OPS]) {
         if open {
             painter.rect_filled(Rect::from_min_size(name_r.min, vec2(2.0, name_r.height())), cr(0), lt.mid);
         }
-        let led_c = pos2(name_r.left() + 12.0, name_r.center().y);
+        let led_c = pos2(name_r.left() + 9.0, name_r.center().y);
         theme::led(painter, led_c, 10.0, used[row].then_some(lt), false);
         let ink = if open || resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
-        painter.text(led_c + vec2(9.0, 0.0), Align2::LEFT_CENTER, format!("OP{}", row + 1), small.clone(), ink);
-        if resp.on_hover_text("Open this operator").clicked() {
+        painter.text(led_c + vec2(8.0, 0.0), Align2::LEFT_CENTER, (row + 1).to_string(), small.clone(), ink);
+        if resp.on_hover_text(format!("Operator {}: click to open it", row + 1)).clicked() {
             *page = Page::Op(row);
         }
         for col in 0..=OPS {
             let id = if col == OPS { p::out(row) } else { p::matrix(row, col) };
             let cell = Rect::from_min_size(pos2(col_x(col), row_y(row)), s.mcell);
             if col == row {
-                // Feedback: the diagonal sits in a faint recess.
-                ui.painter().rect_filled(cell.shrink(1.0), cr(4), theme::mix(theme::PANEL, theme::BG, 0.3));
+                // Feedback: the diagonal sits in a faint, square recess.
+                ui.painter().rect_filled(cell, cr(0), theme::mix(theme::PANEL, theme::BG, 0.3));
             }
             let knob = Rect::from_center_size(cell.center(), Vec2::splat(theme::m().knob_small));
             let mut v = ed.v(id);
@@ -938,16 +896,6 @@ fn lcd_grid() -> Color32 {
 /// The shading under a curve on an LCD.
 fn lcd_fill() -> Color32 {
     theme::LCD_INK.gamma_multiply(0.09)
-}
-
-fn lcd_caption(painter: &egui::Painter, rect: Rect, text: &str) {
-    painter.text(
-        rect.left_bottom() + vec2(9.0, -3.0),
-        Align2::LEFT_BOTTOM,
-        text,
-        FontId::proportional(theme::m().text_small - 1.0),
-        theme::LCD_INK_DIM,
-    );
 }
 
 /// A draggable point on an LCD: dark ink; `solid` = filled, else a ring.

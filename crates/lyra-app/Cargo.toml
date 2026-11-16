@@ -18,3 +18,5 @@ egui.workspace = true
 eframe.workspace = true
 cpal.workspace = true
 rfd.workspace = true
+# Already in the tree through eframe; decodes the Fluttersine logo (live-reloaded while you edit it).
+png = "0.18"
