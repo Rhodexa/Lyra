@@ -170,6 +170,10 @@ pub fn apply(ctx: &Context) {
     style.spacing.button_padding = egui::vec2(8.0, 3.0);
     style.spacing.interact_size = egui::vec2(m.control_h, m.control_h);
     style.spacing.combo_height = 320.0;
+    // Panel and window edges are easier to grab, and the docked panels' grab
+    // zone now reaches their content (padding is 8 pt): aiming at the split
+    // line can't land in the arranger and place a clip by accident.
+    style.interaction.resize_grab_radius_side = 9.0;
 
     let v = &mut style.visuals;
     *v = egui::Visuals::dark();

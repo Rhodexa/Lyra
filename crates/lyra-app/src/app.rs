@@ -843,3 +843,15 @@ impl LyraApp {
             });
     }
 }
+
+/// True while the pointer is on (or dragging) one of the docked panels'
+/// resize edges. The arranger and piano roll read the mouse directly, so
+/// without this a press on the edge also placed a clip or a note.
+pub fn on_panel_edge(ctx: &egui::Context) -> bool {
+    let pos = ctx.input(|i| i.pointer.interact_pos());
+    ["browser", "piano-dock"].iter().any(|panel| {
+        ctx.read_response(Id::new(*panel).with("__resize")).is_some_and(|r| {
+            r.hovered() || r.dragged() || r.is_pointer_button_down_on() || pos.is_some_and(|p| r.rect.contains(p))
+        })
+    })
+}

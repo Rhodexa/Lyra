@@ -49,14 +49,26 @@ fn knob_with(
     let mut n = n0;
     let before = *value;
 
+    // During a drag the knob keeps its own raw, continuous position and only
+    // the value it outputs is quantised (choice knobs snap to steps). Rounding
+    // the position itself every frame threw away any movement smaller than
+    // half a step per frame, so stepped knobs barely moved.
+    let raw_id = resp.id.with("raw");
     if resp.dragged() {
         let fine = ui.input(|i| i.modifiers.shift);
-        n -= resp.drag_delta().y * if fine { 0.0015 } else { 0.006 };
+        let raw: f32 = if resp.drag_started() { n0 } else { ui.data(|d| d.get_temp(raw_id)).unwrap_or(n0) };
+        n = (raw - resp.drag_delta().y * if fine { 0.0015 } else { 0.006 }).clamp(0.0, 1.0);
+        ui.data_mut(|d| d.insert_temp(raw_id, n));
     }
     if resp.hovered() {
         let wheel = ui.input(|i| i.raw_scroll_delta.y);
         if wheel != 0.0 {
-            n += wheel.signum() * 0.02;
+            n = if info.is_choice() {
+                // One notch = one step.
+                info.to_normalized((value.round() + wheel.signum()).clamp(info.min, info.max))
+            } else {
+                n + wheel.signum() * 0.02
+            };
         }
     }
     // Only convert back when the knob actually moved: the round trip through the

@@ -308,7 +308,9 @@ impl PianoRoll {
 
         // ── Layout ──
         let size = ui.available_size().max(vec2(320.0, 220.0));
-        let (rect, _resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
+        // Hover only: the editor reads the mouse itself, and a sensing canvas would
+        // win egui's hit test over the docked panels' resize edges.
+        let (rect, _resp) = ui.allocate_exact_size(size, Sense::hover());
         // The vertical bar runs down the right of the grid, thinner than the overview.
         let vbar_w = (m.overview_h * 0.6).round();
         let right = rect.right() - vbar_w - 2.0;
@@ -336,7 +338,7 @@ impl PianoRoll {
                 i.zoom_delta(),
             )
         });
-        let hovering = ui.rect_contains_pointer(rect);
+        let hovering = ui.rect_contains_pointer(rect) && !crate::app::on_panel_edge(ui.ctx());
         let pattern_ticks = (p.patterns[pat].play_length() * TICKS_PER_STEP) as f32;
         let overview = Overview { rect: overview_r, area: grid, content: pattern_ticks };
         let over_bars = pos.is_some_and(|p| overview_r.contains(p) || vbar.rect.contains(p));
