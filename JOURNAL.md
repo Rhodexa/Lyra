@@ -16,10 +16,7 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Wishes
 *Things you wish Lyra did.*
-- [ ] ~ Docked layout (Blender / VS Code style areas that don't overlap) for the main views; it would also save the title bars (~5rem). Floating windows stay for plugins.
 - [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
-- [ ] ~ Start building docked windows for essential panels. Eg:
-Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons/hotkeys) | Inspector (Potentially Channel rack and other things might be dockable there). Plugins still maintain their floating nature due to rendering limitations.
 
 ## Sound
 *Ears-only notes: "kick too clicky", "pad needs more air", "this preset slaps".*
@@ -58,6 +55,12 @@ Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Docked layout → `0cbc1e5`**
+- [x] ~ Docked layout (Blender / VS Code style areas that don't overlap) for the main views; it would also save the title bars (~5rem). Floating windows stay for plugins.
+- [x] ~ Start building docked windows for essential panels. Eg:
+Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons/hotkeys) | Inspector (Potentially Channel rack and other things might be dockable there). Plugins still maintain their floating nature due to rendering limitations.
+  *→ browser docked left (F4, folds to a strip), arranger docked in the centre, piano roll docked under it on a draggable split (or alone via its full-screen button). Rack, mixer, instrument and effect windows stay floating. The right-hand panel waits until something earns it (ideas: the mixer's effect rack, the selected instrument's main controls, a sample editor for voice lines).*
 
 **Playlist → `e16fe3a`**
 - [x] Putting Arrenger/Playlist up to date with the visual language. 
