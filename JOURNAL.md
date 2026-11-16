@@ -12,7 +12,6 @@ what to work on and folds the items into the plan when the time is right.
 ## Friction
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
 // - [ ] ? bug or missing?
-- [ ] 
 
 ## Wishes
 *Things you wish Lyra did.*
@@ -55,6 +54,14 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Crash + journal → `e8f2956`**
+- [x] *(chat)* The sound engine crashed while adding a reverb: `index out of bounds: the len is 192000 but the index is 192000` (effects.rs:370)
+  *→ the Delay, not the reverb: a float rounding wrapped its read position to one past the end of its 4-second buffer. Fixed, with a test that reproduces it. And now any bug inside the audio thread is caught: Lyra restarts the sound engine by itself and tells you.*
+- [x] ? bug. Notes that start before the end of the pattern but end after it don't extend the pattern's length
+  *→ a real bug, or rather a choice of mine that was wrong: the length counted where notes start, not where they end. Now a note crossing the bar line adds the bar (ending exactly on the line doesn't).*
+- [x] Note strips be slightly trasnlucent to see when they step on eachother, or hide themselves. Other that,
+  *→ notes are slightly see-through now. (Your note ends with "Other that," — I think the rest of the sentence got lost.)*
 
 **Docked layout → `0cbc1e5`**
 - [x] ~ Docked layout (Blender / VS Code style areas that don't overlap) for the main views; it would also save the title bars (~5rem). Floating windows stay for plugins.
