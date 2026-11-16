@@ -442,6 +442,13 @@ fn clicked_inside(ctx: &egui::Context, resp: &egui::Response) -> bool {
     press.is_some_and(|pos| ctx.layer_id_at(pos) == Some(resp.layer_id))
 }
 
+/// Like [`clicked_inside`], for docked panels. They all share egui's one
+/// background layer, so the layer alone can't tell them apart: the press must
+/// also land inside this panel's own rect.
+fn clicked_in_panel(ctx: &egui::Context, resp: &egui::Response) -> bool {
+    clicked_inside(ctx, resp) && ctx.input(|i| i.pointer.interact_pos()).is_some_and(|pos| resp.rect.contains(pos))
+}
+
 impl eframe::App for LyraApp {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         files::backup(&self.project); // quitting never loses anything
@@ -556,7 +563,8 @@ impl LyraApp {
 
         // ── Browser ──
         if self.ui.show_browser {
-            let r = egui::SidePanel::left("browser")
+            // (Clicking the browser leaves keyboard focus where it was.)
+            egui::SidePanel::left("browser")
                 .resizable(true)
                 .default_width(230.0)
                 .width_range(160.0..=480.0)
@@ -572,9 +580,6 @@ impl LyraApp {
                     });
                     crate::browser::show(ui, &mut self.project, &mut self.history, &mut self.ui);
                 });
-            if clicked_inside(ctx, &r.response) {
-                self.ui.focus = Focus::Rack;
-            }
         } else {
             // Folded: a thin strip you click to unfold.
             egui::SidePanel::left("browser-folded")
@@ -621,7 +626,7 @@ impl LyraApp {
                 .height_range(200.0..=(avail - 160.0).max(200.0))
                 .frame(panel)
                 .show(ctx, |ui| self.piano_view(ui, playing, playhead, actions));
-            if clicked_inside(ctx, &r.response) {
+            if clicked_in_panel(ctx, &r.response) {
                 self.ui.focus = Focus::Piano;
             }
         }
@@ -632,7 +637,7 @@ impl LyraApp {
                 self.piano_view(ui, playing, playhead, actions);
             }
         });
-        if clicked_inside(ctx, &r.response) {
+        if clicked_in_panel(ctx, &r.response) {
             self.ui.focus = if arranger { Focus::Playlist } else { Focus::Piano };
         }
     }

@@ -908,20 +908,26 @@ impl PianoRoll {
             let r = v.note_rect(n).shrink2(vec2(0.5, 0.5));
             let selected = self.selection.contains(&i);
             let playing = playhead.is_some_and(|t| (n.start as f64..(n.start + n.len) as f64).contains(&t));
-            let mut fill = theme::mix(theme::PANEL_HI, color, 0.45 + 0.55 * n.velocity);
+            // Flat keys: a dark recess outline, a flat fill in the channel's
+            // light (softer notes dimmer), brighter while sounding. Selected
+            // notes get a white ring outside the dark one, which reads on any
+            // note colour and on the grid.
+            let mut fill = theme::shade(color, 0.6 + 0.4 * n.velocity);
             if playing {
-                fill = theme::mix(fill, Color32::WHITE, 0.25);
+                fill = theme::shade(fill, 1.12);
             }
-            painter.rect_filled(r, cr(2), fill);
-            let edge = if selected { stroke(1.5, theme::TEXT) } else { stroke(1.0, theme::LINE) };
-            painter.rect_stroke(r, cr(2), edge, StrokeKind::Inside);
+            painter.rect_filled(r, cr(3), theme::KEY_RECESS);
+            painter.rect_filled(r.shrink(1.0), cr(2), fill);
+            if selected {
+                painter.rect_stroke(r, cr(3), stroke(1.5, theme::TEXT), StrokeKind::Outside);
+            }
             if r.width() > 30.0 && v.row_h >= 10.0 {
                 painter.text(
                     r.left_center() + vec2(4.0, 0.0),
                     Align2::LEFT_CENTER,
                     theory::note_name(n.key),
                     FontId::proportional(9.0),
-                    theme::INSET,
+                    theme::key_ink(true),
                 );
             }
         }
