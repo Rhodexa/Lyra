@@ -60,7 +60,7 @@ Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
-**Scrollbars → (hash)**
+**Scrollbars → `19c4d0c`**
 - [x] hover over horizontal scroll bar should zoom. That zoom is better to have its origin at the viewport's left edge rather than the cursor's location
   *→ wheel over the overview bar zooms, keeping the view's left edge still (piano roll and playlist). Ctrl+wheel over the grid still zooms around the mouse.*
 - [x] Missing left virtical scroll bars, same style. These would immediatly make it also Touch friendly.
