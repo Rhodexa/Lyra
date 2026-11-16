@@ -3,6 +3,7 @@
 mod app;
 mod audio;
 mod bridge;
+mod browser;
 mod demo;
 mod design;
 mod devtools;

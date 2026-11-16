@@ -17,7 +17,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 |---|---|
 | Play / stop | `Space` |
 | Project | click the logo, or `Ctrl+N` new · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as |
-| Windows | `F5` playlist · `F6` instrument rack · `F7` piano roll · `F8` instrument editor (also the WINDOWS module in the top bar) |
+| Views | Docked: `F4` browser (left, folds to a strip) · `F5` arranger (centre) · `F7` piano roll (docked under the arranger; its "full screen" hides the arranger). Floating: `F6` instrument rack · `F8` instrument editor · `F9` mixer. Also the window keys in the top bar. |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
 | Patterns | `[` / `]` or the picker in the top bar (new, clone) |
@@ -26,7 +26,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Knobs | drag (Shift = fine), wheel, double-click to reset |
 | UI size | `F12` Design panel, or `Ctrl+=` / `Ctrl+-` / `Ctrl+0` zoom (`LYRA_ZOOM=1.3` to start bigger) |
 
-**Playlist** (`F5`; `L` or PAT/SONG switches what Space plays)
+**Arranger / playlist** (`F5`; `L` or SONG/PAT switches what Space plays)
 
 | Do | How |
 |---|---|

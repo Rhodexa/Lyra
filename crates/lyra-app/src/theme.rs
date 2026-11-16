@@ -1,12 +1,10 @@
 //! Lyra's look, in one place.
 //!
-//! Flat & minimal, but never plastic: everything sits on a faint grain, the
-//! workspace carries a barely-there seigaiha wave pattern, and colour comes
-//! from pastels with mint as the hero. No wood, no chrome.
-//!
-//! The textures here are generated in code as *placeholders*. Swapping them
-//! for hand-made art later means replacing `grain_image` / `pattern_image`
-//! with loaded PNGs — nothing else changes.
+//! The control library from the user's HTML studies (see the "Material"
+//! section): neutral charcoal surfaces on a dark background, silicone keys,
+//! round LEDs, backlit LCDs, recessed wells. Pastel lights with mint as the
+//! hero; text is soft white, never mint (mint text reads like a VFD).
+//! No wood, no chrome.
 
 use egui::{Color32, ColorImage, Context, FontId, Painter, Rect, Stroke, TextStyle, TextureHandle};
 
@@ -207,10 +205,10 @@ pub fn apply(ctx: &Context) {
     ctx.set_style(style);
 }
 
-/// The textures every surface is printed on, plus the logo.
+/// Textures: the logo. (The workspace's grain and seigaiha wave textures
+/// went away when the docked panels came to cover the whole workspace;
+/// they live in git history before the docking commit.)
 pub struct Textures {
-    grain: TextureHandle,
-    pattern: TextureHandle,
     logo: TextureHandle,
 }
 
@@ -220,16 +218,9 @@ pub struct Textures {
 pub const LOGO_48: &[u8] = include_bytes!("../assets/logo_48.rgba");
 pub const ICON_128: &[u8] = include_bytes!("../assets/icon_128.rgba");
 
-const GRAIN: usize = 128;
-/// Seigaiha scale radius in pixels.
-const WAVE_R: usize = 22;
-
 impl Textures {
     pub fn new(ctx: &Context) -> Self {
-        let opts = egui::TextureOptions::NEAREST_REPEAT;
         Self {
-            grain: ctx.load_texture("lyra-grain", grain_image(), opts),
-            pattern: ctx.load_texture("lyra-seigaiha", pattern_image(), egui::TextureOptions::LINEAR_REPEAT),
             logo: ctx.load_texture(
                 "lyra-logo",
                 ColorImage::from_rgba_unmultiplied([48, 48], LOGO_48),
@@ -241,74 +232,6 @@ impl Textures {
     pub fn logo(&self) -> egui::TextureId {
         self.logo.id()
     }
-
-    /// Fine paper grain. Paint it *before* a surface's content.
-    pub fn grain(&self, painter: &Painter, rect: Rect) {
-        tile(painter, &self.grain, rect, GRAIN as f32, GRAIN as f32);
-    }
-
-    /// Faint wave pattern for big empty areas (the workspace).
-    pub fn pattern(&self, painter: &Painter, rect: Rect) {
-        tile(painter, &self.pattern, rect, (WAVE_R * 2) as f32, WAVE_R as f32);
-    }
-}
-
-/// Tiles a texture over `rect`, anchored to the rect's own corner — so each
-/// surface has its own grain. (Anchoring to the screen made a window's grain line
-/// up with the background's, which read as "the window is see-through".)
-fn tile(painter: &Painter, tex: &TextureHandle, rect: Rect, w: f32, h: f32) {
-    let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(rect.width() / w, rect.height() / h));
-    painter.image(tex.id(), rect, uv, Color32::WHITE);
-}
-
-/// Placeholder: mostly dark specks, a few faint light ones.
-fn grain_image() -> ColorImage {
-    let mut rng = 0x9e3779b9u32;
-    let mut px = Vec::with_capacity(GRAIN * GRAIN * 4);
-    for _ in 0..GRAIN * GRAIN {
-        rng ^= rng << 13;
-        rng ^= rng >> 17;
-        rng ^= rng << 5;
-        let v = (rng >> 24) as u8;
-        let (c, a) = if v.is_multiple_of(4) { (255, v / 64) } else { (0, v / 26) };
-        px.extend_from_slice(&[c, c, c, a]);
-    }
-    ColorImage::from_rgba_unmultiplied([GRAIN, GRAIN], &px)
-}
-
-/// Placeholder: seigaiha (overlapping wave scales), computed per pixel.
-/// Rows of circles every R/2, alternate rows shifted by R; lower rows cover upper ones.
-fn pattern_image() -> ColorImage {
-    let r = WAVE_R as f32;
-    let (w, h) = (WAVE_R * 2, WAVE_R);
-    let mut px = Vec::with_capacity(w * h * 4);
-    for y in 0..h {
-        for x in 0..w {
-            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
-            let mut alpha = 0u8;
-            // Candidate rows whose circle top can reach this pixel, nearest (topmost-drawn) first.
-            let k_max = ((fy + r) / (r / 2.0)).floor() as i32;
-            let k_min = (fy / (r / 2.0)).ceil() as i32;
-            for k in (k_min..=k_max).rev() {
-                let cy = k as f32 * r / 2.0;
-                let cx_off = if k.rem_euclid(2) == 1 { r } else { 0.0 };
-                let mut dx = (fx - cx_off).rem_euclid(2.0 * r);
-                if dx > r {
-                    dx -= 2.0 * r;
-                }
-                let d = (dx * dx + (fy - cy) * (fy - cy)).sqrt();
-                if d <= r {
-                    // Three concentric rings per scale.
-                    let ring = (d / (r / 3.0)).fract();
-                    alpha = if ring > 0.9 || d > r - 1.0 { 26 } else { 0 };
-                    break;
-                }
-            }
-            // Dark engraving, not light lines: present when you look, gone when you don't.
-            px.extend_from_slice(&[0, 0, 0, alpha]);
-        }
-    }
-    ColorImage::from_rgba_unmultiplied([w, h], &px)
 }
 
 // ── Material: the control library ───────────────────────────────────────────

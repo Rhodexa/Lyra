@@ -160,7 +160,8 @@ pub fn show(
         module(ui, |ui| {
             ui.spacing_mut().item_spacing.x = gap;
             for (icon, open, hint, action) in [
-                (Icon::Playlist, st.show_playlist, "Playlist  (F5)", Action::TogglePlaylist),
+                (Icon::Browser, st.show_browser, "Browser  (F4)", Action::ToggleBrowser),
+                (Icon::Playlist, st.show_playlist, "Arranger  (F5)", Action::TogglePlaylist),
                 (Icon::Rack, st.show_rack, "Instrument rack  (F6)", Action::ToggleRack),
                 (Icon::Piano, st.show_piano, "Piano roll  (F7)", Action::TogglePiano),
                 (Icon::Knob, st.show_editor, "Instrument  (F8)", Action::ToggleEditor),

@@ -245,6 +245,7 @@ pub enum Icon {
     Knob,
     Playlist,
     Mixer,
+    Browser,
 }
 
 /// Draw an icon centred in `r` (a key's face). Hand-drawn vectors until the
@@ -313,6 +314,17 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, bg: Colo
             for (x, cap) in [(-4.5, -2.0), (0.0, 3.0), (4.5, -4.5)] {
                 p.line_segment([c + vec2(x, -6.0) * u, c + vec2(x, 6.0) * u], stroke(u.max(1.0), ink));
                 p.rect_filled(Rect::from_center_size(c + vec2(x, cap) * u, vec2(3.6, 2.6) * u), cr(1), ink);
+            }
+        }
+        Icon::Browser => {
+            // A panel on the left with a list beside it.
+            let frame = Rect::from_center_size(c, vec2(13.0, 11.0) * u);
+            p.rect_stroke(frame, cr((1.5 * u) as u8), line, egui::StrokeKind::Middle);
+            let split = frame.left() + 4.5 * u;
+            p.vline(split, frame.y_range(), line);
+            for k in 0..3 {
+                let y = frame.top() + (2.8 + k as f32 * 2.7) * u;
+                p.hline(split + 2.0 * u..=frame.right() - 2.0 * u, y, stroke(u.max(1.0), ink));
             }
         }
         Icon::Playlist => {
