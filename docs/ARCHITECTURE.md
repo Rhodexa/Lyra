@@ -123,7 +123,7 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   editor (`editor.rs`) is generated from `params()` and `groups()` alone, so any
   future plugin gets an editor for free.
 * Hand-made editors take over below the editor's header for one instrument id.
-  Lyra FM (Fluttersine) has one: `fm_editor.rs` (operator tabs, always-visible
+  Fluttersine (id `lyra.fm`) has one: `fm_editor.rs` (operator tabs, always-visible
   matrix, draggable envelopes and filter curve). It still only edits `params`.
 
 ## Music theory

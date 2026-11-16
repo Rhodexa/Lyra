@@ -103,7 +103,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     let all = [lyra_plugin::ParamGroup { name: "", ids: 0..params.len() as u32 }];
     let groups = if groups.is_empty() { &all[..] } else { groups };
     if groups.len() > 4 {
-        // Big instruments (Lyra FM: 6 operators + matrix + filter…) get one tab
+        // Big instruments (Fluttersine: 6 operators + matrix + filter…) get one tab
         // per group instead of a wall of knobs.
         let tab_id = egui::Id::new(("editor-tab", instrument.as_str()));
         let mut tab = ui.ctx().data(|d| d.get_temp::<usize>(tab_id)).unwrap_or(0).min(groups.len() - 1);

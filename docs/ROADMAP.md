@@ -28,7 +28,7 @@ built before the line it depends on.
 - [x] Built-in FX: EQ, Filter, Compressor, Delay (tempo-synced, ping-pong), Reverb, Pump (beat-synced ducking)
 - [ ] WAV export (the same engine, offline)
 - [ ] Sends / sidechain from a real kick
-- [x] Lyra FM (port of Fluttersine: 6 operators, 6×6 matrix, filters, LFO, 18 presets) with a tabbed editor
+- [x] Fluttersine (FM synth, id `lyra.fm`; port of the original: 6 operators, 6×6 matrix, filters, LFO, 18 presets) with a tabbed editor
 - [ ] Library folder for samples/plugins + "collect into project" (with M4)
 - Mixer inserts with effect slots; per-channel meters
 - Built-in FX: EQ, compressor, delay, reverb, filter, sidechain pump

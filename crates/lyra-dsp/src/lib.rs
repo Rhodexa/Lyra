@@ -27,7 +27,8 @@ pub const INSTRUMENTS: &[InstrumentInfo] = &[
     InstrumentInfo { id: "lyra.clap", name: "Clap", melodic: false },
     InstrumentInfo { id: "lyra.hat", name: "Hi-hat", melodic: false },
     InstrumentInfo { id: "lyra.synth", name: "Lyra Synth", melodic: true },
-    InstrumentInfo { id: "lyra.fm", name: "Lyra FM", melodic: true },
+    // The id stays "lyra.fm" (saved projects use it); the name is the synth's own.
+    InstrumentInfo { id: "lyra.fm", name: "Fluttersine", melodic: true },
 ];
 
 pub fn info(id: &str) -> Option<&'static InstrumentInfo> {
@@ -217,7 +218,7 @@ pub const PRESETS: &[Preset] = &[
     },
 ];
 
-/// Presets for one instrument (Lyra Synth's list, or Lyra FM's own table).
+/// Presets for one instrument (Lyra Synth's list, or Fluttersine's own table).
 pub fn presets_for(instrument: &str) -> Vec<Preset> {
     let synth = PRESETS.iter().filter(|p| p.instrument == instrument).map(|p| Preset { ..*p });
     let fm = fm::FM_PRESETS.iter().filter(|_| instrument == "lyra.fm").map(|&(name, values)| Preset {

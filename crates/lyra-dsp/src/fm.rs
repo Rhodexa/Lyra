@@ -1,4 +1,4 @@
-//! "Lyra FM": a six-operator FM (phase-modulation) synth, ported from the owner's
+//! Fluttersine (id `lyra.fm`): a six-operator FM (phase-modulation) synth, ported from the owner's
 //! Fluttersine web synth.
 //!
 //! ```text
@@ -1444,7 +1444,7 @@ impl Fm {
 
 impl Plugin for Fm {
     fn name(&self) -> &'static str {
-        "Lyra FM"
+        "Fluttersine"
     }
     fn params(&self) -> &'static [ParamInfo] {
         &FM_PARAMS
