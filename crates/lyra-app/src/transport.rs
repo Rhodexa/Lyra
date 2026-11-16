@@ -65,13 +65,14 @@ pub fn show(
         // The deck: what plays, play / stop, where we are, the beat.
         module(ui, |ui| {
             ui.spacing_mut().item_spacing.x = gap;
-            // SONG / PAT, a radio: SONG (mint) plays the playlist, PAT (Lyra's gold)
-            // plays the current pattern. L toggles between them.
+            // SONG / PAT: shows which mode is on (SONG mint, PAT Lyra's gold).
+            // Clicking either face toggles: a click here means "switch", and
+            // having to aim for the right face only gets in the way. L too.
             let options = [(Legend::Text("SONG"), theme::L_MINT), (Legend::Text("PAT"), theme::L_AMBER)];
-            let hint = "SONG: play the whole playlist · PAT: play the current pattern  ( L toggles )";
+            let hint = "Click to switch: SONG plays the playlist, PAT the current pattern  ( L )";
             let chosen = if st.song_mode { 0 } else { 1 };
-            if let Some(i) = widgets::radio_keys(ui, vec2(big * 1.3, big), &options, chosen, hint) {
-                actions.push(Action::SongMode(i == 0));
+            if widgets::radio_keys(ui, vec2(big * 1.3, big), &options, chosen, hint).is_some() {
+                actions.push(Action::SongMode(!st.song_mode));
             }
             ui.add_space(gap);
             if widgets::key(
