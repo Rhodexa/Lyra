@@ -41,10 +41,7 @@ pub const MINT_DEEP: Color32 = Color32::from_rgb(0x55, 0x79, 0x6b);
 /// Lyra's eyes. Use sparingly.
 pub const GOLD: Color32 = Color32::from_rgb(0xf5, 0xdb, 0xa5);
 pub const ROSE: Color32 = Color32::from_rgb(0xff, 0xc5, 0xdf);
-pub const SKY: Color32 = Color32::from_rgb(0xbf, 0xce, 0xfb);
 pub const LAVENDER: Color32 = Color32::from_rgb(0xdc, 0xc6, 0xfa);
-pub const PEACH: Color32 = Color32::from_rgb(0xff, 0xd0, 0xb4);
-pub const BUTTER: Color32 = Color32::from_rgb(0xf5, 0xdb, 0xa5);
 
 /// A channel's colour (its light's mid tone), cycled.
 pub fn channel_color(i: usize) -> Color32 {
@@ -236,6 +233,27 @@ impl Textures {
     pub fn logo(&self) -> egui::TextureId {
         self.logo.id()
     }
+}
+
+/// Fluttersine's logo (from the original synth's splash screen), cropped to its
+/// artwork and stored at twice the size the FM editor shows it. Regenerate with:
+/// `im = Image.open("fluttersine_logo.png").convert("RGBA"); im = im.crop(im.split()[3].point(lambda v: 255 if v > 8 else 0).getbbox())`
+/// `im.resize((238, 176), Image.LANCZOS).tobytes()`
+const FLUTTERSINE_LOGO: &[u8] = include_bytes!("../assets/fluttersine_logo.rgba");
+pub const FLUTTERSINE_LOGO_SIZE: [usize; 2] = [238, 176];
+
+/// The Fluttersine logo texture, loaded the first time an FM editor opens.
+pub fn fluttersine_logo(ctx: &Context) -> egui::TextureId {
+    let id = egui::Id::new("fluttersine-logo");
+    // Copy the handle out before loading: egui's context lock is not re-entrant.
+    let cached = ctx.data(|d| d.get_temp::<TextureHandle>(id));
+    let handle = cached.unwrap_or_else(|| {
+        let image = ColorImage::from_rgba_unmultiplied(FLUTTERSINE_LOGO_SIZE, FLUTTERSINE_LOGO);
+        let handle = ctx.load_texture("fluttersine-logo", image, egui::TextureOptions::LINEAR);
+        ctx.data_mut(|d| d.insert_temp(id, handle.clone()));
+        handle
+    });
+    handle.id()
 }
 
 // ── Material: the control library ───────────────────────────────────────────

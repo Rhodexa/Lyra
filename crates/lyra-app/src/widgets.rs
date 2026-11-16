@@ -429,12 +429,6 @@ pub fn radio_keys(
     clicked
 }
 
-/// A square icon key, `control_h` big, lit mint when `active`.
-pub fn icon_button(ui: &mut Ui, icon: Icon, active: bool, hint: &str) -> Response {
-    let h = theme::m().control_h;
-    key(ui, vec2(h, h), Legend::Icon(icon), active, theme::L_MINT, hint)
-}
-
 /// LCD text, laid out tight like the studies (letter-spacing -0.06em).
 fn lcd_galley(ui: &Ui, text: &str, size: f32) -> std::sync::Arc<egui::Galley> {
     let job = egui::text::LayoutJob::single_section(
