@@ -98,7 +98,7 @@ pub fn show(
             let d = (big * 0.36).round();
             let (r, _) = ui.allocate_exact_size(vec2(d + 4.0, big), Sense::hover());
             let beat = (step % STEPS_PER_BAR) / 4;
-            let flash = playing && step % 4 == 0;
+            let flash = playing && step.is_multiple_of(4);
             let light = if beat == 0 { theme::L_AMBER } else { theme::L_MINT };
             theme::led(ui.painter(), r.center(), d, flash.then_some(light), false);
         });

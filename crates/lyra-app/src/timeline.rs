@@ -1,6 +1,6 @@
-//! Pieces shared by every horizontal time editor (playlist, piano roll):
-//! the overview bar (drag the thumb to pan, drag its ends to zoom) and the
-//! bar ruler.
+//! Pieces shared by the time editors (playlist, piano roll): the overview
+//! bar (drag the thumb to pan, drag its ends to zoom, wheel over it to zoom),
+//! its vertical twin for rows (`VBar`), and the bar ruler.
 
 use crate::theme::{self, cr, stroke};
 use egui::{pos2, Align2, FontId, Painter, Pos2, Rect, StrokeKind};
@@ -98,6 +98,14 @@ impl Overview {
         }
     }
 
+    /// Wheel over the bar: zoom, keeping the view's left edge where it is
+    /// (zooming around the mouse made the content slide away under you).
+    pub fn wheel_zoom(&self, v: &mut TimeView, wheel_y: f32, min_ppt: f32, max_ppt: f32) {
+        if wheel_y != 0.0 {
+            v.zoom_at(self.area, (wheel_y * 0.004).exp(), self.area.left(), min_ppt, max_ppt);
+        }
+    }
+
     pub fn paint(&self, painter: &Painter, v: &TimeView, hot: bool) {
         painter.rect_filled(self.rect, cr(3), theme::INSET);
         let thumb = self.thumb(v);
@@ -150,6 +158,100 @@ pub fn paint_ruler(painter: &Painter, v: &TimeView, ruler: Rect, end: f32, playh
             painter.add(egui::Shape::convex_polygon(tri, theme::MINT, egui::Stroke::NONE));
             let line = if playing { theme::MINT } else { theme::MINT.gamma_multiply(0.35) };
             painter.vline(x, grid.y_range(), stroke(1.0, line));
+        }
+    }
+}
+
+/// The vertical view of a row editor (piano keys, playlist tracks), in rows:
+/// `start` rows scrolled off the top, `visible` rows on screen, `total` rows.
+#[derive(Clone, Copy, Debug)]
+pub struct RowView {
+    pub start: f32,
+    pub visible: f32,
+    pub total: f32,
+}
+
+/// A vertical-bar drag in progress.
+#[derive(Clone, Copy, Debug)]
+pub enum VDrag {
+    /// Grabbed the thumb's middle, `grab` rows below its top.
+    Pan { grab: f32 },
+    /// Grabbed one end; the other end stays where it was.
+    Edge { top: bool, fixed: f32 },
+}
+
+/// The overview bar's vertical twin, beside a row editor: drag the thumb to
+/// scroll, drag an end to zoom the rows, click the track to jump there, wheel
+/// over it to zoom (keeping the top row still). Thinner than the overview.
+pub struct VBar {
+    pub rect: Rect,
+}
+
+impl VBar {
+    fn span(&self, v: &RowView) -> f32 {
+        v.total.max(v.start + v.visible).max(1.0)
+    }
+
+    fn at(&self, v: &RowView, y: f32) -> f32 {
+        ((y - self.rect.top()) / self.rect.height() * self.span(v)).max(0.0)
+    }
+
+    pub fn thumb(&self, v: &RowView) -> Rect {
+        let span = self.span(v);
+        let t = self.rect.top() + v.start / span * self.rect.height();
+        let b = self.rect.top() + (v.start + v.visible) / span * self.rect.height();
+        Rect::from_min_max(
+            pos2(self.rect.left() + 1.0, t),
+            pos2(self.rect.right() - 1.0, b.max(t + 14.0).min(self.rect.bottom())),
+        )
+    }
+
+    pub fn press(&self, v: &mut RowView, pos: Pos2) -> VDrag {
+        let thumb = self.thumb(v);
+        if (pos.y - thumb.top()).abs() < 6.0 {
+            VDrag::Edge { top: true, fixed: v.start + v.visible }
+        } else if (pos.y - thumb.bottom()).abs() < 6.0 {
+            VDrag::Edge { top: false, fixed: v.start }
+        } else if thumb.y_range().contains(pos.y) {
+            VDrag::Pan { grab: self.at(v, pos.y) - v.start }
+        } else {
+            v.start = (self.at(v, pos.y) - v.visible * 0.5).clamp(0.0, (v.total - v.visible).max(0.0));
+            VDrag::Pan { grab: v.visible * 0.5 }
+        }
+    }
+
+    /// Follow a drag. Edge drags change `visible` (the caller turns that into
+    /// a row height), between `min_rows` and `max_rows`.
+    pub fn drag(&self, v: &mut RowView, drag: VDrag, pos: Pos2, min_rows: f32, max_rows: f32) {
+        let at = self.at(v, pos.y);
+        match drag {
+            VDrag::Pan { grab } => v.start = (at - grab).clamp(0.0, (v.total - v.visible).max(0.0)),
+            VDrag::Edge { top, fixed } => {
+                let (a, b) = if top { (at.min(fixed - min_rows), fixed) } else { (fixed, at.max(fixed + min_rows)) };
+                v.visible = (b - a).clamp(min_rows, max_rows);
+                v.start = if top { (fixed - v.visible).max(0.0) } else { a.max(0.0) };
+            }
+        }
+    }
+
+    /// Wheel over the bar: zoom the rows, keeping the top row still.
+    pub fn wheel_zoom(&self, v: &mut RowView, wheel_y: f32, min_rows: f32, max_rows: f32) {
+        if wheel_y != 0.0 {
+            v.visible = (v.visible * (-wheel_y * 0.004).exp()).clamp(min_rows, max_rows);
+        }
+    }
+
+    pub fn paint(&self, painter: &Painter, v: &RowView, hot: bool) {
+        painter.rect_filled(self.rect, cr(3), theme::INSET);
+        let thumb = self.thumb(v);
+        let fill = if hot { theme::mix(theme::RAISED, theme::MINT, 0.15) } else { theme::RAISED };
+        painter.rect_filled(thumb, cr(4), fill);
+        painter.rect_stroke(thumb, cr(4), stroke(1.0, theme::LINE), StrokeKind::Inside);
+        // Grips on both ends: "drag me to zoom".
+        for y in [thumb.top() + 5.0, thumb.bottom() - 5.0] {
+            for dy in [-1.5, 1.5] {
+                painter.hline(thumb.shrink(4.0).x_range(), y + dy, stroke(1.0, theme::MINT.gamma_multiply(0.6)));
+            }
         }
     }
 }

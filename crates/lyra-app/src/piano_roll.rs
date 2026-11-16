@@ -25,6 +25,7 @@
 
 use crate::keys::Action;
 use crate::theme::{self, cr, stroke};
+use crate::timeline::{self, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag};
 use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, StrokeKind, Ui};
 use lyra_model::{theory, ChannelId, Chord, History, Note, Project, Scale, TICKS_PER_BAR, TICKS_PER_STEP};
 
@@ -58,15 +59,10 @@ enum Drag {
     Velocity,
     Seek,
     Audition,
-    /// Overview bar: dragging the thumb's middle (grab offset in ticks from its left end).
-    Pan {
-        grab: f32,
-    },
-    /// Overview bar: dragging one end of the thumb; the other end stays put.
-    ZoomEdge {
-        left: bool,
-        fixed: f32,
-    },
+    /// The overview bar (pan or zoom), shared with the playlist.
+    Overview(OverviewDrag),
+    /// The vertical bar beside the grid (scroll or zoom the keys).
+    VBar(VDrag),
     /// Middle mouse: grab the canvas and move it.
     Hand {
         last: Pos2,
@@ -74,10 +70,8 @@ enum Drag {
 }
 
 pub struct PianoRoll {
-    /// Tick at the left edge of the grid.
-    scroll_x: f32,
-    /// Pixels per tick.
-    ppt: f32,
+    /// Horizontal view: tick at the left edge, pixels per tick.
+    time: TimeView,
     /// Key value at the top edge (fractional = smooth scrolling).
     view_top: f32,
     row_h: f32,
@@ -107,8 +101,7 @@ pub struct PianoRoll {
 impl Default for PianoRoll {
     fn default() -> Self {
         Self {
-            scroll_x: 0.0,
-            ppt: 0.9,
+            time: TimeView { scroll: 0.0, ppt: 0.9 },
             view_top: 76.0,
             row_h: theme::Metrics::DEFAULT.row_h,
             snap: TICKS_PER_STEP,
@@ -159,9 +152,6 @@ impl View {
         let y = self.y(n.key);
         Rect::from_min_max(pos2(self.x(n.start as f32), y), pos2(self.x((n.start + n.len) as f32), y + self.row_h))
     }
-    fn visible_ticks(&self) -> f32 {
-        self.grid.width() / self.ppt
-    }
 }
 
 fn hit(view: &View, notes: &[Note], pos: Pos2) -> Option<usize> {
@@ -189,7 +179,7 @@ impl PianoRoll {
         if let Some(top) = notes.iter().map(|n| n.key).max() {
             self.view_top = top as f32 + 8.0;
         }
-        self.scroll_x = 0.0;
+        self.time.scroll = 0.0;
     }
 
     fn sanitize(&mut self, pat: usize, ch: ChannelId, len: usize, melodic: bool) {
@@ -319,15 +309,19 @@ impl PianoRoll {
         // ── Layout ──
         let size = ui.available_size().max(vec2(320.0, 220.0));
         let (rect, _resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
-        let overview =
-            Rect::from_min_max(pos2(rect.left() + m.keys_w, rect.top()), pos2(rect.right(), rect.top() + m.overview_h));
+        // The vertical bar runs down the right of the grid, thinner than the overview.
+        let vbar_w = (m.overview_h * 0.6).round();
+        let right = rect.right() - vbar_w - 2.0;
+        let overview_r =
+            Rect::from_min_max(pos2(rect.left() + m.keys_w, rect.top()), pos2(right, rect.top() + m.overview_h));
         let ruler = Rect::from_min_max(
-            pos2(overview.left(), overview.bottom() + 2.0),
-            pos2(rect.right(), overview.bottom() + 2.0 + m.ruler_h),
+            pos2(overview_r.left(), overview_r.bottom() + 2.0),
+            pos2(right, overview_r.bottom() + 2.0 + m.ruler_h),
         );
-        let grid = Rect::from_min_max(pos2(overview.left(), ruler.bottom()), pos2(rect.right(), rect.bottom() - VEL_H));
+        let grid = Rect::from_min_max(pos2(overview_r.left(), ruler.bottom()), pos2(right, rect.bottom() - VEL_H));
         let keys_r = Rect::from_min_max(pos2(rect.left(), grid.top()), pos2(grid.left(), grid.bottom()));
-        let vel = Rect::from_min_max(pos2(grid.left(), grid.bottom() + 3.0), rect.right_bottom());
+        let vel = Rect::from_min_max(pos2(grid.left(), grid.bottom() + 3.0), pos2(right, rect.bottom()));
+        let vbar = VBar { rect: Rect::from_min_max(pos2(right + 2.0, grid.top()), pos2(rect.right(), grid.bottom())) };
 
         let (pos, pressed_p, pressed_s, pressed_m, double_r, down, mods, wheel, zoom) = ui.input(|i| {
             (
@@ -344,9 +338,20 @@ impl PianoRoll {
         });
         let hovering = ui.rect_contains_pointer(rect);
         let pattern_ticks = (p.patterns[pat].play_length() * TICKS_PER_STEP) as f32;
+        let overview = Overview { rect: overview_r, area: grid, content: pattern_ticks };
+        let over_bars = pos.is_some_and(|p| overview_r.contains(p) || vbar.rect.contains(p));
 
         // ── Wheel ──
-        if hovering {
+        if hovering && over_bars {
+            // Wheel over a scrollbar zooms its axis, anchored at the top-left edge.
+            if pos.is_some_and(|p| overview_r.contains(p)) {
+                overview.wheel_zoom(&mut self.time, wheel.y, 0.08, 8.0);
+            } else {
+                let mut rv = self.rows(grid);
+                vbar.wheel_zoom(&mut rv, wheel.y, grid.height() / 36.0, grid.height() / 6.0);
+                self.set_rows(rv, grid);
+            }
+        } else if hovering {
             let view = self.view(grid);
             let hovered_note =
                 pos.filter(|p| grid.contains(*p)).and_then(|pos| hit(&view, p.patterns[pat].notes(ch_id), pos));
@@ -378,7 +383,7 @@ impl PianoRoll {
                     0.0
                 };
                 if sideways != 0.0 {
-                    self.scroll_x -= sideways / self.ppt;
+                    self.time.scroll -= sideways / self.time.ppt;
                 } else if vertical != 0.0 {
                     self.view_top += vertical / self.row_h * 0.5;
                 }
@@ -386,7 +391,7 @@ impl PianoRoll {
         }
         let rows = grid.height() / self.row_h;
         self.view_top = self.view_top.clamp(rows.min(128.0), 128.0);
-        self.scroll_x = self.scroll_x.max(0.0);
+        self.time.scroll = self.time.scroll.max(0.0);
         let view = self.view(grid);
         self.hover_tick = pos.filter(|p| hovering && grid.contains(*p)).map(|p| view.tick(p.x));
 
@@ -417,7 +422,7 @@ impl PianoRoll {
                     pressed_p,
                     mods,
                     &view,
-                    overview,
+                    (&overview, &vbar),
                     ruler,
                     keys_r,
                     vel,
@@ -434,7 +439,7 @@ impl PianoRoll {
         }
         if down {
             if let Some(pos) = pos {
-                self.drag_to(pos, mods, &view, vel, p, pat, ch_id, out);
+                self.drag_to(pos, mods, &view, vel, (&overview, &vbar), p, pat, ch_id, out);
             }
         } else if !matches!(self.drag, Drag::None) {
             if let Some(k) = self.audition.take() {
@@ -451,9 +456,17 @@ impl PianoRoll {
             } else if hit(&view, notes, pos).is_some() {
                 ui.ctx().set_cursor_icon(CursorIcon::Grab);
             }
-        } else if matches!(self.drag, Drag::Move { .. } | Drag::Pan { .. } | Drag::Hand { .. }) {
+        } else if matches!(
+            self.drag,
+            Drag::Move { .. }
+                | Drag::Hand { .. }
+                | Drag::Overview(OverviewDrag::Pan { .. })
+                | Drag::VBar(VDrag::Pan { .. })
+        ) {
             ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
-        } else if matches!(self.drag, Drag::Resize { .. } | Drag::ZoomEdge { .. }) {
+        } else if matches!(self.drag, Drag::VBar(VDrag::Edge { .. })) {
+            ui.ctx().set_cursor_icon(CursorIcon::ResizeVertical);
+        } else if matches!(self.drag, Drag::Resize { .. } | Drag::Overview(OverviewDrag::Edge { .. })) {
             ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
         }
 
@@ -468,8 +481,21 @@ impl PianoRoll {
             painter.rect_filled(r, cr(0), theme::MINT.gamma_multiply(0.07));
             painter.rect_stroke(r, cr(0), stroke(1.0, theme::MINT.gamma_multiply(0.7)), StrokeKind::Inside);
         }
-        self.paint_overview(&painter, &view, overview, pattern_ticks, p, pat, ch_id, color);
-        self.paint_ruler(&painter, &view, ruler, pattern_ticks, play, playing);
+        overview.paint(&painter, &self.time, matches!(self.drag, Drag::Overview(_)));
+        // A tiny silhouette of the channel's notes, so you can see where things are.
+        for n in p.patterns[pat].notes(ch_id) {
+            let x0 = overview.x_of(&self.time, n.start as f32);
+            let x1 = overview.x_of(&self.time, (n.start + n.len) as f32);
+            let y = overview_r.center().y;
+            painter.rect_filled(
+                Rect::from_min_max(pos2(x0, y - 1.0), pos2(x1.max(x0 + 1.0), y + 1.0)),
+                cr(0),
+                color.gamma_multiply(0.5),
+            );
+        }
+        vbar.paint(&painter, &self.rows(grid), matches!(self.drag, Drag::VBar(_)));
+        // Playhead: a bright line while playing, a dim marker (where Play starts) when stopped.
+        timeline::paint_ruler(&painter, &self.time, ruler, pattern_ticks, Some((play, playing)), grid);
         let sounding: Vec<u8> = if playing {
             p.patterns[pat]
                 .notes(ch_id)
@@ -485,14 +511,23 @@ impl PianoRoll {
     }
 
     fn view(&self, grid: Rect) -> View {
-        View { grid, scroll_x: self.scroll_x, ppt: self.ppt, view_top: self.view_top, row_h: self.row_h }
+        View { grid, scroll_x: self.time.scroll, ppt: self.time.ppt, view_top: self.view_top, row_h: self.row_h }
     }
 
     /// Zoom the time axis by `factor`, keeping the tick under screen-x `anchor_x` still.
     fn zoom_time(&mut self, factor: f32, anchor_x: f32, grid: Rect) {
-        let anchor = (anchor_x - grid.left()) / self.ppt + self.scroll_x;
-        self.ppt = (self.ppt * factor).clamp(0.08, 8.0);
-        self.scroll_x = (anchor - (anchor_x - grid.left()) / self.ppt).max(0.0);
+        self.time.zoom_at(grid, factor, anchor_x, 0.08, 8.0);
+    }
+
+    /// The keys as rows for the vertical bar: row 0 is key 127 at the top.
+    fn rows(&self, grid: Rect) -> RowView {
+        RowView { start: 128.0 - self.view_top, visible: grid.height() / self.row_h, total: 128.0 }
+    }
+
+    /// Apply a vertical-bar change (scroll and/or row height).
+    fn set_rows(&mut self, rv: RowView, grid: Rect) {
+        self.row_h = (grid.height() / rv.visible.max(1.0)).clamp(6.0, 36.0);
+        self.view_top = 128.0 - rv.start;
     }
 
     fn toolbar(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, color: Color32, ch: usize) {
@@ -572,7 +607,7 @@ impl PianoRoll {
         primary: bool,
         mods: egui::Modifiers,
         view: &View,
-        overview: Rect,
+        (overview, vbar): (&Overview, &VBar),
         ruler: Rect,
         keys_r: Rect,
         vel: Rect,
@@ -653,21 +688,12 @@ impl PianoRoll {
                     self.drag = Drag::Move { anchor_tick, anchor_key, originals, lead: 0, free };
                 }
             }
-        } else if overview.contains(pos) && primary {
-            let (thumb_l, thumb_r) = self.thumb(view, overview, pattern_ticks);
-            let span = self.overview_span(view, pattern_ticks);
-            let at = (pos.x - overview.left()) / overview.width() * span;
-            if (pos.x - thumb_l).abs() < 6.0 {
-                self.drag = Drag::ZoomEdge { left: true, fixed: self.scroll_x + view.visible_ticks() };
-            } else if (pos.x - thumb_r).abs() < 6.0 {
-                self.drag = Drag::ZoomEdge { left: false, fixed: self.scroll_x };
-            } else if pos.x > thumb_l && pos.x < thumb_r {
-                self.drag = Drag::Pan { grab: at - self.scroll_x };
-            } else {
-                // Click on the track: centre the view there, then keep panning.
-                self.scroll_x = (at - view.visible_ticks() * 0.5).max(0.0);
-                self.drag = Drag::Pan { grab: view.visible_ticks() * 0.5 };
-            }
+        } else if overview.rect.contains(pos) && primary {
+            self.drag = Drag::Overview(overview.press(&mut self.time, pos));
+        } else if vbar.rect.contains(pos) && primary {
+            let mut rv = self.rows(view.grid);
+            self.drag = Drag::VBar(vbar.press(&mut rv, pos));
+            self.set_rows(rv, view.grid);
         } else if ruler.contains(pos) && primary {
             // The piano roll's ruler is about *this pattern*: hear it from here.
             out.push(Action::SongMode(false));
@@ -708,6 +734,7 @@ impl PianoRoll {
         mods: egui::Modifiers,
         view: &View,
         vel: Rect,
+        (overview, vbar): (&Overview, &VBar),
         p: &mut Project,
         pat: usize,
         ch_id: ChannelId,
@@ -778,44 +805,21 @@ impl PianoRoll {
                 let key = view.key(pos.y).clamp(0, 127) as u8;
                 self.audition(key, out);
             }
-            Drag::Pan { grab } => {
-                let span = self.overview_span(view, pattern_ticks);
-                let at = (pos.x - view.grid.left()) / view.grid.width() * span;
-                self.scroll_x = (at - *grab).max(0.0);
+            Drag::Overview(od) => overview.drag(&mut self.time, *od, pos, TICKS_PER_STEP as f32 * 2.0, 8.0),
+            Drag::VBar(vd) => {
+                let mut rv = self.rows(view.grid);
+                vbar.drag(&mut rv, *vd, pos, view.grid.height() / 36.0, view.grid.height() / 6.0);
+                self.set_rows(rv, view.grid);
             }
             Drag::Hand { last } => {
                 let d = pos - *last;
-                self.scroll_x = (self.scroll_x - d.x / self.ppt).max(0.0);
+                self.time.scroll = (self.time.scroll - d.x / self.time.ppt).max(0.0);
                 self.view_top += d.y / self.row_h;
                 *last = pos;
-            }
-            Drag::ZoomEdge { left, fixed } => {
-                let span = self.overview_span(view, pattern_ticks);
-                let at = ((pos.x - view.grid.left()) / view.grid.width() * span).max(0.0);
-                let min_ticks = TICKS_PER_STEP as f32 * 2.0;
-                let (a, b) =
-                    if *left { (at.min(*fixed - min_ticks), *fixed) } else { (*fixed, at.max(*fixed + min_ticks)) };
-                self.ppt = (view.grid.width() / (b - a)).clamp(0.08, 8.0);
-                self.scroll_x = a.max(0.0);
             }
             Drag::None => {}
         }
         self.drag = drag;
-    }
-
-    /// Total ticks the overview bar represents: the pattern plus room to grow,
-    /// and always a bit more than what's visible, so the thumb never fills the
-    /// whole bar (a full-width thumb doesn't look grabbable).
-    fn overview_span(&self, v: &View, pattern_ticks: f32) -> f32 {
-        (pattern_ticks + 2.0 * TICKS_PER_BAR as f32).max(self.scroll_x + v.visible_ticks() * 1.2)
-    }
-
-    /// Screen x of the overview thumb's two ends.
-    fn thumb(&self, v: &View, overview: Rect, pattern_ticks: f32) -> (f32, f32) {
-        let span = self.overview_span(v, pattern_ticks);
-        let l = overview.left() + self.scroll_x / span * overview.width();
-        let r = overview.left() + (self.scroll_x + v.visible_ticks()) / span * overview.width();
-        (l, r.max(l + 12.0))
     }
 
     fn paint_grid(&self, painter: &egui::Painter, v: &View, pattern_ticks: f32, scale: Scale, root: u8) {
@@ -918,95 +922,6 @@ impl PianoRoll {
                     theme::INSET,
                 );
             }
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn paint_overview(
-        &self,
-        painter: &egui::Painter,
-        v: &View,
-        r: Rect,
-        pattern_ticks: f32,
-        p: &Project,
-        pat: usize,
-        ch_id: ChannelId,
-        color: Color32,
-    ) {
-        painter.rect_filled(r, cr(3), theme::INSET);
-        let span = self.overview_span(v, pattern_ticks);
-        // A tiny silhouette of the channel's notes, so you can see where things are.
-        for n in p.patterns[pat].notes(ch_id) {
-            let x0 = r.left() + n.start as f32 / span * r.width();
-            let x1 = r.left() + (n.start + n.len) as f32 / span * r.width();
-            painter.rect_filled(
-                Rect::from_min_max(pos2(x0, r.center().y - 1.0), pos2(x1.max(x0 + 1.0), r.center().y + 1.0)),
-                cr(0),
-                color.gamma_multiply(0.5),
-            );
-        }
-        let (l, rr) = self.thumb(v, r, pattern_ticks);
-        let thumb = Rect::from_min_max(pos2(l, r.top() + 1.0), pos2(rr, r.bottom() - 1.0));
-        let hot = matches!(self.drag, Drag::Pan { .. } | Drag::ZoomEdge { .. });
-        painter.rect_filled(
-            thumb,
-            cr(4),
-            if hot { theme::mix(theme::RAISED, theme::MINT, 0.15) } else { theme::RAISED },
-        );
-        painter.rect_stroke(thumb, cr(4), stroke(1.0, theme::LINE), StrokeKind::Inside);
-        // Grips on both ends: "drag me to zoom".
-        for x in [thumb.left() + 5.0, thumb.right() - 5.0] {
-            for dx in [-1.5, 1.5] {
-                painter.vline(x + dx, thumb.shrink(5.0).y_range(), stroke(1.0, theme::MINT.gamma_multiply(0.6)));
-            }
-        }
-    }
-
-    fn paint_ruler(
-        &self,
-        painter: &egui::Painter,
-        v: &View,
-        ruler: Rect,
-        pattern_ticks: f32,
-        playhead: f32,
-        playing: bool,
-    ) {
-        painter.rect_filled(ruler, cr(0), theme::TOOLBAR);
-        painter.hline(ruler.x_range(), ruler.bottom() - 0.5, stroke(1.0, theme::LINE));
-        let bar_px = TICKS_PER_BAR as f32 * v.ppt;
-        let every = if bar_px < 30.0 {
-            4
-        } else if bar_px < 60.0 {
-            2
-        } else {
-            1
-        };
-        let first = (v.scroll_x / TICKS_PER_BAR as f32).floor() as u32;
-        let last = (v.tick(ruler.right()) / TICKS_PER_BAR as f32).ceil() as u32;
-        for bar in (first..=last).filter(|b| b % every == 0) {
-            let x = v.x((bar * TICKS_PER_BAR) as f32);
-            painter.vline(x, ruler.y_range(), stroke(1.0, theme::LINE));
-            painter.text(
-                pos2(x + 3.0, ruler.center().y),
-                Align2::LEFT_CENTER,
-                format!("{}", bar + 1),
-                FontId::proportional(9.5),
-                theme::TEXT_DIM,
-            );
-        }
-        // Pattern end (where the loop wraps).
-        let end = v.x(pattern_ticks);
-        if end >= ruler.left() {
-            painter.vline(end, ruler.y_range(), stroke(2.0, theme::GOLD.gamma_multiply(0.8)));
-        }
-        // Playhead: a bright line while playing, a marker (where Play starts) when stopped.
-        let x = v.x(playhead);
-        if x >= ruler.left() {
-            let tri =
-                vec![pos2(x - 5.0, ruler.top() + 2.0), pos2(x + 5.0, ruler.top() + 2.0), pos2(x, ruler.bottom() - 2.0)];
-            painter.add(egui::Shape::convex_polygon(tri, theme::MINT, egui::Stroke::NONE));
-            let line = if playing { theme::MINT } else { theme::MINT.gamma_multiply(0.35) };
-            painter.vline(x, v.grid.y_range(), stroke(1.0, line));
         }
     }
 

@@ -12,14 +12,11 @@ what to work on and folds the items into the plan when the time is right.
 ## Friction
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
 // - [ ] ? bug or missing?
-- [ ] hover over horizontal scroll bar should zoom. That zoom is better to have its origin at the viewport's left edge rather than the cursor's location
-- [ ] Missing left virtical scroll bars, same style. These would immediatly make it also Touch friendly.
 - [ ] 
 
 ## Wishes
 *Things you wish Lyra did.*
 - [ ] Putting Arrenger/Playlist up to date with the visual language. 
-- [ ] Piano roll: a vertical scrollbar on the right (can be thinner than the top one), great on a touchpad.
 - [ ] ~ Docked layout (Blender / VS Code style areas that don't overlap) for the main views; it would also save the title bars (~5rem). Floating windows stay for plugins.
 - [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
 - [ ] ~ Start building docked windows for essential panels. Eg:
@@ -44,7 +41,6 @@ Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons
 - [ ] Wheel-over-note changes velocity only while *hovering* a note. With a selection but no hover, the wheel still scrolls, otherwise you couldn't scroll while anything is selected. Tell me if you want it the other way.
 
 - [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
-- [ ] The piano roll still has its own copy of the overview bar and ruler; move it onto the shared `timeline` module the playlist uses.
 
 - [ ] KDE shows a generic "W" icon for Lyra (title bar and taskbar): Wayland takes the icon from a `.desktop` file, which Lyra doesn't have yet. Needs a `lyra.desktop` + icon install (app id `lyra`).
 - [ ] *From the manual pass (verified, not urgent):*
@@ -63,6 +59,16 @@ Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Scrollbars → (hash)**
+- [x] hover over horizontal scroll bar should zoom. That zoom is better to have its origin at the viewport's left edge rather than the cursor's location
+  *→ wheel over the overview bar zooms, keeping the view's left edge still (piano roll and playlist). Ctrl+wheel over the grid still zooms around the mouse.*
+- [x] Missing left virtical scroll bars, same style. These would immediatly make it also Touch friendly.
+  *→ a vertical bar in the same style beside the grid in the piano roll and the playlist: drag the thumb to scroll, drag its ends to zoom the rows, click the track to jump, wheel over it to zoom (top row stays). I put it on the **right**, per your older wish below; if you meant the left, it's one line to move.*
+- [x] Piano roll: a vertical scrollbar on the right (can be thinner than the top one), great on a touchpad.
+  *→ same bar, 60 % of the overview's thickness.*
+- [x] The piano roll still has its own copy of the overview bar and ruler; move it onto the shared `timeline` module the playlist uses.
+  *→ done on the way: one overview, one vertical bar, one ruler for both editors.*
 
 **Journal batch → `298b3d5`**
 - [x] Swap UI PAT/SONG but not their colors. SONG/PAT, SONG is green. Clicking either toggles

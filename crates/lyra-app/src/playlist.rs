@@ -18,7 +18,7 @@
 use crate::app::{Focus, UiState};
 use crate::keys::Action;
 use crate::theme::{self, cr, stroke};
-use crate::timeline::{self, Overview, OverviewDrag, TimeView};
+use crate::timeline::{self, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag};
 use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, StrokeKind, Ui};
 use lyra_model::{Clip, History, Project, TICKS_PER_BAR, TICKS_PER_STEP};
 
@@ -29,13 +29,31 @@ pub const SNAPS: [(&str, u32); 4] = [("Free", 1), ("Step", TICKS_PER_STEP), ("Be
 
 enum Drag {
     None,
-    Move { anchor_tick: f32, anchor_track: i32, originals: Vec<(usize, Clip)>, lead: usize, free: bool },
-    Resize { anchor_tick: f32, originals: Vec<(usize, Clip)>, lead: usize, free: bool },
-    Select { from: Pos2, base: Vec<usize> },
+    Move {
+        anchor_tick: f32,
+        anchor_track: i32,
+        originals: Vec<(usize, Clip)>,
+        lead: usize,
+        free: bool,
+    },
+    Resize {
+        anchor_tick: f32,
+        originals: Vec<(usize, Clip)>,
+        lead: usize,
+        free: bool,
+    },
+    Select {
+        from: Pos2,
+        base: Vec<usize>,
+    },
     Erase,
     Seek,
-    Hand { last: Pos2 },
+    Hand {
+        last: Pos2,
+    },
     Overview(OverviewDrag),
+    /// The vertical bar beside the grid (scroll or zoom the tracks).
+    VBar(VDrag),
 }
 
 pub struct Playlist {
@@ -107,6 +125,17 @@ fn snapped(raw: f32, snap: u32) -> f32 {
 }
 
 impl Playlist {
+    /// The tracks as rows for the vertical bar.
+    fn rows(&self, grid: Rect, tracks: usize) -> RowView {
+        RowView { start: self.scroll_y, visible: grid.height() / self.track_h, total: tracks as f32 }
+    }
+
+    /// Apply a vertical-bar change (scroll and/or track height).
+    fn set_rows(&mut self, rv: RowView, grid: Rect) {
+        self.track_h = (grid.height() / rv.visible.max(0.1)).clamp(24.0, 140.0);
+        self.scroll_y = rv.start;
+    }
+
     fn view(&self, grid: Rect) -> View {
         View { grid, time: self.time, scroll_y: self.scroll_y, track_h: self.track_h }
     }
@@ -177,13 +206,17 @@ impl Playlist {
 
         let size = ui.available_size().max(vec2(420.0, 200.0));
         let (rect, _resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
+        // The vertical bar runs down the right of the grid, thinner than the overview.
+        let vbar_w = (m.overview_h * 0.6).round();
+        let right = rect.right() - vbar_w - 2.0;
         let overview_r =
-            Rect::from_min_max(pos2(rect.left() + HEADER_W, rect.top()), pos2(rect.right(), rect.top() + m.overview_h));
+            Rect::from_min_max(pos2(rect.left() + HEADER_W, rect.top()), pos2(right, rect.top() + m.overview_h));
         let ruler = Rect::from_min_max(
             pos2(overview_r.left(), overview_r.bottom() + 2.0),
-            pos2(rect.right(), overview_r.bottom() + 2.0 + m.ruler_h),
+            pos2(right, overview_r.bottom() + 2.0 + m.ruler_h),
         );
-        let grid = Rect::from_min_max(pos2(ruler.left(), ruler.bottom()), rect.right_bottom());
+        let grid = Rect::from_min_max(pos2(ruler.left(), ruler.bottom()), pos2(right, rect.bottom()));
+        let vbar = VBar { rect: Rect::from_min_max(pos2(right + 2.0, grid.top()), pos2(rect.right(), grid.bottom())) };
         let headers = Rect::from_min_max(pos2(rect.left(), grid.top()), pos2(grid.left(), grid.bottom()));
         let song_len = p.song_length() as f32;
         let overview = Overview { rect: overview_r, area: grid, content: song_len };
@@ -204,7 +237,17 @@ impl Playlist {
         let hovering = ui.rect_contains_pointer(rect);
 
         // ── Wheel ──
-        if hovering {
+        let over_bars = pos.is_some_and(|p| overview_r.contains(p) || vbar.rect.contains(p));
+        if hovering && over_bars {
+            // Wheel over a scrollbar zooms its axis, anchored at the top-left edge.
+            if pos.is_some_and(|p| overview_r.contains(p)) {
+                overview.wheel_zoom(&mut self.time, wheel.y, 0.01, 2.0);
+            } else {
+                let mut rv = self.rows(grid, p.tracks.len());
+                vbar.wheel_zoom(&mut rv, wheel.y, grid.height() / 140.0, grid.height() / 24.0);
+                self.set_rows(rv, grid);
+            }
+        } else if hovering {
             if zoom != 1.0 {
                 self.time.zoom_at(grid, zoom, pos.map_or(grid.left(), |p| p.x), 0.01, 2.0);
             } else if wheel.y != 0.0 && mods.alt {
@@ -237,6 +280,10 @@ impl Playlist {
             if let Some(pos) = pos {
                 if overview_r.contains(pos) && pressed_p {
                     self.drag = Drag::Overview(overview.press(&mut self.time, pos));
+                } else if vbar.rect.contains(pos) && pressed_p {
+                    let mut rv = self.rows(grid, p.tracks.len());
+                    self.drag = Drag::VBar(vbar.press(&mut rv, pos));
+                    self.set_rows(rv, grid);
                 } else if ruler.contains(pos) && pressed_p {
                     out.push(Action::SongMode(true));
                     out.push(Action::Seek(view.tick(pos.x).clamp(0.0, song_len - 1.0) as f64));
@@ -253,7 +300,7 @@ impl Playlist {
         }
         if down {
             if let Some(pos) = pos {
-                self.drag_to(pos, mods, &view, &overview, p, song_len, out);
+                self.drag_to(pos, mods, &view, (&overview, &vbar), p, song_len, out);
             }
         } else {
             self.drag = Drag::None;
@@ -268,9 +315,16 @@ impl Playlist {
                     ui.ctx().set_cursor_icon(CursorIcon::Grab);
                 }
             }
-        } else if matches!(self.drag, Drag::Move { .. } | Drag::Hand { .. } | Drag::Overview(OverviewDrag::Pan { .. }))
-        {
+        } else if matches!(
+            self.drag,
+            Drag::Move { .. }
+                | Drag::Hand { .. }
+                | Drag::Overview(OverviewDrag::Pan { .. })
+                | Drag::VBar(VDrag::Pan { .. })
+        ) {
             ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+        } else if matches!(self.drag, Drag::VBar(VDrag::Edge { .. })) {
+            ui.ctx().set_cursor_icon(CursorIcon::ResizeVertical);
         } else if matches!(self.drag, Drag::Resize { .. } | Drag::Overview(OverviewDrag::Edge { .. })) {
             ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
         }
@@ -287,6 +341,7 @@ impl Playlist {
         }
         self.paint_headers(&painter, &view, headers, p);
         overview.paint(&painter, &self.time, matches!(self.drag, Drag::Overview(_)));
+        vbar.paint(&painter, &self.rows(grid, p.tracks.len()), matches!(self.drag, Drag::VBar(_)));
         for c in &p.clips {
             let x0 = overview.x_of(&self.time, c.start as f32);
             let x1 = overview.x_of(&self.time, c.end() as f32);
@@ -410,7 +465,7 @@ impl Playlist {
         pos: Pos2,
         mods: egui::Modifiers,
         v: &View,
-        overview: &Overview,
+        (overview, vbar): (&Overview, &VBar),
         p: &mut Project,
         song_len: f32,
         out: &mut Vec<Action>,
@@ -469,6 +524,11 @@ impl Playlist {
                 *last = pos;
             }
             Drag::Overview(od) => overview.drag(&mut self.time, *od, pos, TICKS_PER_BAR as f32, 2.0),
+            Drag::VBar(vd) => {
+                let mut rv = self.rows(v.grid, p.tracks.len());
+                vbar.drag(&mut rv, *vd, pos, v.grid.height() / 140.0, v.grid.height() / 24.0);
+                self.set_rows(rv, v.grid);
+            }
             Drag::None => {}
         }
         self.drag = drag;
