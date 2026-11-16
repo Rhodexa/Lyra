@@ -127,6 +127,8 @@ pub struct LyraApp {
     /// The project as last backed up, and when.
     backed_up: Project,
     last_backup: std::time::Instant,
+    /// When the sound engine was restarted after a crash (for the crash-loop guard).
+    engine_restarts: Vec<std::time::Instant>,
     title: String,
     /// A short status message (saved, opened, errors) and when it appeared.
     toast: Option<(String, bool, std::time::Instant)>,
@@ -186,6 +188,7 @@ impl LyraApp {
             saved: project_for_saved,
             backed_up: project_for_backup,
             last_backup: std::time::Instant::now(),
+            engine_restarts: Vec::new(),
             title: String::new(),
             toast,
         }
@@ -272,7 +275,43 @@ impl LyraApp {
         }
     }
 
+    /// The audio callback caught a panic (a bug in an instrument or effect) and
+    /// went silent. Start a fresh engine and stream; the bridge then re-sends
+    /// the whole project. At most three restarts a minute: a bug that strikes
+    /// on every start shouldn't turn into an endless loop.
+    fn recover_engine(&mut self) {
+        if !self.audio.as_ref().is_some_and(|a| a.stats.crashed.load(Relaxed)) {
+            return;
+        }
+        let now = std::time::Instant::now();
+        self.engine_restarts.retain(|t| now.duration_since(*t) < Duration::from_secs(60));
+        self.audio = None; // stops the old stream before a new one opens the device
+        self.engine = None;
+        if self.engine_restarts.len() >= 3 {
+            self.audio_error = Some("sound engine stopped after repeated errors".into());
+            self.notify(
+                "The sound engine keeps failing, so it's off. Save, then restart Lyra (details in the terminal).",
+                true,
+            );
+            return;
+        }
+        self.engine_restarts.push(now);
+        match audio::start() {
+            Ok((a, h)) => {
+                self.audio = Some(a);
+                self.engine = Some(h);
+                self.bridge = Bridge::default();
+                self.notify("The sound engine hit a bug and was restarted (details in the terminal).", true);
+            }
+            Err(e) => {
+                self.audio_error = Some(format!("no audio: {e}"));
+                self.notify("The sound engine hit a bug and couldn't restart.", true);
+            }
+        }
+    }
+
     fn read_engine(&mut self) {
+        self.recover_engine();
         let n = self.project.channels.len();
         self.ui.flash.resize(n, 0.0);
         self.ui.last_triggers.resize(n, 0);

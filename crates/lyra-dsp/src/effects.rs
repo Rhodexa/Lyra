@@ -364,9 +364,7 @@ impl Delay {
         let (fb, mix, ping) = (self.p[1], self.p[4], self.p[2] >= 0.5);
         for i in 0..l.len() {
             self.time += (target - self.time) * 0.0005;
-            let read = (self.write as f32 - self.time).rem_euclid(len as f32);
-            let (i0, frac) = (read as usize, read.fract());
-            let i1 = (i0 + 1) % len;
+            let (i0, i1, frac) = ring_read(self.write, self.time, len);
             let tap = |b: &Vec<f32>| b[i0] + (b[i1] - b[i0]) * frac;
             let (dl, dr) = (self.tone[0].run(tap(&self.buf[0])), self.tone[1].run(tap(&self.buf[1])));
             let (inl, inr) = (l[i], r[i]);
@@ -385,6 +383,19 @@ impl Delay {
     }
 }
 effect_plugin!(Delay, "Delay", DELAY_PARAMS);
+
+/// Where to read a ring buffer `delay` samples behind `write`: the two
+/// neighbouring slots and the blend between them.
+///
+/// The wrap is done in floats, and a position a hair below zero wraps to
+/// `len - 0.0005`, which f32 can't represent near 192 000 and rounds to
+/// exactly `len`: one past the end. That crashed the audio thread. Wrapping
+/// the integer index too makes it land on slot 0, which is the right sample.
+fn ring_read(write: usize, delay: f32, len: usize) -> (usize, usize, f32) {
+    let read = (write as f32 - delay).rem_euclid(len as f32);
+    let i0 = (read as usize) % len;
+    (i0, (i0 + 1) % len, read.fract())
+}
 
 // ─────────────────────────────── Reverb ───────────────────────────────
 
@@ -537,6 +548,24 @@ pub fn groups(_id: &str) -> &'static [ParamGroup] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ring_read_never_leaves_the_buffer() {
+        // The crash: write at 0, a delay a hair above zero, a 4 s buffer at 48 kHz.
+        let len = 192_000;
+        for delay in [0.0005f32, 0.001, 0.004, 1e-6, 0.0] {
+            let (i0, i1, frac) = ring_read(0, delay, len);
+            assert!(i0 < len && i1 < len, "delay {delay}: {i0} {i1}");
+            assert!((0.0..1.0).contains(&frac));
+        }
+        // And everywhere else, for a sweep of positions and delays.
+        for write in (0..len).step_by(997) {
+            for delay in [0.25f32, 1.5, 4800.75, 191_998.9] {
+                let (i0, i1, _) = ring_read(write, delay, len);
+                assert!(i0 < len && i1 < len);
+            }
+        }
+    }
 
     fn render(fx: &mut dyn Plugin, input: impl Fn(usize) -> f32, seconds: f32) -> Vec<f32> {
         let sr = 48_000.0;

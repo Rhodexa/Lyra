@@ -84,8 +84,10 @@ impl Pattern {
     /// has a note in it, but never shorter than `min_length`. Patterns are
     /// dynamic — write into bar 3 and the loop becomes 3 bars, delete it and it shrinks.
     pub fn play_length(&self) -> u32 {
-        // A note "fills" the bar it starts in; a long tail alone doesn't add a bar.
-        let last_bar = self.notes.values().flatten().map(|n| n.start / TICKS_PER_BAR + 1).max().unwrap_or(1);
+        // Whole bars, up to where the last note *ends* (a note ending exactly on
+        // a bar line doesn't spill into the next bar).
+        let last_bar =
+            self.notes.values().flatten().map(|n| (n.start + n.len.max(1) - 1) / TICKS_PER_BAR + 1).max().unwrap_or(1);
         (last_bar * STEPS_PER_BAR).max(self.min_length)
     }
 
@@ -374,6 +376,13 @@ mod tests {
         assert_eq!(p.play_length(), 16, "and it shrinks back");
         p.min_length = 32;
         assert_eq!(p.play_length(), 32, "min_length is a floor");
+        p.min_length = 16;
+        // A note that starts in bar 1 but rings into bar 2 makes it 2 bars...
+        p.notes_mut(1).push(Note { start: TICKS_PER_BAR - 24, len: 48, key: 60, velocity: 1.0 });
+        assert_eq!(p.play_length(), 32, "a note crossing the bar line lengthens the pattern");
+        // ...but one that ends exactly on the bar line doesn't.
+        p.notes_mut(1)[0].len = 24;
+        assert_eq!(p.play_length(), 16, "ending on the bar line stays inside");
     }
 
     #[test]

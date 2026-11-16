@@ -916,8 +916,9 @@ impl PianoRoll {
             if playing {
                 fill = theme::shade(fill, 1.12);
             }
-            painter.rect_filled(r, cr(3), theme::KEY_RECESS);
-            painter.rect_filled(r.shrink(1.0), cr(2), fill);
+            // Slightly see-through, so notes that overlap (or hide each other) show.
+            painter.rect_filled(r, cr(3), theme::KEY_RECESS.gamma_multiply(0.9));
+            painter.rect_filled(r.shrink(1.0), cr(2), fill.gamma_multiply(0.78));
             if selected {
                 painter.rect_stroke(r, cr(3), stroke(1.5, theme::TEXT), StrokeKind::Outside);
             }

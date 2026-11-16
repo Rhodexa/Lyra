@@ -14,7 +14,7 @@
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use lyra_engine::{Engine, EngineHandle};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -49,6 +49,9 @@ pub struct AudioStats {
     pub callbacks: AtomicU64,
     /// Errors reported by the audio backend, total.
     pub errors: AtomicU64,
+    /// Something in the engine panicked (a bug). The callback has gone silent
+    /// for good; the app notices and starts a fresh engine.
+    pub crashed: AtomicBool,
 }
 
 impl AudioStats {
@@ -144,6 +147,15 @@ where
     // Allocated once, here, before the callback ever runs.
     let mut scratch = vec![0.0f32; 4096 * channels];
     let mut last: Option<(Instant, f64)> = None; // (start of previous callback, its audio duration)
+                                                 // Dev switch: panic inside the engine after this many callbacks, once per run
+                                                 // (tests the recovery). LYRA_AUDIO_PANIC_ALWAYS=1 panics in every new engine
+                                                 // too (tests the crash-loop guard).
+    static INJECTED: AtomicBool = AtomicBool::new(false);
+    let always = std::env::var_os("LYRA_AUDIO_PANIC_ALWAYS").is_some();
+    let mut panic_after: Option<u64> = std::env::var("LYRA_AUDIO_PANIC_AFTER")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|_| always || !INJECTED.swap(true, Relaxed));
     let error_stats = stats.clone();
 
     device
@@ -165,9 +177,31 @@ where
                 }
                 last = Some((start, duration));
 
+                if stats.crashed.load(Relaxed) {
+                    // After a panic the engine's state can't be trusted: stay silent
+                    // until the app replaces this stream.
+                    data.fill(T::from_sample(0.0f32));
+                    return;
+                }
+                if let Some(n) = &mut panic_after {
+                    *n = n.saturating_sub(1);
+                }
+                let inject = panic_after == Some(0);
                 for chunk in data.chunks_mut(scratch.len()) {
                     let buf = &mut scratch[..chunk.len()];
-                    engine.process(buf, channels);
+                    // A bug in any instrument or effect must not take the sound
+                    // down for good: catch the panic, go silent, raise the flag.
+                    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        if inject {
+                            panic!("LYRA_AUDIO_PANIC_AFTER: injected panic");
+                        }
+                        engine.process(buf, channels)
+                    }));
+                    if ran.is_err() {
+                        stats.crashed.store(true, Relaxed);
+                        data.fill(T::from_sample(0.0f32));
+                        return;
+                    }
                     for (out, s) in chunk.iter_mut().zip(buf.iter()) {
                         *out = T::from_sample(if silent { 0.0 } else { *s });
                     }

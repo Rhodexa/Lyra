@@ -10,6 +10,7 @@
 //! | `LYRA_OPEN=piano,editor,design` | open these windows on launch |
 //! | `LYRA_ZOOM=1.3` | starting UI zoom (read in `app.rs`) |
 //! | `LYRA_BUFFER=n` | audio ring size in frames (see `audio.rs`) |
+//! | `LYRA_AUDIO_PANIC_AFTER=n` | panic inside the audio callback after n callbacks, once (tests crash recovery; add `LYRA_AUDIO_PANIC_ALWAYS=1` to test the crash-loop guard) |
 //! | `LYRA_SCRIPT="…"` | synthetic input, one step per frame (see below) |
 //!
 //! Script steps, separated by `;`: `wait N` (frames), `move X Y` (points),
