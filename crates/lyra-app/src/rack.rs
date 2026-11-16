@@ -1,4 +1,5 @@
-//! The channel rack: one row per instrument, one button per step.
+//! The instrument rack (FL calls it the channel rack): one row per
+//! instrument, one button per step.
 //!
 //! Mouse grammar ("it knows what you mean"):
 //! * **click / drag** across steps — paint. The first step you touch decides
@@ -110,7 +111,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
             h.checkpoint(p);
             p.patterns[pat].min_length = new_len;
         }
-        ui.menu_button("+ Channel", |ui| add_channel_menu(ui, p, h, st));
+        ui.menu_button("+ Instrument", |ui| add_channel_menu(ui, p, h, st));
     });
     ui.add_space(4.0);
 
@@ -127,7 +128,6 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
     });
     if !any_down {
         st.paint = None;
-        st.led_paint = None;
     }
     let any_solo = p.any_solo();
     let mut delete = None;
@@ -138,6 +138,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
     let row_w = m.led
         + m.knob_small * 2.0
         + m.name_w
+        + m.step_h
         + 8.0
         + 5.0 * ui.spacing().item_spacing.x
         + step_x(p.patterns[pat].play_length() - 1)
@@ -189,14 +190,17 @@ fn row(
         let mute = p.channels[ci].mute;
         let audible = !mute && (!any_solo || p.channels[ci].solo);
         let r = widgets::led(ui, audible, light, "Click / drag: mute · Right-click: solo");
-        let over = pointer.is_some_and(|_| ui.rect_contains_pointer(r.rect));
-        if over && primary {
-            h.checkpoint(p);
-            st.led_paint = Some(audible); // audible → we're muting
-        }
-        if let (true, Some(muting)) = (over, st.led_paint) {
-            p.channels[ci].mute = muting;
-            p.channels[ci].solo = false;
+        match widgets::sweep(ui, r.rect, "rack-mute", audible) {
+            Some(widgets::Sweep::Begin(on)) => {
+                h.checkpoint(p);
+                p.channels[ci].mute = !on;
+                p.channels[ci].solo = false;
+            }
+            Some(widgets::Sweep::Continue(on)) => {
+                p.channels[ci].mute = !on;
+                p.channels[ci].solo = false;
+            }
+            None => {}
         }
         if r.secondary_clicked() {
             h.checkpoint(p);
@@ -312,6 +316,21 @@ fn row(
                 ui.close_menu();
             }
         });
+
+        // Which mixer insert this instrument plays into (M = master).
+        let mut insert = p.channels[ci].mixer;
+        let inserts = p.mixer.len().saturating_sub(1);
+        let r = widgets::number_well(ui, &mut insert, 0..=inserts, ci + 1, vec2(m.step_h, m.step_h), |n| {
+            if n == 0 {
+                "M".into()
+            } else {
+                n.to_string()
+            }
+        });
+        if tracked(&r, h, p) {
+            p.channels[ci].mixer = insert;
+        }
+        r.on_hover_text("Mixer insert: drag or scroll to route (M = master)");
 
         ui.add_space(4.0);
 

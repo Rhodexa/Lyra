@@ -65,10 +65,12 @@ pub fn show(
         // The deck: what plays, play / stop, where we are, the beat.
         module(ui, |ui| {
             ui.spacing_mut().item_spacing.x = gap;
-            let options = [(Legend::Text("PAT"), theme::L_MINT), (Legend::Text("SONG"), theme::L_AMBER)];
-            let hint = "Play the current pattern / the whole playlist  ( L )";
-            if let Some(i) = widgets::radio_keys(ui, vec2(big * 1.3, big), &options, st.song_mode as usize, hint) {
-                actions.push(Action::SongMode(i == 1));
+            // SONG / PAT: the left face is green, the right amber; clicking either flips the mode.
+            let options = [(Legend::Text("SONG"), theme::L_MINT), (Legend::Text("PAT"), theme::L_AMBER)];
+            let hint = "Play the whole playlist / the current pattern  ( L )";
+            let chosen = if st.song_mode { 0 } else { 1 };
+            if widgets::radio_keys(ui, vec2(big * 1.3, big), &options, chosen, hint).is_some() {
+                actions.push(Action::SongMode(!st.song_mode));
             }
             ui.add_space(gap);
             if widgets::key(
@@ -92,15 +94,13 @@ pub fn show(
             let pos = format!("{}.{}.{}", step / STEPS_PER_BAR + 1, (step % STEPS_PER_BAR) / 4 + 1, step % 4 + 1);
             widgets::lcd_text(ui, &pos, "BAR . BEAT . STEP", vec2(big * 2.6, big))
                 .on_hover_text("Song position: bar . beat . step");
-            // Beat lights: the downbeat in gold, Lyra's eyes.
-            let d = (big * 0.3).round();
-            let (r, _) = ui.allocate_exact_size(vec2(4.0 * (d + 3.0), big), Sense::hover());
-            for b in 0..4u32 {
-                let c = r.left_center() + vec2((d + 3.0) * (b as f32 + 0.5), 0.0);
-                let on = playing && (step % STEPS_PER_BAR) / 4 == b;
-                let light = if b == 0 { theme::L_AMBER } else { theme::L_MINT };
-                theme::led(ui.painter(), c, d, on.then_some(light), false);
-            }
+            // One beat light: it flashes on every beat, gold on the downbeat (Lyra's eyes).
+            let d = (big * 0.36).round();
+            let (r, _) = ui.allocate_exact_size(vec2(d + 4.0, big), Sense::hover());
+            let beat = (step % STEPS_PER_BAR) / 4;
+            let flash = playing && step % 4 == 0;
+            let light = if beat == 0 { theme::L_AMBER } else { theme::L_MINT };
+            theme::led(ui.painter(), r.center(), d, flash.then_some(light), false);
         });
 
         // Tempo and swing.
@@ -159,7 +159,7 @@ pub fn show(
             ui.spacing_mut().item_spacing.x = gap;
             for (icon, open, hint, action) in [
                 (Icon::Playlist, st.show_playlist, "Playlist  (F5)", Action::TogglePlaylist),
-                (Icon::Rack, st.show_rack, "Channel rack  (F6)", Action::ToggleRack),
+                (Icon::Rack, st.show_rack, "Instrument rack  (F6)", Action::ToggleRack),
                 (Icon::Piano, st.show_piano, "Piano roll  (F7)", Action::TogglePiano),
                 (Icon::Knob, st.show_editor, "Instrument  (F8)", Action::ToggleEditor),
                 (Icon::Mixer, st.show_mixer, "Mixer  (F9)", Action::ToggleMixer),
@@ -206,7 +206,7 @@ fn pattern_picker(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiStat
         Align2::LEFT_CENTER,
         &p.patterns[st.pattern].name,
         FontId::proportional(m.text),
-        theme::MINT,
+        theme::TEXT,
     );
     // A small chevron, like the dropdown in the studies.
     let c = r.right_center() - vec2(13.0, 1.5);

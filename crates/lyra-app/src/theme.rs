@@ -735,9 +735,12 @@ pub const LCD_INK_DIM: Color32 = hex(0x5e5e5e);
 pub fn lcd_panel(p: &Painter, r: Rect) {
     let rad = (r.height() * 0.11).clamp(3.0, 7.0);
     p.rect_filled(r, cr(rad as u8), LCD);
-    // inset 0 1px 2px: a faint shadow under the top edge.
-    let top = Rect::from_min_size(r.min + egui::vec2(rad * 0.6, 0.0), egui::vec2(r.width() - rad * 1.2, 1.0));
-    p.rect_filled(top, cr(0), mix(LCD, hex(0x1f1f1f), 0.13));
+    // Inset shadow under the top edge, three pixels deep, fading out.
+    let shadow = hex(0x19231e);
+    for (k, a) in [(0.0, 0.42), (1.0, 0.2), (2.0, 0.07)] {
+        let line = Rect::from_min_size(r.min + egui::vec2(rad * 0.55, k), egui::vec2(r.width() - rad * 1.1, 1.0));
+        p.rect_filled(line, cr(0), mix(LCD, shadow, a));
+    }
 }
 
 /// A recessed well (dropdowns, displays): darker than the panel, an inner

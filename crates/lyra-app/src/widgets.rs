@@ -643,7 +643,7 @@ pub fn keyboard_map(ui: &mut Ui, first_key: u8, last_key: u8) -> Option<i32> {
         let i = white.iter().position(|&w| w > k).unwrap_or(0);
         let x = keys.left() + i as f32 * key_w - 1.5;
         let r = Rect::from_min_size(pos2(x, keys.top()), vec2(2.5, keys.height() * 0.6));
-        p.rect_filled(r, cr(0), if lit(k) { theme::L_MINT.rim } else { theme::WELL });
+        p.rect_filled(r, cr(0), if lit(k) { Color32::from_rgb(0x6e, 0x6e, 0x6e) } else { theme::WELL });
     }
     let resp =
         resp.on_hover_text("Where your typing keyboard plays (Z…P rows). Click left / right to shift an octave.");
@@ -652,4 +652,89 @@ pub fn keyboard_map(ui: &mut Ui, first_key: u8, last_key: u8) -> Option<i32> {
         return Some(if x < rect.center().x { -1 } else { 1 });
     }
     None
+}
+
+/// What a sweepable toggle should do this frame.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Sweep {
+    /// A gesture starts here: take an undo checkpoint, then set the value.
+    Begin(bool),
+    /// The gesture passed over this toggle: set the value (same undo step).
+    Continue(bool),
+}
+
+/// Press-and-sweep for rows of toggles (mute lights, bypass lights, …):
+/// press one to flip it, keep the button down and sweep over its neighbours
+/// to set them the same way. One gesture is one undo step.
+///
+/// `group` names the row of toggles that belong together (toggles in other
+/// groups ignore the sweep). Call it for every toggle, every frame, with the
+/// toggle's rect and current state. Uses the pointer directly, because egui
+/// doesn't report hovers on other widgets while a drag is in progress.
+pub fn sweep(ui: &Ui, rect: Rect, group: &str, on: bool) -> Option<Sweep> {
+    let key = egui::Id::new("lyra-sweep");
+    let (pressed, down, pos) =
+        ui.input(|i| (i.pointer.primary_pressed(), i.pointer.primary_down(), i.pointer.interact_pos()));
+    let over = pos.is_some_and(|p| rect.contains(p)) && ui.rect_contains_pointer(rect);
+    if pressed && over {
+        ui.data_mut(|d| d.insert_temp(key, (group.to_string(), !on)));
+        return Some(Sweep::Begin(!on));
+    }
+    let gesture: Option<(String, bool)> = ui.data(|d| d.get_temp(key));
+    match gesture {
+        Some(_) if !down && !pressed => {
+            ui.data_mut(|d| d.remove::<(String, bool)>(key));
+            None
+        }
+        Some((g, target)) if over && g == group && on != target => Some(Sweep::Continue(target)),
+        _ => None,
+    }
+}
+
+/// A small number in a well: drag up/down or scroll to change it,
+/// double-click for `default`. `label` turns the value into text.
+pub fn number_well(
+    ui: &mut Ui,
+    value: &mut usize,
+    range: std::ops::RangeInclusive<usize>,
+    default: usize,
+    size: egui::Vec2,
+    label: impl Fn(usize) -> String,
+) -> Response {
+    let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
+    let before = *value;
+    let mut v = *value as i64;
+    if resp.dragged() {
+        let acc_id = resp.id.with("acc");
+        let mut acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0);
+        acc -= resp.drag_delta().y / 10.0;
+        let n = acc.trunc();
+        acc -= n;
+        ui.data_mut(|d| d.insert_temp(acc_id, acc));
+        v += n as i64;
+    }
+    if resp.hovered() {
+        let wheel = ui.input(|i| i.raw_scroll_delta.y);
+        if wheel != 0.0 {
+            v += wheel.signum() as i64;
+        }
+    }
+    if resp.double_clicked() {
+        v = default as i64;
+    }
+    *value = (v.max(*range.start() as i64) as usize).min(*range.end());
+    if *value != before {
+        resp.mark_changed();
+    }
+    let p = ui.painter();
+    theme::well(p, rect);
+    let hot = resp.hovered() || resp.dragged();
+    p.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        label(*value),
+        egui::FontId::monospace(theme::m().text_small + 1.0),
+        if hot { theme::TEXT } else { theme::TEXT_DIM },
+    );
+    resp
 }

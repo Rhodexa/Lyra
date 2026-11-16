@@ -55,6 +55,18 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
             }
         });
         ui.add_space(seam);
+        // The effect rack sits above the strips: it casts a soft shadow onto them.
+        let edge = ui.cursor().left() - seam;
+        let top = ui.cursor().top();
+        let shadow = Rect::from_min_max(pos2(edge - 10.0, top), pos2(edge, top + STRIP_H));
+        let mut mesh = egui::Mesh::default();
+        for (x, a) in [(shadow.left(), 0u8), (shadow.right(), 110u8)] {
+            mesh.colored_vertex(pos2(x, shadow.top()), Color32::from_black_alpha(a));
+            mesh.colored_vertex(pos2(x, shadow.bottom()), Color32::from_black_alpha(a));
+        }
+        mesh.add_triangle(0, 1, 3);
+        mesh.add_triangle(0, 3, 2);
+        ui.painter().add(egui::Shape::mesh(mesh));
         egui::Frame::default().fill(theme::PANEL).inner_margin(egui::Margin::same(RACK_PAD as i8)).show(ui, |ui| {
             ui.set_width(RACK_W);
             ui.set_height(STRIP_H - 2.0 * RACK_PAD);
@@ -136,14 +148,21 @@ fn strip(ui: &mut Ui, r: Rect, p: &mut Project, h: &mut History, st: &mut UiStat
 
     // Mute: lit = audible, like every light in Lyra. Alt-click: solo (again: everyone back).
     let led_r = Rect::from_center_size(pos2(cx, y + 11.0), vec2(22.0, 22.0));
-    let led = ui.interact(led_r, id.with("mute"), Sense::click());
+    let led = ui.interact(led_r, id.with("mute"), Sense::click_and_drag());
     theme::led(&painter, led_r.center(), 22.0, (!p.mixer[t].mute).then_some(theme::L_MINT), led.hovered());
-    if led.clicked() {
-        h.checkpoint(p);
-        if ui.input(|i| i.modifiers.alt) {
+    if ui.input(|i| i.modifiers.alt) {
+        if led.clicked() {
+            h.checkpoint(p);
             solo(p, t);
-        } else {
-            p.mixer[t].mute ^= true;
+        }
+    } else {
+        match widgets::sweep(ui, led_r, "mixer-mute", !p.mixer[t].mute) {
+            Some(widgets::Sweep::Begin(on)) => {
+                h.checkpoint(p);
+                p.mixer[t].mute = !on;
+            }
+            Some(widgets::Sweep::Continue(on)) => p.mixer[t].mute = !on,
+            None => {}
         }
     }
     led.on_hover_text("Mute (lit = on) · Alt-click: solo");
@@ -343,10 +362,12 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
         match &slot {
             Some(s) => {
                 let led_r = Rect::from_center_size(led_c, vec2(m.led, m.led));
-                let led = ui.interact(led_r, ui.id().with(("fx-led", t, i)), Sense::click());
+                let led = ui.interact(led_r, ui.id().with(("fx-led", t, i)), Sense::click_and_drag());
                 theme::led(&painter, led_c, m.led, (!s.bypass).then_some(light), led.hovered());
-                if led.clicked() {
-                    action = Some(SlotAction::Bypass(i));
+                match widgets::sweep(ui, led_r, "fx-bypass", !s.bypass) {
+                    Some(widgets::Sweep::Begin(on)) => action = Some(SlotAction::Bypass(i, on, true)),
+                    Some(widgets::Sweep::Continue(on)) => action = Some(SlotAction::Bypass(i, on, false)),
+                    None => {}
                 }
                 led.on_hover_text("On / bypass");
                 let name = lyra_dsp::effects::info(&s.effect).map_or("Missing effect", |e| e.name);
@@ -459,9 +480,11 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
             st.effect = Some((t, i));
             st.raise = Some(crate::app::Focus::Effect);
         }
-        Some(SlotAction::Bypass(i)) => {
-            h.checkpoint(p);
-            p.mixer[t].effects[i].bypass ^= true;
+        Some(SlotAction::Bypass(i, on, begin)) => {
+            if begin {
+                h.checkpoint(p);
+            }
+            p.mixer[t].effects[i].bypass = !on;
         }
         Some(SlotAction::Put(i, id)) => {
             h.checkpoint(p);
@@ -509,7 +532,8 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
 
 enum SlotAction {
     Open(usize),
-    Bypass(usize),
+    /// (slot, turn on, first in the gesture)
+    Bypass(usize, bool, bool),
     Put(usize, &'static str),
     Move(usize, usize),
     Remove(usize),

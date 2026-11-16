@@ -12,18 +12,22 @@ what to work on and folds the items into the plan when the time is right.
 ## Friction
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
 // - [ ] ? bug or missing?
-- [ ]
+- [ ] hover over horizontal scroll bar should zoom. That zoom is better to have its origin at the viewport's left edge rather than the cursor's location
+- [ ] Missing left virtical scroll bars, same style. These would immediatly make it also Touch friendly.
+- [ ] 
 
 ## Wishes
 *Things you wish Lyra did.*
+- [ ] Putting Arrenger/Playlist up to date with the visual language. 
 - [ ] Piano roll: a vertical scrollbar on the right (can be thinner than the top one), great on a touchpad.
 - [ ] ~ Docked layout (Blender / VS Code style areas that don't overlap) for the main views; it would also save the title bars (~5rem). Floating windows stay for plugins.
 - [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
-- [ ] 
-- [ ]
+- [ ] ~ Start building docked windows for essential panels. Eg:
+Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons/hotkeys) | Inspector (Potentially Channel rack and other things might be dockable there). Plugins still maintain their floating nature due to rendering limitations.
 
 ## Sound
 *Ears-only notes: "kick too clicky", "pad needs more air", "this preset slaps".*
+// Director's note: These don't belong to Lyra. They would be incumbent to the plugins and synths dev, which could be also us, but not Lyra's team
 
 - [ ]
 
@@ -59,6 +63,28 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Journal batch → (hash)**
+- [x] Swap UI PAT/SONG but not their colors. SONG/PAT, SONG is green. Clicking either toggles
+  *→ SONG (green) | PAT (amber); clicking either face flips the mode.*
+- [x] 1, 2, 3, 4 LEDs are unnecessary, could be a simple flashing LED with different colors, potentially also following the song's measure in the future. They use space right now.
+  *→ one light: flashes on every beat, gold on the downbeat. Following the song's measure comes with time signatures.*
+- [x] Slightly stronger inset shadow on the LCD views.
+  *→ sorry: I claimed this last round, but that edit silently didn't apply. Now really in: a 3-px shadow, fading. My edit scripts now fail loudly when a change doesn't land.*
+- [x] left edge sahdow on the current channel mixer editor so they not merge witht the mixer strips
+  *→ the effect rack casts a soft shadow onto the strips.*
+- [x] Dropdown text be soft white/light gray (text color) 
+  *→ the pattern name is text-coloured now. (Other dropdowns already were.)*
+- [x] Piano octave offset window be Text white too rather than green
+  *→ the playable range is light grey now.*
+- [x] Most if not all rack'ed toggles should support the mouse drag to turn on/off all on hover. This is a good time to generalize that architecture in the UI-building libraries.
+  *→ `widgets::sweep`: press a toggle, keep the button down, sweep over its neighbours. One gesture = one undo step. Used by the rack's mute lights, the mixer's mute lights and the effect bypass lights.*
+- [x] Channel module to mixer mapping. A simple number selector to send a synth to a mixer chan.
+  *→ a number well after each instrument's name: drag or scroll (M = master, double-click resets).*
+- [x] Channel rack should be called something else, Mixer has channels, the channel rack has plugins/synths/instruments...
+  *→ "Instrument rack" (window title, F6 hint, "+ Instrument", README). The code still says `rack`.*
+- [x] Small border in the bottom edge of the toolbar to make it more visible
+  *→ a dark 2-px rule along the toolbar's bottom edge.*
 
 **Mixer & toolbar round 3 → `a46fefa`**
 - [x] *(chat)* Mixer window: resizing it shrank it, then it slowly grew back.

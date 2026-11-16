@@ -48,8 +48,7 @@ pub struct UiState {
     pub focus: Focus,
     /// Keys currently held on the typing keyboard (lights the piano roll's keys).
     pub live_keys: Vec<u8>,
-    /// While sweeping across mute lights: the mute state being painted.
-    pub led_paint: Option<bool>,
+
     /// A window that asked to be brought to the front this frame.
     pub raise: Option<Focus>,
     pub show_design: bool,
@@ -81,7 +80,6 @@ impl Default for UiState {
             show_editor: false,
             focus: Focus::Rack,
             live_keys: Vec::new(),
-            led_paint: None,
             raise: None,
             show_design: false,
             show_playlist: true,
@@ -465,6 +463,7 @@ impl eframe::App for LyraApp {
             .exact_height(theme::m().toolbar_h)
             .frame(egui::Frame::default().fill(theme::TOOLBAR).inner_margin(Margin::ZERO))
             .show(ctx, |ui| {
+                let bar = ui.max_rect();
                 let logo = self.textures.logo();
                 let octave = self.keyboard.octave;
                 transport::show(
@@ -478,6 +477,9 @@ impl eframe::App for LyraApp {
                     octave,
                     &mut actions,
                 );
+                // A dark rule along the bottom edge sets the toolbar off from the workspace.
+                let rule = egui::Rect::from_min_max(egui::pos2(bar.left(), bar.bottom() - 2.0), bar.max);
+                ui.painter().rect_filled(rule, cr(0), egui::Color32::from_rgb(0x0b, 0x0b, 0x0b));
             });
 
         self.status_bar(ctx);
@@ -601,7 +603,7 @@ impl LyraApp {
         }
 
         let mut open = self.ui.show_rack;
-        let rack_win = egui::Window::new("Channel rack")
+        let rack_win = egui::Window::new("Instrument rack")
             .id(Id::new("rack"))
             .open(&mut open)
             .default_pos([16.0, 54.0])
