@@ -235,12 +235,12 @@ impl Textures {
     }
 }
 
-/// Fluttersine's logo (from the original synth's splash screen), cropped to its
-/// artwork and stored at twice the size the FM editor shows it. Regenerate with:
-/// `im = Image.open("fluttersine_logo.png").convert("RGBA"); im = im.crop(im.split()[3].point(lambda v: 255 if v > 8 else 0).getbbox())`
-/// `im.resize((238, 176), Image.LANCZOS).tobytes()`
+/// Fluttersine's logo (the user's wordmark, `Fluttersine/fslogo2.png`), cropped
+/// to its artwork and stored at twice the size the FM editor shows it. Regenerate with:
+/// `im = Image.open("fslogo2.png").convert("RGBA"); im = im.crop(im.split()[3].point(lambda v: 255 if v > 8 else 0).getbbox())`
+/// `im.resize((420, 176), Image.LANCZOS).tobytes()`
 const FLUTTERSINE_LOGO: &[u8] = include_bytes!("../assets/fluttersine_logo.rgba");
-pub const FLUTTERSINE_LOGO_SIZE: [usize; 2] = [238, 176];
+pub const FLUTTERSINE_LOGO_SIZE: [usize; 2] = [420, 176];
 
 /// The Fluttersine logo texture, loaded the first time an FM editor opens.
 pub fn fluttersine_logo(ctx: &Context) -> egui::TextureId {

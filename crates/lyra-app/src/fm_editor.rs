@@ -1,10 +1,10 @@
 //! The hand-made editor for Lyra FM, a.k.a. **Fluttersine** (Sytrus-style).
 //!
 //! ```text
-//!  ┌ ◀ [ LCD: preset ▾ ] ▶ ─────────────────┐┌ logo ───────────┐
-//!  ├OP1┼OP2┼OP3┼OP4┼OP5┼OP6┼FILTER┼LFO───────┤│                 │
+//!  ┌ ◀ [ preset ▾ ] ▶ ───────────────────────┐   Fluttersine (logo,
+//!  ├OP1┼OP2┼OP3┼OP4┼OP5┼OP6┼FILTER┼LFO───────┤   no frame)
 //!  ┌ the open page ──────────────────────────┐┌ FM matrix ──────┐
-//!  │ wave keys · LCD wave · LCD envelope     ││ row → column    │
+//!  │ wave keys · LCD wave · LCD envelope     ││ 6×7 knobs       │
 //!  │ knobs                                   │├ voice ──────────┤
 //!  └─────────────────────────────────────────┘└─────────────────┘
 //! ```
@@ -12,13 +12,12 @@
 //! Lyra's visual language: fixed plates on a dark rack, a seam apart, so
 //! nothing moves when you switch pages. The open tab is just a brighter plate
 //! with a thin line of its light on top (like the selected mixer strip).
-//! Colour is only light: LEDs, lit keys, knob arcs and the matrix fills, one
-//! light per operator. Text stays grey, and the curves are dark ink on LCDs.
+//! Colour is only light: LEDs, lit keys and knob arcs, one light per operator. Text stays grey, and the curves are dark ink on LCDs.
 //!
 //! * The matrix is always visible; clicking a row's name opens that operator.
 //! * Envelope dots and the filter dots can be dragged; the knobs below are the
 //!   same parameters.
-//! * Wheel over the tabs, the wave keys or the preset LCD steps through them.
+//! * Wheel over the tabs, the wave keys or the preset dropdown steps through them.
 //!
 //! Like every view, this only edits `channel.params`; the bridge does the rest.
 //! The waveform pictures are display-only copies of `lyra_dsp::fm`'s shapes.
@@ -154,7 +153,8 @@ fn sizes() -> Sizes {
     let key_h = m.control_h;
     let gap = 6.0;
     let display_h = 104.0;
-    let mcell = vec2((m.control_h * 1.45).round(), m.control_h + 4.0);
+    // One small knob per matrix cell, with a little air around it.
+    let mcell = vec2(m.knob_small + 10.0, m.knob_small + 5.0);
     let mlabel_w = 50.0;
     let header_h = 16.0;
     Sizes {
@@ -188,14 +188,19 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     let (preset_h, page_h) = (outer(s.preset_h), outer(s.page_h));
     let left_h = preset_h + seam + s.tab_h + seam + page_h;
     let (rack, _) = ui.allocate_exact_size(vec2(seam + lw + seam + rw + seam, seam + left_h + seam), Sense::hover());
-    ui.painter().rect_filled(rack, cr(3), theme::BG);
     let x0 = rack.left() + seam;
     let x1 = x0 + lw + seam;
     let y0 = rack.top() + seam;
     let preset_r = Rect::from_min_size(pos2(x0, y0), vec2(lw, preset_h));
     let tabs_r = Rect::from_min_size(pos2(x0, preset_r.bottom() + seam), vec2(lw, s.tab_h));
     let page_r = Rect::from_min_size(pos2(x0, tabs_r.bottom() + seam), vec2(lw, page_h));
-    let logo_r = Rect::from_min_max(pos2(x1, y0), pos2(x1 + rw, tabs_r.bottom()));
+    // The rack's dark frame is L-shaped: the top-right corner is open window
+    // surface, and the logo sits on it with no frame of its own.
+    let frame_left = Rect::from_min_max(rack.min, pos2(x1, rack.bottom()));
+    let frame_right = Rect::from_min_max(pos2(x1 - seam, page_r.top() - seam), rack.max);
+    ui.painter().rect_filled(frame_left, cr(3), theme::BG);
+    ui.painter().rect_filled(frame_right, cr(3), theme::BG);
+    let logo_r = Rect::from_min_max(pos2(x1, rack.top()), pos2(rack.right(), page_r.top() - seam));
     let matrix_r = Rect::from_min_size(pos2(x1, page_r.top()), vec2(rw, outer(s.matrix_h)));
     let voice_r = Rect::from_min_max(pos2(x1, matrix_r.bottom() + seam), pos2(x1 + rw, page_r.bottom()));
 
@@ -222,10 +227,10 @@ fn plate<R>(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash, add: impl FnOnce(&
     add(&mut child)
 }
 
+/// The Fluttersine wordmark, straight on the window's surface (no plate, no frame).
 fn logo(ui: &mut Ui, r: Rect) {
-    ui.painter().rect_filled(r, cr(0), theme::PANEL);
     let [w, h] = theme::FLUTTERSINE_LOGO_SIZE;
-    let room = r.shrink(4.0);
+    let room = r.shrink2(vec2(10.0, 2.0));
     let scale = (room.width() / w as f32).min(room.height() / h as f32);
     let img = Rect::from_center_size(room.center(), vec2(w as f32, h as f32) * scale);
     let tex = theme::fluttersine_logo(ui.ctx());
@@ -253,7 +258,8 @@ fn current_preset(params: &[f32]) -> Option<usize> {
         .find(|&k| preset_values(k).iter().zip(params).all(|(a, b)| (a - b).abs() <= 1e-5 * a.abs().max(1.0)))
 }
 
-/// `◀ [ LCD: preset name ] ▶`. Click the LCD for the list, scroll over it to step.
+/// `◀ [ preset ▾ ] ▶`, a dropdown like the pattern picker. Click for the list,
+/// scroll over it to step.
 fn preset_row(ui: &mut Ui, ed: &mut Ed) {
     let s = sizes();
     let n = FM_PRESETS.len();
@@ -276,17 +282,17 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed) {
         if key(ui, Icon::Prev, "Previous preset").clicked() {
             pick = Some((at + n - 1) % n);
         }
-        let lcd_w = ui.available_width() - s.preset_h - 4.0;
-        let (r, resp) = ui.allocate_exact_size(vec2(lcd_w, s.preset_h), Sense::click());
+        let well_w = ui.available_width() - s.preset_h - 4.0;
+        let (r, resp) = ui.allocate_exact_size(vec2(well_w, s.preset_h), Sense::click());
         let painter = ui.painter();
-        theme::lcd_panel(painter, r);
+        theme::well(painter, r);
         let m = theme::m();
         let text = painter.text(
             r.left_center() + vec2(10.0, 0.0),
             Align2::LEFT_CENTER,
             name,
-            FontId::proportional(m.text + 1.0),
-            theme::LCD_INK,
+            FontId::proportional(m.text),
+            theme::TEXT,
         );
         if edited {
             painter.text(
@@ -294,12 +300,12 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed) {
                 Align2::LEFT_CENTER,
                 "edited",
                 FontId::proportional(m.text_small),
-                theme::LCD_INK_DIM,
+                theme::TEXT_DIM,
             );
         }
         let c = r.right_center() - vec2(13.0, 1.5);
         let chevron = vec![c + vec2(-3.5, -1.5), c + vec2(0.0, 2.0), c + vec2(3.5, -1.5)];
-        painter.add(Shape::line(chevron, stroke(1.6, theme::LCD_INK_DIM)));
+        painter.add(Shape::line(chevron, stroke(1.6, theme::TEXT_DIM)));
         if let Some(step) = wheel_step(ui, r) {
             pick = Some((at as i32 + step).rem_euclid(n as i32) as usize);
         }
@@ -793,7 +799,7 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, page: &mut Page, used: &[bool; OPS]) {
     let (area, _) = ui.allocate_exact_size(vec2(s.right_w, s.matrix_h), Sense::hover());
     ui.interact(Rect::from_min_size(area.min, vec2(s.mlabel_w - 4.0, 16.0)), Id::new("fm-matrix-help"), Sense::hover())
         .on_hover_text(
-            "FM matrix. Each row is an operator sending into each column: drag a cell up to modulate.\n\
+            "FM matrix. Each row is an operator sending into each column: turn a knob up to modulate.\n\
              The diagonal is feedback (an operator modulating itself). OUT is how loud it is.",
         );
     // Column heads
@@ -827,82 +833,18 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, page: &mut Page, used: &[bool; OPS]) {
             *page = Page::Op(row);
         }
         for col in 0..=OPS {
-            let (id, kind) = if col == OPS {
-                (p::out(row), Cell::Out)
-            } else if col == row {
-                (p::matrix(row, col), Cell::Feedback)
-            } else {
-                (p::matrix(row, col), Cell::Mod)
-            };
+            let id = if col == OPS { p::out(row) } else { p::matrix(row, col) };
             let cell = Rect::from_min_size(pos2(col_x(col), row_y(row)), s.mcell);
+            if col == row {
+                // Feedback: the diagonal sits in a faint recess.
+                ui.painter().rect_filled(cell.shrink(1.0), cr(4), theme::mix(theme::PANEL, theme::BG, 0.3));
+            }
+            let knob = Rect::from_center_size(cell.center(), Vec2::splat(theme::m().knob_small));
             let mut v = ed.v(id);
-            let r = matrix_cell(ui, cell, &mut v, id, lt, kind);
-            let tip = match kind {
-                Cell::Out => format!("OP{} to the output: {:.0}%", row + 1, v * 100.0),
-                Cell::Feedback => format!("OP{} feedback: {:.0}%", row + 1, v * 100.0),
-                Cell::Mod => format!("OP{} into OP{}: {:.0}%", row + 1, col + 1, v * 100.0),
-            };
-            let r = r.on_hover_text(tip);
+            let r = widgets::knob_at(ui, Id::new(("fm-matrix-knob", id)), knob, &mut v, &FM_PARAMS[id], lt.mid);
             ed.track(&r, id, v);
         }
     }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum Cell {
-    Mod,
-    Feedback,
-    Out,
-}
-
-/// One matrix cell, a flat key: drag up/down (Shift = fine), wheel = 1 % steps,
-/// double-click = reset. Its row's light fills it from the bottom.
-fn matrix_cell(ui: &mut Ui, rect: Rect, v: &mut f32, id: usize, light: Light, kind: Cell) -> Response {
-    let info = &FM_PARAMS[id];
-    let mut resp = ui.interact(rect, Id::new(("fm-cell", id)), Sense::click_and_drag());
-    let before = *v;
-    if resp.dragged() {
-        let fine = ui.input(|i| i.modifiers.shift);
-        *v -= resp.drag_delta().y * if fine { 0.001 } else { 0.005 };
-    }
-    if resp.hovered() {
-        let wheel = ui.input(|i| i.raw_scroll_delta.y);
-        if wheel != 0.0 {
-            *v = ((*v * 100.0).round() + wheel.signum()) / 100.0;
-        }
-    }
-    if resp.double_clicked() {
-        *v = info.default;
-    }
-    *v = v.clamp(info.min, info.max);
-    if *v != before {
-        resp.mark_changed();
-    }
-
-    let painter = ui.painter();
-    let hot = resp.hovered() || resp.dragged();
-    // The feedback diagonal is a shade darker, so the grid reads at a glance.
-    let tone = match kind {
-        Cell::Feedback => 0.78,
-        _ => 1.0,
-    };
-    theme::flat_key(painter, rect, None, hot, tone);
-    if *v > 0.0 {
-        // The amount as a level bar along the bottom, the number above it.
-        let face = rect.shrink(2.0);
-        let track = Rect::from_min_max(pos2(face.left(), face.bottom() - 4.0), face.right_bottom());
-        painter.rect_filled(track, cr(1), theme::KEY_RECESS);
-        let lit = Rect::from_min_size(track.min, vec2((track.width() * *v).max(2.0), track.height()));
-        painter.rect_filled(lit, cr(1), if hot { theme::shade(light.mid, 1.06) } else { light.mid });
-        painter.text(
-            rect.center() - vec2(0.0, 2.0),
-            Align2::CENTER_CENTER,
-            format!("{:.0}", *v * 100.0),
-            FontId::monospace(theme::m().text_small),
-            if hot { theme::TEXT } else { theme::shade(theme::TEXT, 0.92) },
-        );
-    }
-    resp
 }
 
 fn voice(ui: &mut Ui, ed: &mut Ed) {
