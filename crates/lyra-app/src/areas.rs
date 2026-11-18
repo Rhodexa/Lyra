@@ -9,8 +9,11 @@
 //! Keyboard editing keys (Delete, Ctrl+A, arrows…) go to the area under the
 //! mouse. The F-keys open the bottom area on an editor (F5 arrangement, F7
 //! piano roll, F9 mixer); pressing the same key again folds it away. Tab
-//! flips the area under the mouse back to its previous editor.
+//! flips the area under the mouse back to its previous editor. Double-clicking
+//! an audio clip opens the audio-clip editor (in the bottom area if neither
+//! area shows it yet).
 
+use crate::audio_editor::AudioEditor;
 use crate::piano_roll::PianoRoll;
 use crate::playlist::Playlist;
 use crate::theme::{self, cr};
@@ -26,10 +29,12 @@ pub enum Editor {
     /// The old channel rack's step grid. Not part of the plugin rack any more;
     /// kept as an editor for people who like programming beats in steps.
     Steps,
+    /// One audio clip, big: trim, gain, fades.
+    Audio,
 }
 
 impl Editor {
-    pub const ALL: [Editor; 4] = [Editor::Arrangement, Editor::PianoRoll, Editor::Mixer, Editor::Steps];
+    pub const ALL: [Editor; 5] = [Editor::Arrangement, Editor::PianoRoll, Editor::Audio, Editor::Mixer, Editor::Steps];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -37,6 +42,7 @@ impl Editor {
             Editor::PianoRoll => "Piano roll",
             Editor::Mixer => "Mixer",
             Editor::Steps => "Step sequencer",
+            Editor::Audio => "Audio clip",
         }
     }
 
@@ -46,6 +52,7 @@ impl Editor {
             Editor::PianoRoll => Icon::Piano,
             Editor::Mixer => Icon::Mixer,
             Editor::Steps => Icon::Rack,
+            Editor::Audio => Icon::Wave,
         }
     }
 
@@ -54,7 +61,7 @@ impl Editor {
             Editor::Arrangement => "F5",
             Editor::PianoRoll => "F7",
             Editor::Mixer => "F9",
-            Editor::Steps => "",
+            Editor::Steps | Editor::Audio => "",
         }
     }
 }
@@ -66,13 +73,21 @@ pub struct Area {
     pub prev: Option<Editor>,
     pub playlist: Playlist,
     pub piano: PianoRoll,
+    pub audio: AudioEditor,
     /// (pattern, channel id) this area's piano roll last framed its view on.
     pub framed: Option<(usize, u32)>,
 }
 
 impl Area {
     pub fn new(editor: Editor) -> Self {
-        Self { editor, prev: None, playlist: Playlist::default(), piano: PianoRoll::default(), framed: None }
+        Self {
+            editor,
+            prev: None,
+            playlist: Playlist::default(),
+            piano: PianoRoll::default(),
+            audio: AudioEditor::default(),
+            framed: None,
+        }
     }
 
     /// Show `editor`, remembering the one it replaces (for Tab).

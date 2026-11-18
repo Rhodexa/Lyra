@@ -3,6 +3,7 @@
 mod app;
 mod areas;
 mod audio;
+mod audio_editor;
 mod bridge;
 mod browser;
 mod demo;
@@ -20,6 +21,7 @@ mod samples;
 mod theme;
 mod timeline;
 mod transport;
+mod waveform;
 mod widgets;
 
 // The model and engine must agree on what a "step" is.

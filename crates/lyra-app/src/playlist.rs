@@ -6,6 +6,12 @@
 //! * **drag a clip** — move (also to another track) · **drag its right end** —
 //!   resize (longer than the pattern = the pattern repeats) · **Shift+drag** — duplicate
 //! * **click a clip** — makes its pattern the current one · **double-click** — open it in the piano roll
+//!   (an audio clip: in the audio-clip editor)
+//! * **audio clips** — drop a sample from the browser onto a track · drag the
+//!   *left* end to trim the start · the little squares on the title strip are
+//!   the fades (drag sideways), the dot on a fade's curve bends it (drag up and
+//!   down). Fades and gain are shared by every copy of the clip, like a
+//!   pattern's notes; where each copy starts and ends is its own.
 //! * **right-drag** — delete · **Ctrl+drag** — box select (Shift adds) · **Alt** — no snap
 //! * **wheel** — scroll tracks · **Shift+wheel** — zoom time · **Ctrl+wheel** — sideways ·
 //!   **Alt+wheel** — track height · **middle-drag** — pan
@@ -13,15 +19,18 @@
 //!   play the song from there · track lights — mute a track
 //!
 //! Keys (when this window was clicked last): Delete, Ctrl+A, Ctrl+D/B (duplicate
-//! after), ←→ move by snap (Ctrl = 4 bars), ↑↓ move to the track above/below, Esc.
+//! after), Ctrl+U (the selected audio clips get their own copy, to change apart), ←→ move by snap (Ctrl = 4 bars), ↑↓ move to the track above/below, Esc.
 
 use crate::app::UiState;
+use crate::browser::{AudioDrag, SampleDrag};
 use crate::keys::Action;
+use crate::samples::{self, Samples};
 use crate::theme::{self, cr, stroke};
 use crate::timeline::{self, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag};
+use crate::waveform::{self, End};
 use crate::widgets;
 use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, StrokeKind, Ui};
-use lyra_model::{Clip, History, Project, TICKS_PER_BAR, TICKS_PER_STEP};
+use lyra_model::{Audio, Clip, History, Project, Source, TICKS_PER_BAR, TICKS_PER_STEP};
 
 const HEADER_W: f32 = 150.0;
 const BEAT: u32 = TICKS_PER_STEP * 4;
@@ -42,6 +51,29 @@ enum Drag {
         originals: Vec<(usize, Clip)>,
         lead: usize,
         free: bool,
+    },
+    /// An audio clip's left end: trims its start (start and offset move together).
+    ResizeLeft {
+        anchor_tick: f32,
+        originals: Vec<(usize, Clip)>,
+        lead: usize,
+        free: bool,
+    },
+    /// A fade's length (shared by every copy of the audio clip).
+    Fade {
+        audio: usize,
+        end: End,
+        orig: f32,
+        anchor_x: f32,
+        seconds_per_px: f32,
+        max: f32,
+    },
+    /// A fade's curve.
+    Tension {
+        audio: usize,
+        end: End,
+        orig: f32,
+        anchor_y: f32,
     },
     Select {
         from: Pos2,
@@ -65,6 +97,8 @@ pub struct Playlist {
     pub snap: u32,
     selection: Vec<usize>,
     drag: Drag,
+    /// The last left press (time, place): our own double-click test, see `show`.
+    last_press: Option<(f64, Pos2)>,
 }
 
 impl Default for Playlist {
@@ -76,6 +110,7 @@ impl Default for Playlist {
             snap: TICKS_PER_BAR,
             selection: Vec::new(),
             drag: Drag::None,
+            last_press: None,
         }
     }
 }
@@ -106,6 +141,100 @@ impl View {
         let y = self.y(c.track);
         Rect::from_min_max(pos2(self.x(c.start as f32), y + 1.0), pos2(self.x(c.end() as f32), y + self.track_h - 1.0))
     }
+}
+
+/// A clip's parts on screen: the inner face, the title strip, and the body below it.
+fn parts(r: Rect) -> (Rect, Rect, Rect) {
+    let m = theme::m();
+    let inner = r.shrink(1.0);
+    let strip_h = (m.text_small + 6.0).min(inner.height() * 0.45);
+    let strip = Rect::from_min_max(inner.min, pos2(inner.right(), inner.top() + strip_h));
+    let body = Rect::from_min_max(pos2(inner.left(), strip.bottom()), inner.right_bottom() - vec2(0.0, 1.0));
+    (inner, strip, body)
+}
+
+/// Ticks of audio an audio clip has left from its offset on (None for pattern clips).
+pub fn audio_room(p: &Project, c: &Clip) -> Option<u32> {
+    let a = p.audio(c.audio()?)?;
+    let ticks = (a.length() / p.seconds_per_tick()).ceil() as u32;
+    Some(ticks.saturating_sub(c.offset).max(1))
+}
+
+/// Where an audio clip's fades are on screen.
+struct FadeGeo {
+    body: Rect,
+    /// The title strip's bottom edge, where the fade handles sit.
+    handles_y: f32,
+    /// Clip start, end of the fade-in, start of the fade-out, end of the sound.
+    x0: f32,
+    x_in: f32,
+    x_out: f32,
+    x_end: f32,
+}
+
+fn fade_geo(v: &View, p: &Project, c: &Clip, a: &Audio) -> FadeGeo {
+    let (_, strip, body) = parts(v.clip_rect(c));
+    let spt = p.seconds_per_tick() as f32;
+    let room = audio_room(p, c).unwrap_or(c.len);
+    let x0 = body.left();
+    let x_end = v.x((c.start + c.len.min(room)) as f32).min(body.right());
+    let px = |secs: f32| secs / spt * v.time.ppt;
+    let x_in = (x0 + px(a.fade_in.len)).min(x_end);
+    let x_out = (x_end - px(a.fade_out.len)).max(x0);
+    FadeGeo { body, handles_y: strip.bottom(), x0, x_in, x_out, x_end }
+}
+
+/// A fade handle or curve under the mouse.
+#[derive(Clone, Copy, PartialEq)]
+struct FadeHit {
+    clip: usize,
+    end: End,
+    /// The curve's dot (tension) rather than the square (length).
+    curve: bool,
+}
+
+const HANDLE_R: f32 = 6.0;
+/// Fades narrower than this show no curve dot (too fiddly).
+const CURVE_MIN_W: f32 = 16.0;
+
+fn fade_hit(v: &View, p: &Project, pos: Pos2) -> Option<FadeHit> {
+    (0..p.clips.len()).rev().find_map(|i| {
+        let c = &p.clips[i];
+        let a = p.audio(c.audio()?)?;
+        let r = v.clip_rect(c);
+        if r.height() < 28.0 || !r.expand(HANDLE_R).contains(pos) {
+            return None;
+        }
+        let g = fade_geo(v, p, c, a);
+        for (end, x, fade) in [(End::In, g.x_in, a.fade_in), (End::Out, g.x_out, a.fade_out)] {
+            if pos.distance(pos2(x, g.handles_y)) <= HANDLE_R {
+                return Some(FadeHit { clip: i, end, curve: false });
+            }
+            let (f0, f1) = if end == End::In { (g.x0, g.x_in) } else { (g.x_out, g.x_end) };
+            if f1 - f0 >= CURVE_MIN_W {
+                let mid = pos2(
+                    (f0 + f1) * 0.5,
+                    g.body.bottom() - lyra_engine::fade_curve(0.5, fade.tension) * g.body.height(),
+                );
+                if pos.distance(mid) <= HANDLE_R {
+                    return Some(FadeHit { clip: i, end, curve: true });
+                }
+            }
+        }
+        None
+    })
+}
+
+fn left_edge_hit(v: &View, clips: &[Clip], pos: Pos2) -> Option<usize> {
+    let m = theme::m();
+    (0..clips.len()).rev().find(|&i| {
+        let r = v.clip_rect(&clips[i]);
+        let grab = m.edge_grab.min(r.width() * 0.3);
+        clips[i].audio().is_some()
+            && r.y_range().contains(pos.y)
+            && pos.x >= r.left() - m.edge_reach
+            && pos.x <= r.left() + grab
+    })
 }
 
 fn hit(v: &View, clips: &[Clip], pos: Pos2) -> Option<usize> {
@@ -168,6 +297,33 @@ impl Playlist {
                 }
                 self.selection = (base..p.clips.len()).collect();
             }
+            Action::MakeUnique if !self.selection.is_empty() => {
+                // One new audio clip per audio clip the selection plays, shared by
+                // the selected copies; only when copies outside the selection
+                // play it too (otherwise it's unique already).
+                let mut sources: Vec<lyra_model::AudioId> =
+                    self.selection.iter().filter_map(|&i| p.clips[i].audio()).collect();
+                sources.sort_unstable();
+                sources.dedup();
+                let shared = |p: &Project, id| {
+                    (0..p.clips.len()).any(|i| p.clips[i].audio() == Some(id) && !self.selection.contains(&i))
+                };
+                let todo: Vec<_> = sources.into_iter().filter(|&id| shared(p, id)).collect();
+                if todo.is_empty() {
+                    return true;
+                }
+                h.checkpoint(p);
+                for id in todo {
+                    let Some(index) = p.audio_index(id) else { continue };
+                    let copy = p.clone_audio(index);
+                    let new_id = p.audio[copy].id;
+                    for &i in &self.selection {
+                        if p.clips[i].audio() == Some(id) {
+                            p.clips[i].source = Source::Audio(new_id);
+                        }
+                    }
+                }
+            }
             Action::Arrow { dx, dy, big } if !self.selection.is_empty() => {
                 let dt = dx as i64 * if big { 4 * TICKS_PER_BAR as i64 } else { self.snap as i64 };
                 let tracks = p.tracks.len() as i64;
@@ -198,6 +354,7 @@ impl Playlist {
         st: &mut UiState,
         playhead: f64,
         playing: bool,
+        samples: &mut Samples,
         out: &mut Vec<Action>,
     ) {
         let m = theme::m();
@@ -222,19 +379,28 @@ impl Playlist {
         let song_len = p.song_length() as f32;
         let overview = Overview { rect: overview_r, area: grid, content: song_len };
 
-        let (pos, pressed_p, pressed_s, pressed_m, double, down, mods, wheel, zoom) = ui.input(|i| {
+        let (pos, pressed_p, pressed_s, pressed_m, down, mods, wheel, zoom, now) = ui.input(|i| {
             (
                 i.pointer.interact_pos(),
                 i.pointer.primary_pressed(),
                 i.pointer.secondary_pressed(),
                 i.pointer.button_pressed(egui::PointerButton::Middle),
-                i.pointer.button_double_clicked(egui::PointerButton::Primary),
                 i.pointer.any_down(),
                 i.modifiers,
                 i.raw_scroll_delta,
                 i.zoom_delta(),
+                i.time,
             )
         });
+        // A double-click is decided on the second *press*, by us: egui only
+        // reports one on the release, a frame (or more) after the press that
+        // starts our gestures, so asking egui worked only when a quick click
+        // fit in one frame. A third press right after doesn't count again.
+        let double = pressed_p
+            && pos.is_some_and(|p| self.last_press.is_some_and(|(t, at)| now - t < 0.35 && at.distance(p) < 6.0));
+        if pressed_p {
+            self.last_press = if double { None } else { pos.map(|p| (now, p)) };
+        }
         let hovering = ui.rect_contains_pointer(rect) && !crate::app::on_panel_edge(ui.ctx());
 
         // ── Wheel ──
@@ -276,10 +442,14 @@ impl Playlist {
         self.scroll_y = self.scroll_y.clamp(0.0, (p.tracks.len() as f32 - rows).max(0.0));
         let view = self.view(grid);
 
-        // Track headers mute like every row of lights: press one, sweep over the others.
+        // Track headers mute like every row of lights: press one, sweep over the
+        // others. (Not over the insert well at the right end.)
         for t in 0..p.tracks.len() {
             let y = view.y(t);
-            let row = Rect::from_min_max(pos2(headers.left(), y), pos2(headers.right(), y + self.track_h));
+            let mut row = Rect::from_min_max(pos2(headers.left(), y), pos2(headers.right(), y + self.track_h));
+            if let Some(well) = route_well(&view, headers, t) {
+                row.max.x = well.left() - 2.0;
+            }
             if !row.intersects(headers) || !hovering {
                 continue;
             }
@@ -290,6 +460,47 @@ impl Playlist {
                 }
                 Some(widgets::Sweep::Continue(on)) => p.tracks[t].mute = !on,
                 None => {}
+            }
+        }
+
+        // ── Drops from the browser: a sample becomes a new audio clip, an audio
+        //    clip a new copy of it. ──
+        let drop_at = pos.filter(|p| hovering && grid.contains(*p));
+        let dropping = egui::DragAndDrop::has_payload_of_type::<SampleDrag>(ui.ctx())
+            || egui::DragAndDrop::has_payload_of_type::<AudioDrag>(ui.ctx());
+        let mut ghost = None;
+        if let (Some(at), true) = (drop_at, dropping) {
+            let snap = if mods.alt { 1 } else { self.snap };
+            let start = (view.tick(at.x).max(0.0) as u32 / snap) * snap;
+            let track = view.track(at.y);
+            let spt = p.seconds_per_tick();
+            let secs = if let Some(d) = egui::DragAndDrop::payload::<SampleDrag>(ui.ctx()) {
+                samples.get(&d.0).map(|s| s.seconds() as f64).unwrap_or(0.0)
+            } else {
+                egui::DragAndDrop::payload::<AudioDrag>(ui.ctx()).and_then(|d| p.audio(d.0)).map_or(0.0, |a| a.length())
+            };
+            let len = ((secs / spt).ceil() as u32).max(1);
+            if let Ok(track) = usize::try_from(track).map(|t| t.min(p.tracks.len().saturating_sub(1))) {
+                ghost = Some(Clip::of_audio(0, track, start, len));
+                if ui.input(|i| i.pointer.any_released()) {
+                    let id = if let Some(d) = egui::DragAndDrop::take_payload::<SampleDrag>(ui.ctx()) {
+                        h.checkpoint(p);
+                        let i = p.add_audio(&samples::display_name(&d.0), &d.0, secs);
+                        Some(p.audio[i].id)
+                    } else if let Some(d) = egui::DragAndDrop::take_payload::<AudioDrag>(ui.ctx()) {
+                        h.checkpoint(p);
+                        Some(d.0)
+                    } else {
+                        None
+                    };
+                    if let Some(id) = id {
+                        p.clips.push(Clip::of_audio(id, track, start, len));
+                        self.selection = vec![p.clips.len() - 1];
+                        st.audio = Some(id);
+                        st.place_audio = true;
+                        ghost = None;
+                    }
+                }
             }
         }
 
@@ -321,7 +532,10 @@ impl Playlist {
             if let Some(pos) = pos {
                 // Held at or past an edge while moving, resizing or selecting:
                 // the view scrolls and the drag follows.
-                let horizontal = matches!(self.drag, Drag::Move { .. } | Drag::Resize { .. } | Drag::Select { .. });
+                let horizontal = matches!(
+                    self.drag,
+                    Drag::Move { .. } | Drag::Resize { .. } | Drag::ResizeLeft { .. } | Drag::Select { .. }
+                );
                 let vertical = matches!(self.drag, Drag::Move { .. } | Drag::Select { .. });
                 let mut view = view;
                 if horizontal {
@@ -352,7 +566,13 @@ impl Playlist {
         // Cursor feedback
         if let (true, Some(pos), Drag::None) = (hovering, pos, &self.drag) {
             if grid.contains(pos) {
-                if edge_hit(&view, &p.clips, pos).is_some() {
+                if let Some(f) = fade_hit(&view, p, pos) {
+                    ui.ctx().set_cursor_icon(if f.curve {
+                        CursorIcon::ResizeVertical
+                    } else {
+                        CursorIcon::ResizeHorizontal
+                    });
+                } else if edge_hit(&view, &p.clips, pos).is_some() || left_edge_hit(&view, &p.clips, pos).is_some() {
                     ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
                 } else if hit(&view, &p.clips, pos).is_some() {
                     ui.ctx().set_cursor_icon(CursorIcon::Grab);
@@ -366,9 +586,15 @@ impl Playlist {
                 | Drag::VBar(VDrag::Pan { .. })
         ) {
             ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
-        } else if matches!(self.drag, Drag::VBar(VDrag::Edge { .. })) {
+        } else if matches!(self.drag, Drag::VBar(VDrag::Edge { .. }) | Drag::Tension { .. }) {
             ui.ctx().set_cursor_icon(CursorIcon::ResizeVertical);
-        } else if matches!(self.drag, Drag::Resize { .. } | Drag::Overview(OverviewDrag::Edge { .. })) {
+        } else if matches!(
+            self.drag,
+            Drag::Resize { .. }
+                | Drag::ResizeLeft { .. }
+                | Drag::Fade { .. }
+                | Drag::Overview(OverviewDrag::Edge { .. })
+        ) {
             ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
         }
 
@@ -376,13 +602,48 @@ impl Playlist {
         let view = self.view(grid);
         let painter = ui.painter_at(rect);
         self.paint_grid(&painter, &view, p, song_len);
-        self.paint_clips(&painter, &view, p, st, playing.then_some(playhead));
+        let hot = match &self.drag {
+            Drag::Fade { audio, end, .. } | Drag::Tension { audio, end, .. } => {
+                let curve = matches!(self.drag, Drag::Tension { .. });
+                Some((Some(*audio), *end, curve))
+            }
+            Drag::None => pos
+                .filter(|_| hovering)
+                .and_then(|pos| fade_hit(&view, p, pos))
+                .map(|f| (p.clips[f.clip].audio().and_then(|id| p.audio_index(id)), f.end, f.curve)),
+            _ => None,
+        };
+        self.paint_clips(&painter, &view, p, st, playing.then_some(playhead), samples, hot);
+        if let Some(g) = &ghost {
+            let r = view.clip_rect(g);
+            painter.rect_filled(r, cr(4), theme::TEXT.gamma_multiply(0.12));
+            painter.rect_stroke(r, cr(4), stroke(1.5, theme::TEXT.gamma_multiply(0.6)), StrokeKind::Inside);
+        }
         if let (Drag::Select { from, .. }, Some(pos)) = (&self.drag, pos) {
             let r = Rect::from_two_pos(*from, pos);
             painter.rect_filled(r, cr(0), theme::MINT.gamma_multiply(0.07));
             painter.rect_stroke(r, cr(0), stroke(1.0, theme::MINT.gamma_multiply(0.7)), StrokeKind::Inside);
         }
         self.paint_headers(&painter, &view, headers, p);
+        // Each track's insert for its audio clips, at the right end of its header.
+        for t in 0..p.tracks.len() {
+            let Some(well) = route_well(&view, headers, t) else { continue };
+            let mut insert = p.tracks[t].mixer;
+            let inserts = p.mixer.len().saturating_sub(1);
+            let r = ui.put(well, |ui: &mut Ui| {
+                widgets::number_well(ui, &mut insert, 0..=inserts, 0, well.size(), |n| {
+                    if n == 0 {
+                        "M".into()
+                    } else {
+                        n.to_string()
+                    }
+                })
+            });
+            let r = r.on_hover_text("Mixer insert for this track's audio clips (M = master)");
+            if crate::rack::tracked(&r, h, p) {
+                p.tracks[t].mixer = insert;
+            }
+        }
         overview.paint(&painter, &self.time, matches!(self.drag, Drag::Overview(_)));
         vbar.paint(&painter, &self.rows(grid, p.tracks.len()), matches!(self.drag, Drag::VBar(_)));
         for c in &p.clips {
@@ -410,7 +671,13 @@ impl Playlist {
                 }
             });
             ui.add_space(10.0);
-            if let Some(pat) = p.patterns.get(st.pattern) {
+            let placing = if st.place_audio { st.audio.and_then(|id| p.audio(id)) } else { None };
+            if let Some(a) = placing {
+                let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
+                ui.painter().circle_filled(r.center(), 4.0, theme::channel_color(a.color));
+                ui.label(egui::RichText::new(format!("click places: {}", a.name)).color(theme::TEXT_DIM))
+                    .on_hover_text("Click a pattern clip (or pick a pattern in the top bar) to place patterns again.");
+            } else if let Some(pat) = p.patterns.get(st.pattern) {
                 let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                 ui.painter().circle_filled(r.center(), 4.0, theme::channel_color(st.pattern));
                 ui.label(egui::RichText::new(format!("click places: {}", pat.name)).color(theme::TEXT_DIM))
@@ -452,15 +719,53 @@ impl Playlist {
             self.drag = Drag::Select { from: pos, base };
             return;
         }
+        // A fade's handle or curve (audio clips): change the shared fade.
+        if let Some(f) = fade_hit(v, p, pos) {
+            let c = &p.clips[f.clip];
+            let Some(ai) = c.audio().and_then(|id| p.audio_index(id)) else { return };
+            h.checkpoint(p);
+            let a = &p.audio[ai];
+            let fade = if f.end == End::In { a.fade_in } else { a.fade_out };
+            self.drag = if f.curve {
+                Drag::Tension { audio: ai, end: f.end, orig: fade.tension, anchor_y: pos.y }
+            } else {
+                let spt = p.seconds_per_tick() as f32;
+                let room = audio_room(p, c).unwrap_or(c.len).min(c.len);
+                Drag::Fade {
+                    audio: ai,
+                    end: f.end,
+                    orig: fade.len,
+                    anchor_x: pos.x,
+                    seconds_per_px: spt / v.time.ppt,
+                    max: room as f32 * spt,
+                }
+            };
+            return;
+        }
         let edge = edge_hit(v, &p.clips, pos);
-        if let Some(i) = edge.or_else(|| hit(v, &p.clips, pos)) {
-            // Clicking a clip makes its pattern the current one (FL-style).
-            if let Some(idx) = p.pattern_index(p.clips[i].pattern) {
-                st.pattern = idx;
+        let left = if edge.is_none() { left_edge_hit(v, &p.clips, pos) } else { None };
+        if let Some(i) = edge.or(left).or_else(|| hit(v, &p.clips, pos)) {
+            // Clicking a clip makes it the current one (FL-style): the next click
+            // on empty space places another of it.
+            match p.clips[i].source {
+                Source::Pattern(id) => {
+                    if let Some(idx) = p.pattern_index(id) {
+                        st.pattern = idx;
+                    }
+                    st.place_audio = false;
+                }
+                Source::Audio(id) => {
+                    st.audio = Some(id);
+                    st.place_audio = true;
+                }
             }
             if double {
-                // Double-click a clip: edit its pattern in the piano roll.
-                st.open_pattern = p.pattern_index(p.clips[i].pattern);
+                // Double-click a clip: edit its pattern in the piano roll, or its
+                // audio in the audio-clip editor.
+                match p.clips[i].source {
+                    Source::Pattern(id) => st.open_pattern = p.pattern_index(id),
+                    Source::Audio(id) => st.open_audio = Some(id),
+                }
                 self.drag = Drag::None;
                 return;
             }
@@ -483,18 +788,29 @@ impl Playlist {
             let lead = originals.iter().position(|(j, _)| *j == lead_i).unwrap_or(0);
             self.drag = if edge.is_some() {
                 Drag::Resize { anchor_tick, originals, lead, free }
+            } else if left.is_some() {
+                Drag::ResizeLeft { anchor_tick, originals, lead, free }
             } else {
                 Drag::Move { anchor_tick, anchor_track, originals, lead, free }
             };
-        } else if let (Some(pat), Ok(track)) = (p.patterns.get(st.pattern), usize::try_from(anchor_track)) {
+        } else if let Ok(track) = usize::try_from(anchor_track) {
             if track >= p.tracks.len() {
                 return;
             }
-            // Place the current pattern here, full length, and keep dragging it.
-            h.checkpoint(p);
+            // Place the current pattern (or audio clip) here, full length, and
+            // keep dragging it.
             let start = (anchor_tick.max(0.0) as u32 / snap) * snap;
-            let len = pat.play_length() * TICKS_PER_STEP;
-            p.clips.push(Clip { pattern: pat.id, track, start, len });
+            let placing = st.audio.filter(|_| st.place_audio).filter(|&id| p.audio(id).is_some());
+            let clip = if let Some(id) = placing {
+                let probe = Clip::of_audio(id, track, start, 1);
+                Clip::of_audio(id, track, start, audio_room(p, &probe).unwrap_or(TICKS_PER_BAR))
+            } else if let Some(pat) = p.patterns.get(st.pattern) {
+                Clip::of_pattern(pat.id, track, start, pat.play_length() * TICKS_PER_STEP)
+            } else {
+                return;
+            };
+            h.checkpoint(p);
+            p.clips.push(clip);
             let i = p.clips.len() - 1;
             self.selection = vec![i];
             self.drag =
@@ -541,8 +857,50 @@ impl Playlist {
                 let new_len = snapped(raw, snap).max(snap.max(TICKS_PER_STEP) as f32) as i64;
                 let dl = new_len - lead_clip.len as i64;
                 for (i, c) in originals.iter() {
+                    // An audio clip can't run past the end of its audio.
+                    let room = audio_room(p, c).map_or(i64::MAX, |r| r as i64);
                     if let Some(clip) = p.clips.get_mut(*i) {
-                        clip.len = (c.len as i64 + dl).max(TICKS_PER_STEP as i64) as u32;
+                        clip.len = (c.len as i64 + dl).max(TICKS_PER_STEP as i64).min(room.max(1)) as u32;
+                    }
+                }
+            }
+            Drag::ResizeLeft { anchor_tick, originals, lead, free } => {
+                *free |= mods.alt;
+                let snap = if *free { 1 } else { self.snap };
+                let lead_clip = &originals[*lead].1;
+                let raw = lead_clip.start as f32 + (v.tick(pos.x) - *anchor_tick);
+                let mut d = snapped(raw, snap) as i64 - lead_clip.start as i64;
+                // Every audio clip in the selection moves its start the same
+                // amount: not before its audio's start, not past its own end.
+                let audio: Vec<&(usize, Clip)> = originals.iter().filter(|(_, c)| c.audio().is_some()).collect();
+                for (_, c) in &audio {
+                    d = d.max(-(c.offset as i64)).max(-(c.start as i64)).min(c.len as i64 - 1);
+                }
+                for (i, c) in audio {
+                    if let Some(clip) = p.clips.get_mut(*i) {
+                        clip.start = (c.start as i64 + d) as u32;
+                        clip.offset = (c.offset as i64 + d) as u32;
+                        clip.len = (c.len as i64 - d) as u32;
+                    }
+                }
+            }
+            Drag::Fade { audio, end, orig, anchor_x, seconds_per_px, max } => {
+                let dx = pos.x - *anchor_x;
+                let d = if *end == End::In { dx } else { -dx };
+                let len = (*orig + d * *seconds_per_px).clamp(0.0, max.max(0.0));
+                if let Some(a) = p.audio.get_mut(*audio) {
+                    match end {
+                        End::In => a.fade_in.len = len,
+                        End::Out => a.fade_out.len = len,
+                    }
+                }
+            }
+            Drag::Tension { audio, end, orig, anchor_y } => {
+                let t = waveform::drag_tension(*orig, pos.y - *anchor_y);
+                if let Some(a) = p.audio.get_mut(*audio) {
+                    match end {
+                        End::In => a.fade_in.tension = t,
+                        End::Out => a.fade_out.tension = t,
                     }
                 }
             }
@@ -622,67 +980,65 @@ impl Playlist {
     }
 
     /// Clips are flat keys: a dark recess outline, a body tinted with the
-    /// pattern's light, and a flat title strip in that light with dark ink.
-    fn paint_clips(&self, painter: &egui::Painter, v: &View, p: &Project, st: &UiState, playhead: Option<f64>) {
+    /// clip's light, and a flat title strip in that light with dark ink.
+    #[allow(clippy::too_many_arguments)]
+    fn paint_clips(
+        &self,
+        painter: &egui::Painter,
+        v: &View,
+        p: &Project,
+        st: &UiState,
+        playhead: Option<f64>,
+        samples: &mut Samples,
+        hot: Option<(Option<usize>, End, bool)>,
+    ) {
         let m = theme::m();
         for (i, c) in p.clips.iter().enumerate() {
             let r = v.clip_rect(c);
             if !r.intersects(v.grid) {
                 continue;
             }
-            let Some(pat) = p.pattern(c.pattern) else { continue };
+            let (name, current) = match c.source {
+                Source::Pattern(id) => match p.pattern(id) {
+                    Some(pat) => (pat.name.as_str(), !st.place_audio && p.pattern_index(id) == Some(st.pattern)),
+                    None => continue,
+                },
+                Source::Audio(id) => match p.audio(id) {
+                    Some(a) => (a.name.as_str(), st.place_audio && st.audio == Some(id)),
+                    None => continue,
+                },
+            };
             let light = clip_light(p, c);
-            let current = p.pattern_index(c.pattern) == Some(st.pattern);
             let playing = playhead.is_some_and(|t| (c.start as f64..c.end() as f64).contains(&t));
             let selected = self.selection.contains(&i);
             painter.rect_filled(r, cr(4), theme::KEY_RECESS);
-            let inner = r.shrink(1.0);
-            let mut body = theme::mix(theme::PANEL, light.low, if current { 0.34 } else { 0.24 });
+            let (inner, strip, body) = parts(r);
+            let mut fill = theme::mix(theme::PANEL, light.low, if current { 0.52 } else { 0.42 });
             if playing {
-                body = theme::shade(body, 1.12);
+                fill = theme::shade(fill, 1.12);
             }
-            painter.rect_filled(inner, cr(3), body);
-            // Title strip.
-            let strip_h = (m.text_small + 6.0).min(inner.height() * 0.45);
-            let strip = Rect::from_min_max(inner.min, pos2(inner.right(), inner.top() + strip_h));
+            painter.rect_filled(inner, cr(3), fill);
             let strip_fill = if playing { theme::shade(light.mid, 1.04) } else { light.mid };
             painter.rect_filled(strip, egui::CornerRadius { nw: 3, ne: 3, sw: 0, se: 0 }, strip_fill);
             if r.width() > 24.0 {
                 painter.with_clip_rect(strip.intersect(v.grid)).text(
                     strip.left_center() + vec2(5.0, 0.0),
                     Align2::LEFT_CENTER,
-                    &pat.name,
+                    name,
                     FontId::proportional(m.text_small),
                     theme::key_ink(true),
                 );
             }
-            // Note silhouettes of every channel, repeated across the clip.
-            let body_r = Rect::from_min_max(
-                pos2(inner.left() + 2.0, strip.bottom() + 2.0),
-                inner.right_bottom() - vec2(2.0, 2.0),
-            );
-            let loop_len = (pat.play_length() * TICKS_PER_STEP).max(1);
-            let (lo, hi) =
-                pat.notes.values().flatten().fold((127u8, 0u8), |(lo, hi), n| (lo.min(n.key), hi.max(n.key)));
-            let span = (hi.saturating_sub(lo) as f32).max(12.0);
-            let clipped = painter.with_clip_rect(body_r.intersect(v.grid));
-            for (ch_i, ch) in p.channels.iter().enumerate() {
-                let ink = theme::channel_light(ch.color).mid;
-                for rep in (0..c.len).step_by(loop_len as usize) {
-                    if rep > 0 && ch_i == 0 {
-                        // Where the pattern repeats.
-                        let x = v.x((c.start + rep) as f32);
-                        clipped.vline(x, body_r.y_range(), stroke(1.0, Color32::from_black_alpha(90)));
+            match c.source {
+                Source::Pattern(id) => {
+                    if let Some(pat) = p.pattern(id) {
+                        paint_notes(painter, v, p, c, pat, body);
                     }
-                    for n in pat.notes(ch.id).iter().filter(|n| rep + n.start < c.len) {
-                        let x0 = v.x((c.start + rep + n.start) as f32);
-                        let x1 = v.x((c.start + rep + (n.start + n.len).min(c.len - rep)) as f32);
-                        let y = body_r.bottom() - (n.key - lo) as f32 / span * (body_r.height() - 2.0);
-                        clipped.rect_filled(
-                            Rect::from_min_max(pos2(x0, y - 1.5), pos2(x1.max(x0 + 1.5), y)),
-                            cr(0),
-                            ink,
-                        );
+                }
+                Source::Audio(id) => {
+                    if let (Some(a), Some(ai)) = (p.audio(id), p.audio_index(id)) {
+                        let hot = hot.filter(|h| h.0 == Some(ai)).map(|h| (h.1, h.2));
+                        paint_audio(painter, v, p, c, a, light, samples, hot);
                     }
                 }
             }
@@ -721,7 +1077,114 @@ impl Playlist {
     }
 }
 
-/// Clips are lit by pattern, so the same pattern looks the same everywhere.
+/// Clips are lit by what they play, so the same pattern (or audio clip)
+/// looks the same everywhere.
 pub fn clip_light(p: &Project, c: &Clip) -> theme::Light {
-    theme::channel_light(p.pattern_index(c.pattern).unwrap_or(0))
+    match c.source {
+        Source::Pattern(id) => theme::channel_light(p.pattern_index(id).unwrap_or(0)),
+        Source::Audio(id) => theme::channel_light(p.audio(id).map_or(0, |a| a.color)),
+    }
+}
+
+/// The insert well at the right end of a track's header (None when the row
+/// is too short or not fully on screen).
+fn route_well(v: &View, headers: Rect, track: usize) -> Option<Rect> {
+    let y = v.y(track);
+    let size = vec2(24.0, 18.0f32.min(v.track_h - 8.0));
+    if size.y < 12.0 {
+        return None;
+    }
+    let center = pos2(headers.right() - theme::SEAM - 6.0 - size.x * 0.5, y + (v.track_h - theme::SEAM) * 0.5);
+    let r = Rect::from_center_size(center, size);
+    (r.top() >= headers.top() && r.bottom() <= headers.bottom()).then_some(r)
+}
+
+/// A pattern clip's body: note silhouettes of every channel, repeated across the clip.
+fn paint_notes(painter: &egui::Painter, v: &View, p: &Project, c: &Clip, pat: &lyra_model::Pattern, body: Rect) {
+    let body_r = body.shrink2(vec2(2.0, 2.0));
+    let loop_len = (pat.play_length() * TICKS_PER_STEP).max(1);
+    let (lo, hi) = pat.notes.values().flatten().fold((127u8, 0u8), |(lo, hi), n| (lo.min(n.key), hi.max(n.key)));
+    let span = (hi.saturating_sub(lo) as f32).max(12.0);
+    let clipped = painter.with_clip_rect(body_r.intersect(v.grid));
+    for (ch_i, ch) in p.channels.iter().enumerate() {
+        let ink = theme::channel_light(ch.color).mid;
+        for rep in (0..c.len).step_by(loop_len as usize) {
+            if rep > 0 && ch_i == 0 {
+                // Where the pattern repeats.
+                let x = v.x((c.start + rep) as f32);
+                clipped.vline(x, body_r.y_range(), stroke(1.0, Color32::from_black_alpha(90)));
+            }
+            for n in pat.notes(ch.id).iter().filter(|n| rep + n.start < c.len) {
+                let x0 = v.x((c.start + rep + n.start) as f32);
+                let x1 = v.x((c.start + rep + (n.start + n.len).min(c.len - rep)) as f32);
+                let y = body_r.bottom() - (n.key - lo) as f32 / span * (body_r.height() - 2.0);
+                clipped.rect_filled(Rect::from_min_max(pos2(x0, y - 1.5), pos2(x1.max(x0 + 1.5), y)), cr(0), ink);
+            }
+        }
+    }
+}
+
+/// An audio clip's body: its waveform, shaped by its gain and fades, with
+/// the fades' curves and handles on top. `hot` = the fade part under the mouse.
+#[allow(clippy::too_many_arguments)]
+fn paint_audio(
+    painter: &egui::Painter,
+    v: &View,
+    p: &Project,
+    c: &Clip,
+    a: &Audio,
+    light: theme::Light,
+    samples: &mut Samples,
+    hot: Option<(End, bool)>,
+) {
+    let g = fade_geo(v, p, c, a);
+    let clipped = painter.with_clip_rect(g.body.intersect(v.grid));
+    if g.x_end < g.body.right() {
+        // The clip runs on past the end of its sound: nothing plays here.
+        let rest = Rect::from_min_max(pos2(g.x_end, g.body.top()), g.body.right_bottom());
+        clipped.rect_filled(rest, cr(0), Color32::from_black_alpha(90));
+    }
+    let Some(peaks) = samples.peaks(&a.sample) else {
+        clipped.text(
+            g.body.left_center() + vec2(5.0, 0.0),
+            Align2::LEFT_CENTER,
+            "file missing",
+            FontId::proportional(theme::m().text_small),
+            theme::TEXT_DIM,
+        );
+        return;
+    };
+    let spt = p.seconds_per_tick();
+    let sr = peaks.sample_rate() as f64;
+    let gain = 10f32.powf(a.gain / 20.0);
+    let wave = g.body.shrink2(vec2(0.0, 2.0));
+    waveform::paint(&clipped, wave, &peaks, light.hi, 1.0, |x| {
+        if x < g.x0 || x >= g.x_end {
+            return None;
+        }
+        let secs = |x: f32| a.start + (c.offset as f64 + (v.tick(x) - c.start as f32) as f64) * spt;
+        let mut gain = gain;
+        if x < g.x_in {
+            gain *= waveform::fade_gain(End::In, x, g.x0, g.x_in, a.fade_in.tension);
+        }
+        if x > g.x_out {
+            gain *= waveform::fade_gain(End::Out, x, g.x_out, g.x_end, a.fade_out.tension);
+        }
+        Some((secs(x) * sr, secs(x + 1.0) * sr, gain))
+    });
+    if g.body.height() < 26.0 {
+        return; // too short for fades to be grabbed: just the waveform
+    }
+    for (end, f0, f1, fade, handle) in
+        [(End::In, g.x0, g.x_in, a.fade_in, g.x_in), (End::Out, g.x_out, g.x_end, a.fade_out, g.x_out)]
+    {
+        let h = hot.filter(|h| h.0 == end);
+        if f1 - f0 >= 2.0 {
+            let mid = waveform::paint_fade(&clipped, g.body, end, f0, f1, fade.tension, theme::TEXT);
+            if f1 - f0 >= CURVE_MIN_W {
+                waveform::paint_tension(&clipped, mid, h.is_some_and(|h| h.1));
+            }
+        }
+        waveform::paint_handle(&painter.with_clip_rect(v.grid), pos2(handle, g.handles_y), h.is_some_and(|h| !h.1));
+    }
 }

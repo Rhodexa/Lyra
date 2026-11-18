@@ -4,6 +4,8 @@
 //!   to hear it; double-click (or drag it onto the plugin rack) to make a
 //!   sampler that plays it; drag it onto a rack row to swap that sample in
 //! * **Patterns** — click to edit (and place) that pattern
+//! * **Audio clips** — the project's audio clips: click to place it,
+//!   double-click to open it, drag one onto a track for another copy
 //! * **Instruments** — click to add one to the instrument rack; open the
 //!   arrow for its presets
 //! * **Effects** — click to plug one into the selected mixer track
@@ -59,7 +61,36 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
                     st.open_pattern = Some(i);
                 } else if r.clicked() {
                     st.pattern = i;
+                    st.place_audio = false;
                 }
+            }
+        }
+
+        // ── Audio clips ──
+        if section(ui, "Audio clips", p.audio.len()) {
+            for i in 0..p.audio.len() {
+                let a = &p.audio[i];
+                let (id, light) = (a.id, theme::channel_light(a.color));
+                let m = theme::m();
+                let (r, resp) =
+                    ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click_and_drag());
+                let chosen = st.place_audio && st.audio == Some(id);
+                paint_row(ui, r, &resp, &a.name, Some(light), chosen, 0.0);
+                if resp.drag_started() {
+                    egui::DragAndDrop::set_payload(ui.ctx(), AudioDrag(id));
+                }
+                let resp =
+                    resp.on_hover_text("Click: place it with a click · double-click: open it · drag: onto a track");
+                if resp.clicked() {
+                    st.audio = Some(id);
+                    st.place_audio = true;
+                    if double_click(ui, "browser-last-audio-click", id) {
+                        st.open_audio = Some(id);
+                    }
+                }
+            }
+            if p.audio.is_empty() {
+                ui.label(egui::RichText::new("Drop a sample on a track.").small().color(theme::TEXT_DIM));
             }
         }
 
@@ -159,18 +190,12 @@ fn folder(ui: &mut Ui, f: &Folder, depth: usize, p: &mut Project, h: &mut Histor
         if resp.drag_started() {
             egui::DragAndDrop::set_payload(ui.ctx(), SampleDrag(name.clone()));
         }
-        let resp = resp.on_hover_text("Click: hear it · double-click: new sampler · drag: onto the plugin rack");
+        let resp = resp
+            .on_hover_text("Click: hear it · double-click: new sampler · drag: onto the plugin rack, or onto a track");
         if resp.clicked() {
-            // Our own double-click test: egui's doesn't fire on rows that can
-            // also be dragged. A second click on the same sample within 0.35 s.
-            let now = ui.input(|i| i.time);
-            let key = egui::Id::new("browser-last-sample-click");
-            let last: Option<(String, f64)> = ui.data(|d| d.get_temp(key));
-            if last.is_some_and(|(n, t)| n == name && now - t < 0.35) {
-                ui.data_mut(|d| d.remove::<(String, f64)>(key));
+            if double_click(ui, "browser-last-sample-click", name.clone()) {
                 add_sampler(p, h, st, &name);
             } else {
-                ui.data_mut(|d| d.insert_temp(key, (name.clone(), now)));
                 st.preview = Some(name.clone());
             }
         }
@@ -180,6 +205,25 @@ fn folder(ui: &mut Ui, f: &Folder, depth: usize, p: &mut Project, h: &mut Histor
 /// A sample being dragged out of the browser (its stored name).
 #[derive(Clone, Debug)]
 pub struct SampleDrag(pub String);
+
+/// An audio clip being dragged out of the browser.
+#[derive(Clone, Debug)]
+pub struct AudioDrag(pub lyra_model::AudioId);
+
+/// Our own double-click test (egui's doesn't fire on rows that can also be
+/// dragged): true on a second click on the same `item` within 0.35 s.
+fn double_click<T: Clone + PartialEq + Send + Sync + 'static>(ui: &Ui, key: &str, item: T) -> bool {
+    let now = ui.input(|i| i.time);
+    let key = egui::Id::new(key);
+    let last: Option<(T, f64)> = ui.data(|d| d.get_temp(key));
+    if last.is_some_and(|(n, t)| n == item && now - t < 0.35) {
+        ui.data_mut(|d| d.remove::<(T, f64)>(key));
+        true
+    } else {
+        ui.data_mut(|d| d.insert_temp(key, (item, now)));
+        false
+    }
+}
 
 /// A new sampler instrument playing `sample`, named after it.
 pub fn add_sampler(p: &mut Project, h: &mut History, st: &mut UiState, sample: &str) {

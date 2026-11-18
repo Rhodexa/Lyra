@@ -7,7 +7,7 @@
 //! | `LYRA_SCREENSHOT_FRAMES=n` | warm-up frames before the shot (default 45) |
 //! | `LYRA_PLAY=1` | start playing on launch |
 //! | `LYRA_SILENT=1` | engine runs normally, but the sound card gets zeros (see `audio.rs`) |
-//! | `LYRA_OPEN=piano,editor,design` | open these windows on launch |
+//! | `LYRA_OPEN=piano,mixer,steps,audio,editor,design` | open these on launch (the first four: in the bottom area) |
 //! | `LYRA_ZOOM=1.3` | starting UI zoom (read in `app.rs`) |
 //! | `LYRA_BUFFER=n` | audio ring size in frames (see `audio.rs`) |
 //! | `LYRA_AUDIO_PANIC_AFTER=n` | panic inside the audio callback after n callbacks, once (tests crash recovery; add `LYRA_AUDIO_PANIC_ALWAYS=1` to test the crash-loop guard) |

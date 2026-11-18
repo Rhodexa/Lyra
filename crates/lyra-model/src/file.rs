@@ -46,7 +46,13 @@ mod tests {
         p.patterns[0].notes_mut(ch).push(Note { start: 48, len: 36, key: 45, velocity: 0.9 });
         p.add_pattern();
         let id = p.patterns[0].id;
-        p.clips.push(Clip { pattern: id, track: 2, start: TICKS_PER_BAR, len: 4 * TICKS_PER_BAR });
+        p.clips.push(Clip::of_pattern(id, 2, TICKS_PER_BAR, 4 * TICKS_PER_BAR));
+        let a = p.add_audio("Hello", "/tmp/hello.wav", 1.5);
+        p.audio[a].fade_out = crate::Fade { len: 0.25, tension: -0.5 };
+        let mut cl = Clip::of_audio(p.audio[a].id, 3, 0, 100);
+        cl.offset = 12;
+        p.clips.push(cl);
+        p.tracks[3].mixer = 4;
         p.tracks[2].mute = true;
         p.bpm = 128.5;
         let back = from_json(&to_json(&p)).unwrap();
@@ -54,6 +60,16 @@ mod tests {
         // ids keep counting from where they were (no reuse after loading)
         let mut back = back;
         assert_ne!(back.add_channel("x", "lyra.kick", vec![]), ch);
+    }
+
+    #[test]
+    fn clips_from_before_audio_still_open() {
+        let json = r#"{"format":"lyra-project","version":1,"project":{"clips":[{"pattern":7,"track":1,"start":0,"len":384}]}}"#;
+        let p = from_json(json).unwrap();
+        assert_eq!(p.clips[0].pattern(), Some(7));
+        assert_eq!(p.clips[0].offset, 0);
+        // And pattern clips are still written the old way.
+        assert!(to_json(&p).contains("\"pattern\": 7"));
     }
 
     #[test]

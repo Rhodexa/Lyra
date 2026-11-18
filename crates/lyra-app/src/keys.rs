@@ -42,6 +42,9 @@ pub enum Action {
     Paste,
     /// Duplicate the selection right after itself (Ctrl+D or Ctrl+B).
     Duplicate,
+    /// Ctrl+U: the selected audio clips get their own copy of their audio
+    /// clip, so changing them no longer changes the others.
+    MakeUnique,
     Quantize,
     /// Move the playhead / start marker to a tick (from clicking a timeline).
     Seek(f64),
@@ -78,6 +81,8 @@ pub struct Keyboard {
     /// Which note each held key started, so octave changes never strand a note.
     held: HashMap<Key, u8>,
     pub octave: i32,
+    /// Tab presses taken out of the raw input (see `take_tabs`).
+    tabs: usize,
 }
 
 /// Semitones above the lowest key (Z = C3 at octave 0).
@@ -119,18 +124,37 @@ fn semitone(k: Key) -> Option<i32> {
 }
 
 impl Keyboard {
+    /// Tab flips the hovered area's editor. egui would otherwise use it to move
+    /// keyboard focus between widgets, and it does that *before* the app sees
+    /// the key: focus then landed on some text field and every key after it
+    /// went there. So Tab is taken out of the raw input, before egui runs.
+    /// (Not while someone is typing in a text field.)
+    pub fn take_tabs(&mut self, ctx: &Context, raw: &mut egui::RawInput) {
+        if ctx.wants_keyboard_input() {
+            return;
+        }
+        raw.events.retain(|e| match e {
+            egui::Event::Key { key: Key::Tab, pressed, repeat, modifiers, .. } if modifiers.is_none() => {
+                if *pressed && !*repeat {
+                    self.tabs += 1;
+                }
+                false
+            }
+            _ => true,
+        });
+    }
+
     pub fn poll(&mut self, ctx: &Context) -> Vec<Action> {
         let mut out = Vec::new();
+        let tabs = std::mem::take(&mut self.tabs);
         if ctx.wants_keyboard_input() {
             return out; // someone is typing into a text field
         }
+        out.extend(std::iter::repeat_n(Action::SwapEditor, tabs));
         let events = ctx.input(|i| i.events.clone());
         // Space means play/stop, always: take it away from egui so it can never
         // also "press" whatever button or menu happens to have focus.
         ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Space));
-        // Tab flips the hovered area's editor; egui would otherwise use it to
-        // move keyboard focus between widgets.
-        ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Tab));
         for e in events {
             // egui-winit turns Ctrl+C / X / V into these clipboard events instead
             // of key presses, so they must be caught here (this is why copy/paste
@@ -153,6 +177,7 @@ impl Keyboard {
                         Key::A => out.push(Action::SelectAll),
                         // Ctrl+C/X/V arrive as Event::Copy/Cut/Paste (above).
                         Key::D | Key::B => out.push(Action::Duplicate),
+                        Key::U => out.push(Action::MakeUnique),
                         Key::S if modifiers.shift => out.push(Action::SaveAs),
                         Key::S => out.push(Action::Save),
                         Key::O => out.push(Action::OpenProject),
@@ -207,7 +232,6 @@ impl Keyboard {
                 Key::F5 => out.push(Action::TogglePlaylist),
                 Key::F9 => out.push(Action::ToggleMixer),
                 Key::L => out.push(Action::ToggleSongMode),
-                Key::Tab => out.push(Action::SwapEditor),
                 _ => {}
             }
         }

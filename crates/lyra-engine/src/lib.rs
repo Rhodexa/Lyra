@@ -25,7 +25,7 @@
 //!
 //! That's the whole threading model: two threads, three one-way pipes.
 
-use lyra_plugin::{Event, Plugin, ProcessContext, TimedEvent, Transport};
+use lyra_plugin::{Event, Plugin, ProcessContext, SampleData, TimedEvent, Transport};
 use rtrb::{Consumer, Producer, RingBuffer};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::sync::Arc;
@@ -66,6 +66,119 @@ pub struct Sequence {
     /// Loop length in ticks (0 = nothing to play).
     pub length: u32,
     pub notes: Vec<SeqNote>,
+}
+
+/// A stretch of audio on the song timeline (an audio clip on the playlist).
+///
+/// Played straight from the song position, not triggered: start the song
+/// halfway through a clip (or seek into it) and you hear it from there.
+#[derive(Clone, Debug)]
+pub struct AudioRegion {
+    /// Where it sits in the song, in ticks.
+    pub start: f64,
+    pub end: f64,
+    pub data: Arc<SampleData>,
+    /// Seconds into the file at `start`, and the point in the file where it
+    /// must stop (the end of the audio clip's trim).
+    pub from: f64,
+    pub until: f64,
+    /// Linear gain.
+    pub gain: f32,
+    /// (seconds, tension) at each end of the region; see [`fade_curve`].
+    pub fade_in: (f32, f32),
+    pub fade_out: (f32, f32),
+    /// Mixer track it plays into.
+    pub track: usize,
+}
+
+impl PartialEq for AudioRegion {
+    fn eq(&self, o: &Self) -> bool {
+        Arc::ptr_eq(&self.data, &o.data)
+            && (self.start, self.end, self.from, self.until) == (o.start, o.end, o.from, o.until)
+            && (self.gain, self.fade_in, self.fade_out, self.track) == (o.gain, o.fade_in, o.fade_out, o.track)
+    }
+}
+
+/// Every audio region in the song (empty when a pattern loops on its own).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AudioLane {
+    pub regions: Vec<AudioRegion>,
+}
+
+/// A fade's shape: `x` (0..1, how far towards full volume) to gain (0..1).
+/// `tension` 0 is a straight line; above 0 the curve bows down (quieter
+/// through the fade), below 0 it bows up (louder). A fade-out uses the same
+/// curve read backwards, so the same tension looks the same at both ends.
+pub fn fade_curve(x: f32, tension: f32) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    let c = tension.clamp(-1.0, 1.0) * 6.0;
+    if c.abs() < 1e-3 {
+        x
+    } else {
+        (c * x).exp_m1() / c.exp_m1()
+    }
+}
+
+impl AudioRegion {
+    /// Mix this region's part of a block into `out_l`/`out_r`. `pos` is the
+    /// song tick at the first sample, the song loops every `len` ticks.
+    /// REAL-TIME: no allocation.
+    #[allow(clippy::too_many_arguments)]
+    fn render(
+        &self,
+        pos: f64,
+        ticks_per_sample: f64,
+        len: f64,
+        seconds_per_tick: f64,
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+    ) {
+        let n = out_l.len();
+        let lo = pos;
+        let hi = pos + ticks_per_sample * n as f64;
+        let overlaps = |a: f64, b: f64| self.start < b && self.end > a;
+        if !(overlaps(lo, hi.min(len)) || (hi > len && overlaps(0.0, hi - len))) {
+            return;
+        }
+        let data = &*self.data;
+        let frames = data.left.len().min(data.right.len());
+        // How long this region really sounds: the clip's length, or less if
+        // the audio runs out first.
+        let dur = ((self.end - self.start) * seconds_per_tick).min(self.until - self.from);
+        let (fi, fo) = (self.fade_in.0 as f64, self.fade_out.0 as f64);
+        for s in 0..n {
+            let mut t = pos + s as f64 * ticks_per_sample;
+            if t >= len {
+                t -= len;
+            }
+            if t < self.start || t >= self.end {
+                continue;
+            }
+            let el = (t - self.start) * seconds_per_tick;
+            if el >= dur {
+                continue;
+            }
+            let mut g = self.gain;
+            if el < fi {
+                g *= fade_curve((el / fi) as f32, self.fade_in.1);
+            }
+            let left = dur - el;
+            if left < fo {
+                g *= fade_curve((left / fo) as f32, self.fade_out.1);
+            }
+            let at = (self.from + el) * data.sample_rate as f64;
+            if at < 0.0 {
+                continue;
+            }
+            let i = at as usize;
+            if i + 1 >= frames {
+                continue;
+            }
+            let f = (at - i as f64) as f32;
+            out_l[s] += (data.left[i] + (data.left[i + 1] - data.left[i]) * f) * g;
+            out_r[s] += (data.right[i] + (data.right[i + 1] - data.right[i]) * f) * g;
+        }
+    }
 }
 
 /// One instrument + its mixer settings, as the engine owns it.
@@ -218,9 +331,12 @@ pub enum Command {
     },
     /// Fade the preview out.
     StopPreview,
+    /// Replace the audio clips the song plays.
+    SetAudio(Box<AudioLane>),
 }
 
 enum Trash {
+    Audio(#[allow(dead_code)] Box<AudioLane>),
     Sequence(#[allow(dead_code)] Box<Sequence>),
     Channel(#[allow(dead_code)] Box<ChannelSlot>),
     Chain(#[allow(dead_code)] Box<FxChain>),
@@ -327,6 +443,7 @@ pub struct Engine {
     #[allow(clippy::vec_box)]
     channels: Vec<Box<ChannelSlot>>,
     seq: Box<Sequence>,
+    audio: Box<AudioLane>,
 
     playing: bool,
     /// Position inside the loop, in ticks.
@@ -360,6 +477,7 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
         shared: shared.clone(),
         channels: Vec::with_capacity(MAX_CHANNELS),
         seq: Box::default(),
+        audio: Box::default(),
         playing: false,
         pos: 0.0,
         start_marker: 0.0,
@@ -509,6 +627,10 @@ impl Engine {
                         self.discard(Trash::Channel(old));
                     }
                 }
+                Command::SetAudio(lane) => {
+                    let old = std::mem::replace(&mut self.audio, lane);
+                    self.discard(Trash::Audio(old));
+                }
                 Command::StopPreview => {
                     if let Some(p) = &mut self.preview {
                         if p.pending.len() < p.pending.capacity() {
@@ -540,6 +662,7 @@ impl Engine {
                 events.push(TimedEvent { offset: 0, event: e });
             }
         }
+        let block_pos = self.pos;
         if self.playing && self.seq.length > 0 {
             self.schedule(n);
         }
@@ -581,6 +704,24 @@ impl Engine {
                 track.buf_r[s] += r;
             }
             raise_peak(&self.shared.peaks[i], peak);
+        }
+
+        // 2b. Audio clips play straight into their mixer tracks.
+        if self.playing && self.seq.length > 0 {
+            let ticks_per_sample = self.tempo * PPQ as f64 / 60.0 / self.sr as f64;
+            let seconds_per_tick = 60.0 / (self.tempo * PPQ as f64);
+            let len = self.seq.length as f64;
+            for r in &self.audio.regions {
+                let track = &mut self.mixer[r.track.min(MIXER_TRACKS - 1)];
+                r.render(
+                    block_pos,
+                    ticks_per_sample,
+                    len,
+                    seconds_per_tick,
+                    &mut track.buf_l[..n],
+                    &mut track.buf_r[..n],
+                );
+            }
         }
 
         // 3. Mixer: inserts 1..N run their effects, then volume/pan/mute, into
@@ -822,6 +963,70 @@ mod tests {
         run(&mut eng, 30_000);
         let log = log.lock().unwrap();
         assert!(log.iter().any(|(_, e)| matches!(e, Event::NoteOff { key: 60 })), "the note must not hang");
+    }
+
+    /// A second of a steady 0.5 tone at 48 kHz.
+    fn tone() -> Arc<SampleData> {
+        Arc::new(SampleData { sample_rate: 48_000.0, left: vec![0.5; 48_000], right: vec![0.5; 48_000] })
+    }
+
+    fn region(start: f64, end: f64) -> AudioRegion {
+        AudioRegion {
+            start,
+            end,
+            data: tone(),
+            from: 0.0,
+            until: 1.0,
+            gain: 1.0,
+            fade_in: (0.0, 0.0),
+            fade_out: (0.0, 0.0),
+            track: 0,
+        }
+    }
+
+    /// Run `samples` frames and return the left channel.
+    fn capture(eng: &mut Engine, samples: usize) -> Vec<f32> {
+        let mut out = vec![0.0; 2 * samples];
+        eng.process(&mut out, 2);
+        out.iter().step_by(2).copied().collect()
+    }
+
+    #[test]
+    fn audio_plays_where_it_sits_and_from_the_middle_after_a_seek() {
+        let (mut eng, mut h, _) = setup();
+        // At 120 bpm a tick is 250 samples: the region covers samples 24_000..36_000.
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] })));
+        h.send(Command::SetAudio(Box::new(AudioLane { regions: vec![region(96.0, 144.0)] })));
+        h.send(Command::SetMasterVolume(1.0));
+        h.send(Command::Play);
+        let out = capture(&mut eng, 40_000);
+        assert!(out[23_900].abs() < 1e-4, "silent before");
+        assert!(out[30_000].abs() > 0.2, "sounds inside");
+        assert!(out[36_100].abs() < 1e-4, "silent after");
+        // Seek into the middle: plays immediately, no trigger needed.
+        h.send(Command::Seek(120.0));
+        let out = capture(&mut eng, 1_000);
+        assert!(out[500].abs() > 0.2);
+    }
+
+    #[test]
+    fn audio_fades_follow_their_curve() {
+        let (mut eng, mut h, _) = setup();
+        let mut r = region(0.0, 192.0); // one second
+        r.fade_in = (0.5, 0.0);
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] })));
+        h.send(Command::SetAudio(Box::new(AudioLane { regions: vec![r] })));
+        h.send(Command::SetMasterVolume(1.0));
+        h.send(Command::Play);
+        let out = capture(&mut eng, 30_000);
+        // Linear fade over 0.5 s: a quarter of the way in, ~a quarter of the level.
+        // (The master fader smooths in from 0.8 to 1.0 over the first few ms.)
+        let quarter = out[6_000] / out[29_000];
+        assert!((quarter - 0.25).abs() < 0.02, "got {quarter}");
+        assert!(out[0].abs() < 1e-3, "starts from silence");
+        assert!((fade_curve(0.5, 0.5) - 0.5).abs() > 0.1 && fade_curve(0.5, 0.5) < 0.5, "tension bends it");
+        assert!(fade_curve(0.5, -0.5) > 0.5);
+        assert_eq!(fade_curve(1.0, 0.7), 1.0);
     }
 
     #[test]

@@ -57,7 +57,21 @@ bottom area on an editor. Instrument and effect editors stay floating windows.
 a sampler its sample (`Plugin::set_sample`) before the plugin goes to the audio
 thread. Projects store `bundled:<path>` for Lyra's own library, else a full
 path. Browser previews use the engine's preview slot (`Command::Preview`),
-mixed into the master before master volume.
+mixed into the master before master volume. Waveforms draw from `Peaks`
+(min/max per 64 and per 4096 frames, built once per file), so a long take
+zoomed out never walks every sample.
+
+**Audio clips** mirror patterns. `Project.audio` holds the shared `Audio`
+(sample, gain, trim in seconds, fade in/out with a tension), and a `Clip`'s
+`source` is `Pattern(id)` or `Audio(id)`; each placed copy has its own start,
+length and `offset` (ticks into the audio, for a trimmed left end). Fades sit
+at each copy's own edges. In song mode `bridge::compile_audio` turns every
+audio clip into an `AudioRegion` (song ticks, seconds into the file, gain,
+fades, the track's insert) and sends the list as one `AudioLane`. The engine
+renders regions *from the song position*, not from triggers, so seeking into
+the middle of a line plays from there; nothing about it allocates. The fade
+shape is one function, `lyra_engine::fade_curve`, used by the engine and by
+the drawing.
 
 Views **only edit the project**. `bridge.rs` is the only file that talks to the
 engine about edits. Live playing (notes, play/stop) goes straight to the engine
@@ -84,8 +98,8 @@ Stop returns there.
 
 ## Song mode
 
-Clips (`lyra-model`: pattern id, track, start, length) live on playlist
-tracks. Patterns have stable ids, so cloning or reordering patterns never
+Clips (`lyra-model`: what they play, track, start, length) live on playlist
+tracks; audio clips are below, under *Audio clips*. Patterns have stable ids, so cloning or reordering patterns never
 re-points a clip. In song mode, `bridge::compile_song` flattens every clip
 into **one** `Sequence`: a clip repeats its pattern to fill its length, notes
 are cut at the clip's end, and muted tracks are skipped. The engine plays it

@@ -15,9 +15,9 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 
 | Do | How |
 |---|---|
-| Play / stop | `Space` |
+| Play / stop | `Space` · Stop while stopped goes back to the start |
 | Project | click the logo, or `Ctrl+N` new · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as |
-| Layout | Browser on the left (`F4`), plugin rack on the right (`F6`); both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
+| Layout | Browser on the left (`F4`), plugin rack on the right (`F6`); both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Audio clip, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
 | Patterns | `[` / `]` or the picker in the top bar (new, clone) |
@@ -35,6 +35,10 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Pick a clip's pattern / open it | click a clip / double-click it |
 | Delete | right-click or right-drag, or `Delete` |
 | Select | Ctrl+drag, `Ctrl+A` · duplicate after: `Ctrl+D` / `Ctrl+B` |
+| Audio clip | drop a sample from the browser on a track (or an audio clip from the browser for another copy) |
+| Trim a copy / fade / bend a fade | drag either end · drag the small squares on the title strip · drag the dot on a fade's curve up/down |
+| Edit an audio clip | double-click it: gain, fades and trim in the *Audio clip* editor. Copies share all that, like patterns; `Ctrl+U` gives the selected ones their own |
+| Where a track's audio plays | the number at the right of its header: mixer insert (M = master) |
 | Play from here | click the ruler (switches to song mode) |
 | Mute a track | click its light |
 | Scroll / zoom / pan | wheel (up/down), Ctrl+wheel (sideways) · Shift+wheel or wheel over the ruler (time, around the mouse), wheel over a scrollbar (that axis), Alt+wheel (track height) · middle-drag |
@@ -96,7 +100,7 @@ Lyra ships a **Starter Kit** of 65 CC0 one-shots (see `assets/samples/Starter Ki
 ## Developer switches
 
 `LYRA_BUFFER=512` (audio ring size) · `LYRA_SILENT=1` · `LYRA_PLAY=1` ·
-`LYRA_OPEN=piano,editor,design` · `LYRA_ZOOM=1.3` · `LYRA_SCREENSHOT=out.png` (+ `LYRA_SCREENSHOT_FRAMES=n`) ·
+`LYRA_OPEN=piano,mixer,steps,audio,editor,design` · `LYRA_ZOOM=1.3` · `LYRA_SCREENSHOT=out.png` (+ `LYRA_SCREENSHOT_FRAMES=n`) ·
 `LYRA_SCRIPT="wait 30; move 71 134; down; move 71 110; up"` (synthetic input for UI tests). See `crates/lyra-app/src/devtools.rs`.
 
 ## Read more

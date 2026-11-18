@@ -258,6 +258,7 @@ pub enum Icon {
     Playlist,
     Mixer,
     Browser,
+    Wave,
 }
 
 /// Draw an icon centred in `r` (a key's face). Hand-drawn vectors until the
@@ -337,6 +338,16 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, bg: Colo
             for k in 0..3 {
                 let y = frame.top() + (2.8 + k as f32 * 2.7) * u;
                 p.hline(split + 2.0 * u..=frame.right() - 2.0 * u, y, stroke(u.max(1.0), ink));
+            }
+        }
+        Icon::Wave => {
+            // A short waveform: bars of different heights around a centre line.
+            for (i, hgt) in [2.0, 5.0, 9.0, 6.0, 11.0, 7.0, 3.5].iter().enumerate() {
+                let x = c.x + (i as f32 - 3.0) * 2.0 * u;
+                p.line_segment(
+                    [pos2(x, c.y - hgt * 0.5 * u), pos2(x, c.y + hgt * 0.5 * u)],
+                    stroke((1.3 * u).max(1.0), ink),
+                );
             }
         }
         Icon::Playlist => {

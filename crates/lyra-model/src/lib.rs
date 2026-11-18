@@ -25,6 +25,8 @@ pub type ChannelId = u32;
 /// Stable pattern identity: clips refer to patterns by id, so cloning or
 /// reordering patterns never makes a clip play the wrong one.
 pub type PatternId = u32;
+/// Stable identity of an audio clip (the shared thing clips point at).
+pub type AudioId = u32;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Note {
@@ -147,23 +149,149 @@ impl Pattern {
 pub struct Track {
     pub name: String,
     pub mute: bool,
+    /// Mixer track the *audio clips* on this row play into (0 = master).
+    /// Patterns keep playing through their channels' own inserts.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub mixer: usize,
 }
 
-/// A pattern placed on the playlist. If the clip is longer than the pattern,
-/// the pattern repeats inside it (stretch a 2-bar beat across 16 bars).
+fn is_zero<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
+/// A fade at the start or end of an audio clip.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Fade {
+    /// Length in seconds (0 = no fade).
+    pub len: f32,
+    /// Curve, -1..1, as drawn: 0 is a straight line, below 0 it bows up
+    /// (stays louder through the fade), above 0 it bows down (quieter).
+    pub tension: f32,
+}
+
+/// An audio clip: a sample plus how to play it. Like a pattern, it is
+/// *shared*: every clip on the playlist that points at it plays it, so a
+/// change here (gain, fades, trim) changes all of them. Nothing touches the
+/// file on disk.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Audio {
+    pub id: AudioId,
+    pub name: String,
+    /// "bundled:<path>" for Lyra's own library, otherwise a path on disk.
+    pub sample: String,
+    /// Gain in dB.
+    #[serde(default)]
+    pub gain: f32,
+    /// The part of the file that plays, in seconds from its start.
+    pub start: f64,
+    pub end: f64,
+    /// Fades sit at the edges of each placed clip, so cutting a clip on the
+    /// playlist keeps its fade.
+    #[serde(default)]
+    pub fade_in: Fade,
+    #[serde(default)]
+    pub fade_out: Fade,
+    /// Index into the theme's palette.
+    #[serde(default)]
+    pub color: usize,
+}
+
+impl Audio {
+    /// Seconds of the file that play.
+    pub fn length(&self) -> f64 {
+        (self.end - self.start).max(0.0)
+    }
+}
+
+/// What a clip plays.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    Pattern(PatternId),
+    Audio(AudioId),
+}
+
+/// Something placed on the playlist.
+///
+/// * A **pattern** clip longer than its pattern repeats the pattern inside it
+///   (stretch a 2-bar beat across 16 bars).
+/// * An **audio** clip plays its audio from `offset` ticks in: dragging its
+///   left edge moves both `start` and `offset`, so the sound stays in place.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(from = "ClipFile", into = "ClipFile")]
 pub struct Clip {
-    pub pattern: PatternId,
+    pub source: Source,
     /// Playlist row.
     pub track: usize,
     /// Song position and length, in ticks.
     pub start: u32,
     pub len: u32,
+    /// Ticks into the source where this clip begins (audio clips).
+    pub offset: u32,
 }
 
 impl Clip {
+    pub fn of_pattern(pattern: PatternId, track: usize, start: u32, len: u32) -> Self {
+        Self { source: Source::Pattern(pattern), track, start, len, offset: 0 }
+    }
+
+    pub fn of_audio(audio: AudioId, track: usize, start: u32, len: u32) -> Self {
+        Self { source: Source::Audio(audio), track, start, len, offset: 0 }
+    }
+
     pub fn end(&self) -> u32 {
         self.start + self.len
+    }
+
+    pub fn pattern(&self) -> Option<PatternId> {
+        match self.source {
+            Source::Pattern(id) => Some(id),
+            Source::Audio(_) => None,
+        }
+    }
+
+    pub fn audio(&self) -> Option<AudioId> {
+        match self.source {
+            Source::Audio(id) => Some(id),
+            Source::Pattern(_) => None,
+        }
+    }
+}
+
+/// How a clip is written in a project file: `"pattern": id` or `"audio": id`
+/// (files from before audio clips only have `pattern`).
+#[derive(Clone, Serialize, Deserialize)]
+struct ClipFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pattern: Option<PatternId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    audio: Option<AudioId>,
+    track: usize,
+    start: u32,
+    len: u32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    offset: u32,
+}
+
+impl From<ClipFile> for Clip {
+    fn from(f: ClipFile) -> Self {
+        let source = match (f.audio, f.pattern) {
+            (Some(a), _) => Source::Audio(a),
+            (None, p) => Source::Pattern(p.unwrap_or(0)),
+        };
+        Clip { source, track: f.track, start: f.start, len: f.len, offset: f.offset }
+    }
+}
+
+impl From<Clip> for ClipFile {
+    fn from(c: Clip) -> Self {
+        ClipFile {
+            pattern: c.pattern(),
+            audio: c.audio(),
+            track: c.track,
+            start: c.start,
+            len: c.len,
+            offset: c.offset,
+        }
     }
 }
 
@@ -215,9 +343,12 @@ pub struct Project {
     pub patterns: Vec<Pattern>,
     pub tracks: Vec<Track>,
     pub clips: Vec<Clip>,
+    /// Audio clips (shared, like patterns).
+    pub audio: Vec<Audio>,
     pub mixer: Vec<MixerTrack>,
     next_id: ChannelId,
     next_pattern_id: PatternId,
+    next_audio_id: AudioId,
 }
 
 impl Default for Project {
@@ -230,11 +361,13 @@ impl Default for Project {
             scale: Scale::Minor,
             channels: Vec::new(),
             patterns: vec![Pattern::new(1, "Pattern 1")],
-            tracks: (1..=DEFAULT_TRACKS).map(|i| Track { name: format!("Track {i}"), mute: false }).collect(),
+            tracks: (1..=DEFAULT_TRACKS).map(|i| Track { name: format!("Track {i}"), mute: false, mixer: 0 }).collect(),
             clips: Vec::new(),
+            audio: Vec::new(),
             mixer: default_mixer(),
             next_id: 1,
             next_pattern_id: 2,
+            next_audio_id: 1,
         }
     }
 }
@@ -302,6 +435,51 @@ impl Project {
 
     pub fn pattern(&self, id: PatternId) -> Option<&Pattern> {
         self.patterns.iter().find(|p| p.id == id)
+    }
+
+    /// Adds an audio clip playing all `seconds` of `sample`; returns its index.
+    pub fn add_audio(&mut self, name: &str, sample: &str, seconds: f64) -> usize {
+        let id = self.next_audio_id;
+        self.next_audio_id += 1;
+        // Short fades by default: no clicks where the sound is cut.
+        let edge = Fade { len: 0.005, tension: 0.0 };
+        let color = self.patterns.len() + self.audio.len();
+        self.audio.push(Audio {
+            id,
+            name: name.to_string(),
+            sample: sample.to_string(),
+            gain: 0.0,
+            start: 0.0,
+            end: seconds.max(0.0),
+            fade_in: edge,
+            fade_out: edge,
+            color,
+        });
+        self.audio.len() - 1
+    }
+
+    /// Duplicates an audio clip (so it can be changed on its own); returns the new index.
+    pub fn clone_audio(&mut self, index: usize) -> usize {
+        let mut copy = self.audio[index].clone();
+        copy.name = format!("{} copy", copy.name);
+        copy.color = self.patterns.len() + self.audio.len(); // its own colour: visibly a different clip
+        copy.id = self.next_audio_id;
+        self.next_audio_id += 1;
+        self.audio.insert(index + 1, copy);
+        index + 1
+    }
+
+    pub fn audio_index(&self, id: AudioId) -> Option<usize> {
+        self.audio.iter().position(|a| a.id == id)
+    }
+
+    pub fn audio(&self, id: AudioId) -> Option<&Audio> {
+        self.audio.iter().find(|a| a.id == id)
+    }
+
+    /// Seconds per tick at the project's tempo.
+    pub fn seconds_per_tick(&self) -> f64 {
+        60.0 / (self.bpm.max(1.0) * (TICKS_PER_STEP * 4) as f64)
     }
 
     /// The song runs to the end of the last clip (whole bars, at least one bar).
@@ -394,7 +572,7 @@ mod tests {
     fn clips_keep_pointing_at_the_right_pattern() {
         let mut proj = Project::default();
         let a = proj.patterns[0].id;
-        proj.clips.push(Clip { pattern: a, track: 0, start: 0, len: TICKS_PER_BAR });
+        proj.clips.push(Clip::of_pattern(a, 0, 0, TICKS_PER_BAR));
         proj.add_pattern();
         let b = proj.patterns[1].id;
         proj.clone_pattern(0); // inserts at index 1, shifting "b" to index 2
@@ -402,6 +580,22 @@ mod tests {
         assert_eq!(proj.pattern_index(b), Some(2));
         assert_ne!(proj.patterns[1].id, a, "a clone gets its own id");
         assert_eq!(proj.song_length(), TICKS_PER_BAR);
+    }
+
+    #[test]
+    fn audio_clips_are_shared_and_clonable() {
+        let mut proj = Project::default();
+        let i = proj.add_audio("line 1", "/voice/line1.wav", 2.5);
+        let id = proj.audio[i].id;
+        proj.clips.push(Clip::of_audio(id, 0, 0, TICKS_PER_BAR));
+        proj.clips.push(Clip::of_audio(id, 1, TICKS_PER_BAR, TICKS_PER_BAR));
+        assert_eq!(proj.audio(id).unwrap().length(), 2.5);
+        let c = proj.clone_audio(i);
+        assert_ne!(proj.audio[c].id, id, "a copy gets its own id");
+        assert!(proj.clips.iter().all(|cl| cl.audio() == Some(id)), "clips keep their audio");
+        // One beat at 120 bpm is half a second.
+        proj.bpm = 120.0;
+        assert!((proj.seconds_per_tick() * (TICKS_PER_STEP * 4) as f64 - 0.5).abs() < 1e-9);
     }
 
     #[test]

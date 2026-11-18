@@ -6,7 +6,7 @@
 //! for edits themselves — they just change the project. One direction, one place.
 
 use crate::samples::Samples;
-use lyra_engine::{ChannelSlot, Command, EngineHandle, FxChain, SeqNote, Sequence};
+use lyra_engine::{AudioLane, AudioRegion, ChannelSlot, Command, EngineHandle, FxChain, SeqNote, Sequence};
 use lyra_model::{Pattern, Project, TICKS_PER_STEP};
 
 /// What the engine should loop: one pattern, or the whole arrangement.
@@ -23,6 +23,7 @@ pub struct Bridge {
     /// The sequence the engine has now — compiled again on every change and
     /// only re-sent when it actually differs.
     last_seq: Option<Sequence>,
+    last_audio: Option<AudioLane>,
 }
 
 impl Bridge {
@@ -153,6 +154,15 @@ impl Bridge {
                 self.last_seq = Some(seq);
             }
         }
+        // Audio clips only play in song mode (a pattern loops on its own).
+        let lane = match target {
+            Playing::Song => compile_audio(p, samples),
+            Playing::Pattern(_) => AudioLane::default(),
+        };
+        if self.last_audio.as_ref() != Some(&lane) {
+            eng.send(Command::SetAudio(Box::new(lane.clone())));
+            self.last_audio = Some(lane);
+        }
         if switched {
             eng.send(Command::Seek(0.0));
         }
@@ -182,7 +192,7 @@ fn compile_song(p: &Project) -> Sequence {
         if p.tracks.get(clip.track).is_some_and(|t| t.mute) {
             continue;
         }
-        let Some(pat) = p.pattern(clip.pattern) else { continue };
+        let Some(pat) = clip.pattern().and_then(|id| p.pattern(id)) else { continue };
         let loop_len = pat.play_length() * TICKS_PER_STEP;
         for (index, ch) in p.channels.iter().enumerate() {
             for rep in (0..clip.len).step_by(loop_len.max(1) as usize) {
@@ -206,6 +216,34 @@ fn compile_song(p: &Project) -> Sequence {
     Sequence { length: p.song_length(), notes }
 }
 
+/// Every audio clip on the playlist as a region the engine plays. Samples
+/// load here (once each) if they haven't yet.
+pub fn compile_audio(p: &Project, samples: &mut Samples) -> AudioLane {
+    let spt = p.seconds_per_tick();
+    let mut regions = Vec::new();
+    for clip in &p.clips {
+        let Some(track) = p.tracks.get(clip.track) else { continue };
+        if track.mute {
+            continue;
+        }
+        let Some(a) = clip.audio().and_then(|id| p.audio(id)) else { continue };
+        let Ok(data) = samples.get(&a.sample) else { continue };
+        let until = a.end.min(data.seconds() as f64);
+        regions.push(AudioRegion {
+            start: clip.start as f64,
+            end: clip.end() as f64,
+            from: a.start + clip.offset as f64 * spt,
+            until,
+            gain: 10f32.powf(a.gain / 20.0),
+            fade_in: (a.fade_in.len, a.fade_in.tension),
+            fade_out: (a.fade_out.len, a.fade_out.tension),
+            track: track.mixer,
+            data,
+        });
+    }
+    AudioLane { regions }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,7 +260,7 @@ mod tests {
     fn a_long_clip_repeats_its_pattern() {
         let mut p = project_with_one_note();
         let id = p.patterns[0].id;
-        p.clips.push(Clip { pattern: id, track: 0, start: TICKS_PER_BAR, len: 3 * TICKS_PER_BAR });
+        p.clips.push(Clip::of_pattern(id, 0, TICKS_PER_BAR, 3 * TICKS_PER_BAR));
         let seq = compile_song(&p);
         let starts: Vec<u32> = seq.notes.iter().map(|n| n.start).collect();
         assert_eq!(starts, vec![TICKS_PER_BAR, 2 * TICKS_PER_BAR, 3 * TICKS_PER_BAR]);
@@ -234,11 +272,34 @@ mod tests {
         let mut p = project_with_one_note();
         let id = p.patterns[0].id;
         p.patterns[0].notes.values_mut().next().unwrap()[0].len = 2 * TICKS_PER_BAR; // a long note
-        p.clips.push(Clip { pattern: id, track: 0, start: 0, len: TICKS_PER_BAR / 2 });
-        p.clips.push(Clip { pattern: id, track: 1, start: TICKS_PER_BAR, len: TICKS_PER_BAR });
+        p.clips.push(Clip::of_pattern(id, 0, 0, TICKS_PER_BAR / 2));
+        p.clips.push(Clip::of_pattern(id, 1, TICKS_PER_BAR, TICKS_PER_BAR));
         p.tracks[1].mute = true;
         let seq = compile_song(&p);
         assert_eq!(seq.notes.len(), 1, "the muted track's clip is skipped");
         assert_eq!(seq.notes[0].len, TICKS_PER_BAR / 2, "notes are cut at the clip's end");
+    }
+
+    #[test]
+    fn audio_clips_become_regions_on_their_tracks_insert() {
+        let mut p = Project::default();
+        p.bpm = 120.0; // a tick = 1/192 s
+        let kick = "bundled:Starter Kit/Kicks/bd_haus.flac";
+        let a = p.add_audio("kick", kick, 0.3);
+        p.audio[a].gain = -6.0;
+        let id = p.audio[a].id;
+        let mut c = Clip::of_audio(id, 2, TICKS_PER_BAR, 48);
+        c.offset = 19; // a tenth of a second in
+        p.clips.push(c);
+        p.clips.push(Clip::of_audio(id, 3, 0, 48));
+        p.tracks[2].mixer = 5;
+        p.tracks[3].mute = true;
+        let lane = compile_audio(&p, &mut Samples::default());
+        assert_eq!(lane.regions.len(), 1, "the muted track's clip is skipped");
+        let r = &lane.regions[0];
+        assert_eq!((r.start, r.end, r.track), (TICKS_PER_BAR as f64, (TICKS_PER_BAR + 48) as f64, 5));
+        assert!((r.from - 19.0 / 192.0).abs() < 1e-9);
+        assert!((r.gain - 0.501).abs() < 0.01);
+        assert!(r.until <= 0.3);
     }
 }

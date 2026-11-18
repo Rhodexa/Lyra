@@ -38,10 +38,11 @@ built before the line it depends on.
 - [x] Sampler instrument (one-shot / hold, root key, tune, attack/release, start), WAV + FLAC
 - [x] Starter Kit: 65 CC0 one-shots (from Sonic Pi via Freesound, credits per file)
 - [x] Browser: sample library (kit + your folder), click to hear, double-click / drag onto the plugin rack
-- [ ] Audio clips in the arrangement (drop a sample on a track)
+- [x] Audio clips in the arrangement: drop a sample on a track; shared like patterns (Ctrl+U makes a copy unique); trim each copy's ends; fades with curves (on the clip or in the audio-clip editor), gain, trim; each track picks the insert its audio plays into
 - [ ] Settings saving (layout, sizes, zoom); WAV export
-- Sampler, sample browser (drag from disk), audio clips
-- Waveform editing (cut, fade, normalize): the voice-acting workflow
+- [ ] Add any folder to the browser (your animation project's voice folder), not only the library
+- More waveform editing: split at the playhead, normalize, reverse; clips that follow tempo changes
+- Sample browser: drag files in from the file manager (needs window drag-and-drop on Wayland)
 
 ## M5: Plugins & automation
 - CLAP hosting with plugin windows (third-party synths/FX)

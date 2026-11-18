@@ -72,6 +72,14 @@ pub struct UiState {
     pub track_meters: Vec<[f32; 2]>,
     /// Space plays the whole playlist (true) or just the current pattern.
     pub song_mode: bool,
+    /// The current audio clip (what the audio-clip editor shows), and whether
+    /// a click on empty arrangement places it (instead of the current pattern).
+    pub audio: Option<lyra_model::AudioId>,
+    pub place_audio: bool,
+    /// "Open this audio clip in the audio-clip editor" (a double-click).
+    pub open_audio: Option<lyra_model::AudioId>,
+    /// The pattern last frame: picking another one goes back to placing patterns.
+    last_pattern: usize,
 }
 
 impl Default for UiState {
@@ -101,6 +109,10 @@ impl Default for UiState {
             fx_drag: None,
             track_meters: Vec::new(),
             song_mode: false,
+            audio: None,
+            place_audio: false,
+            open_audio: None,
+            last_pattern: 0,
         }
     }
 }
@@ -169,10 +181,15 @@ impl LyraApp {
             ui.selected = 5; // the demo's bass: something melodic to look at
         }
         // LYRA_OPEN=piano / mixer / steps opens the bottom area on that editor.
-        let bottom = [("piano", Editor::PianoRoll), ("mixer", Editor::Mixer), ("steps", Editor::Steps)]
-            .into_iter()
-            .find(|(name, _)| dev.wants(name))
-            .map(|(_, e)| e);
+        let bottom = [
+            ("piano", Editor::PianoRoll),
+            ("mixer", Editor::Mixer),
+            ("steps", Editor::Steps),
+            ("audio", Editor::Audio),
+        ]
+        .into_iter()
+        .find(|(name, _)| dev.wants(name))
+        .map(|(_, e)| e);
         // Reopen the last project; first run (or a missing file) gets the demo.
         let (project, path, toast) = match files::last_project().map(|p| (files::load(&p), p)) {
             Some((Ok(project), path)) => (project, Some(path), None),
@@ -438,7 +455,7 @@ impl LyraApp {
         let pat = self.ui.pattern.min(self.project.patterns.len() - 1);
         let id = self.project.patterns[pat].id;
         let now = self.playhead;
-        let clips = || self.project.clips.iter().filter(|c| c.pattern == id);
+        let clips = || self.project.clips.iter().filter(|c| c.pattern() == Some(id));
         let clip = clips()
             .find(|c| (c.start as f64..c.end() as f64).contains(&now))
             .or_else(|| clips().min_by_key(|c| c.start));
@@ -495,6 +512,9 @@ impl LyraApp {
         }
         match a {
             Action::TogglePlay => self.send(if playing { Command::Stop } else { Command::Play }),
+            // Stop while stopped: back to the very start (of the song in song
+            // mode, of the pattern in pattern mode).
+            Action::Stop if !playing => self.pending_seek = Some(0.0),
             Action::Stop => self.send(Command::Stop),
             Action::Undo => {
                 self.history.undo(&mut self.project);
@@ -578,6 +598,7 @@ fn is_edit(a: Action) -> bool {
             | Action::Cut
             | Action::Paste
             | Action::Duplicate
+            | Action::MakeUnique
             | Action::Quantize
     )
 }
@@ -591,7 +612,7 @@ fn pattern_position(p: &Project, pat: usize, playhead: f64, song_mode: bool) -> 
     let loop_len = (pattern.play_length() * TICKS_PER_STEP) as f64;
     p.clips
         .iter()
-        .find(|c| c.pattern == pattern.id && (c.start as f64..c.end() as f64).contains(&playhead))
+        .find(|c| c.pattern() == Some(pattern.id) && (c.start as f64..c.end() as f64).contains(&playhead))
         .map(|c| (playhead - c.start as f64) % loop_len)
 }
 
@@ -625,6 +646,7 @@ impl eframe::App for LyraApp {
 
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         self.dev.inject(ctx, raw);
+        self.keyboard.take_tabs(ctx, raw);
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -787,6 +809,15 @@ impl LyraApp {
         // ── The two areas ──
         // Ask-to-show from widgets ("open the piano roll"): fine if an area
         // already shows it, otherwise the bottom area opens on it.
+        if self.ui.pattern != self.ui.last_pattern {
+            self.ui.place_audio = false;
+            self.ui.last_pattern = self.ui.pattern;
+        }
+        // Double-clicked an audio clip: show it in the audio-clip editor.
+        if let Some(id) = self.ui.open_audio.take() {
+            self.ui.audio = Some(id);
+            self.ui.show = Some(Editor::Audio);
+        }
         if let Some(e) = self.ui.show.take() {
             let shown = self.areas[0].editor == e || (self.bottom_open && self.areas[1].editor == e);
             if !shown {
@@ -817,6 +848,7 @@ impl LyraApp {
         let editor = self.areas[1].editor;
         let default_h = match editor {
             Editor::Mixer => crate::mixer::STRIP_H + m.control_h + 4.0 + 2.0 * 8.0 + 4.0,
+            Editor::Audio => avail * 0.36,
             _ => avail * 0.5,
         };
         let r = egui::TopBottomPanel::bottom(bottom_panel_id(editor))
@@ -842,7 +874,7 @@ impl LyraApp {
         // Where we are *inside the current pattern* (see `pattern_position`).
         let local = pattern_position(&self.project, pat, playhead, self.ui.song_mode);
         let live_keys = self.ui.live_keys.clone();
-        let LyraApp { areas, project: p, history: h, ui: st, .. } = self;
+        let LyraApp { areas, project: p, history: h, ui: st, samples, .. } = self;
         let area = &mut areas[i];
         ui.push_id(("area", i), |ui| {
             ui.horizontal(|ui| {
@@ -850,6 +882,7 @@ impl LyraApp {
                 ui.add_space(6.0);
                 match area.editor {
                     Editor::Arrangement => area.playlist.toolbar(ui, p, st),
+                    Editor::Audio => area.audio.toolbar(ui, p, h, st),
                     Editor::PianoRoll if has_channel => {
                         let color = theme::channel_color(p.channels[ch].color);
                         area.piano.toolbar(ui, p, h, color, ch);
@@ -862,7 +895,11 @@ impl LyraApp {
                 Editor::Arrangement => {
                     let song_playhead = if st.song_mode { playhead } else { 0.0 };
                     let song_playing = playing && st.song_mode;
-                    area.playlist.show(ui, p, h, st, song_playhead, song_playing, actions);
+                    area.playlist.show(ui, p, h, st, song_playhead, song_playing, samples, actions);
+                }
+                Editor::Audio => {
+                    let song_playhead = st.song_mode.then_some(playhead);
+                    area.audio.show(ui, p, h, st, samples, song_playhead, actions);
                 }
                 Editor::PianoRoll if has_channel => {
                     let ch_id = p.channels[ch].id;
