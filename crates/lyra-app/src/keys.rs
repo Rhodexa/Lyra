@@ -45,6 +45,9 @@ pub enum Action {
     Quantize,
     /// Move the playhead / start marker to a tick (from clicking a timeline).
     Seek(f64),
+    /// Seek to a tick *inside the current pattern* (the piano roll's ruler):
+    /// in song mode, to where that pattern plays in the song.
+    SeekPattern(f64),
     /// Make this channel (by index) the selected one.
     SelectChannel(usize),
     /// Shift the typing keyboard by this many octaves.
@@ -58,6 +61,8 @@ pub enum Action {
     TogglePlaylist,
     ToggleMixer,
     ToggleBrowser,
+    /// Tab: the area under the mouse flips back to its previous editor.
+    SwapEditor,
     /// Pattern mode ↔ song mode.
     ToggleSongMode,
     SongMode(bool),
@@ -123,6 +128,9 @@ impl Keyboard {
         // Space means play/stop, always: take it away from egui so it can never
         // also "press" whatever button or menu happens to have focus.
         ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Space));
+        // Tab flips the hovered area's editor; egui would otherwise use it to
+        // move keyboard focus between widgets.
+        ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Tab));
         for e in events {
             // egui-winit turns Ctrl+C / X / V into these clipboard events instead
             // of key presses, so they must be caught here (this is why copy/paste
@@ -199,6 +207,7 @@ impl Keyboard {
                 Key::F5 => out.push(Action::TogglePlaylist),
                 Key::F9 => out.push(Action::ToggleMixer),
                 Key::L => out.push(Action::ToggleSongMode),
+                Key::Tab => out.push(Action::SwapEditor),
                 _ => {}
             }
         }

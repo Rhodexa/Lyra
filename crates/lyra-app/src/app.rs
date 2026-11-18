@@ -51,6 +51,9 @@ pub struct UiState {
     pub show: Option<Editor>,
     /// The editors on screen this frame (lights the toolbar keys).
     pub visible: Vec<Editor>,
+    /// "Open this pattern in the piano roll" (double-click in the browser or
+    /// on a clip): the top area switches to the piano roll for it.
+    pub open_pattern: Option<usize>,
     /// The browser panel on the left (F4).
     pub show_browser: bool,
     /// The mixer track whose effects are shown.
@@ -81,6 +84,7 @@ impl Default for UiState {
             show_design: false,
             show: None,
             visible: Vec::new(),
+            open_pattern: None,
             show_browser: true,
             mixer_selected: 1,
             effect: None,
@@ -111,6 +115,8 @@ pub struct LyraApp {
     area_rects: [Option<egui::Rect>; 2],
     /// The area editing keys go to while the mouse is outside both areas.
     key_area: usize,
+    /// The playhead as of this frame (for seeks that depend on where we are).
+    playhead: f64,
     textures: theme::Textures,
     frame_count: u64,
     /// A window being raised, and for how many more frames (see `windows`).
@@ -179,6 +185,7 @@ impl LyraApp {
             bottom_open: bottom.is_some(),
             area_rects: [None; 2],
             key_area: 0,
+            playhead: 0.0,
             textures: theme::Textures::new(&cc.egui_ctx),
             frame_count: 0,
             raising: None,
@@ -364,12 +371,43 @@ impl LyraApp {
         Some(self.key_area)
     }
 
+    /// A seek inside the current pattern (the piano roll's ruler). In pattern
+    /// mode, plain. In song mode it stays in song mode: it goes to that spot in
+    /// the clip of this pattern that's playing now (or the first one); only a
+    /// pattern with no clip at all switches to pattern mode.
+    fn seek_pattern(&mut self, tick: f64) {
+        if !self.ui.song_mode {
+            self.pending_seek = Some(tick);
+            return;
+        }
+        let pat = self.ui.pattern.min(self.project.patterns.len() - 1);
+        let id = self.project.patterns[pat].id;
+        let now = self.playhead;
+        let clips = || self.project.clips.iter().filter(|c| c.pattern == id);
+        let clip = clips()
+            .find(|c| (c.start as f64..c.end() as f64).contains(&now))
+            .or_else(|| clips().min_by_key(|c| c.start));
+        match clip {
+            Some(c) => {
+                let len = self.project.patterns[pat].play_length() as f64 * TICKS_PER_STEP as f64;
+                let into = (now - c.start as f64).max(0.0);
+                // Same repeat of the pattern the playhead is in, clamped to the clip.
+                let rep = (into / len).floor() * len;
+                self.pending_seek = Some((c.start as f64 + rep + tick).min(c.end() as f64 - 1.0));
+            }
+            None => {
+                self.ui.song_mode = false;
+                self.pending_seek = Some(tick);
+            }
+        }
+    }
+
     /// F5 / F7 / F9: open the bottom area on `editor`; again folds it away.
     fn toggle_bottom(&mut self, editor: Editor) {
         if self.bottom_open && self.areas[1].editor == editor {
             self.bottom_open = false;
         } else {
-            self.areas[1].editor = editor;
+            self.areas[1].set(editor);
             self.bottom_open = true;
         }
     }
@@ -418,6 +456,11 @@ impl LyraApp {
                 self.live(Event::NoteOff { key });
             }
             Action::Seek(tick) => self.pending_seek = Some(tick),
+            Action::SeekPattern(tick) => self.seek_pattern(tick),
+            Action::SwapEditor => {
+                let i = target.unwrap_or(0);
+                self.areas[i].swap();
+            }
             Action::SelectChannel(i) => self.ui.selected = i.min(self.project.channels.len().saturating_sub(1)),
             Action::Octave(d) => self.keyboard.octave = (self.keyboard.octave + d).clamp(-3, 3),
             Action::PrevPattern => self.ui.pattern = self.ui.pattern.saturating_sub(1),
@@ -497,6 +540,12 @@ fn pattern_position(p: &Project, pat: usize, playhead: f64, song_mode: bool) -> 
         .map(|c| (playhead - c.start as f64) % loop_len)
 }
 
+/// The bottom area's panel id while it shows `editor` (one per editor, so each
+/// keeps its own height).
+fn bottom_panel_id(editor: Editor) -> Id {
+    Id::new("area-bottom").with(editor.name())
+}
+
 /// A folded side panel: a thin strip with an arrow; click it to unfold.
 fn folded_strip(ctx: &egui::Context, id: &'static str, left: bool, hint: &str, open: &mut bool) {
     let panel = if left { egui::SidePanel::left(id) } else { egui::SidePanel::right(id) };
@@ -528,6 +577,7 @@ impl eframe::App for LyraApp {
         self.housekeeping(ctx);
         let (playing, playhead) =
             self.engine.as_ref().map_or((false, 0.0), |e| (e.shared().is_playing(), e.shared().playhead()));
+        self.playhead = playhead;
         let mut actions = self.keyboard.poll(ctx);
         self.dev.frame(ctx);
         if std::mem::take(&mut self.dev.autoplay) && !playing {
@@ -676,14 +726,38 @@ impl LyraApp {
         if let Some(e) = self.ui.show.take() {
             let shown = self.areas[0].editor == e || (self.bottom_open && self.areas[1].editor == e);
             if !shown {
-                self.areas[1].editor = e;
+                self.areas[1].set(e);
                 self.bottom_open = true;
             }
         }
+        // Double-clicked a pattern: the top area edits it in the piano roll, on
+        // the selected instrument if it plays in that pattern, otherwise on the
+        // first one that does (melodic ones first).
+        if let Some(i) = self.ui.open_pattern.take().filter(|&i| i < self.project.patterns.len()) {
+            self.ui.pattern = i;
+            let pattern = &self.project.patterns[i];
+            let plays = |c: &lyra_model::Channel| !pattern.notes(c.id).is_empty();
+            let chans = &self.project.channels;
+            if !chans.get(self.ui.selected).is_some_and(plays) {
+                let melodic = |c: &lyra_model::Channel| lyra_dsp::info(&c.instrument).is_some_and(|x| x.melodic);
+                let pick = chans.iter().position(|c| plays(c) && melodic(c)).or_else(|| chans.iter().position(plays));
+                if let Some(ch) = pick {
+                    self.ui.selected = ch;
+                }
+            }
+            self.areas[0].set(Editor::PianoRoll);
+        }
         let avail = ctx.available_rect().height();
-        let r = egui::TopBottomPanel::bottom("area-bottom")
+        // One panel id per editor: egui remembers each one's height, so the
+        // mixer keeps its own size and the piano roll gets its own back.
+        let editor = self.areas[1].editor;
+        let default_h = match editor {
+            Editor::Mixer => crate::mixer::STRIP_H + m.control_h + 4.0 + 2.0 * 8.0 + 4.0,
+            _ => avail * 0.5,
+        };
+        let r = egui::TopBottomPanel::bottom(bottom_panel_id(editor))
             .resizable(true)
-            .default_height(avail * 0.5)
+            .default_height(default_h)
             .height_range(160.0..=(avail - 160.0).max(160.0))
             .frame(panel)
             .show_animated(ctx, self.bottom_open, |ui| self.area_ui(1, ui, playing, playhead, actions));
@@ -708,7 +782,7 @@ impl LyraApp {
         let area = &mut areas[i];
         ui.push_id(("area", i), |ui| {
             ui.horizontal(|ui| {
-                areas::picker(ui, &mut area.editor);
+                areas::picker(ui, area);
                 ui.add_space(6.0);
                 match area.editor {
                     Editor::Arrangement => area.playlist.toolbar(ui, p, st),
@@ -885,8 +959,9 @@ impl LyraApp {
 /// without this a press on the edge also placed a clip or a note.
 pub fn on_panel_edge(ctx: &egui::Context) -> bool {
     let pos = ctx.input(|i| i.pointer.interact_pos());
-    ["browser", "plugins", "area-bottom"].iter().any(|panel| {
-        ctx.read_response(Id::new(*panel).with("__resize")).is_some_and(|r| {
+    let panels = ["browser", "plugins"].map(Id::new).into_iter().chain(Editor::ALL.map(bottom_panel_id));
+    panels.into_iter().any(|panel| {
+        ctx.read_response(panel.with("__resize")).is_some_and(|r| {
             r.hovered() || r.dragged() || r.is_pointer_button_down_on() || pos.is_some_and(|p| r.rect.contains(p))
         })
     })

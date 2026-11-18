@@ -5,7 +5,7 @@
 //!   keep holding to drag it into place
 //! * **drag a clip** — move (also to another track) · **drag its right end** —
 //!   resize (longer than the pattern = the pattern repeats) · **Shift+drag** — duplicate
-//! * **click a clip** — makes its pattern the current one · **double-click** — open it in the rack
+//! * **click a clip** — makes its pattern the current one · **double-click** — open it in the piano roll
 //! * **right-drag** — delete · **Ctrl+drag** — box select (Shift adds) · **Alt** — no snap
 //! * **wheel** — scroll tracks · **Shift+wheel** — zoom time · **Ctrl+wheel** — sideways ·
 //!   **Alt+wheel** — track height · **middle-drag** — pan
@@ -319,6 +319,30 @@ impl Playlist {
         }
         if down {
             if let Some(pos) = pos {
+                // Held at or past an edge while moving, resizing or selecting:
+                // the view scrolls and the drag follows.
+                let horizontal = matches!(self.drag, Drag::Move { .. } | Drag::Resize { .. } | Drag::Select { .. });
+                let vertical = matches!(self.drag, Drag::Move { .. } | Drag::Select { .. });
+                let mut view = view;
+                if horizontal {
+                    let dt = ui.input(|i| i.stable_dt);
+                    let dx = timeline::edge_pan(pos.x, grid.left(), grid.right(), dt);
+                    let dy = if vertical { timeline::edge_pan(pos.y, grid.top(), grid.bottom(), dt) } else { 0.0 };
+                    if dx != 0.0 || dy != 0.0 {
+                        let (scroll0, y0) = (self.time.scroll, self.scroll_y);
+                        let rows = grid.height() / self.track_h;
+                        self.time.scroll = (self.time.scroll + dx / self.time.ppt).max(0.0);
+                        self.scroll_y =
+                            (self.scroll_y + dy / self.track_h).clamp(0.0, (p.tracks.len() as f32 - rows).max(0.0));
+                        // A rubber band keeps its anchor on the music, not on the screen.
+                        if let Drag::Select { from, .. } = &mut self.drag {
+                            from.x -= (self.time.scroll - scroll0) * self.time.ppt;
+                            from.y -= (self.scroll_y - y0) * self.track_h;
+                        }
+                        view = self.view(grid);
+                        ui.ctx().request_repaint();
+                    }
+                }
                 self.drag_to(pos, mods, &view, (&overview, &vbar), p, song_len, out);
             }
         } else {
@@ -435,7 +459,8 @@ impl Playlist {
                 st.pattern = idx;
             }
             if double {
-                st.show_plugins = true;
+                // Double-click a clip: edit its pattern in the piano roll.
+                st.open_pattern = p.pattern_index(p.clips[i].pattern);
                 self.drag = Drag::None;
                 return;
             }

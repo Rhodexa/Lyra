@@ -23,7 +23,10 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
             for i in 0..p.patterns.len() {
                 let light = theme::channel_light(i);
                 let r = row(ui, &p.patterns[i].name, Some(light), st.pattern == i, 0.0);
-                if r.on_hover_text("Click: edit this pattern (and place it in the arranger)").clicked() {
+                let r = r.on_hover_text("Click: make it the current pattern · double-click: open it in the piano roll");
+                if r.double_clicked() {
+                    st.open_pattern = Some(i);
+                } else if r.clicked() {
                     st.pattern = i;
                 }
             }

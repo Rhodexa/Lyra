@@ -258,3 +258,20 @@ fn paint_thumb(painter: &Painter, thumb: Rect, hot: bool) {
     let fill = if hot { egui::Color32::from_rgb(0x4a, 0x4a, 0x4a) } else { egui::Color32::from_rgb(0x3a, 0x3a, 0x3a) };
     painter.rect_filled(thumb.shrink(1.0), cr(3), fill);
 }
+
+/// Auto-scroll while a drag is held at or past an edge of the view: how many
+/// points to scroll this frame along one axis (negative = towards `lo`).
+/// Starts a few points inside the edge, so the edge itself works too, and
+/// speeds up the further past it you hold the mouse. Time-based (`dt`), so it
+/// feels the same at any frame rate.
+pub fn edge_pan(pos: f32, lo: f32, hi: f32, dt: f32) -> f32 {
+    const ZONE: f32 = 10.0;
+    let over = if pos < lo + ZONE {
+        pos - (lo + ZONE)
+    } else if pos > hi - ZONE {
+        pos - (hi - ZONE)
+    } else {
+        0.0
+    };
+    (over * 9.0).clamp(-1800.0, 1800.0) * dt.min(0.05)
+}

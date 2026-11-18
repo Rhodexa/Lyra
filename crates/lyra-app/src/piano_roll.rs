@@ -438,6 +438,28 @@ impl PianoRoll {
         }
         if down {
             if let Some(pos) = pos {
+                // Held at or past an edge while moving, resizing or selecting:
+                // the view scrolls, and the drag follows (a note goes up an
+                // octave by holding it at the top edge).
+                let horizontal = matches!(self.drag, Drag::Move { .. } | Drag::Resize { .. } | Drag::Select { .. });
+                let vertical = matches!(self.drag, Drag::Move { .. } | Drag::Select { .. });
+                if horizontal {
+                    let dt = ui.input(|i| i.stable_dt);
+                    let dx = timeline::edge_pan(pos.x, grid.left(), grid.right(), dt);
+                    let dy = if vertical { timeline::edge_pan(pos.y, grid.top(), grid.bottom(), dt) } else { 0.0 };
+                    if dx != 0.0 || dy != 0.0 {
+                        let (scroll0, top0) = (self.time.scroll, self.view_top);
+                        self.time.scroll = (self.time.scroll + dx / self.time.ppt).max(0.0);
+                        self.view_top = (self.view_top - dy / self.row_h).clamp(rows.min(128.0), 128.0);
+                        // A rubber band keeps its anchor on the music, not on the screen.
+                        if let Drag::Select { from, .. } = &mut self.drag {
+                            from.x -= (self.time.scroll - scroll0) * self.time.ppt;
+                            from.y += (self.view_top - top0) * self.row_h;
+                        }
+                        ui.ctx().request_repaint();
+                    }
+                }
+                let view = self.view(grid);
                 self.drag_to(pos, mods, &view, vel, (&overview, &vbar), p, pat, ch_id, out);
             }
         } else if !matches!(self.drag, Drag::None) {
@@ -688,8 +710,8 @@ impl PianoRoll {
             self.set_rows(rv, view.grid);
         } else if ruler.contains(pos) && primary {
             // The piano roll's ruler is about *this pattern*: hear it from here.
-            out.push(Action::SongMode(false));
-            out.push(Action::Seek(view.tick(pos.x).clamp(0.0, pattern_ticks - 1.0) as f64));
+            // (In song mode the app finds where this pattern plays in the song.)
+            out.push(Action::SeekPattern(view.tick(pos.x).clamp(0.0, pattern_ticks - 1.0) as f64));
             self.drag = Drag::Seek;
         } else if keys_r.contains(pos) && primary {
             let key = view.key(pos.y).clamp(0, 127) as u8;
@@ -792,7 +814,7 @@ impl PianoRoll {
                 }
                 self.last_vel = v;
             }
-            Drag::Seek => out.push(Action::Seek(view.tick(pos.x).clamp(0.0, pattern_ticks - 1.0) as f64)),
+            Drag::Seek => out.push(Action::SeekPattern(view.tick(pos.x).clamp(0.0, pattern_ticks - 1.0) as f64)),
             Drag::Audition => {
                 let key = view.key(pos.y).clamp(0, 127) as u8;
                 self.audition(key, out);

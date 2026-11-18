@@ -8,7 +8,8 @@
 //!
 //! Keyboard editing keys (Delete, Ctrl+A, arrows…) go to the area under the
 //! mouse. The F-keys open the bottom area on an editor (F5 arrangement, F7
-//! piano roll, F9 mixer); pressing the same key again folds it away.
+//! piano roll, F9 mixer); pressing the same key again folds it away. Tab
+//! flips the area under the mouse back to its previous editor.
 
 use crate::piano_roll::PianoRoll;
 use crate::playlist::Playlist;
@@ -61,6 +62,8 @@ impl Editor {
 /// One area: the editor it shows, plus every editor's own state.
 pub struct Area {
     pub editor: Editor,
+    /// The editor shown before this one (Tab flips back to it).
+    pub prev: Option<Editor>,
     pub playlist: Playlist,
     pub piano: PianoRoll,
     /// (pattern, channel id) this area's piano roll last framed its view on.
@@ -69,13 +72,34 @@ pub struct Area {
 
 impl Area {
     pub fn new(editor: Editor) -> Self {
-        Self { editor, playlist: Playlist::default(), piano: PianoRoll::default(), framed: None }
+        Self { editor, prev: None, playlist: Playlist::default(), piano: PianoRoll::default(), framed: None }
+    }
+
+    /// Show `editor`, remembering the one it replaces (for Tab).
+    pub fn set(&mut self, editor: Editor) {
+        if editor != self.editor {
+            self.prev = Some(self.editor);
+            self.editor = editor;
+        }
+    }
+
+    /// Tab: back to the previous editor (and Tab again comes back here).
+    pub fn swap(&mut self) {
+        if let Some(prev) = self.prev {
+            self.set(prev);
+        }
     }
 }
 
 /// The editor picker: a small well showing the editor's icon and name; click
 /// it for the list.
-pub fn picker(ui: &mut Ui, editor: &mut Editor) {
+pub fn picker(ui: &mut Ui, area: &mut Area) {
+    let mut editor = area.editor;
+    picker_list(ui, &mut editor);
+    area.set(editor);
+}
+
+fn picker_list(ui: &mut Ui, editor: &mut Editor) {
     let m = theme::m();
     let h = m.control_h;
     let (r, resp) = ui.allocate_exact_size(vec2(h * 5.6, h), Sense::click());

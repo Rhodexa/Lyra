@@ -28,7 +28,7 @@ const STRIP_W: f32 = PAD_L + FADER_W + METER_W + PAD_R;
 const FADER_H: f32 = 210.0;
 /// The lower part: vertical name on the left, pan and mute on the right.
 const LOWER_H: f32 = 170.0;
-const STRIP_H: f32 = 8.0 + FADER_H + 6.0 + LOWER_H + 6.0;
+pub const STRIP_H: f32 = 8.0 + FADER_H + 6.0 + LOWER_H + 6.0;
 
 /// Width of the effect rack beside the strips (inside its padding).
 const RACK_W: f32 = 240.0;
