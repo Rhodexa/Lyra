@@ -76,6 +76,9 @@ pub struct UiState {
     /// a click on empty arrangement places it (instead of the current pattern).
     pub audio: Option<lyra_model::AudioId>,
     pub place_audio: bool,
+    /// The playlist clip (index) the audio-clip editor shows the window and
+    /// own settings of: the one last clicked. None = just the source.
+    pub audio_clip: Option<usize>,
     /// "Open this audio clip in the audio-clip editor" (a double-click).
     pub open_audio: Option<lyra_model::AudioId>,
     /// The pattern last frame: picking another one goes back to placing patterns.
@@ -111,6 +114,7 @@ impl Default for UiState {
             song_mode: false,
             audio: None,
             place_audio: false,
+            audio_clip: None,
             open_audio: None,
             last_pattern: 0,
         }

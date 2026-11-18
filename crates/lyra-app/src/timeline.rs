@@ -384,6 +384,13 @@ pub fn snap(raw: f32, step: u32) -> f32 {
     (raw / step as f32).round() * step as f32
 }
 
+/// Where a dragged value (a start, a length) goes: moved by the mouse's
+/// travel since the press, snapped to the grid. None while the mouse hasn't
+/// really moved: a click must never pull an off-grid item onto the grid.
+pub fn drag_to_grid(value: f32, anchor_tick: f32, tick: f32, ppt: f32, step: u32) -> Option<f32> {
+    ((tick - anchor_tick).abs() * ppt >= 3.0).then(|| snap(value + tick - anchor_tick, step))
+}
+
 /// [`edge_pan`] on both axes of `area` (`vertical` false: sideways only).
 pub fn edge_pan_2d(pos: Pos2, area: Rect, dt: f32, vertical: bool) -> egui::Vec2 {
     let dx = edge_pan(pos.x, area.left(), area.right(), dt);

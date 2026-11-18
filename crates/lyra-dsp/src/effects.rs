@@ -503,7 +503,13 @@ pub struct Pump {
 
 impl Pump {
     fn new() -> Self {
-        Self { p: lyra_plugin::default_params(&PUMP_PARAMS), sr: 48_000.0, dirty: true, t: Transport::default(), gain: 1.0 }
+        Self {
+            p: lyra_plugin::default_params(&PUMP_PARAMS),
+            sr: 48_000.0,
+            dirty: true,
+            t: Transport::default(),
+            gain: 1.0,
+        }
     }
     fn prepare(&mut self) {}
     fn update(&mut self) {}

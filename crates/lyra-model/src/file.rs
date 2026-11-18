@@ -24,10 +24,7 @@ pub fn to_json(project: &Project) -> String {
 }
 
 pub fn from_json(text: &str) -> Result<Project, String> {
-    let mut json: serde_json::Value =
-        serde_json::from_str(text).map_err(|e| format!("not a readable Lyra project ({e})"))?;
-    upgrade(&mut json);
-    let file: ProjectFile = serde_json::from_value(json).map_err(|e| format!("not a readable Lyra project ({e})"))?;
+    let file: ProjectFile = serde_json::from_str(text).map_err(|e| format!("not a readable Lyra project ({e})"))?;
     if file.format != FORMAT {
         return Err(format!("not a Lyra project (format \"{}\")", file.format));
     }
@@ -35,22 +32,6 @@ pub fn from_json(text: &str) -> Result<Project, String> {
         return Err(format!("made by a newer Lyra (file v{}, this Lyra reads up to v{VERSION})", file.version));
     }
     Ok(file.project)
-}
-
-/// Older files, said the new way (in place, before reading them).
-fn upgrade(json: &mut serde_json::Value) {
-    // Channels once had a `solo` flag; solo is FL-style now (it mutes the
-    // others). A file with soloed channels: mute every channel that isn't.
-    if let Some(channels) = json.pointer_mut("/project/channels").and_then(|c| c.as_array_mut()) {
-        let soloed = |c: &serde_json::Value| c.get("solo").and_then(|s| s.as_bool()).unwrap_or(false);
-        if channels.iter().any(soloed) {
-            for c in channels.iter_mut() {
-                if !soloed(c) {
-                    c["mute"] = true.into();
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -91,17 +72,6 @@ mod tests {
         assert_eq!(p.clips[0].offset, 0);
         // And pattern clips are still written the old way.
         assert!(to_json(&p).contains("\"pattern\": 7"));
-    }
-
-    #[test]
-    fn an_old_solo_becomes_mutes() {
-        let mut p = Project::default();
-        p.add_channel("a", "lyra.kick", vec![]);
-        p.add_channel("b", "lyra.kick", vec![]);
-        let mut json: serde_json::Value = serde_json::from_str(&to_json(&p)).unwrap();
-        json["project"]["channels"][1]["solo"] = true.into();
-        let back = from_json(&json.to_string()).unwrap();
-        assert!(back.channels[0].mute && !back.channels[1].mute);
     }
 
     #[test]

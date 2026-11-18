@@ -9,11 +9,13 @@
 //!   (an audio clip: in the audio-clip editor)
 //! * **audio clips** — drop a sample from the browser onto a track · drag
 //!   either end to trim it (a clip is a window onto its audio). Hover a clip
-//!   for its handles: the squares on the title strip are its fades (drag
-//!   sideways), the dot on a fade's curve bends it (drag up and down), the pill
+//!   for its handles: the dots on the title strip are its fades (drag
+//!   sideways), the ring on a fade's curve bends it (drag up and down), the ↕
 //!   in the middle is its gain (drag up and down, double-click for 0 dB).
-//!   These are each clip's own; the audio-clip editor edits what all copies
-//!   share (trim, the source's gain and fades).
+//!   These are each clip's own. Double-click: the audio-clip editor, where
+//!   its window onto the audio slides, and what all copies share is edited.
+//! * a click never moves anything: moves and resizes start once the mouse
+//!   has really moved (so an off-grid clip isn't pulled onto the grid)
 //! * **right-drag** — delete · **Ctrl+drag** — box select (Shift adds) · **Alt** — no snap
 //! * **wheel** — scroll tracks · **Shift+wheel** — zoom time · **Ctrl+wheel** — sideways ·
 //!   **Alt+wheel** — track height · **middle-drag** — pan
@@ -220,8 +222,9 @@ fn curve_mid(g: &FadeGeo, end: End, tension: f32) -> Option<Pos2> {
         .then(|| pos2((f0 + f1) * 0.5, g.body.bottom() - lyra_engine::fade_curve(0.5, tension) * g.body.height()))
 }
 
+/// The gain grip sits in the middle of the sound.
 fn gain_pos(g: &FadeGeo) -> Pos2 {
-    pos2((g.x0 + g.x_end) * 0.5, g.handles_y)
+    pos2((g.x0 + g.x_end) * 0.5, g.body.center().y)
 }
 
 /// The handle under `pos`, on the clip it hovers (only that clip shows them).
@@ -500,6 +503,7 @@ impl Playlist {
                         p.clips.push(Clip::of_audio(id, track, start, len));
                         self.selection = vec![p.clips.len() - 1];
                         st.audio = Some(id);
+                        st.audio_clip = Some(p.clips.len() - 1);
                         st.place_audio = true;
                         ghost = None;
                     }
@@ -754,6 +758,7 @@ impl Playlist {
                 }
                 Source::Audio(id) => {
                     st.audio = Some(id);
+                    st.audio_clip = Some(i);
                     st.place_audio = true;
                 }
             }
@@ -810,6 +815,9 @@ impl Playlist {
             h.checkpoint(p);
             p.clips.push(clip);
             let i = p.clips.len() - 1;
+            if p.clips[i].audio().is_some() {
+                st.audio_clip = Some(i);
+            }
             self.selection = vec![i];
             self.drag =
                 Drag::Move { anchor_tick, anchor_track, originals: vec![(i, p.clips[i].clone())], lead: 0, free };
@@ -833,9 +841,10 @@ impl Playlist {
                 *free |= mods.alt; // once free, free until release
                 let snap = if *free { 1 } else { self.snap };
                 let lead_clip = &originals[*lead].1;
-                let raw = lead_clip.start as f32 + (v.tick(pos.x) - *anchor_tick);
+                let start = lead_clip.start as f32;
+                let to = timeline::drag_to_grid(start, *anchor_tick, v.tick(pos.x), v.time.ppt, snap).unwrap_or(start);
                 let min_start = originals.iter().map(|(_, c)| c.start).min().unwrap_or(0) as i64;
-                let dt = (timeline::snap(raw, snap).max(0.0) as i64 - lead_clip.start as i64).max(-min_start);
+                let dt = (to.max(0.0) as i64 - lead_clip.start as i64).max(-min_start);
                 let (lo, hi) =
                     originals.iter().fold((usize::MAX, 0), |(lo, hi), (_, c)| (lo.min(c.track), hi.max(c.track)));
                 let max_down = p.tracks.len().saturating_sub(1).saturating_sub(hi) as i32;
@@ -851,9 +860,8 @@ impl Playlist {
                 *free |= mods.alt;
                 let snap = if *free { 1 } else { self.snap };
                 let lead_clip = &originals[*lead].1;
-                let raw = lead_clip.len as f32 + (v.tick(pos.x) - *anchor_tick);
-                let new_len = timeline::snap(raw, snap).max(snap.max(TICKS_PER_STEP) as f32) as i64;
-                let dl = new_len - lead_clip.len as i64;
+                let to = timeline::drag_to_grid(lead_clip.len as f32, *anchor_tick, v.tick(pos.x), v.time.ppt, snap);
+                let dl = to.map_or(0, |t| t.max(snap.max(TICKS_PER_STEP) as f32) as i64 - lead_clip.len as i64);
                 for (i, c) in originals.iter() {
                     // An audio clip can't run past the end of its audio.
                     let room = audio_room(p, c).map_or(i64::MAX, |r| r as i64);
@@ -866,8 +874,9 @@ impl Playlist {
                 *free |= mods.alt;
                 let snap = if *free { 1 } else { self.snap };
                 let lead_clip = &originals[*lead].1;
-                let raw = lead_clip.start as f32 + (v.tick(pos.x) - *anchor_tick);
-                let mut d = timeline::snap(raw, snap) as i64 - lead_clip.start as i64;
+                let start = lead_clip.start as f32;
+                let to = timeline::drag_to_grid(start, *anchor_tick, v.tick(pos.x), v.time.ppt, snap);
+                let mut d = to.map_or(0, |t| t as i64 - lead_clip.start as i64);
                 // Every audio clip in the selection moves its start the same
                 // amount: not before its audio's start, not past its own end.
                 let audio: Vec<&(usize, Clip)> = originals.iter().filter(|(_, c)| c.audio().is_some()).collect();
@@ -1016,13 +1025,12 @@ impl Playlist {
             let light = clip_light(p, c);
             let playing = playhead.is_some_and(|t| (c.start as f64..c.end() as f64).contains(&t));
             let selected = self.selection.contains(&i);
-            painter.rect_filled(r, cr(4), theme::KEY_RECESS);
-            let (inner, strip, body) = parts(r);
-            let mut fill = theme::mix(theme::PANEL, light.low, if current { 0.52 } else { 0.42 });
-            if playing {
-                fill = theme::shade(fill, 1.12);
-            }
-            painter.rect_filled(inner, cr(3), fill);
+            // The body is a see-through tint of the clip's light, so what's in it
+            // (notes, waveform) stands out against the grid.
+            let (_, strip, body) = parts(r);
+            let alpha = if current { 0.24 } else { 0.16 } + if playing { 0.08 } else { 0.0 };
+            painter.rect_filled(r, cr(4), light.mid.gamma_multiply(alpha));
+            painter.rect_stroke(r, cr(4), stroke(1.0, light.mid.gamma_multiply(0.45)), StrokeKind::Inside);
             let strip_fill = if playing { theme::shade(light.mid, 1.04) } else { light.mid };
             painter.rect_filled(strip, egui::CornerRadius { nw: 3, ne: 3, sw: 0, se: 0 }, strip_fill);
             if r.width() > 24.0 {
@@ -1179,8 +1187,8 @@ fn paint_audio(
         }
         Some((secs(x) * sr, secs(x + 1.0) * sr, gain))
     });
-    // The fades' curves: thin, so they never hide the waveform.
-    let ink = theme::TEXT.gamma_multiply(if hot.is_some() { 0.8 } else { 0.45 });
+    // The fades' curves: thin, in the clip's light, so they never hide the waveform.
+    let ink = light.hi.gamma_multiply(if hot.is_some() { 0.9 } else { 0.5 });
     let mut mids = [None, None];
     for (k, (end, f0, f1, fade)) in
         [(End::In, g.x0, g.x_in, c.fade_in), (End::Out, g.x_out, g.x_end, c.fade_out)].into_iter().enumerate()
@@ -1197,17 +1205,17 @@ fn paint_audio(
     let on_grid = painter.with_clip_rect(v.grid);
     for (k, end) in [End::In, End::Out].into_iter().enumerate() {
         if let Some(mid) = mids[k] {
-            waveform::paint_tension(&clipped, mid, hot == Some(Grip::Curve(end)));
+            waveform::paint_tension(&clipped, mid, light.hi, hot == Some(Grip::Curve(end)));
         }
         let x = if end == End::In { g.x_in } else { g.x_out };
-        waveform::paint_handle(&on_grid, pos2(x, g.handles_y), hot == Some(Grip::Fade(end)));
+        waveform::paint_handle(&on_grid, pos2(x, g.handles_y), light.hi, hot == Some(Grip::Fade(end)));
     }
-    // The gain pill, with its value while it's the one under the mouse.
+    // The gain grip, with the clip's gain beside it while it's under the mouse.
     let at = gain_pos(&g);
     let gain_hot = hot == Some(Grip::Gain);
-    waveform::paint_gain(&on_grid, at, gain_hot);
-    if gain_hot || c.gain != 0.0 {
+    waveform::paint_gain(&clipped, at, light.hi, gain_hot);
+    if gain_hot {
         let text = format!("{:+.1} dB", c.gain);
-        clipped.text(at + vec2(0.0, 6.0), Align2::CENTER_TOP, text, FontId::monospace(m.text_small), theme::TEXT);
+        clipped.text(at + vec2(9.0, 0.0), Align2::LEFT_CENTER, text, FontId::monospace(m.text_small), light.hi);
     }
 }

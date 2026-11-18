@@ -740,8 +740,9 @@ impl PianoRoll {
                 *free |= mods.alt; // latch: once free, free until the mouse is released
                 let snap = if *free { 1 } else { self.snap };
                 let lead_note = &originals[*lead].1;
-                let raw = lead_note.start as f32 + (view.tick(pos.x) - *anchor_tick);
-                let snapped = timeline::snap(raw, snap).max(0.0);
+                let start = lead_note.start as f32;
+                let to = timeline::drag_to_grid(start, *anchor_tick, view.tick(pos.x), view.ppt, snap);
+                let snapped = to.unwrap_or(start).max(0.0);
                 let min_start = originals.iter().map(|(_, n)| n.start).min().unwrap_or(0) as i64;
                 let dt = (snapped as i64 - lead_note.start as i64).max(-min_start);
                 let (lo, hi) = originals
@@ -761,15 +762,17 @@ impl PianoRoll {
                 *free |= mods.alt;
                 let snap = if *free { 1 } else { self.snap };
                 let lead_note = &originals[*lead].1;
-                let raw = lead_note.len as f32 + (view.tick(pos.x) - *anchor_tick);
-                let new_len = timeline::snap(raw, snap).max(snap as f32) as i64;
+                let to = timeline::drag_to_grid(lead_note.len as f32, *anchor_tick, view.tick(pos.x), view.ppt, snap);
+                let new_len = to.map_or(lead_note.len as i64, |t| t.max(snap as f32) as i64);
                 let dl = new_len - lead_note.len as i64;
                 for (i, n) in originals.iter() {
                     if let Some(note) = notes.get_mut(*i) {
                         note.len = (n.len as i64 + dl).max(snap.min(n.len) as i64) as u32;
                     }
                 }
-                self.set_default_len(new_len as u32);
+                if to.is_some() {
+                    self.set_default_len(new_len as u32);
+                }
             }
             Drag::Select { from, base } => {
                 let r = Rect::from_two_pos(*from, pos);

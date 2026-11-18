@@ -1,14 +1,19 @@
 //! The audio-clip editor: one audio clip, big.
 //!
-//! Everything here is the clip's *source*, shared by every copy on the
-//! playlist (like a pattern's notes); each copy adds its own gain and fades
-//! on top, on the playlist. None of it touches the file on disk:
+//! Opened from a clip on the playlist (double-click it), it knows *that*
+//! clip: its window onto the audio is the framed part of the waveform, and
+//! its own gain and fades are the "this clip" knobs. The rest is the clip's
+//! *source*, shared by every copy (like a pattern's notes). None of it
+//! touches the file on disk:
 //!
-//! * **knobs** — gain, the fades' lengths and their curves
-//! * **the white lines** — trim: where in the file the clip starts and ends
-//!   (drag them; outside them the file is drawn dim)
-//! * **the squares** — fade lengths (drag sideways) · **the dots on the
-//!   curves** — bend them (drag up and down: up = louder sooner)
+//! * **knobs** — gain, the fades' lengths and their curves: this clip's, and
+//!   every copy's
+//! * **the frame** — this clip's window: drag it sideways to hear another
+//!   part of the audio (the clip stays where it is on the playlist)
+//! * **the white lines** — trim, for every copy: where in the file the audio
+//!   starts and ends (drag them; outside them the file is drawn dim)
+//! * **the dots** — the source's fade lengths (drag sideways) · **the rings
+//!   on the curves** — bend them (drag up and down: up = louder sooner)
 //! * **ruler** — click to play the song from there (in the clip that's
 //!   playing, or the first one)
 //! * **Shift+wheel** (or the wheel over the ruler) — zoom at the mouse ·
@@ -17,14 +22,13 @@
 
 use crate::app::UiState;
 use crate::keys::Action;
-use crate::rack::tracked;
 use crate::samples::{Peaks, Samples};
 use crate::theme::{self, cr, stroke};
 use crate::timeline::{self, Wheel};
 use crate::waveform::{self, End};
 use crate::widgets;
-use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, Sense, Ui};
-use lyra_model::{AudioId, History, Project, Source};
+use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, Sense, StrokeKind, Ui};
+use lyra_model::{AudioId, Fade, History, Project, Source};
 use lyra_plugin::{Curve, ParamInfo};
 
 const GAIN: ParamInfo = ParamInfo::new(0, "Gain", -36.0, 12.0, 0.0, "dB", Curve::Linear);
@@ -33,7 +37,8 @@ const FADE_OUT: ParamInfo = ParamInfo::new(3, "Fade out", 0.001, 10.0, 0.005, "s
 const CURVE_IN: ParamInfo = ParamInfo::new(2, "Curve", -1.0, 1.0, 0.0, "", Curve::Linear);
 const CURVE_OUT: ParamInfo = ParamInfo::new(4, "Curve", -1.0, 1.0, 0.0, "", Curve::Linear);
 
-const KNOBS_W: f32 = 150.0;
+/// One plate of knobs (this clip's, or every copy's).
+const PLATE_W: f32 = 150.0;
 const HANDLE_R: f32 = 6.0;
 /// The trim lines can be grabbed this far to either side.
 const TRIM_GRAB: f32 = 5.0;
@@ -55,6 +60,12 @@ enum Drag {
         end: End,
         orig: f32,
         anchor_y: f32,
+    },
+    /// The clip's window: slides its offset.
+    Slide {
+        clip: usize,
+        orig: u32,
+        anchor_x: f32,
     },
     Seek,
     Hand {
@@ -84,6 +95,84 @@ fn current(p: &Project, st: &mut UiState) -> Option<usize> {
     let i = st.audio.and_then(|id| p.audio_index(id)).or(if p.audio.is_empty() { None } else { Some(0) })?;
     st.audio = Some(p.audio[i].id);
     Some(i)
+}
+
+/// The playlist clip the editor was opened from, if it still plays this audio.
+fn context_clip(p: &Project, st: &UiState, id: AudioId) -> Option<usize> {
+    st.audio_clip.filter(|&i| p.clips.get(i).is_some_and(|c| c.audio() == Some(id)))
+}
+
+/// Gain and fades as the knobs see them: [gain, in, in curve, out, out curve].
+fn levels(gain: f32, fade_in: Fade, fade_out: Fade) -> [f32; 5] {
+    [gain, fade_in.len, fade_in.tension, fade_out.len, fade_out.tension]
+}
+
+fn set_level(i: usize, v: f32, gain: &mut f32, fade_in: &mut Fade, fade_out: &mut Fade) {
+    match i {
+        0 => *gain = v,
+        1 => fade_in.len = v,
+        2 => fade_in.tension = v,
+        3 => fade_out.len = v,
+        _ => fade_out.tension = v,
+    }
+}
+
+/// What a plate of knobs did this frame.
+struct PlateEdit {
+    /// Take an undo step now (a knob was grabbed, or changed by wheel/click).
+    checkpoint: bool,
+    /// (which level, new value).
+    change: Option<(usize, f32)>,
+}
+
+/// A plate of five knobs: gain, then each fade's length and curve.
+fn levels_plate(ui: &mut Ui, area: Rect, title: &str, salt: &str, vals: [f32; 5], color: Color32) -> PlateEdit {
+    let m = theme::m();
+    ui.painter().rect_filled(area, cr(0), theme::PANEL);
+    ui.painter().text(
+        area.left_top() + vec2(8.0, 6.0),
+        Align2::LEFT_TOP,
+        title,
+        FontId::proportional(m.text_small),
+        theme::TEXT_DIM,
+    );
+    let top = area.top() + 12.0 + m.text_small;
+    let cell = vec2(area.width() * 0.5, m.knob_small + 2.0 * m.text_small + 12.0);
+    let infos = [&GAIN, &FADE_IN, &CURVE_IN, &FADE_OUT, &CURVE_OUT];
+    let places = [(0, 0), (0, 1), (1, 1), (0, 2), (1, 2)];
+    let mut edit = PlateEdit { checkpoint: false, change: None };
+    for (k, (info, (col, row))) in infos.into_iter().zip(places).enumerate() {
+        let r = Rect::from_min_size(pos2(area.left() + col as f32 * cell.x, top + row as f32 * cell.y), cell);
+        if r.bottom() > area.bottom() {
+            continue;
+        }
+        let mut v = vals[k];
+        let knob =
+            Rect::from_center_size(pos2(r.center().x, r.top() + m.knob_small * 0.5), vec2(m.knob_small, m.knob_small));
+        let resp = widgets::knob_at(ui, ui.id().with((salt, k)), knob, &mut v, info, color);
+        // Same rule as `rack::tracked`: one undo step per grab, or per click/wheel change.
+        edit.checkpoint |= resp.drag_started() || (resp.changed() && !resp.dragged());
+        if resp.changed() {
+            edit.change = Some((k, v));
+        }
+        let painter = ui.painter();
+        let y = knob.bottom() + 4.0;
+        painter.text(
+            pos2(r.center().x, y),
+            Align2::CENTER_TOP,
+            info.name,
+            FontId::proportional(m.text_small),
+            theme::TEXT,
+        );
+        painter.text(
+            pos2(r.center().x, y + m.text_small + 2.0),
+            Align2::CENTER_TOP,
+            info.format(v),
+            FontId::proportional(m.text_small),
+            theme::TEXT_DIM,
+        );
+    }
+    edit
 }
 
 /// Screen ↔ file time for one frame.
@@ -129,9 +218,12 @@ enum Hover {
     Fade(End),
     Curve(End),
     Trim(bool),
+    /// Inside this clip's window.
+    Window,
 }
 
-fn hover(v: &View, a: &lyra_model::Audio, pos: Pos2) -> Option<Hover> {
+/// `window`: this clip's window in file seconds, when opened from a clip.
+fn hover(v: &View, a: &lyra_model::Audio, window: Option<(f64, f64)>, pos: Pos2) -> Option<Hover> {
     if !v.wave.expand(HANDLE_R).contains(pos) {
         return None;
     }
@@ -153,6 +245,8 @@ fn hover(v: &View, a: &lyra_model::Audio, pos: Pos2) -> Option<Hover> {
         Some(Hover::Trim(false))
     } else if (pos.x - g.x_end).abs() <= TRIM_GRAB {
         Some(Hover::Trim(true))
+    } else if window.is_some_and(|(s, e)| v.wave.contains(pos) && (v.x(s)..=v.x(e)).contains(&pos.x)) {
+        Some(Hover::Window)
     } else {
         None
     }
@@ -200,58 +294,35 @@ impl AudioEditor {
         let size = ui.available_size().max(vec2(420.0, 160.0));
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
 
-        // ── Knobs, on a plate at the left ──
-        let knobs = Rect::from_min_max(rect.min, pos2(rect.left() + KNOBS_W, rect.bottom()));
-        ui.painter().rect_filled(knobs, cr(0), theme::PANEL);
+        // ── Knobs at the left: the clip's own (when opened from a clip), then the source's ──
+        let id = p.audio[ai].id;
+        let clip = context_clip(p, st, id);
         let color = theme::channel_color(p.audio[ai].color);
-        let cell = vec2(KNOBS_W * 0.5, m.knob_small + 2.0 * m.text_small + 12.0);
-        let cells = [(0, 0, &GAIN), (0, 1, &FADE_IN), (1, 1, &CURVE_IN), (0, 2, &FADE_OUT), (1, 2, &CURVE_OUT)];
-        for (col, row, info) in cells {
-            let at = knobs.min + vec2(col as f32 * cell.x, 6.0 + row as f32 * cell.y);
-            let r = Rect::from_min_size(at, cell);
-            if r.bottom() > knobs.bottom() {
-                continue;
+        let mut x = rect.left();
+        if let Some(ci) = clip {
+            let c = &p.clips[ci];
+            let plate = Rect::from_min_max(pos2(x, rect.top()), pos2(x + PLATE_W, rect.bottom()));
+            let k = levels_plate(ui, plate, "THIS CLIP", "clip-knob", levels(c.gain, c.fade_in, c.fade_out), color);
+            if k.checkpoint {
+                h.checkpoint(p);
             }
-            let a = &p.audio[ai];
-            let mut v = match info.id {
-                0 => a.gain,
-                1 => a.fade_in.len,
-                2 => a.fade_in.tension,
-                3 => a.fade_out.len,
-                _ => a.fade_out.tension,
-            };
-            let knob = Rect::from_center_size(
-                pos2(r.center().x, r.top() + m.knob_small * 0.5),
-                vec2(m.knob_small, m.knob_small),
-            );
-            let resp = widgets::knob_at(ui, ui.id().with(("audio-knob", info.id)), knob, &mut v, info, color);
-            if tracked(&resp, h, p) {
-                let a = &mut p.audio[ai];
-                match info.id {
-                    0 => a.gain = v,
-                    1 => a.fade_in.len = v,
-                    2 => a.fade_in.tension = v,
-                    3 => a.fade_out.len = v,
-                    _ => a.fade_out.tension = v,
-                }
+            if let Some((i, v)) = k.change {
+                let c = &mut p.clips[ci];
+                set_level(i, v, &mut c.gain, &mut c.fade_in, &mut c.fade_out);
             }
-            let painter = ui.painter();
-            let y = knob.bottom() + 4.0;
-            painter.text(
-                pos2(r.center().x, y),
-                Align2::CENTER_TOP,
-                info.name,
-                FontId::proportional(m.text_small),
-                theme::TEXT,
-            );
-            painter.text(
-                pos2(r.center().x, y + m.text_small + 2.0),
-                Align2::CENTER_TOP,
-                info.format(v),
-                FontId::proportional(m.text_small),
-                theme::TEXT_DIM,
-            );
+            x += PLATE_W + theme::SEAM;
         }
+        let a = &p.audio[ai];
+        let plate = Rect::from_min_max(pos2(x, rect.top()), pos2(x + PLATE_W, rect.bottom()));
+        let k = levels_plate(ui, plate, "EVERY COPY", "source-knob", levels(a.gain, a.fade_in, a.fade_out), color);
+        if k.checkpoint {
+            h.checkpoint(p);
+        }
+        if let Some((i, v)) = k.change {
+            let a = &mut p.audio[ai];
+            set_level(i, v, &mut a.gain, &mut a.fade_in, &mut a.fade_out);
+        }
+        let knobs = Rect::from_min_max(rect.min, pos2(plate.right(), rect.bottom()));
 
         // ── The waveform ──
         let canvas = Rect::from_min_max(pos2(knobs.right() + theme::SEAM, rect.top()), rect.max);
@@ -268,7 +339,15 @@ impl AudioEditor {
             return;
         };
         let file_secs = peaks.frames() as f64 / peaks.sample_rate() as f64;
-        let id = p.audio[ai].id;
+        let spt = p.seconds_per_tick();
+        // This clip's window onto the audio, in file seconds.
+        let window = clip.map(|ci| {
+            let c = &p.clips[ci];
+            let a = &p.audio[ai];
+            let start = a.start + c.offset as f64 * spt;
+            let room = crate::playlist::audio_room(p, c).unwrap_or(c.len);
+            (start, start + c.len.min(room) as f64 * spt)
+        });
         if self.framed != Some(id) {
             // First look at this clip: the whole file, with a little room after it.
             self.pps = wave.width() as f64 / (file_secs * 1.04).max(0.01);
@@ -300,7 +379,6 @@ impl AudioEditor {
         let v = View { wave, scroll: self.scroll, pps: self.pps };
 
         // ── Mouse ──
-        let spt = p.seconds_per_tick();
         if hovering && pressed_m {
             if let Some(pos) = pos {
                 self.drag = Drag::Hand { last: pos };
@@ -310,9 +388,13 @@ impl AudioEditor {
                 let a = &p.audio[ai];
                 if ruler.contains(pos) {
                     self.drag = Drag::Seek;
-                } else if let Some(hv) = hover(&v, a, pos) {
+                } else if let Some(hv) = hover(&v, a, window, pos) {
                     h.checkpoint(p);
                     self.drag = match hv {
+                        Hover::Window => match clip {
+                            Some(ci) => Drag::Slide { clip: ci, orig: p.clips[ci].offset, anchor_x: pos.x },
+                            None => Drag::None,
+                        },
                         Hover::Trim(end) => {
                             Drag::Trim { end, orig: if end { a.end } else { a.start }, anchor_x: pos.x }
                         }
@@ -330,6 +412,14 @@ impl AudioEditor {
         }
         if down {
             if let Some(pos) = pos {
+                if let Drag::Slide { clip, orig, anchor_x } = self.drag {
+                    // Slide the window: the clip stays put on the playlist and
+                    // plays another part of the audio (within the trim).
+                    let c_len = p.clips[clip].len as i64;
+                    let max = ((p.audio[ai].length() / spt).floor() as i64 - c_len).max(0);
+                    let d = ((pos.x - anchor_x) as f64 / self.pps / spt).round() as i64;
+                    p.clips[clip].offset = (orig as i64 + d).clamp(0, max) as u32;
+                }
                 let a = &mut p.audio[ai];
                 match &mut self.drag {
                     Drag::Trim { end, orig, anchor_x } => {
@@ -367,7 +457,7 @@ impl AudioEditor {
                         self.scroll -= (pos.x - last.x) as f64 / self.pps;
                         *last = pos;
                     }
-                    Drag::None => {}
+                    Drag::Slide { .. } | Drag::None => {}
                 }
             }
         } else {
@@ -376,13 +466,16 @@ impl AudioEditor {
 
         // Cursor feedback
         let hv = match self.drag {
-            Drag::None => pos.filter(|_| hovering).and_then(|pos| hover(&v, &p.audio[ai], pos)),
+            Drag::None => pos.filter(|_| hovering).and_then(|pos| hover(&v, &p.audio[ai], window, pos)),
+            Drag::Slide { .. } => Some(Hover::Window),
             Drag::Trim { end, .. } => Some(Hover::Trim(end)),
             Drag::Fade { end, .. } => Some(Hover::Fade(end)),
             Drag::Tension { end, .. } => Some(Hover::Curve(end)),
             _ => None,
         };
         match (hv, &self.drag) {
+            (Some(Hover::Window), Drag::Slide { .. }) => ui.ctx().set_cursor_icon(CursorIcon::Grabbing),
+            (Some(Hover::Window), _) => ui.ctx().set_cursor_icon(CursorIcon::Grab),
             (Some(Hover::Curve(_)), _) => ui.ctx().set_cursor_icon(CursorIcon::ResizeVertical),
             (Some(_), _) => ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal),
             (None, Drag::Hand { .. }) => ui.ctx().set_cursor_icon(CursorIcon::Grabbing),
@@ -424,10 +517,10 @@ impl AudioEditor {
             if f1 - f0 >= 2.0 {
                 let mid = waveform::paint_fade(&inside, wave, end, f0, f1, fade.tension, theme::TEXT, true);
                 if f1 - f0 >= 16.0 {
-                    waveform::paint_tension(&painter, mid, hv == Some(Hover::Curve(end)));
+                    waveform::paint_tension(&painter, mid, light.hi, hv == Some(Hover::Curve(end)));
                 }
             }
-            waveform::paint_handle(&painter, pos2(handle, g.handles_y), hv == Some(Hover::Fade(end)));
+            waveform::paint_handle(&painter, pos2(handle, g.handles_y), light.hi, hv == Some(Hover::Fade(end)));
         }
         for (x, end) in [(g.x0, false), (g.x_end, true)] {
             let hot = hv == Some(Hover::Trim(end));
@@ -436,6 +529,31 @@ impl AudioEditor {
                 wave.y_range(),
                 stroke(if hot { 2.0 } else { 1.5 }, if hot { theme::TEXT } else { theme::TEXT.gamma_multiply(0.7) }),
             );
+        }
+        // This clip's window: a frame over the part of the audio it plays,
+        // with its own fades drawn inside.
+        if let (Some((ws, we)), Some(ci)) = (window, clip) {
+            let c = &p.clips[ci];
+            let (x0, x1) = (v.x(ws), v.x(we));
+            let frame = Rect::from_min_max(pos2(x0, wave.top() + 1.0), pos2(x1, wave.bottom() - 1.0));
+            let hot = hv == Some(Hover::Window);
+            painter.rect_filled(frame, cr(4), light.mid.gamma_multiply(if hot { 0.12 } else { 0.07 }));
+            painter.rect_stroke(
+                frame,
+                cr(4),
+                stroke(1.5, light.hi.gamma_multiply(if hot { 1.0 } else { 0.7 })),
+                StrokeKind::Inside,
+            );
+            let px = |secs: f32| secs as f64 * self.pps;
+            let fi = (x0 + px(c.fade_in.len) as f32).min(x1);
+            let fo = (x1 - px(c.fade_out.len) as f32).max(x0);
+            let ink = light.hi.gamma_multiply(0.6);
+            if fi - x0 >= 3.0 {
+                waveform::paint_fade(&painter, frame, End::In, x0, fi, c.fade_in.tension, ink, false);
+            }
+            if x1 - fo >= 3.0 {
+                waveform::paint_fade(&painter, frame, End::Out, fo, x1, c.fade_out.tension, ink, false);
+            }
         }
         paint_seconds(&painter, &v, ruler, file_secs);
         // Where the song is in this clip, while a copy of it plays.

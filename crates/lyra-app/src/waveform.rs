@@ -2,7 +2,7 @@
 //! audio clips and the audio-clip editor.
 
 use crate::samples::Peaks;
-use crate::theme::{self, stroke};
+use crate::theme::stroke;
 use egui::{pos2, Color32, Mesh, Painter, Pos2, Rect, Shape};
 use lyra_engine::fade_curve;
 
@@ -116,24 +116,36 @@ pub fn paint_fade(
     pos2(mx, y_of(mx))
 }
 
-/// A fade handle: a small square at a fade's end (drag sideways: length).
-pub fn paint_handle(painter: &Painter, at: Pos2, hot: bool) {
-    let r = Rect::from_center_size(at, egui::vec2(7.0, 7.0));
-    painter.rect_filled(r.expand(1.0), theme::cr(1), theme::LINE);
-    painter.rect_filled(r, theme::cr(1), if hot { theme::TEXT } else { theme::TEXT_DIM });
+/// A fade handle: a dot at a fade's end (drag sideways: length), in the
+/// clip's own colour.
+pub fn paint_handle(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
+    halo(painter, at, 6.0);
+    painter.circle_filled(at, if hot { 4.5 } else { 3.5 }, color);
 }
 
-/// A tension handle: a small ring on a fade's curve (drag up/down: bend it).
-pub fn paint_tension(painter: &Painter, at: Pos2, hot: bool) {
-    painter.circle_filled(at, 4.5, theme::LINE);
-    painter.circle_filled(at, 3.2, if hot { theme::TEXT } else { theme::TEXT_DIM });
+/// A soft dark disc behind a handle, so it reads on top of the waveform.
+fn halo(painter: &Painter, at: Pos2, r: f32) {
+    painter.circle_filled(at, r, Color32::from_black_alpha(110));
 }
 
-/// A gain handle: a small pill (drag up/down: louder/quieter).
-pub fn paint_gain(painter: &Painter, at: Pos2, hot: bool) {
-    let r = Rect::from_center_size(at, egui::vec2(16.0, 7.0));
-    painter.rect_filled(r.expand(1.0), theme::cr(4), theme::LINE);
-    painter.rect_filled(r, theme::cr(3), if hot { theme::TEXT } else { theme::TEXT_DIM });
+/// A tension handle: a ring on a fade's curve (drag up/down: bend it).
+pub fn paint_tension(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
+    halo(painter, at, 6.5);
+    painter.circle_stroke(at, if hot { 4.5 } else { 3.5 }, stroke(1.5, color));
+}
+
+/// The gain grip: a small up/down arrow (drag up/down: louder/quieter).
+pub fn paint_gain(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
+    let s = if hot { 1.25 } else { 1.0 };
+    halo(painter, at, 9.0 * s);
+    let tri = |dir: f32| {
+        let tip = at + egui::vec2(0.0, -6.0 * dir * s);
+        let base = at + egui::vec2(0.0, -2.0 * dir * s);
+        vec![tip, base + egui::vec2(3.5 * s, 0.0), base + egui::vec2(-3.5 * s, 0.0)]
+    };
+    for dir in [1.0, -1.0] {
+        painter.add(Shape::convex_polygon(tri(dir), color, egui::Stroke::NONE));
+    }
 }
 
 /// Tension after dragging a curve by `dy` points. Dragging up raises the
