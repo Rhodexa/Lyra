@@ -44,9 +44,6 @@ no marks would default to not urgent or 'coding teams judges'
   - Changing channels (add, remove, reorder, replace) rebuilds every engine channel, which cuts off any tails still ringing. Make it insert/remove just the one channel.
   - Notes played live from the typing keyboard don't trigger choke groups.
   - If the engine's command FIFO is ever full, a dropped `SetSequence` goes unnoticed (the bridge thinks it was sent).
-  - Some undo steps do nothing: wheel-velocity checkpoints on every tick, and any press on the piano-roll grid checkpoints even when nothing changes.
-  - The `solo` flag is dead since solo became FL-style mutes. Remove it.
-  - `lyra_dsp::params()` builds a whole plugin just to read a static table; the editor does it every frame.
 
 - [ ] *Lyra FM, notes from the port (behaviour kept from Fluttersine for now):*
   - Saw/pulse stop being band-limited while modulated, so some aliasing on bright FM patches.
@@ -56,6 +53,14 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Cleanup pass → `d742c6f`**
+- [x] *(Noticed by Claude)* Some undo steps do nothing
+  *→ a checkpoint identical to the last one is skipped, and undo skips past a snapshot equal to the project.*
+- [x] *(Noticed by Claude)* The `solo` flag is dead
+  *→ removed; an old file with a soloed channel opens as mutes on the others.*
+- [x] *(Noticed by Claude)* `lyra_dsp::params()` builds a whole plugin
+  *→ each plugin's table is listed in the catalog (tested against the plugin).*
 
 **Audio clips + journal → `0c60fc3`**
 - [x] *(chat)* Audio clips, instanced like patterns, non-destructive, with fade in/out you can see and bend (tension), for the voice-acting work
