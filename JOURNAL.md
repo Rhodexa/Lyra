@@ -6,6 +6,7 @@ what to work on and folds the items into the plan when the time is right.
 
 **Little marks (optional):**
 `!` it really hurts · `?` not sure if it's me or Lyra · `~` someday, no rush
+no marks would default to not urgent or 'coding teams judges'
 
 ---
 
@@ -55,6 +56,18 @@ what to work on and folds the items into the plan when the time is right.
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Journal batch → `3496244`**
+- [x] Draging a note or group of notes or patterns or anything outside the viewport should slowly pan the viewport, that way dragging say a note to an octave higher would be just about holding the note at the top edge and letting the viewport pan
+  *→ in the piano roll and the arrangement, for moving, resizing and rubber-band selecting. It starts a few points inside the edge and speeds up the further past it you hold. Tested: A2 held at the top edge ended up on A#4.*
+- [x] ~ Now: Mixer panel oresizes the bottom split, it would be nice if either the mixer _was_ resizable _or_ just as usefully: Keep track of a desired height by the area, so when switching back to a piano roll or other editors they would take their size back
+  *→ the second option: each editor remembers its own height in the bottom area. The mixer opens at its natural height; the piano roll gets its size back.*
+- [x] Double-click a pattern should open its piano roll on the main panel
+  *→ in the browser or on a clip: the top area switches to the piano roll for that pattern (on the selected instrument if it plays in it, otherwise the first one that does). Tab takes you back.*
+- [x] Tab switches the editor between the last two editors used? (within an area)
+  *→ yes, the area under the mouse.*
+- [x] ~ Changing cursor position _within piano roll_ when in _song mode_ should _not_ switch to pattern mode.
+  *→ it stays in song mode and jumps to that spot in the clip of this pattern that's playing (or its first clip). Only a pattern with no clip in the song still switches to pattern mode.*
 
 **Crash + journal → `e8f2956`**
 - [x] *(chat)* The sound engine crashed while adding a reverb: `index out of bounds: the len is 192000 but the index is 192000` (effects.rs:370)
