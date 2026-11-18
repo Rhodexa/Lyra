@@ -57,6 +57,18 @@ no marks would default to not urgent or 'coding teams judges'
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Audio clips + journal → `0c60fc3`**
+- [x] *(chat)* Audio clips, instanced like patterns, non-destructive, with fade in/out you can see and bend (tension), for the voice-acting work
+  *→ drop a sample on a track. Gain, fades and trim are shared by every copy (Ctrl+U gives the selected copies their own); each copy's own ends trim it. Fades: the little squares on the clip's title strip (sideways) and the dot on the curve (up/down), or the knobs in the new Audio clip editor (double-click a clip). Each track's number at the right of its header picks the mixer insert its audio plays into.*
+- [x] *(chat)* Clips a bit too see-through, more contrast
+  *→ clip bodies are more solid now (the current one a bit more).*
+- [x] bug? ? I couldn't get double-clicking patterns to work reliably. Occasionally it opens, but its like 30% of the time. Tried with touch pad, mouse and touchpad button.
+  *→ a real bug: Lyra asked egui "was this a double-click?" on the frame the button went down, but egui only knows on the frame it comes back up. So it worked only when your click was quick enough to fit in one frame. Now Lyra times the presses itself. (Same fix covers audio clips.)*
+- [x] bug: Tab works but only when the window is in focus, which is the correct behaviour, however after tab switches editor the area looses focus and tab doesnt work anymore until you click on it. Focus shoudln't require interation, instead areas alone should make sure they are in focus through hover.
+  *→ egui uses Tab to move keyboard focus between widgets, and it did that before Lyra saw the key: focus landed on some widget, and once that was a text field, every key went there. Lyra now takes Tab away before egui sees it. Tested: four Tabs in a row flip back and forth every time.*
+- [x] ~ tapping STOP when already stop to return playhead to beginning. Beginning of song in song mode, beginning of pattern in pat mode.
+  *→ yes: Stop while stopped goes to the start (song or pattern, whichever mode you're in).*
+
 **Journal batch → `3496244`**
 - [x] Draging a note or group of notes or patterns or anything outside the viewport should slowly pan the viewport, that way dragging say a note to an octave higher would be just about holding the note at the top edge and letting the viewport pan
   *→ in the piano roll and the arrangement, for moving, resizing and rubber-band selecting. It starts a few points inside the edge and speeds up the further past it you hold. Tested: A2 held at the top edge ended up on A#4.*
