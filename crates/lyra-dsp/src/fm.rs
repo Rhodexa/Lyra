@@ -200,7 +200,7 @@ const fn build_params() -> [ParamInfo; p::COUNT] {
     set!(LFO_SHAPE, choice "Shape", &["Sine", "Triangle", "Saw", "Square", "S&H"], 0);
     set!(LFO_RATE, new "Rate", 0.05, 30.0, 5.0, "Hz", Exp);
     set!(LFO_RETRIG, choice "Retrigger", &OFF_ON, 0);
-    set!(VIBRATO, new "Vibrato", 0.0, 200.0, 0.0, "ct", Lin);
+    set!(VIBRATO, new "Vibrato", 0.0, 1200.0, 0.0, "ct", Lin);
 
     let mut o = 0;
     while o < OPS {
