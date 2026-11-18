@@ -6,7 +6,7 @@
 //! |---|---|
 //! | `lyra.eq` | low cut, low shelf, a mid bell, high shelf |
 //! | `lyra.filter` | sweepable low/high-pass |
-//! | `lyra.comp` | stereo-linked compressor |
+//! | `lyra.compressor` | stereo-linked compressor |
 //! | `lyra.delay` | tempo-synced echo, optional ping-pong |
 //! | `lyra.reverb` | Freeverb-style room |
 //! | `lyra.pump` | beat-synced ducking: the house "sidechain" breathing |
@@ -21,7 +21,7 @@ use Curve::{Exponential as Exp, Linear as Lin};
 pub const PLUGINS: &[PluginInfo] = &[
     effect("lyra.eq", "EQ", &EQ_PARAMS, || Box::new(Eq::new())),
     effect("lyra.filter", "Filter", &FILTER_PARAMS, || Box::new(Filter::new())),
-    effect("lyra.comp", "Compressor", &COMP_PARAMS, || Box::new(Comp::new())),
+    effect("lyra.compressor", "Compressor", &COMP_PARAMS, || Box::new(Comp::new())),
     effect("lyra.delay", "Delay", &DELAY_PARAMS, || Box::new(Delay::new())),
     effect("lyra.reverb", "Reverb", &REVERB_PARAMS, || Box::new(Reverb::new())),
     effect("lyra.pump", "Pump", &PUMP_PARAMS, || Box::new(Pump::new())),

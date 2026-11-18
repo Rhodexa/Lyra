@@ -1,4 +1,4 @@
-//! Fluttersine (id `lyra.fm`): a six-operator FM (phase-modulation) synth, ported from the owner's
+//! Fluttersine (id `lyra.fluttersine`): a six-operator FM (phase-modulation) synth, ported from the owner's
 //! Fluttersine web synth.
 //!
 //! ```text
@@ -36,10 +36,9 @@ const SSD: [f32; 7] = [-0.110_023_13, -0.062_884_39, -0.019_523_56, 0.0, 0.019_9
 
 use Curve::{Exponential as Exp, Linear as Lin};
 
-/// Fluttersine, as Lyra lists it. The id stays "lyra.fm" (saved projects
-/// use it); the name is the synth's own.
+/// Fluttersine, as Lyra lists it.
 pub const PLUGINS: &[PluginInfo] = &[PluginInfo {
-    id: "lyra.fm",
+    id: "lyra.fluttersine",
     name: "Fluttersine",
     melodic: true,
     params: &FM_PARAMS,

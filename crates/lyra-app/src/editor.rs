@@ -51,7 +51,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
             p.channels[ch].mixer = route;
         }
         let presets = lyra_catalog::presets_for(&instrument);
-        if !presets.is_empty() && instrument != "lyra.fm" {
+        if !presets.is_empty() && instrument != "lyra.fluttersine" {
             ui.add_space(8.0);
             ui.menu_button("Presets", |ui| {
                 for preset in presets {
@@ -88,7 +88,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     ui.add_space(6.0);
 
     // Hand-made editors (they have their own preset browser).
-    if instrument == "lyra.fm" {
+    if instrument == "lyra.fluttersine" {
         crate::fm_editor::show(ui, p, h, ch);
         return;
     }

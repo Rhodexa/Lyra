@@ -158,13 +158,21 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
 
 ## Plugin parameters
 
+* **Ids are forever.** A plugin's id string (`lyra.fluttersine`) is how a
+  project finds it; a parameter's id is its slot in the plugin's table, and
+  projects save knob values in that order. So new parameters go at the end
+  (groups decide where they show), retired ones keep their slot, and plugin
+  ids never change. `crates/lyra-catalog/params.lock` records every id Lyra
+  has shipped; a test fails if one changes meaning, and adds new ones itself.
+* Built-ins use the `lyra.` namespace (no real reverse-DNS name starts with
+  it). Hosted CLAP plugins will keep their own ids, stored as `clap:<id>`.
 * Continuous: `ParamInfo::new(..)` with a linear or exponential knob curve.
 * Choices: `ParamInfo::choice(id, name, labels, default)`. The value is an index.
 * `Plugin::groups()` names runs of ids ("Filter": 6..11). The instrument
   editor (`editor.rs`) is generated from `params()` and `groups()` alone, so any
   future plugin gets an editor for free.
 * Hand-made editors take over below the editor's header for one instrument id.
-  Fluttersine (id `lyra.fm`) has one: `fm_editor.rs` (operator tabs, always-visible
+  Fluttersine (id `lyra.fluttersine`) has one: `fm_editor.rs` (operator tabs, always-visible
   matrix, draggable envelopes and filter curve). It still only edits `params`.
 
 ## Music theory

@@ -1,0 +1,228 @@
+# Every plugin id and parameter id Lyra has shipped. Ids are forever; see
+# lyra-plugin's docs. New entries are added by `cargo test`.
+lyra.kick	0	Tune
+lyra.kick	1	Punch
+lyra.kick	2	Sweep
+lyra.kick	3	Decay
+lyra.kick	4	Click
+lyra.kick	5	Drive
+lyra.kick	6	Level
+lyra.snare	0	Tune
+lyra.snare	1	Body
+lyra.snare	2	Snap
+lyra.snare	3	Decay
+lyra.snare	4	Color
+lyra.snare	5	Level
+lyra.clap	0	Tone
+lyra.clap	1	Spread
+lyra.clap	2	Decay
+lyra.clap	3	Level
+lyra.hihat	0	Tune
+lyra.hihat	1	Decay
+lyra.hihat	2	Tone
+lyra.hihat	3	Metal
+lyra.hihat	4	Level
+lyra.synth	0	Wave
+lyra.synth	1	Octave
+lyra.synth	2	Voices
+lyra.synth	3	Detune
+lyra.synth	4	Spread
+lyra.synth	5	Sub
+lyra.synth	6	Cutoff
+lyra.synth	7	Reso
+lyra.synth	8	Env amt
+lyra.synth	9	F. decay
+lyra.synth	10	F. sustain
+lyra.synth	11	Attack
+lyra.synth	12	Decay
+lyra.synth	13	Sustain
+lyra.synth	14	Release
+lyra.synth	15	Key track
+lyra.synth	16	Level
+lyra.fluttersine	0	Wave
+lyra.fluttersine	1	Pitch
+lyra.fluttersine	2	Phase
+lyra.fluttersine	3	Ratio
+lyra.fluttersine	4	Fixed
+lyra.fluttersine	5	Fine
+lyra.fluttersine	6	Warp / PW
+lyra.fluttersine	7	PWM
+lyra.fluttersine	8	SS spread
+lyra.fluttersine	9	SS mix
+lyra.fluttersine	10	Velocity
+lyra.fluttersine	11	Attack
+lyra.fluttersine	12	Decay
+lyra.fluttersine	13	Sustain
+lyra.fluttersine	14	Release
+lyra.fluttersine	15	Wave
+lyra.fluttersine	16	Pitch
+lyra.fluttersine	17	Phase
+lyra.fluttersine	18	Ratio
+lyra.fluttersine	19	Fixed
+lyra.fluttersine	20	Fine
+lyra.fluttersine	21	Warp / PW
+lyra.fluttersine	22	PWM
+lyra.fluttersine	23	SS spread
+lyra.fluttersine	24	SS mix
+lyra.fluttersine	25	Velocity
+lyra.fluttersine	26	Attack
+lyra.fluttersine	27	Decay
+lyra.fluttersine	28	Sustain
+lyra.fluttersine	29	Release
+lyra.fluttersine	30	Wave
+lyra.fluttersine	31	Pitch
+lyra.fluttersine	32	Phase
+lyra.fluttersine	33	Ratio
+lyra.fluttersine	34	Fixed
+lyra.fluttersine	35	Fine
+lyra.fluttersine	36	Warp / PW
+lyra.fluttersine	37	PWM
+lyra.fluttersine	38	SS spread
+lyra.fluttersine	39	SS mix
+lyra.fluttersine	40	Velocity
+lyra.fluttersine	41	Attack
+lyra.fluttersine	42	Decay
+lyra.fluttersine	43	Sustain
+lyra.fluttersine	44	Release
+lyra.fluttersine	45	Wave
+lyra.fluttersine	46	Pitch
+lyra.fluttersine	47	Phase
+lyra.fluttersine	48	Ratio
+lyra.fluttersine	49	Fixed
+lyra.fluttersine	50	Fine
+lyra.fluttersine	51	Warp / PW
+lyra.fluttersine	52	PWM
+lyra.fluttersine	53	SS spread
+lyra.fluttersine	54	SS mix
+lyra.fluttersine	55	Velocity
+lyra.fluttersine	56	Attack
+lyra.fluttersine	57	Decay
+lyra.fluttersine	58	Sustain
+lyra.fluttersine	59	Release
+lyra.fluttersine	60	Wave
+lyra.fluttersine	61	Pitch
+lyra.fluttersine	62	Phase
+lyra.fluttersine	63	Ratio
+lyra.fluttersine	64	Fixed
+lyra.fluttersine	65	Fine
+lyra.fluttersine	66	Warp / PW
+lyra.fluttersine	67	PWM
+lyra.fluttersine	68	SS spread
+lyra.fluttersine	69	SS mix
+lyra.fluttersine	70	Velocity
+lyra.fluttersine	71	Attack
+lyra.fluttersine	72	Decay
+lyra.fluttersine	73	Sustain
+lyra.fluttersine	74	Release
+lyra.fluttersine	75	Wave
+lyra.fluttersine	76	Pitch
+lyra.fluttersine	77	Phase
+lyra.fluttersine	78	Ratio
+lyra.fluttersine	79	Fixed
+lyra.fluttersine	80	Fine
+lyra.fluttersine	81	Warp / PW
+lyra.fluttersine	82	PWM
+lyra.fluttersine	83	SS spread
+lyra.fluttersine	84	SS mix
+lyra.fluttersine	85	Velocity
+lyra.fluttersine	86	Attack
+lyra.fluttersine	87	Decay
+lyra.fluttersine	88	Sustain
+lyra.fluttersine	89	Release
+lyra.fluttersine	90	Op 1 feedback
+lyra.fluttersine	91	Op 1 > Op 2
+lyra.fluttersine	92	Op 1 > Op 3
+lyra.fluttersine	93	Op 1 > Op 4
+lyra.fluttersine	94	Op 1 > Op 5
+lyra.fluttersine	95	Op 1 > Op 6
+lyra.fluttersine	96	Op 2 > Op 1
+lyra.fluttersine	97	Op 2 feedback
+lyra.fluttersine	98	Op 2 > Op 3
+lyra.fluttersine	99	Op 2 > Op 4
+lyra.fluttersine	100	Op 2 > Op 5
+lyra.fluttersine	101	Op 2 > Op 6
+lyra.fluttersine	102	Op 3 > Op 1
+lyra.fluttersine	103	Op 3 > Op 2
+lyra.fluttersine	104	Op 3 feedback
+lyra.fluttersine	105	Op 3 > Op 4
+lyra.fluttersine	106	Op 3 > Op 5
+lyra.fluttersine	107	Op 3 > Op 6
+lyra.fluttersine	108	Op 4 > Op 1
+lyra.fluttersine	109	Op 4 > Op 2
+lyra.fluttersine	110	Op 4 > Op 3
+lyra.fluttersine	111	Op 4 feedback
+lyra.fluttersine	112	Op 4 > Op 5
+lyra.fluttersine	113	Op 4 > Op 6
+lyra.fluttersine	114	Op 5 > Op 1
+lyra.fluttersine	115	Op 5 > Op 2
+lyra.fluttersine	116	Op 5 > Op 3
+lyra.fluttersine	117	Op 5 > Op 4
+lyra.fluttersine	118	Op 5 feedback
+lyra.fluttersine	119	Op 5 > Op 6
+lyra.fluttersine	120	Op 6 > Op 1
+lyra.fluttersine	121	Op 6 > Op 2
+lyra.fluttersine	122	Op 6 > Op 3
+lyra.fluttersine	123	Op 6 > Op 4
+lyra.fluttersine	124	Op 6 > Op 5
+lyra.fluttersine	125	Op 6 feedback
+lyra.fluttersine	126	Low-pass
+lyra.fluttersine	127	Slope
+lyra.fluttersine	128	Cutoff
+lyra.fluttersine	129	Reso
+lyra.fluttersine	130	Env amt
+lyra.fluttersine	131	Key track
+lyra.fluttersine	132	LFO amt
+lyra.fluttersine	133	F. attack
+lyra.fluttersine	134	F. decay
+lyra.fluttersine	135	F. sustain
+lyra.fluttersine	136	F. release
+lyra.fluttersine	137	High-pass
+lyra.fluttersine	138	HP cutoff
+lyra.fluttersine	139	HP reso
+lyra.fluttersine	140	Shape
+lyra.fluttersine	141	Rate
+lyra.fluttersine	142	Retrigger
+lyra.fluttersine	143	Vibrato
+lyra.fluttersine	144	Op 1 out
+lyra.fluttersine	145	Op 2 out
+lyra.fluttersine	146	Op 3 out
+lyra.fluttersine	147	Op 4 out
+lyra.fluttersine	148	Op 5 out
+lyra.fluttersine	149	Op 6 out
+lyra.fluttersine	150	Volume
+lyra.fluttersine	151	Mode
+lyra.fluttersine	152	Glide
+lyra.fluttersine	153	Glide when
+lyra.sampler	0	Gain
+lyra.sampler	1	Root
+lyra.sampler	2	Tune
+lyra.sampler	3	Fine
+lyra.sampler	4	Attack
+lyra.sampler	5	Release
+lyra.sampler	6	Start
+lyra.sampler	7	Mode
+lyra.eq	0	Low cut
+lyra.eq	1	Low
+lyra.eq	2	Mid
+lyra.eq	3	Mid freq
+lyra.eq	4	High
+lyra.filter	0	Mode
+lyra.filter	1	Cutoff
+lyra.filter	2	Reso
+lyra.compressor	0	Threshold
+lyra.compressor	1	Ratio
+lyra.compressor	2	Attack
+lyra.compressor	3	Release
+lyra.compressor	4	Makeup
+lyra.delay	0	Time
+lyra.delay	1	Feedback
+lyra.delay	2	Ping-pong
+lyra.delay	3	Tone
+lyra.delay	4	Mix
+lyra.reverb	0	Size
+lyra.reverb	1	Damp
+lyra.reverb	2	Width
+lyra.reverb	3	Mix
+lyra.pump	0	Depth
+lyra.pump	1	Recovery
+lyra.pump	2	Rate

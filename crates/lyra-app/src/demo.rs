@@ -41,8 +41,8 @@ pub fn project() -> Project {
     // Hat params: 0 Tune, 1 Decay, 2 Tone, 3 Metal, 4 Level.
     let kick = add(&mut p, "Kick", "lyra.kick", &[], 0.9, 0);
     let clap = add(&mut p, "Clap", "lyra.clap", &[], 0.7, 0);
-    let hat = add(&mut p, "Closed hat", "lyra.hat", &[(1, 0.045), (2, 8000.0)], 0.5, 1);
-    let open = add(&mut p, "Open hat", "lyra.hat", &[(1, 0.32), (2, 6500.0)], 0.45, 1);
+    let hat = add(&mut p, "Closed hat", "lyra.hihat", &[(1, 0.045), (2, 8000.0)], 0.5, 1);
+    let open = add(&mut p, "Open hat", "lyra.hihat", &[(1, 0.32), (2, 6500.0)], 0.45, 1);
     let snare = add(&mut p, "Snare", "lyra.snare", &[(0, 220.0), (3, 0.12)], 0.45, 0);
     let bass = add_with(&mut p, "Bass", "lyra.synth", preset("Deep Bass"), 0.75, 0);
     let chords = add_with(&mut p, "Chords", "lyra.synth", preset("Chord Stab"), 0.5, 0);
@@ -125,7 +125,7 @@ pub fn project() -> Project {
         fx("lyra.delay", &[(0, 2.0), (1, 0.4), (4, 0.22)]),
         fx("lyra.reverb", &[(0, 0.8), (3, 0.28)]),
     ];
-    p.mixer[0].effects = vec![fx("lyra.comp", &[(0, -10.0), (1, 2.5), (4, 1.5)])];
+    p.mixer[0].effects = vec![fx("lyra.compressor", &[(0, -10.0), (1, 2.5), (4, 1.5)])];
 
     // A 16-bar song: intro (beat), bass joins, breakdown (chords alone), drop (all).
     let bar = TICKS_PER_BAR;

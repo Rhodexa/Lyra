@@ -147,7 +147,58 @@ mod tests {
             assert!(std::ptr::eq(e.groups, p.groups()) || p.groups().is_empty(), "{}: groups", e.id);
             assert_eq!(all.iter().filter(|o| o.id == e.id).count(), 1, "{} listed twice", e.id);
         }
-        assert!(!groups("lyra.fm").is_empty() && groups("lyra.kick").is_empty());
-        assert!(presets_for("lyra.synth").len() > 3 && presets_for("lyra.fm").len() > 3);
+        assert!(!groups("lyra.fluttersine").is_empty() && groups("lyra.kick").is_empty());
+        assert!(presets_for("lyra.synth").len() > 3 && presets_for("lyra.fluttersine").len() > 3);
+    }
+
+    /// Saved projects find their plugins by id string and store knob values
+    /// by parameter id, so neither may ever change meaning. `params.lock`
+    /// remembers every (plugin, parameter id, name) Lyra has shipped; like
+    /// Cargo.lock, new entries are added to it automatically.
+    #[test]
+    fn plugin_and_parameter_ids_are_forever() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("params.lock");
+        let all: Vec<&PluginInfo> = instruments().iter().copied().chain(effects::all()).collect();
+        let lines: Vec<String> =
+            all.iter().flat_map(|e| e.params.iter().map(move |p| format!("{}\t{}\t{}", e.id, p.id, p.name))).collect();
+        let locked = std::fs::read_to_string(&path).unwrap_or_default();
+        let mut problems = Vec::new();
+        for line in locked.lines().filter(|l| !l.is_empty() && !l.starts_with('#')) {
+            let mut f = line.split('\t');
+            let (plugin, id, name) = (f.next().unwrap_or(""), f.next().unwrap_or(""), f.next().unwrap_or(""));
+            let Some(e) = all.iter().find(|e| e.id == plugin) else {
+                problems.push(format!("plugin \"{plugin}\" is gone or renamed: projects using it would go silent"));
+                continue;
+            };
+            match e.params.iter().find(|p| p.id.to_string() == id) {
+                Some(p) if p.name == name => {}
+                Some(p) => problems.push(format!("{plugin} parameter {id} was \"{name}\", now \"{}\"", p.name)),
+                None => problems.push(format!("{plugin} parameter {id} (\"{name}\") is gone")),
+            }
+        }
+        problems.dedup(); // a vanished plugin reports once, not once per knob
+        assert!(
+            problems.is_empty(),
+            "ids changed meaning:\n  {}\n\nAdd new parameters at the END of a table (the editor's groups decide where \
+             they show) and keep retired ones in their slot. If you only renamed a knob, edit params.lock.",
+            problems.join("\n  ")
+        );
+        // Everything still means what it meant: record any additions.
+        let known: std::collections::HashSet<&str> = locked.lines().collect();
+        let new: Vec<&String> = lines.iter().filter(|l| !known.contains(l.as_str())).collect();
+        if !new.is_empty() || locked.is_empty() {
+            let mut text = if locked.is_empty() {
+                "# Every plugin id and parameter id Lyra has shipped. Ids are forever; see\n\
+                 # lyra-plugin's docs. New entries are added by `cargo test`.\n"
+                    .to_string()
+            } else {
+                locked.clone()
+            };
+            for l in new {
+                text.push_str(l);
+                text.push('\n');
+            }
+            std::fs::write(&path, text).expect("write params.lock");
+        }
     }
 }

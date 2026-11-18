@@ -15,8 +15,8 @@ fn main() {
     let channels: [ChannelSpec; 5] = [
         ("lyra.kick", &[], 0.9, 0),
         ("lyra.clap", &[], 0.7, 0),
-        ("lyra.hat", &[(1, 0.045), (2, 8000.0)], 0.5, 1),
-        ("lyra.hat", &[(1, 0.32), (2, 6500.0)], 0.45, 1),
+        ("lyra.hihat", &[(1, 0.045), (2, 8000.0)], 0.5, 1),
+        ("lyra.hihat", &[(1, 0.32), (2, 6500.0)], 0.45, 1),
         ("lyra.snare", &[(0, 220.0), (3, 0.12)], 0.45, 0),
     ];
     for (i, (id, tweaks, volume, choke)) in channels.iter().enumerate() {

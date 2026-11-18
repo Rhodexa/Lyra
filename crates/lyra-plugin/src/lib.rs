@@ -11,7 +11,12 @@
 //!
 //! ## Parameters
 //! Parameters are plain `f32`s in their *real* units (Hz, seconds, 0..1 ...).
-//! By convention a parameter's `id` equals its index in [`Plugin::params`].
+//! A parameter's `id` equals its index in [`Plugin::params`], and projects
+//! save knob values in that order, so **ids are forever**: a new parameter
+//! goes at the *end* of the table (the editor's groups decide where it
+//! shows), and a retired one keeps its slot. A plugin's `id` string is
+//! forever too: saved projects find their instruments by it. The catalog's
+//! `params.lock` test holds both to that.
 
 /// Something that happens to a plugin at a precise sample inside a block.
 #[derive(Clone, Copy, Debug, PartialEq)]

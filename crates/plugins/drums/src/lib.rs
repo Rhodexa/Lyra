@@ -18,7 +18,7 @@ pub const PLUGINS: &[PluginInfo] = &[
     drum("lyra.kick", "Kick", &KICK_PARAMS, || Box::new(Kick::new())),
     drum("lyra.snare", "Snare", &SNARE_PARAMS, || Box::new(Snare::new())),
     drum("lyra.clap", "Clap", &CLAP_PARAMS, || Box::new(Clap::new())),
-    drum("lyra.hat", "Hi-hat", &HAT_PARAMS, || Box::new(Hat::new())),
+    drum("lyra.hihat", "Hi-hat", &HAT_PARAMS, || Box::new(Hat::new())),
 ];
 
 const fn drum(
