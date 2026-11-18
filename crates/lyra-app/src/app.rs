@@ -419,7 +419,7 @@ impl LyraApp {
             match self.samples.get(&name) {
                 Ok(data) => {
                     if let Some(e) = &mut self.engine {
-                        let mut sampler = lyra_dsp::sampler::Sampler::new();
+                        let mut sampler = lyra_sampler::Sampler::new();
                         lyra_plugin::Plugin::set_sample(&mut sampler, data);
                         let slot = lyra_engine::ChannelSlot::new(Box::new(sampler), e.sample_rate());
                         e.send(Command::Preview { slot, key: 60 });
@@ -559,7 +559,7 @@ impl LyraApp {
             Action::NewProject => {
                 files::backup(&self.project); // nothing is ever lost, so no "are you sure?"
                 let mut p = Project::default();
-                p.add_channel("Kick", "lyra.kick", lyra_dsp::default_params("lyra.kick"));
+                p.add_channel("Kick", "lyra.kick", lyra_catalog::default_params("lyra.kick"));
                 self.replace_project(p, None);
                 self.notify("New project · the previous one is in Open backup", false);
             }
@@ -838,7 +838,7 @@ impl LyraApp {
             let plays = |c: &lyra_model::Channel| !pattern.notes(c.id).is_empty();
             let chans = &self.project.channels;
             if !chans.get(self.ui.selected).is_some_and(plays) {
-                let melodic = |c: &lyra_model::Channel| lyra_dsp::info(&c.instrument).is_some_and(|x| x.melodic);
+                let melodic = |c: &lyra_model::Channel| lyra_catalog::info(&c.instrument).is_some_and(|x| x.melodic);
                 let pick = chans.iter().position(|c| plays(c) && melodic(c)).or_else(|| chans.iter().position(plays));
                 if let Some(ch) = pick {
                     self.ui.selected = ch;
@@ -969,8 +969,8 @@ impl LyraApp {
         self.ui.effect = fx;
         if let Some((t, i)) = fx {
             let mut open = true;
-            let name =
-                lyra_dsp::effects::info(&self.project.mixer[t].effects[i].effect).map_or("Missing effect", |e| e.name);
+            let name = lyra_catalog::effects::info(&self.project.mixer[t].effects[i].effect)
+                .map_or("Missing effect", |e| e.name);
             egui::Window::new(format!("{name} · {}", self.project.mixer[t].name))
                 .id(Id::new("effect"))
                 .open(&mut open)

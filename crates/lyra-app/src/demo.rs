@@ -5,7 +5,7 @@
 use lyra_model::{ChannelId, Clip, EffectSlot, Note, Project, TICKS_PER_BAR, TICKS_PER_STEP};
 
 fn add(p: &mut Project, name: &str, instrument: &str, tweaks: &[(usize, f32)], volume: f32, choke: u8) -> ChannelId {
-    let mut params = lyra_dsp::default_params(instrument);
+    let mut params = lyra_catalog::default_params(instrument);
     for &(i, v) in tweaks {
         if let Some(slot) = params.get_mut(i) {
             *slot = v;
@@ -24,7 +24,7 @@ fn add_with(p: &mut Project, name: &str, instrument: &str, params: Vec<f32>, vol
 }
 
 fn preset(name: &str) -> Vec<f32> {
-    lyra_dsp::PRESETS.iter().find(|p| p.name == name).map(|p| p.params()).unwrap_or_default()
+    lyra_catalog::presets().find(|p| p.name == name).map(|p| p.params()).unwrap_or_default()
 }
 
 /// A note `len` steps long starting at `step` (both may be fractional).
@@ -111,7 +111,7 @@ pub fn project() -> Project {
     route(&mut p, bass, 4, "Bass");
     route(&mut p, chords, 5, "Chords");
     let fx = |id: &str, tweaks: &[(usize, f32)]| {
-        let mut params = lyra_dsp::effects::default_params(id);
+        let mut params = lyra_catalog::effects::default_params(id);
         for &(i, v) in tweaks {
             params[i] = v;
         }

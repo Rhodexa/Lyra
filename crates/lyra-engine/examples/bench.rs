@@ -20,7 +20,7 @@ fn main() {
         ("lyra.snare", &[(0, 220.0), (3, 0.12)], 0.45, 0),
     ];
     for (i, (id, tweaks, volume, choke)) in channels.iter().enumerate() {
-        let mut p = lyra_dsp::create(id).unwrap();
+        let mut p = lyra_catalog::create(id).unwrap();
         for &(pid, v) in *tweaks {
             p.set_param(pid, v);
         }

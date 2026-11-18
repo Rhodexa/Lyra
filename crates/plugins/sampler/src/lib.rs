@@ -8,9 +8,21 @@
 //! The sample arrives through `set_sample` on the UI thread. Without one the
 //! sampler is silent.
 
-use crate::util::decay_coeff;
-use lyra_plugin::{Curve, Event, ParamInfo, Plugin, ProcessContext, SampleData};
+use lyra_dsp::decay_coeff;
+use lyra_plugin::{Curve, Event, ParamInfo, Plugin, PluginInfo, ProcessContext, SampleData};
 use std::sync::Arc;
+
+/// The Sampler, as Lyra lists it. (Not melodic: it starts life playing a
+/// dropped drum hit; the piano roll plays it all the same.)
+pub const PLUGINS: &[PluginInfo] = &[PluginInfo {
+    id: "lyra.sampler",
+    name: "Sampler",
+    melodic: false,
+    params: &PARAMS,
+    groups: &[],
+    presets: &[],
+    create: || Box::new(Sampler::new()),
+}];
 
 pub mod p {
     pub const GAIN: usize = 0;
@@ -23,7 +35,7 @@ pub mod p {
     pub const MODE: usize = 7;
 }
 
-pub(crate) static PARAMS: [ParamInfo; 8] = [
+pub static PARAMS: [ParamInfo; 8] = [
     ParamInfo::new(0, "Gain", -24.0, 12.0, 0.0, "dB", Curve::Linear),
     ParamInfo::new(1, "Root", 24.0, 96.0, 60.0, "note", Curve::Linear),
     ParamInfo::new(2, "Tune", -24.0, 24.0, 0.0, "st", Curve::Linear),

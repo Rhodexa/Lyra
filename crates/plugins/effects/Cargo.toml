@@ -1,0 +1,10 @@
+[package]
+name = "lyra-effects"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Lyra's mixer effects: EQ, filter, compressor, delay, reverb, pump."
+
+[dependencies]
+lyra-plugin.workspace = true
+lyra-dsp.workspace = true

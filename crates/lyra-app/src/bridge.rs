@@ -48,7 +48,7 @@ impl Bridge {
         if rebuild {
             eng.send(Command::ClearChannels);
             for ch in &p.channels {
-                let mut plugin = lyra_dsp::create_or_silence(&ch.instrument);
+                let mut plugin = lyra_catalog::create_or_silence(&ch.instrument);
                 for (id, v) in ch.params.iter().enumerate() {
                     plugin.set_param(id as u32, *v);
                 }
@@ -106,7 +106,7 @@ impl Bridge {
                     .effects
                     .iter()
                     .filter_map(|slot| {
-                        let mut fx = lyra_dsp::effects::create(&slot.effect)?;
+                        let mut fx = lyra_catalog::effects::create(&slot.effect)?;
                         for (id, v) in slot.params.iter().enumerate() {
                             fx.set_param(id as u32, *v);
                         }

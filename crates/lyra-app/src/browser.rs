@@ -96,9 +96,9 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
         }
 
         // ── Instruments ──
-        if section(ui, "Instruments", lyra_dsp::INSTRUMENTS.len()) {
-            for inst in lyra_dsp::INSTRUMENTS {
-                let presets = lyra_dsp::presets_for(inst.id);
+        if section(ui, "Instruments", lyra_catalog::instruments().len()) {
+            for inst in lyra_catalog::instruments() {
+                let presets = lyra_catalog::presets_for(inst.id);
                 let open_id = ui.id().with(("presets", inst.id));
                 let mut open: bool = ui.data(|d| d.get_temp(open_id)).unwrap_or(false);
                 let (r, arrow) = row_with_arrow(ui, inst.name, !presets.is_empty(), open);
@@ -106,7 +106,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
                     open ^= true;
                     ui.data_mut(|d| d.insert_temp(open_id, open));
                 } else if r.on_hover_text("Click: add to the instrument rack").clicked() {
-                    add_instrument(p, h, st, inst.name, inst.id, lyra_dsp::default_params(inst.id));
+                    add_instrument(p, h, st, inst.name, inst.id, lyra_catalog::default_params(inst.id));
                 }
                 if open {
                     for preset in &presets {
@@ -120,10 +120,10 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
         }
 
         // ── Effects ──
-        if section(ui, "Effects", lyra_dsp::effects::EFFECTS.len()) {
+        if section(ui, "Effects", lyra_catalog::effects::all().len()) {
             let t = st.mixer_selected.min(p.mixer.len() - 1);
             let full = p.mixer[t].effects.len() >= lyra_engine::MAX_FX;
-            for e in lyra_dsp::effects::EFFECTS {
+            for e in lyra_catalog::effects::all() {
                 let hint = if full {
                     format!("{}'s effect rack is full", p.mixer[t].name)
                 } else {
@@ -133,7 +133,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
                     h.checkpoint(p);
                     p.mixer[t].effects.push(EffectSlot {
                         effect: e.id.into(),
-                        params: lyra_dsp::effects::default_params(e.id),
+                        params: lyra_catalog::effects::default_params(e.id),
                         bypass: false,
                     });
                     st.effect = Some((t, p.mixer[t].effects.len() - 1));
@@ -229,7 +229,7 @@ fn double_click<T: Clone + PartialEq + Send + Sync + 'static>(ui: &Ui, key: &str
 /// A new sampler instrument playing `sample`, named after it.
 pub fn add_sampler(p: &mut Project, h: &mut History, st: &mut UiState, sample: &str) {
     h.checkpoint(p);
-    p.add_channel(&samples::display_name(sample), "lyra.sampler", lyra_dsp::default_params("lyra.sampler"));
+    p.add_channel(&samples::display_name(sample), "lyra.sampler", lyra_catalog::default_params("lyra.sampler"));
     if let Some(ch) = p.channels.last_mut() {
         ch.sample = Some(sample.to_string());
     }

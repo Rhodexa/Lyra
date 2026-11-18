@@ -1,375 +1,122 @@
-//! # lyra-dsp
-//!
-//! Lyra's built-in instruments (and, from milestone 3, effects).
-//! Everything here implements [`lyra_plugin::Plugin`] — the same interface a
-//! hosted CLAP plugin will get — so the engine never cares where sound comes from.
+//! Small DSP building blocks shared by instruments and effects.
 
-pub mod drums;
-pub mod effects;
-pub mod fm;
-pub mod sampler;
-pub mod synth;
-pub mod util;
+use lyra_plugin::{Event, ProcessContext};
 
-use lyra_plugin::{ParamGroup, ParamInfo, Plugin, ProcessContext};
-use std::collections::HashMap;
-use std::sync::OnceLock;
+/// Fast xorshift noise. Deterministic, allocation-free.
+pub struct Rng(u32);
 
-/// A built-in instrument the user can add from the browser / "+" menu: the
-/// one place that lists it (a step towards a plugin registry).
-pub struct InstrumentInfo {
-    /// Stable id saved in project files. Never rename one.
-    pub id: &'static str,
-    pub name: &'static str,
-    /// Drums play one-shots on steps; melodic instruments live in the piano roll.
-    pub melodic: bool,
-    pub params: &'static [ParamInfo],
-    /// Makes one. UI thread only (it allocates).
-    pub create: fn() -> Box<dyn Plugin>,
+impl Rng {
+    pub fn new(seed: u32) -> Self {
+        Self(seed.max(1))
+    }
+
+    /// White noise sample in -1..1.
+    #[inline]
+    pub fn bipolar(&mut self) -> f32 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.0 = x;
+        (x as f32 / u32::MAX as f32) * 2.0 - 1.0
+    }
 }
 
-pub const INSTRUMENTS: &[InstrumentInfo] = &[
-    InstrumentInfo {
-        id: "lyra.kick",
-        name: "Kick",
-        melodic: false,
-        params: &drums::KICK_PARAMS,
-        create: || Box::new(drums::Kick::new()),
-    },
-    InstrumentInfo {
-        id: "lyra.snare",
-        name: "Snare",
-        melodic: false,
-        params: &drums::SNARE_PARAMS,
-        create: || Box::new(drums::Snare::new()),
-    },
-    InstrumentInfo {
-        id: "lyra.clap",
-        name: "Clap",
-        melodic: false,
-        params: &drums::CLAP_PARAMS,
-        create: || Box::new(drums::Clap::new()),
-    },
-    InstrumentInfo {
-        id: "lyra.hat",
-        name: "Hi-hat",
-        melodic: false,
-        params: &drums::HAT_PARAMS,
-        create: || Box::new(drums::Hat::new()),
-    },
-    InstrumentInfo {
-        id: "lyra.synth",
-        name: "Lyra Synth",
-        melodic: true,
-        params: &synth::SYNTH_PARAMS,
-        create: || Box::new(synth::Synth::new()),
-    },
-    // The id stays "lyra.fm" (saved projects use it); the name is the synth's own.
-    InstrumentInfo {
-        id: "lyra.fm",
-        name: "Fluttersine",
-        melodic: true,
-        params: &fm::FM_PARAMS,
-        create: || Box::new(fm::Fm::new()),
-    },
-    // Plays one sample (drop a sample on the plugin rack to make one).
-    InstrumentInfo {
-        id: "lyra.sampler",
-        name: "Sampler",
-        melodic: false,
-        params: &sampler::PARAMS,
-        create: || Box::new(sampler::Sampler::new()),
-    },
-];
-
-pub fn info(id: &str) -> Option<&'static InstrumentInfo> {
-    INSTRUMENTS.iter().find(|i| i.id == id)
+/// Per-sample multiplier that makes a value fall by 60 dB over `seconds`.
+/// (`env *= coeff` each sample — no `exp()` in the inner loop.)
+pub fn decay_coeff(seconds: f32, sample_rate: f32) -> f32 {
+    (-6.9078 / (seconds.max(1e-4) * sample_rate)).exp()
 }
 
-/// Build an instrument by id. Runs on the UI thread (it allocates).
-pub fn create(id: &str) -> Option<Box<dyn Plugin>> {
-    info(id).map(|i| (i.create)())
+/// Per-sample multiplier for a plain exponential with time constant `tau`.
+pub fn tau_coeff(tau: f32, sample_rate: f32) -> f32 {
+    (-1.0 / (tau.max(1e-5) * sample_rate)).exp()
 }
 
-/// Editor groups by instrument id, learned once by making one of each
-/// (some live private to their instrument). No constructor may ask for
-/// groups, or this would wait on itself.
-fn groups_table() -> &'static HashMap<&'static str, &'static [ParamGroup]> {
-    static CELL: OnceLock<HashMap<&'static str, &'static [ParamGroup]>> = OnceLock::new();
-    CELL.get_or_init(|| INSTRUMENTS.iter().map(|i| (i.id, (i.create)().groups())).collect())
+/// Frequency ratio of a MIDI key relative to middle C (60).
+pub fn key_ratio(key: u8) -> f32 {
+    2f32.powf((key as f32 - 60.0) / 12.0)
 }
 
-/// Like [`create`], but an unknown id (e.g. a project from a newer Lyra)
-/// becomes a silent placeholder instead of breaking the channel list.
-pub fn create_or_silence(id: &str) -> Box<dyn Plugin> {
-    create(id).unwrap_or_else(|| Box::new(Silence))
+#[derive(Clone, Copy, Debug)]
+pub enum FilterKind {
+    LowPass,
+    HighPass,
+    BandPass,
 }
 
-/// Parameter descriptions for an instrument id (empty if unknown).
-pub fn params(id: &str) -> &'static [ParamInfo] {
-    info(id).map_or(&[], |i| i.params)
+/// Classic RBJ-cookbook biquad, transposed direct form II.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Biquad {
+    b0: f32,
+    b1: f32,
+    b2: f32,
+    a1: f32,
+    a2: f32,
+    z1: f32,
+    z2: f32,
 }
 
-/// Editor layout groups for an instrument id (empty = one flat group).
-pub fn groups(id: &str) -> &'static [ParamGroup] {
-    groups_table().get(id).copied().unwrap_or(&[])
+impl Biquad {
+    pub fn new(kind: FilterKind, sample_rate: f32, freq: f32, q: f32) -> Self {
+        let mut f = Self::default();
+        f.set(kind, sample_rate, freq, q);
+        f
+    }
+
+    pub fn set(&mut self, kind: FilterKind, sample_rate: f32, freq: f32, q: f32) {
+        let freq = freq.clamp(10.0, sample_rate * 0.45);
+        let w0 = std::f32::consts::TAU * freq / sample_rate;
+        let (sin, cos) = w0.sin_cos();
+        let alpha = sin / (2.0 * q.max(0.05));
+        let (b0, b1, b2) = match kind {
+            FilterKind::LowPass => ((1.0 - cos) / 2.0, 1.0 - cos, (1.0 - cos) / 2.0),
+            FilterKind::HighPass => ((1.0 + cos) / 2.0, -(1.0 + cos), (1.0 + cos) / 2.0),
+            FilterKind::BandPass => (alpha, 0.0, -alpha),
+        };
+        let a0 = 1.0 + alpha;
+        self.b0 = b0 / a0;
+        self.b1 = b1 / a0;
+        self.b2 = b2 / a0;
+        self.a1 = -2.0 * cos / a0;
+        self.a2 = (1.0 - alpha) / a0;
+    }
+
+    pub fn reset(&mut self) {
+        self.z1 = 0.0;
+        self.z2 = 0.0;
+    }
+
+    #[inline]
+    pub fn run(&mut self, x: f32) -> f32 {
+        let y = self.b0 * x + self.z1;
+        self.z1 = self.b1 * x - self.a1 * y + self.z2;
+        self.z2 = self.b2 * x - self.a2 * y;
+        y
+    }
 }
 
-/// Default parameter values for an instrument id (empty if unknown).
-pub fn default_params(id: &str) -> Vec<f32> {
-    lyra_plugin::default_params(params(id))
+/// For simple instruments that produce one (mono) sample at a time.
+pub trait MonoSource {
+    fn handle(&mut self, event: Event);
+    fn tick(&mut self) -> f32;
 }
 
-/// A named starting point: an instrument plus the parameters that differ from its defaults.
-#[derive(Clone, Copy)]
-pub struct Preset {
-    pub name: &'static str,
-    pub instrument: &'static str,
-    pub values: &'static [(usize, f32)],
-}
-
-impl Preset {
-    pub fn params(&self) -> Vec<f32> {
-        let mut v = default_params(self.instrument);
-        for &(i, x) in self.values {
-            if let Some(slot) = v.get_mut(i) {
-                *slot = x;
-            }
+/// Drives a [`MonoSource`] through a block, applying events at their exact sample.
+pub fn run_mono<T: MonoSource>(src: &mut T, ctx: ProcessContext<'_>) {
+    let ProcessContext { events, out_l, out_r, .. } = ctx;
+    let mut next = 0;
+    for i in 0..out_l.len() {
+        while next < events.len() && events[next].offset as usize <= i {
+            src.handle(events[next].event);
+            next += 1;
         }
-        v
+        let s = src.tick();
+        out_l[i] = s;
+        out_r[i] = s;
     }
-}
-
-use synth::p as s;
-
-pub const PRESETS: &[Preset] = &[
-    Preset {
-        name: "Deep Bass",
-        instrument: "lyra.synth",
-        values: &[
-            (s::OCTAVE, 1.0),
-            (s::SUB, 0.55),
-            (s::CUTOFF, 240.0),
-            (s::RESO, 0.3),
-            (s::ENV_AMT, 0.45),
-            (s::F_DECAY, 0.22),
-            (s::F_SUSTAIN, 0.1),
-            (s::ATTACK, 0.002),
-            (s::DECAY, 0.3),
-            (s::SUSTAIN, 0.6),
-            (s::RELEASE, 0.07),
-            (s::KEYTRACK, 0.3),
-            (s::LEVEL, 0.9),
-        ],
-    },
-    Preset {
-        name: "Organ Bass",
-        instrument: "lyra.synth",
-        values: &[
-            (s::WAVE, 1.0),
-            (s::OCTAVE, 1.0),
-            (s::SUB, 0.35),
-            (s::CUTOFF, 700.0),
-            (s::RESO, 0.1),
-            (s::ENV_AMT, 0.25),
-            (s::F_DECAY, 0.18),
-            (s::ATTACK, 0.002),
-            (s::DECAY, 0.25),
-            (s::SUSTAIN, 0.45),
-            (s::RELEASE, 0.06),
-            (s::LEVEL, 0.8),
-        ],
-    },
-    Preset {
-        name: "Chord Stab",
-        instrument: "lyra.synth",
-        values: &[
-            (s::VOICES, 2.0),
-            (s::DETUNE, 0.2),
-            (s::SPREAD, 0.5),
-            (s::CUTOFF, 1300.0),
-            (s::RESO, 0.3),
-            (s::ENV_AMT, 0.5),
-            (s::F_DECAY, 0.2),
-            (s::F_SUSTAIN, 0.1),
-            (s::ATTACK, 0.002),
-            (s::DECAY, 0.35),
-            (s::SUSTAIN, 0.25),
-            (s::RELEASE, 0.2),
-            (s::LEVEL, 0.6),
-        ],
-    },
-    Preset {
-        name: "Pluck",
-        instrument: "lyra.synth",
-        values: &[
-            (s::VOICES, 1.0),
-            (s::DETUNE, 0.15),
-            (s::CUTOFF, 450.0),
-            (s::RESO, 0.35),
-            (s::ENV_AMT, 0.7),
-            (s::F_DECAY, 0.16),
-            (s::F_SUSTAIN, 0.0),
-            (s::ATTACK, 0.001),
-            (s::DECAY, 0.35),
-            (s::SUSTAIN, 0.0),
-            (s::RELEASE, 0.25),
-            (s::LEVEL, 0.7),
-        ],
-    },
-    Preset {
-        name: "Supersaw Pad",
-        instrument: "lyra.synth",
-        values: &[
-            (s::VOICES, 6.0),
-            (s::DETUNE, 0.45),
-            (s::SPREAD, 1.0),
-            (s::CUTOFF, 2800.0),
-            (s::RESO, 0.1),
-            (s::ENV_AMT, 0.15),
-            (s::F_DECAY, 1.5),
-            (s::F_SUSTAIN, 0.6),
-            (s::ATTACK, 0.6),
-            (s::DECAY, 1.2),
-            (s::SUSTAIN, 0.8),
-            (s::RELEASE, 1.6),
-            (s::LEVEL, 0.45),
-        ],
-    },
-    Preset {
-        name: "Square Lead",
-        instrument: "lyra.synth",
-        values: &[
-            (s::WAVE, 1.0),
-            (s::VOICES, 1.0),
-            (s::DETUNE, 0.1),
-            (s::CUTOFF, 3200.0),
-            (s::RESO, 0.2),
-            (s::ENV_AMT, 0.3),
-            (s::F_DECAY, 0.4),
-            (s::SUSTAIN, 0.8),
-            (s::RELEASE, 0.15),
-            (s::LEVEL, 0.55),
-        ],
-    },
-    Preset {
-        name: "Sub",
-        instrument: "lyra.synth",
-        values: &[
-            (s::WAVE, 3.0),
-            (s::OCTAVE, 1.0),
-            (s::CUTOFF, 18_000.0),
-            (s::ENV_AMT, 0.0),
-            (s::ATTACK, 0.003),
-            (s::DECAY, 0.2),
-            (s::SUSTAIN, 0.9),
-            (s::RELEASE, 0.1),
-            (s::LEVEL, 0.9),
-        ],
-    },
-];
-
-/// Presets for one instrument (Lyra Synth's list, or Fluttersine's own table).
-pub fn presets_for(instrument: &str) -> Vec<Preset> {
-    let synth = PRESETS.iter().filter(|p| p.instrument == instrument).map(|p| Preset { ..*p });
-    let fm = fm::FM_PRESETS.iter().filter(|_| instrument == "lyra.fm").map(|&(name, values)| Preset {
-        name,
-        instrument: "lyra.fm",
-        values,
-    });
-    synth.chain(fm).collect()
-}
-
-pub struct Silence;
-
-impl Plugin for Silence {
-    fn name(&self) -> &'static str {
-        "Missing plugin"
-    }
-    fn params(&self) -> &'static [ParamInfo] {
-        &[]
-    }
-    fn set_param(&mut self, _: u32, _: f32) {}
-    fn activate(&mut self, _: f32) {}
-    fn process(&mut self, ctx: ProcessContext<'_>) {
-        ctx.out_l.fill(0.0);
-        ctx.out_r.fill(0.0);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The catalog names each plugin's parameter table itself: it must be the
-    /// one the plugin really uses.
-    #[test]
-    fn catalog_tables_match_their_plugins() {
-        for i in INSTRUMENTS {
-            assert!(std::ptr::eq(i.params, (i.create)().params()), "{}", i.id);
-        }
-        for e in effects::EFFECTS {
-            assert!(std::ptr::eq(e.params, (e.create)().params()), "{}", e.id);
-        }
-        assert!(!groups("lyra.fm").is_empty() && groups("lyra.kick").is_empty());
-    }
-    use lyra_plugin::{Event, TimedEvent};
-
-    /// Render `seconds` of audio in 256-frame blocks; `events` go in the first block.
-    fn render(p: &mut dyn Plugin, events: &[TimedEvent], seconds: f32) -> Vec<f32> {
-        let sr = 48_000.0;
-        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
-        let mut out = Vec::new();
-        let mut first = true;
-        while (out.len() as f32) < seconds * sr {
-            let ev = if first { events } else { &[] };
-            first = false;
-            p.process(ProcessContext { sample_rate: sr, events: ev, out_l: &mut l, out_r: &mut r });
-            out.extend(l.iter().zip(&r).map(|(a, b)| a.abs().max(b.abs())));
-        }
-        out
-    }
-
-    fn on(key: u8) -> TimedEvent {
-        TimedEvent { offset: 0, event: Event::NoteOn { key, velocity: 0.9 } }
-    }
-    fn off(key: u8) -> TimedEvent {
-        TimedEvent { offset: 0, event: Event::NoteOff { key } }
-    }
-
-    #[test]
-    fn every_preset_plays_a_chord_and_falls_silent() {
-        for preset in PRESETS {
-            let mut synth = create(preset.instrument).unwrap();
-            for (i, v) in preset.params().into_iter().enumerate() {
-                synth.set_param(i as u32, v);
-            }
-            synth.activate(48_000.0);
-            let chord = [57, 60, 64, 67];
-            let held = render(synth.as_mut(), &chord.map(on), 0.6);
-            let tail = render(synth.as_mut(), &chord.map(off), 4.0);
-            let peak = held.iter().chain(&tail).fold(0.0f32, |m, x| m.max(*x));
-            assert!(held.iter().chain(&tail).all(|x| x.is_finite()), "{}: NaN/inf", preset.name);
-            assert!(peak > 0.02 && peak < 1.6, "{}: peak {peak}", preset.name);
-            let end = tail[tail.len() - 4800..].iter().fold(0.0f32, |m, x| m.max(*x));
-            assert!(end < 1e-3, "{}: still sounding after release ({end})", preset.name);
-            println!("{:13} peak {peak:.2}", preset.name);
-        }
-    }
-
-    #[test]
-    fn worst_case_cost() {
-        let pad = PRESETS.iter().find(|p| p.name == "Supersaw Pad").unwrap();
-        let mut synth = create(pad.instrument).unwrap();
-        for (i, v) in pad.params().into_iter().enumerate() {
-            synth.set_param(i as u32, v);
-        }
-        synth.activate(48_000.0);
-        let keys: Vec<TimedEvent> = (48..64).map(on).collect(); // 16 notes × 7 unison = 112 oscillators
-        let t = std::time::Instant::now();
-        render(synth.as_mut(), &keys, 2.0);
-        let cost = t.elapsed().as_secs_f64() / 2.0;
-        println!("16-note supersaw: {:.1}% of one core (realtime = 100%)", cost * 100.0);
-        assert!(cost < if cfg!(debug_assertions) { 2.0 } else { 0.25 });
+    // Events past the end of the block (shouldn't happen) still get applied.
+    for e in &events[next..] {
+        src.handle(e.event);
     }
 }

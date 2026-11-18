@@ -56,9 +56,9 @@ fn instrument_menu(ui: &mut Ui) -> Option<(&'static str, &'static str, Vec<f32>)
     let mut picked = None;
     for (title, melodic) in [("DRUMS", false), ("INSTRUMENTS", true)] {
         ui.label(egui::RichText::new(title).small().color(theme::TEXT_DIM));
-        for inst in lyra_dsp::INSTRUMENTS.iter().filter(|i| i.melodic == melodic) {
+        for inst in lyra_catalog::instruments().iter().filter(|i| i.melodic == melodic) {
             if ui.button(inst.name).clicked() {
-                picked = Some((inst.name, inst.id, lyra_dsp::default_params(inst.id)));
+                picked = Some((inst.name, inst.id, lyra_catalog::default_params(inst.id)));
             }
         }
         if !melodic {
@@ -73,7 +73,7 @@ fn add_channel_menu(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiSt
         h.checkpoint(p);
         p.add_channel(name, instrument, params);
         st.selected = p.channels.len() - 1;
-        if lyra_dsp::info(instrument).is_some_and(|i| i.melodic) {
+        if lyra_catalog::info(instrument).is_some_and(|i| i.melodic) {
             st.show = Some(Editor::PianoRoll);
         }
         ui.close_menu();
@@ -244,11 +244,11 @@ fn row(
                 let ch = &mut p.channels[ci];
                 // Rename only channels still named after their instrument or old sample.
                 let old_name = ch.sample.as_deref().map(crate::samples::display_name);
-                let generic = lyra_dsp::info(&ch.instrument).map(|i| i.name) == Some(ch.name.as_str())
+                let generic = lyra_catalog::info(&ch.instrument).map(|i| i.name) == Some(ch.name.as_str())
                     || old_name.as_deref() == Some(ch.name.as_str());
                 if ch.instrument != "lyra.sampler" {
                     ch.instrument = "lyra.sampler".into();
-                    ch.params = lyra_dsp::default_params("lyra.sampler");
+                    ch.params = lyra_catalog::default_params("lyra.sampler");
                 }
                 if generic {
                     ch.name = crate::samples::display_name(&drag.0);
@@ -329,9 +329,9 @@ fn row(
                 if let Some((name, instrument, params)) = instrument_menu(ui) {
                     h.checkpoint(p);
                     let ch = &mut p.channels[ci];
-                    let named_after_instrument = lyra_dsp::info(&ch.instrument).map(|i| i.name)
+                    let named_after_instrument = lyra_catalog::info(&ch.instrument).map(|i| i.name)
                         == Some(ch.name.as_str())
-                        || lyra_dsp::PRESETS.iter().any(|pr| pr.name == ch.name);
+                        || lyra_catalog::presets().any(|pr| pr.name == ch.name);
                     if named_after_instrument {
                         ch.name = name.to_string(); // only rename channels still named after their instrument
                     }

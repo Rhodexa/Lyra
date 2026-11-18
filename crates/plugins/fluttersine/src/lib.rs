@@ -19,8 +19,8 @@
 //! * 16 voices, stolen like `synth.rs` (free, else quietest released, else oldest),
 //!   plus a mono mode with a note stack, legato and glide.
 
-use crate::util::Rng;
-use lyra_plugin::{Curve, Event, ParamGroup, ParamInfo, Plugin, ProcessContext};
+use lyra_dsp::Rng;
+use lyra_plugin::{Curve, Event, ParamGroup, ParamInfo, Plugin, PluginInfo, ProcessContext};
 use std::f32::consts::{PI, TAU};
 
 const MAX_VOICES: usize = 16;
@@ -35,6 +35,18 @@ const STACK: usize = 16;
 const SSD: [f32; 7] = [-0.110_023_13, -0.062_884_39, -0.019_523_56, 0.0, 0.019_912_21, 0.062_165_38, 0.107_452_42];
 
 use Curve::{Exponential as Exp, Linear as Lin};
+
+/// Fluttersine, as Lyra lists it. The id stays "lyra.fm" (saved projects
+/// use it); the name is the synth's own.
+pub const PLUGINS: &[PluginInfo] = &[PluginInfo {
+    id: "lyra.fm",
+    name: "Fluttersine",
+    melodic: true,
+    params: &FM_PARAMS,
+    groups: &FM_GROUPS,
+    presets: FM_PRESETS,
+    create: || Box::new(Fm::new()),
+}];
 
 /// Parameter indices. `op(i, OP_RATIO)` is operator `i`'s ratio (i = 0..6),
 /// `matrix(row, col)` is "operator `row` modulates operator `col`".

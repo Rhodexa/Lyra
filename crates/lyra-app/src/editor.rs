@@ -13,12 +13,12 @@ use lyra_plugin::ParamInfo;
 
 pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     let instrument = p.channels[ch].instrument.clone();
-    let params = lyra_dsp::params(&instrument);
-    let groups = lyra_dsp::groups(&instrument);
+    let params = lyra_catalog::params(&instrument);
+    let groups = lyra_catalog::groups(&instrument);
     let color = theme::channel_color(p.channels[ch].color);
     // Older projects may lack newer parameters: fill them with defaults.
     if p.channels[ch].params.len() < params.len() {
-        let defaults = lyra_dsp::default_params(&instrument);
+        let defaults = lyra_catalog::default_params(&instrument);
         let have = p.channels[ch].params.len();
         p.channels[ch].params.extend_from_slice(&defaults[have..]);
     }
@@ -33,7 +33,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
             }
             p.channels[ch].name = r.text;
         }
-        let label = lyra_dsp::info(&instrument).map_or(instrument.as_str(), |i| i.name);
+        let label = lyra_catalog::info(&instrument).map_or(instrument.as_str(), |i| i.name);
         ui.label(RichText::new(label).small().color(theme::TEXT_DIM));
 
         // Which mixer insert this channel plays into.
@@ -50,7 +50,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
             h.checkpoint(p);
             p.channels[ch].mixer = route;
         }
-        let presets = lyra_dsp::presets_for(&instrument);
+        let presets = lyra_catalog::presets_for(&instrument);
         if !presets.is_empty() && instrument != "lyra.fm" {
             ui.add_space(8.0);
             ui.menu_button("Presets", |ui| {
@@ -63,7 +63,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
                 }
             });
         }
-        if !lyra_dsp::info(&instrument).is_some_and(|i| i.melodic) {
+        if !lyra_catalog::info(&instrument).is_some_and(|i| i.melodic) {
             ui.add_space(8.0);
             ui.label(RichText::new("choke").small().color(theme::TEXT_DIM));
             let mut choke = p.channels[ch].choke;
@@ -200,7 +200,7 @@ fn param_cell(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, info: &P
 
 /// Draw the amp envelope (attack, decay to sustain, hold, release).
 fn envelope(ui: &mut Ui, params: &[f32], color: Color32) {
-    use lyra_dsp::synth::p;
+    use lyra_synth::p;
     let (a, d, s, r) = (params[p::ATTACK], params[p::DECAY], params[p::SUSTAIN], params[p::RELEASE]);
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width().min(420.0), 64.0), Sense::hover());
     let painter = ui.painter_at(rect);

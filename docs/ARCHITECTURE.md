@@ -5,17 +5,29 @@ Terse source of truth. The illustrated manual is generated from this and from th
 ## The crates
 
 ```text
-lyra-app ──────────► lyra-model     project data + undo        (no audio, no UI)
+lyra-app ─────► lyra-model      project data + undo            (no audio, no UI)
    │  │
-   │  └──────────────► lyra-dsp     built-in instruments/effects
-   │                      │
-   └──► lyra-engine ◄─────┘ (via)  lyra-plugin   the ONE plugin interface
+   │  └───────► lyra-catalog    which plugins exist, by id
+   │               │
+   │               ├──► plugins/fluttersine, drums, synth, sampler, effects
+   │               │        │  (each: its DSP, its params, its presets)
+   │               │        └──► lyra-dsp   shared building blocks (filters, envelopes, noise)
+   │               ▼
+   └──► lyra-engine ──────► lyra-plugin     the ONE plugin interface (trait Plugin)
 ```
+
+The engine only ever sees `Box<dyn Plugin>` (think `std::unique_ptr<IPlugin>`).
+A plugin crate describes itself in a `PLUGINS` list of `PluginInfo` (id,
+name, parameter table, presets, a constructor); `lyra-catalog` gathers those
+lists. A plugin's knobs are declared in the plugin's own crate, next to the
+code that reads them.
 
 | Crate | Owns | Must never |
 |---|---|---|
-| `lyra-plugin` | `Plugin` trait, `Event`, `ParamInfo` | depend on anything |
-| `lyra-dsp` | drums (M1), synths/effects (M2–M3) | know about the engine or UI |
+| `lyra-plugin` | `Plugin` trait, `Event`, `ParamInfo`, `PluginInfo` | depend on anything |
+| `lyra-dsp` | small DSP pieces every plugin may use | know about any plugin |
+| `plugins/*` | one plugin family each: its sound, parameters, presets | know about the engine, the UI or each other |
+| `lyra-catalog` | the list of built-ins, lookups by id | contain DSP |
 | `lyra-engine` | audio thread: sequencer, channel mixing, FIFOs | allocate, lock or block in `process` |
 | `lyra-model` | `Project`, `Pattern`, `Note`, `History` | know about audio or UI |
 | `lyra-app` | window, views, theme, keyboard, sound card, bridge | send engine commands from views |
@@ -122,7 +134,7 @@ Effect chains (`FxChain`) are built and activated on the UI thread and
 swapped in whole with `SetFxChain`; the old chain goes back as trash. The bridge
 rebuilds a chain only when its list of effects changes. Knob moves are plain
 `SetFxParam`. Tempo-synced effects get `Plugin::transport()` (tempo, playing,
-position) before each block. Effects live in `lyra-dsp/src/effects.rs`, and
+position) before each block. Effects live in `crates/plugins/effects`, and
 their editors are generated from their parameter tables, like instruments.
 
 ## Project files

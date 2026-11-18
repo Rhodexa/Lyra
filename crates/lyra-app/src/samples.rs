@@ -293,8 +293,8 @@ mod sampler_tests {
     fn a_kit_kick_through_the_sampler_is_loud() {
         let data = Arc::new(decode(&path_for("bundled:Starter Kit/Kicks/bd_boom.flac")).unwrap());
         let peak_in = data.left.iter().fold(0.0f32, |m, x| m.max(x.abs()));
-        let mut s = lyra_dsp::create("lyra.sampler").unwrap();
-        for (i, v) in lyra_dsp::default_params("lyra.sampler").into_iter().enumerate() {
+        let mut s = lyra_catalog::create("lyra.sampler").unwrap();
+        for (i, v) in lyra_catalog::default_params("lyra.sampler").into_iter().enumerate() {
             s.set_param(i as u32, v);
         }
         s.set_sample(data);

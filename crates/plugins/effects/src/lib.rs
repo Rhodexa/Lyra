@@ -11,47 +11,29 @@
 //! | `lyra.reverb` | Freeverb-style room |
 //! | `lyra.pump` | beat-synced ducking: the house "sidechain" breathing |
 
-use crate::util::{tau_coeff, Biquad, FilterKind};
-use lyra_plugin::{Curve, ParamGroup, ParamInfo, Plugin, ProcessContext, Transport};
+use lyra_dsp::{tau_coeff, Biquad, FilterKind};
+use lyra_plugin::{Curve, ParamInfo, Plugin, PluginInfo, ProcessContext, Transport};
 use std::f32::consts::{PI, TAU};
 
 use Curve::{Exponential as Exp, Linear as Lin};
 
-/// A built-in effect: the one place that lists it.
-pub struct EffectInfo {
-    /// Stable id saved in project files. Never rename one.
-    pub id: &'static str,
-    pub name: &'static str,
-    pub params: &'static [ParamInfo],
-    /// Makes one. UI thread only (it allocates).
-    pub create: fn() -> Box<dyn Plugin>,
-}
-
-pub const EFFECTS: &[EffectInfo] = &[
-    EffectInfo { id: "lyra.eq", name: "EQ", params: &EQ_PARAMS, create: || Box::new(Eq::new()) },
-    EffectInfo { id: "lyra.filter", name: "Filter", params: &FILTER_PARAMS, create: || Box::new(Filter::new()) },
-    EffectInfo { id: "lyra.comp", name: "Compressor", params: &COMP_PARAMS, create: || Box::new(Comp::new()) },
-    EffectInfo { id: "lyra.delay", name: "Delay", params: &DELAY_PARAMS, create: || Box::new(Delay::new()) },
-    EffectInfo { id: "lyra.reverb", name: "Reverb", params: &REVERB_PARAMS, create: || Box::new(Reverb::new()) },
-    EffectInfo { id: "lyra.pump", name: "Pump", params: &PUMP_PARAMS, create: || Box::new(Pump::new()) },
+/// The effects, as Lyra lists them.
+pub const PLUGINS: &[PluginInfo] = &[
+    effect("lyra.eq", "EQ", &EQ_PARAMS, || Box::new(Eq::new())),
+    effect("lyra.filter", "Filter", &FILTER_PARAMS, || Box::new(Filter::new())),
+    effect("lyra.comp", "Compressor", &COMP_PARAMS, || Box::new(Comp::new())),
+    effect("lyra.delay", "Delay", &DELAY_PARAMS, || Box::new(Delay::new())),
+    effect("lyra.reverb", "Reverb", &REVERB_PARAMS, || Box::new(Reverb::new())),
+    effect("lyra.pump", "Pump", &PUMP_PARAMS, || Box::new(Pump::new())),
 ];
 
-pub fn info(id: &str) -> Option<&'static EffectInfo> {
-    EFFECTS.iter().find(|e| e.id == id)
-}
-
-/// Build an effect by id. UI thread (it allocates).
-pub fn create(id: &str) -> Option<Box<dyn Plugin>> {
-    info(id).map(|e| (e.create)())
-}
-
-/// Parameter table for an effect id.
-pub fn params(id: &str) -> &'static [ParamInfo] {
-    info(id).map_or(&[], |e| e.params)
-}
-
-pub fn default_params(id: &str) -> Vec<f32> {
-    lyra_plugin::default_params(params(id))
+const fn effect(
+    id: &'static str,
+    name: &'static str,
+    params: &'static [ParamInfo],
+    create: fn() -> Box<dyn Plugin>,
+) -> PluginInfo {
+    PluginInfo { id, name, melodic: false, params, groups: &[], presets: &[], create }
 }
 
 fn db(v: f32) -> f32 {
@@ -149,7 +131,7 @@ impl Section {
     }
 }
 
-static EQ_PARAMS: [ParamInfo; 5] = [
+pub static EQ_PARAMS: [ParamInfo; 5] = [
     ParamInfo::new(0, "Low cut", 20.0, 600.0, 20.0, "Hz", Exp),
     ParamInfo::new(1, "Low", -18.0, 18.0, 0.0, "dB", Lin),
     ParamInfo::new(2, "Mid", -18.0, 18.0, 0.0, "dB", Lin),
@@ -203,7 +185,7 @@ effect_plugin!(Eq, "EQ", EQ_PARAMS);
 
 // ─────────────────────────────── Filter ───────────────────────────────
 
-static FILTER_PARAMS: [ParamInfo; 3] = [
+pub static FILTER_PARAMS: [ParamInfo; 3] = [
     ParamInfo::choice(0, "Mode", &["Low-pass", "High-pass"], 0),
     ParamInfo::new(1, "Cutoff", 20.0, 20_000.0, 20_000.0, "Hz", Exp),
     ParamInfo::new(2, "Reso", 0.0, 1.0, 0.15, "%", Lin),
@@ -256,7 +238,7 @@ effect_plugin!(Filter, "Filter", FILTER_PARAMS);
 
 // ─────────────────────────────── Compressor ───────────────────────────────
 
-static COMP_PARAMS: [ParamInfo; 5] = [
+pub static COMP_PARAMS: [ParamInfo; 5] = [
     ParamInfo::new(0, "Threshold", -40.0, 0.0, -14.0, "dB", Lin),
     ParamInfo::new(1, "Ratio", 1.0, 20.0, 4.0, "", Exp),
     ParamInfo::new(2, "Attack", 0.0002, 0.1, 0.005, "s", Exp),
@@ -302,7 +284,7 @@ effect_plugin!(Comp, "Compressor", COMP_PARAMS);
 
 const DELAY_BEATS: [f32; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 
-static DELAY_PARAMS: [ParamInfo; 5] = [
+pub static DELAY_PARAMS: [ParamInfo; 5] = [
     ParamInfo::choice(0, "Time", &["1/16", "1/8", "3/16", "1/4", "3/8", "1/2"], 2),
     ParamInfo::new(1, "Feedback", 0.0, 0.9, 0.35, "%", Lin),
     ParamInfo::choice(2, "Ping-pong", &["Off", "On"], 1),
@@ -398,7 +380,7 @@ const COMBS: [usize; 8] = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617];
 const ALLPASSES: [usize; 4] = [556, 441, 341, 225];
 const STEREO_SPREAD: usize = 23;
 
-static REVERB_PARAMS: [ParamInfo; 4] = [
+pub static REVERB_PARAMS: [ParamInfo; 4] = [
     ParamInfo::new(0, "Size", 0.0, 1.0, 0.7, "%", Lin),
     ParamInfo::new(1, "Damp", 0.0, 1.0, 0.45, "%", Lin),
     ParamInfo::new(2, "Width", 0.0, 1.0, 1.0, "%", Lin),
@@ -485,7 +467,7 @@ effect_plugin!(Reverb, "Reverb", REVERB_PARAMS);
 
 const PUMP_BEATS: [f64; 3] = [1.0, 0.5, 2.0];
 
-static PUMP_PARAMS: [ParamInfo; 3] = [
+pub static PUMP_PARAMS: [ParamInfo; 3] = [
     ParamInfo::new(0, "Depth", 0.0, 1.0, 0.6, "%", Lin),
     ParamInfo::new(1, "Recovery", 0.1, 1.0, 0.55, "%", Lin),
     ParamInfo::choice(2, "Rate", &["1/4", "1/8", "1/2"], 0),
@@ -540,14 +522,13 @@ impl Pump {
 }
 effect_plugin!(Pump, "Pump", PUMP_PARAMS);
 
-/// Effects show as one flat group in the editor.
-pub fn groups(_id: &str) -> &'static [ParamGroup] {
-    &[]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn create(id: &str) -> Option<Box<dyn Plugin>> {
+        PLUGINS.iter().find(|e| e.id == id).map(|e| (e.create)())
+    }
 
     #[test]
     fn ring_read_never_leaves_the_buffer() {
@@ -588,14 +569,14 @@ mod tests {
 
     #[test]
     fn every_effect_is_stable_and_passes_audio() {
-        for e in EFFECTS {
+        for e in PLUGINS {
             let mut fx = create(e.id).unwrap();
             fx.activate(48_000.0);
             let out = render(fx.as_mut(), |n| (n as f32 * 0.03).sin() * 0.5, 1.0);
             let peak = out.iter().fold(0.0f32, |m, x| m.max(*x));
             assert!(out.iter().all(|x| x.is_finite()), "{}: NaN", e.name);
             assert!(peak > 0.05 && peak < 2.0, "{}: peak {peak}", e.name);
-            assert_eq!(fx.params().len(), params(e.id).len());
+            assert_eq!(fx.params().len(), e.params.len());
         }
     }
 

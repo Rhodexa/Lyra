@@ -1,0 +1,10 @@
+[package]
+name = "lyra-synth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Lyra Synth: a subtractive synth (saw/square, supersaw voices, filter, envelopes)."
+
+[dependencies]
+lyra-plugin.workspace = true
+lyra-dsp.workspace = true

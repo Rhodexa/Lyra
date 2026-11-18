@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/lyra-*", "crates/plugins/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -10,6 +10,13 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 lyra-plugin = { path = "crates/lyra-plugin" }
 lyra-dsp    = { path = "crates/lyra-dsp" }
+lyra-catalog = { path = "crates/lyra-catalog" }
+# One crate per built-in plugin family (see crates/plugins).
+lyra-fluttersine = { path = "crates/plugins/fluttersine" }
+lyra-drums       = { path = "crates/plugins/drums" }
+lyra-synth       = { path = "crates/plugins/synth" }
+lyra-sampler     = { path = "crates/plugins/sampler" }
+lyra-effects     = { path = "crates/plugins/effects" }
 lyra-engine = { path = "crates/lyra-engine" }
 lyra-model  = { path = "crates/lyra-model" }
 

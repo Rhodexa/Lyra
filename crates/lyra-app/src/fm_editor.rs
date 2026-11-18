@@ -20,14 +20,14 @@
 //! * Wheel over the tabs, the wave keys or the preset dropdown steps through them.
 //!
 //! Like every view, this only edits `channel.params`; the bridge does the rest.
-//! The waveform pictures are display-only copies of `lyra_dsp::fm`'s shapes.
+//! The waveform pictures are display-only copies of `lyra_fluttersine`'s shapes.
 
 use crate::rack::tracked;
 use crate::theme::{self, cr, stroke, Light};
 use crate::widgets::{self, Icon, Legend};
 use egui::{pos2, vec2, Align, Align2, Color32, FontId, Id, Layout, Rect, Response, RichText, Sense, Shape, Ui};
 use egui::{UiBuilder, Vec2};
-use lyra_dsp::fm::{p, FM_PARAMS, FM_PRESETS};
+use lyra_fluttersine::{p, FM_PARAMS, FM_PRESETS};
 use lyra_model::{History, Project};
 use p::{op, OPS};
 use std::f32::consts::TAU;
@@ -40,7 +40,7 @@ const FILTER_LIGHT: Light = theme::L_CYAN;
 const LFO_LIGHT: Light = theme::L_LIME;
 const VOICE_LIGHT: Light = theme::L_MINT;
 
-/// Waveform indices that behave differently (see `lyra_dsp::fm`).
+/// Waveform indices that behave differently (see `lyra_fluttersine`).
 const W_PULSE: usize = 8;
 const W_SSAW: usize = 9;
 /// Supersaw side-voice detunes, for the picture only.

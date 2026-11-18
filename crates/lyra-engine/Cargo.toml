@@ -10,4 +10,4 @@ lyra-plugin.workspace = true
 rtrb.workspace = true
 
 [dev-dependencies]
-lyra-dsp.workspace = true
+lyra-catalog.workspace = true

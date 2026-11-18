@@ -9,8 +9,8 @@
 //! * The filter is a TPT state-variable filter: stable when swept fast.
 //! * 16 voices; when all are busy, the quietest released (else oldest) voice is reused.
 
-use crate::util::*;
-use lyra_plugin::{Curve, Event, ParamGroup, ParamInfo, Plugin, ProcessContext};
+use lyra_dsp::*;
+use lyra_plugin::{Curve, Event, ParamGroup, ParamInfo, Plugin, PluginInfo, Preset, ProcessContext};
 use std::f32::consts::{FRAC_PI_4, PI, SQRT_2, TAU};
 
 const MAX_VOICES: usize = 16;
@@ -19,6 +19,140 @@ const MAX_UNISON: usize = 7;
 const CONTROL_RATE: u32 = 8;
 
 use Curve::{Exponential as Exp, Linear as Lin};
+
+/// Lyra Synth, as Lyra lists it.
+pub const PLUGINS: &[PluginInfo] = &[PluginInfo {
+    id: "lyra.synth",
+    name: "Lyra Synth",
+    melodic: true,
+    params: &SYNTH_PARAMS,
+    groups: &SYNTH_GROUPS,
+    presets: PRESETS,
+    create: || Box::new(Synth::new()),
+}];
+
+use p as s;
+
+/// Starting points: (name, the parameters that differ from the defaults).
+pub const PRESETS: &[Preset] = &[
+    (
+        "Deep Bass",
+        &[
+            (s::OCTAVE, 1.0),
+            (s::SUB, 0.55),
+            (s::CUTOFF, 240.0),
+            (s::RESO, 0.3),
+            (s::ENV_AMT, 0.45),
+            (s::F_DECAY, 0.22),
+            (s::F_SUSTAIN, 0.1),
+            (s::ATTACK, 0.002),
+            (s::DECAY, 0.3),
+            (s::SUSTAIN, 0.6),
+            (s::RELEASE, 0.07),
+            (s::KEYTRACK, 0.3),
+            (s::LEVEL, 0.9),
+        ],
+    ),
+    (
+        "Organ Bass",
+        &[
+            (s::WAVE, 1.0),
+            (s::OCTAVE, 1.0),
+            (s::SUB, 0.35),
+            (s::CUTOFF, 700.0),
+            (s::RESO, 0.1),
+            (s::ENV_AMT, 0.25),
+            (s::F_DECAY, 0.18),
+            (s::ATTACK, 0.002),
+            (s::DECAY, 0.25),
+            (s::SUSTAIN, 0.45),
+            (s::RELEASE, 0.06),
+            (s::LEVEL, 0.8),
+        ],
+    ),
+    (
+        "Chord Stab",
+        &[
+            (s::VOICES, 2.0),
+            (s::DETUNE, 0.2),
+            (s::SPREAD, 0.5),
+            (s::CUTOFF, 1300.0),
+            (s::RESO, 0.3),
+            (s::ENV_AMT, 0.5),
+            (s::F_DECAY, 0.2),
+            (s::F_SUSTAIN, 0.1),
+            (s::ATTACK, 0.002),
+            (s::DECAY, 0.35),
+            (s::SUSTAIN, 0.25),
+            (s::RELEASE, 0.2),
+            (s::LEVEL, 0.6),
+        ],
+    ),
+    (
+        "Pluck",
+        &[
+            (s::VOICES, 1.0),
+            (s::DETUNE, 0.15),
+            (s::CUTOFF, 450.0),
+            (s::RESO, 0.35),
+            (s::ENV_AMT, 0.7),
+            (s::F_DECAY, 0.16),
+            (s::F_SUSTAIN, 0.0),
+            (s::ATTACK, 0.001),
+            (s::DECAY, 0.35),
+            (s::SUSTAIN, 0.0),
+            (s::RELEASE, 0.25),
+            (s::LEVEL, 0.7),
+        ],
+    ),
+    (
+        "Supersaw Pad",
+        &[
+            (s::VOICES, 6.0),
+            (s::DETUNE, 0.45),
+            (s::SPREAD, 1.0),
+            (s::CUTOFF, 2800.0),
+            (s::RESO, 0.1),
+            (s::ENV_AMT, 0.15),
+            (s::F_DECAY, 1.5),
+            (s::F_SUSTAIN, 0.6),
+            (s::ATTACK, 0.6),
+            (s::DECAY, 1.2),
+            (s::SUSTAIN, 0.8),
+            (s::RELEASE, 1.6),
+            (s::LEVEL, 0.45),
+        ],
+    ),
+    (
+        "Square Lead",
+        &[
+            (s::WAVE, 1.0),
+            (s::VOICES, 1.0),
+            (s::DETUNE, 0.1),
+            (s::CUTOFF, 3200.0),
+            (s::RESO, 0.2),
+            (s::ENV_AMT, 0.3),
+            (s::F_DECAY, 0.4),
+            (s::SUSTAIN, 0.8),
+            (s::RELEASE, 0.15),
+            (s::LEVEL, 0.55),
+        ],
+    ),
+    (
+        "Sub",
+        &[
+            (s::WAVE, 3.0),
+            (s::OCTAVE, 1.0),
+            (s::CUTOFF, 18_000.0),
+            (s::ENV_AMT, 0.0),
+            (s::ATTACK, 0.003),
+            (s::DECAY, 0.2),
+            (s::SUSTAIN, 0.9),
+            (s::RELEASE, 0.1),
+            (s::LEVEL, 0.9),
+        ],
+    ),
+];
 
 pub mod p {
     pub const WAVE: usize = 0;
@@ -361,5 +495,78 @@ impl Plugin for Synth {
         for e in &events[next..] {
             self.handle(e.event);
         }
+    }
+}
+
+#[cfg(test)]
+mod preset_tests {
+    use super::*;
+    use lyra_plugin::{Event, TimedEvent};
+
+    fn with_preset(preset: &Preset) -> Vec<f32> {
+        let mut v = lyra_plugin::default_params(&SYNTH_PARAMS);
+        for &(i, x) in preset.1 {
+            v[i] = x;
+        }
+        v
+    }
+
+    /// Render `seconds` of audio in 256-frame blocks; `events` go in the first block.
+    fn render(p: &mut dyn Plugin, events: &[TimedEvent], seconds: f32) -> Vec<f32> {
+        let sr = 48_000.0;
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+        let mut out = Vec::new();
+        let mut first = true;
+        while (out.len() as f32) < seconds * sr {
+            let ev = if first { events } else { &[] };
+            first = false;
+            p.process(ProcessContext { sample_rate: sr, events: ev, out_l: &mut l, out_r: &mut r });
+            out.extend(l.iter().zip(&r).map(|(a, b)| a.abs().max(b.abs())));
+        }
+        out
+    }
+
+    fn on(key: u8) -> TimedEvent {
+        TimedEvent { offset: 0, event: Event::NoteOn { key, velocity: 0.9 } }
+    }
+    fn off(key: u8) -> TimedEvent {
+        TimedEvent { offset: 0, event: Event::NoteOff { key } }
+    }
+
+    #[test]
+    fn every_preset_plays_a_chord_and_falls_silent() {
+        for preset in PRESETS {
+            let (name, _) = *preset;
+            let mut synth = Synth::new();
+            for (i, v) in with_preset(preset).into_iter().enumerate() {
+                synth.set_param(i as u32, v);
+            }
+            synth.activate(48_000.0);
+            let chord = [57, 60, 64, 67];
+            let held = render(&mut synth, &chord.map(on), 0.6);
+            let tail = render(&mut synth, &chord.map(off), 4.0);
+            let peak = held.iter().chain(&tail).fold(0.0f32, |m, x| m.max(*x));
+            assert!(held.iter().chain(&tail).all(|x| x.is_finite()), "{name}: NaN/inf");
+            assert!(peak > 0.02 && peak < 1.6, "{name}: peak {peak}");
+            let end = tail[tail.len() - 4800..].iter().fold(0.0f32, |m, x| m.max(*x));
+            assert!(end < 1e-3, "{name}: still sounding after release ({end})");
+            println!("{name:13} peak {peak:.2}");
+        }
+    }
+
+    #[test]
+    fn worst_case_cost() {
+        let pad = PRESETS.iter().find(|p| p.0 == "Supersaw Pad").unwrap();
+        let mut synth = Synth::new();
+        for (i, v) in with_preset(pad).into_iter().enumerate() {
+            synth.set_param(i as u32, v);
+        }
+        synth.activate(48_000.0);
+        let keys: Vec<TimedEvent> = (48..64).map(on).collect(); // 16 notes × 7 unison = 112 oscillators
+        let t = std::time::Instant::now();
+        render(&mut synth, &keys, 2.0);
+        let cost = t.elapsed().as_secs_f64() / 2.0;
+        println!("16-note supersaw: {:.1}% of one core (realtime = 100%)", cost * 100.0);
+        assert!(cost < if cfg!(debug_assertions) { 2.0 } else { 0.25 });
     }
 }

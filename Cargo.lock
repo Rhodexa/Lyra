@@ -1418,12 +1418,35 @@ dependencies = [
  "eframe",
  "egui",
  "hound",
- "lyra-dsp",
+ "lyra-catalog",
  "lyra-engine",
+ "lyra-fluttersine",
  "lyra-model",
  "lyra-plugin",
+ "lyra-sampler",
+ "lyra-synth",
  "png",
  "rfd",
+]
+
+[[package]]
+name = "lyra-catalog"
+version = "0.1.0"
+dependencies = [
+ "lyra-drums",
+ "lyra-effects",
+ "lyra-fluttersine",
+ "lyra-plugin",
+ "lyra-sampler",
+ "lyra-synth",
+]
+
+[[package]]
+name = "lyra-drums"
+version = "0.1.0"
+dependencies = [
+ "lyra-dsp",
+ "lyra-plugin",
 ]
 
 [[package]]
@@ -1434,12 +1457,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "lyra-engine"
+name = "lyra-effects"
 version = "0.1.0"
 dependencies = [
  "lyra-dsp",
  "lyra-plugin",
+]
+
+[[package]]
+name = "lyra-engine"
+version = "0.1.0"
+dependencies = [
+ "lyra-catalog",
+ "lyra-plugin",
  "rtrb",
+]
+
+[[package]]
+name = "lyra-fluttersine"
+version = "0.1.0"
+dependencies = [
+ "lyra-dsp",
+ "lyra-plugin",
 ]
 
 [[package]]
@@ -1453,6 +1492,22 @@ dependencies = [
 [[package]]
 name = "lyra-plugin"
 version = "0.1.0"
+
+[[package]]
+name = "lyra-sampler"
+version = "0.1.0"
+dependencies = [
+ "lyra-dsp",
+ "lyra-plugin",
+]
+
+[[package]]
+name = "lyra-synth"
+version = "0.1.0"
+dependencies = [
+ "lyra-dsp",
+ "lyra-plugin",
+]
 
 [[package]]
 name = "mach2"

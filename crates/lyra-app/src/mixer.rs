@@ -366,7 +366,7 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
                     None => {}
                 }
                 led.on_hover_text("On / bypass");
-                let name = lyra_dsp::effects::info(&s.effect).map_or("Missing effect", |e| e.name);
+                let name = lyra_catalog::effects::info(&s.effect).map_or("Missing effect", |e| e.name);
                 let fill = if open || resp.hovered() {
                     theme::PANEL_HI
                 } else {
@@ -485,7 +485,8 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
         Some(SlotAction::Put(i, id)) => {
             h.checkpoint(p);
             let fx = &mut p.mixer[t].effects;
-            let slot = EffectSlot { effect: id.into(), params: lyra_dsp::effects::default_params(id), bypass: false };
+            let slot =
+                EffectSlot { effect: id.into(), params: lyra_catalog::effects::default_params(id), bypass: false };
             if i < fx.len() {
                 fx[i] = slot;
             } else {
@@ -538,7 +539,7 @@ enum SlotAction {
 /// Every built-in effect, once. Returns the id picked.
 fn effect_menu(ui: &mut Ui) -> Option<&'static str> {
     let mut picked = None;
-    for e in lyra_dsp::effects::EFFECTS {
+    for e in lyra_catalog::effects::all() {
         if ui.button(e.name).clicked() {
             picked = Some(e.id);
         }
@@ -559,7 +560,7 @@ pub fn effect_editor(ui: &mut Ui, p: &mut Project, h: &mut History, t: usize, i:
         ui.label(RichText::new(format!("slot {}", i + 1)).small().color(theme::TEXT_DIM));
     });
     ui.add_space(4.0);
-    let infos = lyra_dsp::effects::params(&slot.effect);
+    let infos = lyra_catalog::effects::params(&slot.effect);
     let cell = vec2(m.knob_large + 30.0, m.knob_large + 2.0 * m.text_small + 14.0);
     egui::Grid::new(("fx-grid", t, i)).spacing(vec2(4.0, 6.0)).show(ui, |ui| {
         for (k, info) in infos.iter().enumerate() {

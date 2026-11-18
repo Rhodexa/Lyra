@@ -197,7 +197,7 @@ impl PianoRoll {
     pub fn action(&mut self, a: Action, p: &mut Project, h: &mut History, pat: usize, ch: usize) -> bool {
         let id = p.channels[ch].id;
         let len = p.patterns[pat].notes(id).len();
-        let melodic = lyra_dsp::info(&p.channels[ch].instrument).is_some_and(|i| i.melodic);
+        let melodic = lyra_catalog::info(&p.channels[ch].instrument).is_some_and(|i| i.melodic);
         self.sanitize(pat, id, len, melodic);
         let snap = self.snap;
         match a {
@@ -290,7 +290,7 @@ impl PianoRoll {
     ) {
         let ch_id = p.channels[ch].id;
         let color = theme::channel_color(p.channels[ch].color);
-        let melodic = lyra_dsp::info(&p.channels[ch].instrument).is_some_and(|i| i.melodic);
+        let melodic = lyra_catalog::info(&p.channels[ch].instrument).is_some_and(|i| i.melodic);
         self.sanitize(pat, ch_id, p.patterns[pat].notes(ch_id).len(), melodic);
         self.playing = playing;
         self.playhead = playhead;
@@ -381,7 +381,7 @@ impl PianoRoll {
             if grid.contains(pos) && hit(&view, p.patterns[pat].notes(ch_id), pos).is_none() {
                 let ghost_owner = p.channels.iter().enumerate().find(|(i, c)| {
                     *i != ch
-                        && lyra_dsp::info(&c.instrument).is_some_and(|inst| inst.melodic)
+                        && lyra_catalog::info(&c.instrument).is_some_and(|inst| inst.melodic)
                         && hit(&view, p.patterns[pat].notes(c.id), pos).is_some()
                 });
                 if let Some((i, _)) = ghost_owner {
@@ -886,7 +886,7 @@ impl PianoRoll {
         if self.show_ghosts {
             // Ghosts: other melodic channels' notes, so you can write around them.
             for (other_i, other) in p.channels.iter().enumerate() {
-                let melodic = lyra_dsp::info(&other.instrument).is_some_and(|i| i.melodic);
+                let melodic = lyra_catalog::info(&other.instrument).is_some_and(|i| i.melodic);
                 if other_i == ch || !melodic {
                     continue;
                 }

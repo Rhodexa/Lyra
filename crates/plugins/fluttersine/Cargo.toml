@@ -1,0 +1,10 @@
+[package]
+name = "lyra-fluttersine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Fluttersine: Lyra's six-operator FM synth."
+
+[dependencies]
+lyra-plugin.workspace = true
+lyra-dsp.workspace = true

@@ -1,0 +1,10 @@
+[package]
+name = "lyra-drums"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Lyra's synthesized drums: kick, snare, clap, hi-hat."
+
+[dependencies]
+lyra-plugin.workspace = true
+lyra-dsp.workspace = true

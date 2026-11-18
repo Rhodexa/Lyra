@@ -34,6 +34,28 @@ pub struct TimedEvent {
     pub event: Event,
 }
 
+/// A plugin as Lyra lists it: everything known about it before making one.
+/// Each plugin crate exports its own entries (`PLUGINS`); `lyra-catalog`
+/// gathers them.
+pub struct PluginInfo {
+    /// Stable id saved in project files. Never rename one.
+    pub id: &'static str,
+    pub name: &'static str,
+    /// Instruments: melodic ones live in the piano roll, the others (drums)
+    /// play one-shots. Effects: false.
+    pub melodic: bool,
+    pub params: &'static [ParamInfo],
+    /// Editor layout (empty = one flat group).
+    pub groups: &'static [ParamGroup],
+    pub presets: &'static [Preset],
+    /// Makes one. UI thread only (it allocates).
+    pub create: fn() -> Box<dyn Plugin>,
+}
+
+/// A named starting point: its name, and the parameters (id, value) that
+/// differ from the defaults.
+pub type Preset = (&'static str, &'static [(usize, f32)]);
+
 /// Decibels to a linear gain (0 dB = 1).
 pub fn db_to_gain(db: f32) -> f32 {
     10f32.powf(db / 20.0)
