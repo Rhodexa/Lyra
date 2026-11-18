@@ -63,11 +63,6 @@ pub fn fade_gain(end: End, x: f32, x0: f32, x1: f32, tension: f32) -> f32 {
     }
 }
 
-/// Decibels to a linear gain.
-pub fn db(db: f32) -> f32 {
-    10f32.powf(db / 20.0)
-}
-
 /// What an audio clip's *source* fades do at file second `t`: they sit at
 /// its trim points, in the file (see `lyra_model::Audio`).
 pub fn source_gain(a: &lyra_model::Audio, t: f64) -> f32 {

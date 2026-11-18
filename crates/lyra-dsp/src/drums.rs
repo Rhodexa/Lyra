@@ -15,7 +15,7 @@ use Curve::{Exponential as Exp, Linear as Lin};
 
 // ───────────────────────────────── Kick ─────────────────────────────────
 
-static KICK_PARAMS: [ParamInfo; 7] = [
+pub(crate) static KICK_PARAMS: [ParamInfo; 7] = [
     ParamInfo::new(0, "Tune", 30.0, 120.0, 48.0, "Hz", Exp),
     ParamInfo::new(1, "Punch", 1.0, 10.0, 5.0, "", Lin),
     ParamInfo::new(2, "Sweep", 0.005, 0.2, 0.04, "s", Exp),
@@ -132,7 +132,7 @@ impl Plugin for Kick {
 
 // ───────────────────────────────── Snare ────────────────────────────────
 
-static SNARE_PARAMS: [ParamInfo; 6] = [
+pub(crate) static SNARE_PARAMS: [ParamInfo; 6] = [
     ParamInfo::new(0, "Tune", 120.0, 400.0, 190.0, "Hz", Exp),
     ParamInfo::new(1, "Body", 0.02, 0.4, 0.12, "s", Exp),
     ParamInfo::new(2, "Snap", 0.0, 1.0, 0.7, "%", Lin),
@@ -249,7 +249,7 @@ impl Plugin for Snare {
 
 // ───────────────────────────────── Clap ─────────────────────────────────
 
-static CLAP_PARAMS: [ParamInfo; 4] = [
+pub(crate) static CLAP_PARAMS: [ParamInfo; 4] = [
     ParamInfo::new(0, "Tone", 600.0, 4000.0, 1300.0, "Hz", Exp),
     ParamInfo::new(1, "Spread", 0.005, 0.03, 0.011, "s", Exp),
     ParamInfo::new(2, "Decay", 0.05, 1.0, 0.22, "s", Exp),
@@ -364,7 +364,7 @@ impl Plugin for Clap {
 
 // ───────────────────────────────── Hi-hat ───────────────────────────────
 
-static HAT_PARAMS: [ParamInfo; 5] = [
+pub(crate) static HAT_PARAMS: [ParamInfo; 5] = [
     ParamInfo::new(0, "Tune", 30.0, 80.0, 40.0, "Hz", Exp),
     ParamInfo::new(1, "Decay", 0.015, 1.5, 0.06, "s", Exp),
     ParamInfo::new(2, "Tone", 2000.0, 12000.0, 7000.0, "Hz", Exp),

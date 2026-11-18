@@ -48,8 +48,8 @@ pub struct Channel {
     pub params: Vec<f32>,
     pub volume: f32,
     pub pan: f32,
+    /// Solo is FL-style: it mutes the other channels, so mutes are the whole truth.
     pub mute: bool,
-    pub solo: bool,
     /// 0 = none. Channels in the same group cut each other off.
     pub choke: u8,
     /// Index into the theme's channel palette.
@@ -429,7 +429,6 @@ impl Project {
             volume: 0.8,
             pan: 0.0,
             mute: false,
-            solo: false,
             choke: 0,
             color,
             mixer,
@@ -527,11 +526,6 @@ impl Project {
         let end = self.clips.iter().map(Clip::end).max().unwrap_or(0);
         end.div_ceil(TICKS_PER_BAR).max(1) * TICKS_PER_BAR
     }
-
-    /// True when any channel is soloed — then only soloed channels are heard.
-    pub fn any_solo(&self) -> bool {
-        self.channels.iter().any(|c| c.solo)
-    }
 }
 
 /// Snapshot undo: simple and bulletproof for now. (Projects are small; when
@@ -545,8 +539,13 @@ pub struct History {
 impl History {
     const LIMIT: usize = 200;
 
-    /// Call *before* changing the project.
+    /// Call *before* changing the project. A checkpoint identical to the last
+    /// one is skipped (a gesture that changed nothing leaves no undo step,
+    /// and doesn't throw away redo either).
     pub fn checkpoint(&mut self, project: &Project) {
+        if self.past.last() == Some(project) {
+            return;
+        }
         self.past.push(project.clone());
         if self.past.len() > Self::LIMIT {
             self.past.remove(0);
@@ -555,6 +554,11 @@ impl History {
     }
 
     pub fn undo(&mut self, project: &mut Project) -> bool {
+        // The last checkpoint can equal the project when the gesture after it
+        // changed nothing: undo goes past it, so every undo does something.
+        while self.past.last() == Some(project) {
+            self.past.pop();
+        }
         match self.past.pop() {
             Some(prev) => {
                 self.future.push(std::mem::replace(project, prev));
@@ -636,6 +640,22 @@ mod tests {
         // One beat at 120 bpm is half a second.
         proj.bpm = 120.0;
         assert!((proj.seconds_per_tick() * (TICKS_PER_STEP * 4) as f64 - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn gestures_that_change_nothing_leave_no_undo_step() {
+        let mut proj = Project::default();
+        let mut h = History::default();
+        h.checkpoint(&proj);
+        proj.bpm = 128.0;
+        h.checkpoint(&proj); // a click that changed nothing...
+        h.checkpoint(&proj); // ...and another
+        assert!(h.undo(&mut proj));
+        assert_eq!(proj.bpm, 124.0, "one undo goes back past the no-ops");
+        assert!(!h.undo(&mut proj));
+        assert!(h.redo(&mut proj));
+        h.checkpoint(&proj); // a no-op after redo keeps nothing broken
+        assert_eq!(proj.bpm, 128.0);
     }
 
     #[test]

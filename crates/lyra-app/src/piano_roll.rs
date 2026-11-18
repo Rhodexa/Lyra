@@ -25,7 +25,7 @@
 
 use crate::keys::Action;
 use crate::theme::{self, cr, stroke};
-use crate::timeline::{self, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag};
+use crate::timeline::{self, Input, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag, Wheel};
 use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, StrokeKind, Ui};
 use lyra_model::{theory, ChannelId, Chord, History, Note, Project, Scale, TICKS_PER_BAR, TICKS_PER_STEP};
 
@@ -166,10 +166,6 @@ fn edge_hit(view: &View, notes: &[Note], pos: Pos2) -> Option<usize> {
     })
 }
 
-fn snap_ticks(raw: f32, snap: u32) -> f32 {
-    (raw / snap as f32).round() * snap as f32
-}
-
 impl PianoRoll {
     /// Scroll so the channel's notes are in view (called when the roll opens).
     pub fn frame_notes(&mut self, notes: &[Note]) {
@@ -255,7 +251,7 @@ impl PianoRoll {
                 let all: Vec<usize> = (0..notes.len()).collect();
                 let targets = if self.selection.is_empty() { &all } else { &self.selection };
                 for &i in targets {
-                    notes[i].start = snap_ticks(notes[i].start as f32, snap) as u32;
+                    notes[i].start = timeline::snap(notes[i].start as f32, snap) as u32;
                 }
             }
             Action::Arrow { dx, dy, big } if !self.selection.is_empty() => {
@@ -319,20 +315,18 @@ impl PianoRoll {
         let vel = Rect::from_min_max(pos2(grid.left(), grid.bottom() + 3.0), pos2(right, rect.bottom()));
         let vbar = VBar { rect: Rect::from_min_max(pos2(right + 2.0, grid.top()), pos2(rect.right(), grid.bottom())) };
 
-        let (pos, pressed_p, pressed_s, pressed_m, double_r, down, mods, wheel, zoom) = ui.input(|i| {
-            (
-                i.pointer.interact_pos(),
-                i.pointer.primary_pressed(),
-                i.pointer.secondary_pressed(),
-                i.pointer.button_pressed(egui::PointerButton::Middle),
-                i.pointer.button_double_clicked(egui::PointerButton::Secondary),
-                i.pointer.any_down(),
-                i.modifiers,
-                i.raw_scroll_delta,
-                i.zoom_delta(),
-            )
-        });
-        let hovering = ui.rect_contains_pointer(rect) && !crate::app::on_panel_edge(ui.ctx());
+        let input = timeline::Input::read(ui, rect);
+        let Input {
+            pos,
+            pressed: pressed_p,
+            pressed_right: pressed_s,
+            pressed_middle: pressed_m,
+            down,
+            mods,
+            hovering,
+            ..
+        } = input;
+        let double_r = ui.input(|i| i.pointer.button_double_clicked(egui::PointerButton::Secondary));
         let pattern_ticks = (p.patterns[pat].play_length() * TICKS_PER_STEP) as f32;
         let overview = Overview { rect: overview_r, area: grid, content: pattern_ticks };
         let over_bars = pos.is_some_and(|p| overview_r.contains(p) || vbar.rect.contains(p));
@@ -341,51 +335,39 @@ impl PianoRoll {
         if hovering && over_bars {
             // Wheel over a scrollbar zooms its axis, anchored at the top-left edge.
             if pos.is_some_and(|p| overview_r.contains(p)) {
-                overview.wheel_zoom(&mut self.time, wheel.y, 0.08, 8.0);
+                overview.wheel_zoom(&mut self.time, input.wheel.y, 0.08, 8.0);
             } else {
                 let mut rv = self.rows(grid);
-                vbar.wheel_zoom(&mut rv, wheel.y, grid.height() / 36.0, grid.height() / 6.0);
+                vbar.wheel_zoom(&mut rv, input.wheel.y, grid.height() / 36.0, grid.height() / 6.0);
                 self.set_rows(rv, grid);
             }
         } else if hovering {
             let view = self.view(grid);
             let hovered_note =
                 pos.filter(|p| grid.contains(*p)).and_then(|pos| hit(&view, p.patterns[pat].notes(ch_id), pos));
-            let vertical = wheel.y;
-            // egui turns Shift+wheel into sideways scroll, so with a modifier the
-            // wheel's amount is whichever axis it arrived on.
-            let amount = wheel.x + wheel.y;
-            let _ = zoom; // Ctrl+wheel is sideways scrolling now (raw delta below)
-            let over_ruler = pos.is_some_and(|p| ruler.contains(p));
-            if (mods.shift || over_ruler) && amount != 0.0 {
-                // Shift+wheel, or the wheel over the ruler: zoom time around the mouse.
-                self.zoom_time((amount * 0.004).exp(), pos.map_or(grid.left(), |p| p.x), grid);
-            } else if mods.command && amount != 0.0 {
-                // Ctrl+wheel: sideways.
-                self.time.scroll -= amount / self.time.ppt;
-            } else if vertical != 0.0 && mods.alt {
-                // Alt+wheel: pitch zoom, keeping the key under the mouse in place.
-                if let Some(pos) = pos {
-                    let anchor = self.view_top - (pos.y - grid.top()) / self.row_h;
-                    self.row_h = (self.row_h * (vertical * 0.004).exp()).clamp(6.0, 36.0);
-                    self.view_top = anchor + (pos.y - grid.top()) / self.row_h;
+            match timeline::wheel(&input, ruler) {
+                Wheel::ZoomTime { factor, at } => self.zoom_time(factor, at, grid),
+                Wheel::ZoomRows { factor, at } => {
+                    // Pitch zoom, keeping the key under the mouse in place.
+                    let anchor = self.view_top - (at - grid.top()) / self.row_h;
+                    self.row_h = (self.row_h * factor).clamp(6.0, 36.0);
+                    self.view_top = anchor + (at - grid.top()) / self.row_h;
                 }
-            } else if let (Some(i), true) = (hovered_note, vertical != 0.0) {
-                // Wheel over a note: velocity (of the selection, if that note is in it).
-                h.checkpoint(p);
-                let targets = if self.selection.contains(&i) { self.selection.clone() } else { vec![i] };
-                let notes = p.patterns[pat].notes_mut(ch_id);
-                for t in targets {
-                    notes[t].velocity = (notes[t].velocity + vertical.signum() * 0.05).clamp(0.05, 1.0);
+                Wheel::Scroll { y, .. } if y != 0.0 && hovered_note.is_some() && !mods.command => {
+                    // Wheel over a note: velocity (of the selection, if that note is in it).
+                    let i = hovered_note.unwrap_or(0);
+                    h.checkpoint(p);
+                    let targets = if self.selection.contains(&i) { self.selection.clone() } else { vec![i] };
+                    let notes = p.patterns[pat].notes_mut(ch_id);
+                    for t in targets {
+                        notes[t].velocity = (notes[t].velocity - y.signum() * 0.05).clamp(0.05, 1.0);
+                    }
                 }
-            } else {
-                // Plain wheel: up and down. A touchpad's sideways swipe: sideways.
-                if wheel.x != 0.0 {
-                    self.time.scroll -= wheel.x / self.time.ppt;
+                Wheel::Scroll { x, y } => {
+                    self.time.scroll += x / self.time.ppt;
+                    self.view_top -= y / self.row_h; // rows count down from the top key
                 }
-                if vertical != 0.0 {
-                    self.view_top += vertical / self.row_h * 0.5;
-                }
+                Wheel::None => {}
             }
         }
         let rows = grid.height() / self.row_h;
@@ -444,9 +426,7 @@ impl PianoRoll {
                 let horizontal = matches!(self.drag, Drag::Move { .. } | Drag::Resize { .. } | Drag::Select { .. });
                 let vertical = matches!(self.drag, Drag::Move { .. } | Drag::Select { .. });
                 if horizontal {
-                    let dt = ui.input(|i| i.stable_dt);
-                    let dx = timeline::edge_pan(pos.x, grid.left(), grid.right(), dt);
-                    let dy = if vertical { timeline::edge_pan(pos.y, grid.top(), grid.bottom(), dt) } else { 0.0 };
+                    let egui::Vec2 { x: dx, y: dy } = timeline::edge_pan_2d(pos, grid, input.dt, vertical);
                     if dx != 0.0 || dy != 0.0 {
                         let (scroll0, top0) = (self.time.scroll, self.view_top);
                         self.time.scroll = (self.time.scroll + dx / self.time.ppt).max(0.0);
@@ -498,9 +478,7 @@ impl PianoRoll {
         self.paint_grid(&painter, &view, pattern_ticks, scale, root);
         self.paint_notes(&painter, &view, p, pat, ch, color, playing.then_some(playhead));
         if let (Drag::Select { from, .. }, Some(pos)) = (&self.drag, pos) {
-            let r = Rect::from_two_pos(*from, pos);
-            painter.rect_filled(r, cr(0), theme::MINT.gamma_multiply(0.07));
-            painter.rect_stroke(r, cr(0), stroke(1.0, theme::MINT.gamma_multiply(0.7)), StrokeKind::Inside);
+            timeline::paint_rubber_band(&painter, *from, pos);
         }
         overview.paint(&painter, &self.time, matches!(self.drag, Drag::Overview(_)));
         // A tiny silhouette of the channel's notes, so you can see where things are.
@@ -763,7 +741,7 @@ impl PianoRoll {
                 let snap = if *free { 1 } else { self.snap };
                 let lead_note = &originals[*lead].1;
                 let raw = lead_note.start as f32 + (view.tick(pos.x) - *anchor_tick);
-                let snapped = snap_ticks(raw, snap).max(0.0);
+                let snapped = timeline::snap(raw, snap).max(0.0);
                 let min_start = originals.iter().map(|(_, n)| n.start).min().unwrap_or(0) as i64;
                 let dt = (snapped as i64 - lead_note.start as i64).max(-min_start);
                 let (lo, hi) = originals
@@ -784,7 +762,7 @@ impl PianoRoll {
                 let snap = if *free { 1 } else { self.snap };
                 let lead_note = &originals[*lead].1;
                 let raw = lead_note.len as f32 + (view.tick(pos.x) - *anchor_tick);
-                let new_len = snap_ticks(raw, snap).max(snap as f32) as i64;
+                let new_len = timeline::snap(raw, snap).max(snap as f32) as i64;
                 let dl = new_len - lead_note.len as i64;
                 for (i, n) in originals.iter() {
                     if let Some(note) = notes.get_mut(*i) {

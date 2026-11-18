@@ -8,7 +8,7 @@
 
 use crate::app::UiState;
 use crate::rack::tracked;
-use crate::theme::{self, cr};
+use crate::theme::{self, cr, hex};
 use crate::widgets;
 use egui::{pos2, vec2, Align2, Color32, Rect, RichText, Sense, Ui};
 use lyra_model::{EffectSlot, History, Project};
@@ -76,10 +76,6 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
             });
         });
     });
-}
-
-fn hex(v: u32) -> Color32 {
-    Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8)
 }
 
 /// One channel strip: fader and stereo meter on top; below, the vertical
@@ -279,7 +275,7 @@ fn db_text(v: f32) -> String {
     if v <= 0.0001 {
         "-inf dB".into()
     } else {
-        format!("{:+.1} dB", 20.0 * v.log10())
+        format!("{:+.1} dB", lyra_plugin::gain_to_db(v))
     }
 }
 

@@ -365,7 +365,8 @@ pub struct Light {
     pub rim: Color32,
 }
 
-const fn hex(v: u32) -> Color32 {
+/// A colour from 0xRRGGBB.
+pub const fn hex(v: u32) -> Color32 {
     Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8)
 }
 

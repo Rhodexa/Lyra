@@ -17,19 +17,23 @@ use std::f32::consts::{PI, TAU};
 
 use Curve::{Exponential as Exp, Linear as Lin};
 
+/// A built-in effect: the one place that lists it.
 pub struct EffectInfo {
     /// Stable id saved in project files. Never rename one.
     pub id: &'static str,
     pub name: &'static str,
+    pub params: &'static [ParamInfo],
+    /// Makes one. UI thread only (it allocates).
+    pub create: fn() -> Box<dyn Plugin>,
 }
 
 pub const EFFECTS: &[EffectInfo] = &[
-    EffectInfo { id: "lyra.eq", name: "EQ" },
-    EffectInfo { id: "lyra.filter", name: "Filter" },
-    EffectInfo { id: "lyra.comp", name: "Compressor" },
-    EffectInfo { id: "lyra.delay", name: "Delay" },
-    EffectInfo { id: "lyra.reverb", name: "Reverb" },
-    EffectInfo { id: "lyra.pump", name: "Pump" },
+    EffectInfo { id: "lyra.eq", name: "EQ", params: &EQ_PARAMS, create: || Box::new(Eq::new()) },
+    EffectInfo { id: "lyra.filter", name: "Filter", params: &FILTER_PARAMS, create: || Box::new(Filter::new()) },
+    EffectInfo { id: "lyra.comp", name: "Compressor", params: &COMP_PARAMS, create: || Box::new(Comp::new()) },
+    EffectInfo { id: "lyra.delay", name: "Delay", params: &DELAY_PARAMS, create: || Box::new(Delay::new()) },
+    EffectInfo { id: "lyra.reverb", name: "Reverb", params: &REVERB_PARAMS, create: || Box::new(Reverb::new()) },
+    EffectInfo { id: "lyra.pump", name: "Pump", params: &PUMP_PARAMS, create: || Box::new(Pump::new()) },
 ];
 
 pub fn info(id: &str) -> Option<&'static EffectInfo> {
@@ -38,28 +42,12 @@ pub fn info(id: &str) -> Option<&'static EffectInfo> {
 
 /// Build an effect by id. UI thread (it allocates).
 pub fn create(id: &str) -> Option<Box<dyn Plugin>> {
-    Some(match id {
-        "lyra.eq" => Box::new(Eq::new()),
-        "lyra.filter" => Box::new(Filter::new()),
-        "lyra.comp" => Box::new(Comp::new()),
-        "lyra.delay" => Box::new(Delay::new()),
-        "lyra.reverb" => Box::new(Reverb::new()),
-        "lyra.pump" => Box::new(Pump::new()),
-        _ => return None,
-    })
+    info(id).map(|e| (e.create)())
 }
 
-/// Parameter table for an effect id — static, no instance needed.
+/// Parameter table for an effect id.
 pub fn params(id: &str) -> &'static [ParamInfo] {
-    match id {
-        "lyra.eq" => &EQ_PARAMS,
-        "lyra.filter" => &FILTER_PARAMS,
-        "lyra.comp" => &COMP_PARAMS,
-        "lyra.delay" => &DELAY_PARAMS,
-        "lyra.reverb" => &REVERB_PARAMS,
-        "lyra.pump" => &PUMP_PARAMS,
-        _ => &[],
-    }
+    info(id).map_or(&[], |e| e.params)
 }
 
 pub fn default_params(id: &str) -> Vec<f32> {
@@ -67,7 +55,7 @@ pub fn default_params(id: &str) -> Vec<f32> {
 }
 
 fn db(v: f32) -> f32 {
-    10f32.powf(v / 20.0)
+    lyra_plugin::db_to_gain(v)
 }
 
 /// Shared boilerplate: parameter storage + the Plugin methods that don't vary.
@@ -180,7 +168,7 @@ pub struct Eq {
 impl Eq {
     fn new() -> Self {
         Self {
-            p: default_params("lyra.eq"),
+            p: lyra_plugin::default_params(&EQ_PARAMS),
             sr: 48_000.0,
             dirty: true,
             cut: [Biquad::default(); 2],
@@ -232,7 +220,13 @@ pub struct Filter {
 
 impl Filter {
     fn new() -> Self {
-        Self { p: default_params("lyra.filter"), sr: 48_000.0, dirty: true, cutoff: 20_000.0, s: [[0.0; 2]; 2] }
+        Self {
+            p: lyra_plugin::default_params(&FILTER_PARAMS),
+            sr: 48_000.0,
+            dirty: true,
+            cutoff: 20_000.0,
+            s: [[0.0; 2]; 2],
+        }
     }
     fn prepare(&mut self) {}
     fn update(&mut self) {}
@@ -281,7 +275,7 @@ pub struct Comp {
 
 impl Comp {
     fn new() -> Self {
-        Self { p: default_params("lyra.comp"), sr: 48_000.0, dirty: true, env: 0.0, att: 0.0, rel: 0.0 }
+        Self { p: lyra_plugin::default_params(&COMP_PARAMS), sr: 48_000.0, dirty: true, env: 0.0, att: 0.0, rel: 0.0 }
     }
     fn prepare(&mut self) {}
     fn update(&mut self) {
@@ -331,7 +325,7 @@ pub struct Delay {
 impl Delay {
     fn new() -> Self {
         Self {
-            p: default_params("lyra.delay"),
+            p: lyra_plugin::default_params(&DELAY_PARAMS),
             sr: 48_000.0,
             dirty: true,
             buf: [Vec::new(), Vec::new()],
@@ -433,7 +427,7 @@ pub struct Reverb {
 impl Reverb {
     fn new() -> Self {
         Self {
-            p: default_params("lyra.reverb"),
+            p: lyra_plugin::default_params(&REVERB_PARAMS),
             sr: 48_000.0,
             dirty: true,
             combs: [Vec::new(), Vec::new()],
@@ -509,7 +503,7 @@ pub struct Pump {
 
 impl Pump {
     fn new() -> Self {
-        Self { p: default_params("lyra.pump"), sr: 48_000.0, dirty: true, t: Transport::default(), gain: 1.0 }
+        Self { p: lyra_plugin::default_params(&PUMP_PARAMS), sr: 48_000.0, dirty: true, t: Transport::default(), gain: 1.0 }
     }
     fn prepare(&mut self) {}
     fn update(&mut self) {}

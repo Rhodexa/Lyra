@@ -20,6 +20,7 @@ use crate::keys::Action;
 use crate::rack::tracked;
 use crate::samples::{Peaks, Samples};
 use crate::theme::{self, cr, stroke};
+use crate::timeline::{self, Wheel};
 use crate::waveform::{self, End};
 use crate::widgets;
 use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, Sense, Ui};
@@ -164,17 +165,11 @@ impl AudioEditor {
         let a = &p.audio[i];
         let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
         ui.painter().circle_filled(r.center(), 4.0, theme::channel_color(a.color));
-        let mut name = a.name.clone();
-        let edit = ui.add(egui::TextEdit::singleline(&mut name).desired_width(160.0));
-        if edit.changed() {
-            if edit.gained_focus() || !ui.data(|d| d.get_temp::<bool>(edit.id).unwrap_or(false)) {
+        if let Some(r) = widgets::name_field(ui, &a.name, 160.0) {
+            if r.first {
                 h.checkpoint(p);
-                ui.data_mut(|d| d.insert_temp(edit.id, true));
             }
-            p.audio[i].name = name;
-        }
-        if edit.lost_focus() {
-            ui.data_mut(|d| d.insert_temp(edit.id, false));
+            p.audio[i].name = r.text;
         }
         let id = p.audio[i].id;
         let copies = p.clips.iter().filter(|c| c.source == Source::Audio(id)).count();
@@ -283,34 +278,21 @@ impl AudioEditor {
         let min_pps = wave.width() as f64 / (file_secs * 4.0).max(0.01);
         let max_pps = peaks.sample_rate() as f64 * 4.0; // four points per sample
 
-        let (pos, pressed_p, pressed_m, down, mods, wheel) = ui.input(|i| {
-            (
-                i.pointer.interact_pos(),
-                i.pointer.primary_pressed(),
-                i.pointer.button_pressed(egui::PointerButton::Middle),
-                i.pointer.any_down(),
-                i.modifiers,
-                i.raw_scroll_delta,
-            )
-        });
-        let hovering = ui.rect_contains_pointer(canvas) && !crate::app::on_panel_edge(ui.ctx());
+        let input = timeline::Input::read(ui, canvas);
+        let timeline::Input { pos, pressed: pressed_p, pressed_middle: pressed_m, down, hovering, .. } = input;
 
-        // ── Wheel ──
+        // ── Wheel ── (the shared scheme; Alt, the "rows" zoom, is the waveform's height)
         if hovering {
-            let amount = wheel.x + wheel.y;
-            let over_ruler = pos.is_some_and(|p| ruler.contains(p));
-            if (mods.shift || over_ruler) && amount != 0.0 {
-                let at = pos.map_or(wave.left(), |p| p.x);
-                let v = View { wave, scroll: self.scroll, pps: self.pps };
-                let anchor = v.secs(at);
-                self.pps = (self.pps * (amount as f64 * 0.004).exp()).clamp(min_pps, max_pps);
-                self.scroll = anchor - (at - wave.left()) as f64 / self.pps;
-            } else if mods.command && amount != 0.0 {
-                self.scroll -= amount as f64 / self.pps;
-            } else if mods.alt && wheel.y != 0.0 {
-                self.vzoom = (self.vzoom * (wheel.y * 0.004).exp()).clamp(0.25, 16.0);
-            } else if wheel.x != 0.0 {
-                self.scroll -= wheel.x as f64 / self.pps;
+            match timeline::wheel(&input, ruler) {
+                Wheel::ZoomTime { factor, at } => {
+                    let v = View { wave, scroll: self.scroll, pps: self.pps };
+                    let anchor = v.secs(at);
+                    self.pps = (self.pps * factor as f64).clamp(min_pps, max_pps);
+                    self.scroll = anchor - (at - wave.left()) as f64 / self.pps;
+                }
+                Wheel::ZoomRows { factor, .. } => self.vzoom = (self.vzoom * factor).clamp(0.25, 16.0),
+                Wheel::Scroll { x, .. } => self.scroll += x as f64 / self.pps,
+                Wheel::None => {}
             }
         }
         let visible = wave.width() as f64 / self.pps;
@@ -417,7 +399,7 @@ impl AudioEditor {
         painter.rect_filled(trim.intersect(wave), cr(0), theme::mix(theme::PANEL, light.low, 0.24));
         painter.hline(wave.x_range(), wave.center().y, stroke(1.0, Color32::from_black_alpha(80)));
         let sr = peaks.sample_rate() as f64;
-        let gain = waveform::db(a.gain);
+        let gain = lyra_plugin::db_to_gain(a.gain);
         let column = |x: f32| (v.secs(x) * sr, v.secs(x + 1.0) * sr);
         // The whole file dim, then the part that plays, shaped by gain and fades.
         paint_wave(&painter, wave, &peaks, theme::TEXT_DIM.gamma_multiply(0.45), self.vzoom, |x| {
@@ -460,13 +442,7 @@ impl AudioEditor {
         if let Some(t) = playhead.and_then(|ph| file_position(p, id, ph, spt)) {
             let x = v.x(t);
             if wave.x_range().contains(x) {
-                painter.vline(x, wave.y_range(), stroke(1.0, theme::MINT));
-                let tri = vec![
-                    pos2(x - 5.0, ruler.top() + 2.0),
-                    pos2(x + 5.0, ruler.top() + 2.0),
-                    pos2(x, ruler.bottom() - 2.0),
-                ];
-                painter.add(egui::Shape::convex_polygon(tri, theme::MINT, egui::Stroke::NONE));
+                timeline::paint_playhead(&painter, x, ruler, wave.y_range(), true);
             }
         }
         if hovering || !matches!(self.drag, Drag::None) {

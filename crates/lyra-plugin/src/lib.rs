@@ -34,6 +34,16 @@ pub struct TimedEvent {
     pub event: Event,
 }
 
+/// Decibels to a linear gain (0 dB = 1).
+pub fn db_to_gain(db: f32) -> f32 {
+    10f32.powf(db / 20.0)
+}
+
+/// A linear gain to decibels (silence comes out as -120 dB, not -inf).
+pub fn gain_to_db(gain: f32) -> f32 {
+    20.0 * gain.max(1e-6).log10()
+}
+
 /// How a knob maps its 0..1 travel onto a parameter's range.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Curve {

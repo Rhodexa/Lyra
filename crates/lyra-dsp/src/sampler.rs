@@ -23,7 +23,7 @@ pub mod p {
     pub const MODE: usize = 7;
 }
 
-static PARAMS: [ParamInfo; 8] = [
+pub(crate) static PARAMS: [ParamInfo; 8] = [
     ParamInfo::new(0, "Gain", -24.0, 12.0, 0.0, "dB", Curve::Linear),
     ParamInfo::new(1, "Root", 24.0, 96.0, 60.0, "note", Curve::Linear),
     ParamInfo::new(2, "Tune", -24.0, 24.0, 0.0, "st", Curve::Linear),
@@ -128,7 +128,7 @@ impl Plugin for Sampler {
         let Some(sample) = self.sample.clone() else { return };
         let (left, right) = (&sample.left, &sample.right);
         let len = left.len();
-        let gain = 10f32.powf(self.p[p::GAIN] / 20.0);
+        let gain = lyra_plugin::db_to_gain(self.p[p::GAIN]);
         let attack_step = 1.0 / (self.p[p::ATTACK].max(0.0001) * self.sr);
         let hold = self.p[p::MODE].round() >= 1.0;
         let release_s = self.p[p::RELEASE];

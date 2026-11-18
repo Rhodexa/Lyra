@@ -1,6 +1,8 @@
-//! Pieces shared by the time editors (playlist, piano roll): the overview
-//! bar (drag the thumb to pan, drag its ends to zoom, wheel over it to zoom),
-//! its vertical twin for rows (`VBar`), and the bar ruler.
+//! Pieces shared by the time editors (arrangement, piano roll, audio clip):
+//! the overview bar (drag the thumb to pan, drag its ends to zoom, wheel over
+//! it to zoom), its vertical twin for rows (`VBar`), the bar ruler, and the
+//! input grammar: reading the mouse, the wheel scheme, double-clicks,
+//! snapping, edge auto-pan, the rubber band and the playhead.
 
 use crate::theme::{self, cr, stroke};
 use egui::{pos2, Align2, FontId, Painter, Pos2, Rect};
@@ -151,11 +153,7 @@ pub fn paint_ruler(painter: &Painter, v: &TimeView, ruler: Rect, end: f32, playh
     if let Some((tick, playing)) = playhead {
         let x = v.x(ruler, tick);
         if x >= ruler.left() {
-            let tri =
-                vec![pos2(x - 5.0, ruler.top() + 2.0), pos2(x + 5.0, ruler.top() + 2.0), pos2(x, ruler.bottom() - 2.0)];
-            painter.add(egui::Shape::convex_polygon(tri, theme::MINT, egui::Stroke::NONE));
-            let line = if playing { theme::MINT } else { theme::MINT.gamma_multiply(0.35) };
-            painter.vline(x, grid.y_range(), stroke(1.0, line));
+            paint_playhead(painter, x, ruler, grid.y_range(), playing);
         }
     }
 }
@@ -274,4 +272,136 @@ pub fn edge_pan(pos: f32, lo: f32, hi: f32, dt: f32) -> f32 {
         0.0
     };
     (over * 9.0).clamp(-1800.0, 1800.0) * dt.min(0.05)
+}
+
+/// The mouse as a time editor reads it, once per frame. Editors read the
+/// pointer themselves (their canvases only sense hover, so they never win
+/// egui's hit test over the docked panels' resize edges).
+#[derive(Clone, Copy)]
+pub struct Input {
+    pub pos: Option<Pos2>,
+    /// This frame's presses: left, right, middle.
+    pub pressed: bool,
+    pub pressed_right: bool,
+    pub pressed_middle: bool,
+    pub down: bool,
+    pub mods: egui::Modifiers,
+    pub wheel: egui::Vec2,
+    pub time: f64,
+    pub dt: f32,
+    /// Over the editor's canvas, and not on a docked panel's resize edge.
+    pub hovering: bool,
+}
+
+impl Input {
+    pub fn read(ui: &egui::Ui, canvas: Rect) -> Self {
+        let mut input = ui.input(|i| Self {
+            pos: i.pointer.interact_pos(),
+            pressed: i.pointer.primary_pressed(),
+            pressed_right: i.pointer.secondary_pressed(),
+            pressed_middle: i.pointer.button_pressed(egui::PointerButton::Middle),
+            down: i.pointer.any_down(),
+            mods: i.modifiers,
+            wheel: i.raw_scroll_delta,
+            time: i.time,
+            dt: i.stable_dt,
+            hovering: false,
+        });
+        input.hovering = ui.rect_contains_pointer(canvas) && !crate::app::on_panel_edge(ui.ctx());
+        input
+    }
+}
+
+/// What the wheel asks a time editor to do. The scheme lives here, once:
+/// plain = up/down (a touchpad's sideways swipe: sideways), Ctrl = sideways,
+/// Shift (or the wheel over the ruler) = zoom time around the mouse,
+/// Alt = row height around the mouse. (Wheel over a scrollbar zooms that
+/// axis: the editors check their bars first.)
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Wheel {
+    None,
+    /// Zoom time by `factor`, keeping screen-x `at` still.
+    ZoomTime {
+        factor: f32,
+        at: f32,
+    },
+    /// Zoom rows by `factor`, keeping screen-y `at` still.
+    ZoomRows {
+        factor: f32,
+        at: f32,
+    },
+    /// Move the view, in points: `x` > 0 = later, `y` > 0 = further down.
+    Scroll {
+        x: f32,
+        y: f32,
+    },
+}
+
+pub fn wheel(input: &Input, ruler: Rect) -> Wheel {
+    let w = input.wheel;
+    // egui turns Shift+wheel into sideways scroll, so with a modifier the
+    // wheel's amount is whichever axis it arrived on.
+    let amount = w.x + w.y;
+    let over_ruler = input.pos.is_some_and(|p| ruler.contains(p));
+    let at = input.pos.unwrap_or(ruler.left_top());
+    if (input.mods.shift || over_ruler) && amount != 0.0 {
+        Wheel::ZoomTime { factor: (amount * 0.004).exp(), at: at.x }
+    } else if input.mods.command && amount != 0.0 {
+        Wheel::Scroll { x: -amount, y: 0.0 }
+    } else if input.mods.alt && w.y != 0.0 {
+        Wheel::ZoomRows { factor: (w.y * 0.004).exp(), at: at.y }
+    } else if w != egui::Vec2::ZERO {
+        Wheel::Scroll { x: -w.x, y: -w.y * 0.5 }
+    } else {
+        Wheel::None
+    }
+}
+
+/// Double-clicks decided on the second *press*. egui only reports a
+/// double-click on the release, a frame or more after the press that starts
+/// an editor's gestures, so asking egui worked only when a click fit in one
+/// frame. A third press right after doesn't count again.
+#[derive(Default)]
+pub struct Clicks {
+    last: Option<(f64, Pos2)>,
+}
+
+impl Clicks {
+    /// Call every frame; true on the press that makes a double-click.
+    pub fn double(&mut self, input: &Input) -> bool {
+        if !input.pressed {
+            return false;
+        }
+        let double =
+            input.pos.is_some_and(|p| self.last.is_some_and(|(t, at)| input.time - t < 0.35 && at.distance(p) < 6.0));
+        self.last = if double { None } else { input.pos.map(|p| (input.time, p)) };
+        double
+    }
+}
+
+/// Round `raw` to the nearest multiple of `step`.
+pub fn snap(raw: f32, step: u32) -> f32 {
+    (raw / step as f32).round() * step as f32
+}
+
+/// [`edge_pan`] on both axes of `area` (`vertical` false: sideways only).
+pub fn edge_pan_2d(pos: Pos2, area: Rect, dt: f32, vertical: bool) -> egui::Vec2 {
+    let dx = edge_pan(pos.x, area.left(), area.right(), dt);
+    let dy = if vertical { edge_pan(pos.y, area.top(), area.bottom(), dt) } else { 0.0 };
+    egui::vec2(dx, dy)
+}
+
+/// The box of a Ctrl+drag selection.
+pub fn paint_rubber_band(painter: &Painter, from: Pos2, to: Pos2) {
+    let r = Rect::from_two_pos(from, to);
+    painter.rect_filled(r, cr(0), theme::MINT.gamma_multiply(0.07));
+    painter.rect_stroke(r, cr(0), stroke(1.0, theme::MINT.gamma_multiply(0.7)), egui::StrokeKind::Inside);
+}
+
+/// The playhead: a marker in the ruler and a line down `lines` (dim while stopped).
+pub fn paint_playhead(painter: &Painter, x: f32, ruler: Rect, lines: egui::Rangef, playing: bool) {
+    let tri = vec![pos2(x - 5.0, ruler.top() + 2.0), pos2(x + 5.0, ruler.top() + 2.0), pos2(x, ruler.bottom() - 2.0)];
+    painter.add(egui::Shape::convex_polygon(tri, theme::MINT, egui::Stroke::NONE));
+    let line = if playing { theme::MINT } else { theme::MINT.gamma_multiply(0.35) };
+    painter.vline(x, lines, stroke(1.0, line));
 }

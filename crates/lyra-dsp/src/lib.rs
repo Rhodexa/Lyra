@@ -12,26 +12,74 @@ pub mod synth;
 pub mod util;
 
 use lyra_plugin::{ParamGroup, ParamInfo, Plugin, ProcessContext};
+use std::collections::HashMap;
+use std::sync::OnceLock;
 
-/// A built-in instrument the user can add from the browser / "+" menu.
+/// A built-in instrument the user can add from the browser / "+" menu: the
+/// one place that lists it (a step towards a plugin registry).
 pub struct InstrumentInfo {
     /// Stable id saved in project files. Never rename one.
     pub id: &'static str,
     pub name: &'static str,
     /// Drums play one-shots on steps; melodic instruments live in the piano roll.
     pub melodic: bool,
+    pub params: &'static [ParamInfo],
+    /// Makes one. UI thread only (it allocates).
+    pub create: fn() -> Box<dyn Plugin>,
 }
 
 pub const INSTRUMENTS: &[InstrumentInfo] = &[
-    InstrumentInfo { id: "lyra.kick", name: "Kick", melodic: false },
-    InstrumentInfo { id: "lyra.snare", name: "Snare", melodic: false },
-    InstrumentInfo { id: "lyra.clap", name: "Clap", melodic: false },
-    InstrumentInfo { id: "lyra.hat", name: "Hi-hat", melodic: false },
-    InstrumentInfo { id: "lyra.synth", name: "Lyra Synth", melodic: true },
+    InstrumentInfo {
+        id: "lyra.kick",
+        name: "Kick",
+        melodic: false,
+        params: &drums::KICK_PARAMS,
+        create: || Box::new(drums::Kick::new()),
+    },
+    InstrumentInfo {
+        id: "lyra.snare",
+        name: "Snare",
+        melodic: false,
+        params: &drums::SNARE_PARAMS,
+        create: || Box::new(drums::Snare::new()),
+    },
+    InstrumentInfo {
+        id: "lyra.clap",
+        name: "Clap",
+        melodic: false,
+        params: &drums::CLAP_PARAMS,
+        create: || Box::new(drums::Clap::new()),
+    },
+    InstrumentInfo {
+        id: "lyra.hat",
+        name: "Hi-hat",
+        melodic: false,
+        params: &drums::HAT_PARAMS,
+        create: || Box::new(drums::Hat::new()),
+    },
+    InstrumentInfo {
+        id: "lyra.synth",
+        name: "Lyra Synth",
+        melodic: true,
+        params: &synth::SYNTH_PARAMS,
+        create: || Box::new(synth::Synth::new()),
+    },
     // The id stays "lyra.fm" (saved projects use it); the name is the synth's own.
-    InstrumentInfo { id: "lyra.fm", name: "Fluttersine", melodic: true },
+    InstrumentInfo {
+        id: "lyra.fm",
+        name: "Fluttersine",
+        melodic: true,
+        params: &fm::FM_PARAMS,
+        create: || Box::new(fm::Fm::new()),
+    },
     // Plays one sample (drop a sample on the plugin rack to make one).
-    InstrumentInfo { id: "lyra.sampler", name: "Sampler", melodic: false },
+    InstrumentInfo {
+        id: "lyra.sampler",
+        name: "Sampler",
+        melodic: false,
+        params: &sampler::PARAMS,
+        create: || Box::new(sampler::Sampler::new()),
+    },
 ];
 
 pub fn info(id: &str) -> Option<&'static InstrumentInfo> {
@@ -40,16 +88,15 @@ pub fn info(id: &str) -> Option<&'static InstrumentInfo> {
 
 /// Build an instrument by id. Runs on the UI thread (it allocates).
 pub fn create(id: &str) -> Option<Box<dyn Plugin>> {
-    Some(match id {
-        "lyra.kick" => Box::new(drums::Kick::new()),
-        "lyra.snare" => Box::new(drums::Snare::new()),
-        "lyra.clap" => Box::new(drums::Clap::new()),
-        "lyra.hat" => Box::new(drums::Hat::new()),
-        "lyra.synth" => Box::new(synth::Synth::new()),
-        "lyra.fm" => Box::new(fm::Fm::new()),
-        "lyra.sampler" => Box::new(sampler::Sampler::new()),
-        _ => return None,
-    })
+    info(id).map(|i| (i.create)())
+}
+
+/// Editor groups by instrument id, learned once by making one of each
+/// (some live private to their instrument). No constructor may ask for
+/// groups, or this would wait on itself.
+fn groups_table() -> &'static HashMap<&'static str, &'static [ParamGroup]> {
+    static CELL: OnceLock<HashMap<&'static str, &'static [ParamGroup]>> = OnceLock::new();
+    CELL.get_or_init(|| INSTRUMENTS.iter().map(|i| (i.id, (i.create)().groups())).collect())
 }
 
 /// Like [`create`], but an unknown id (e.g. a project from a newer Lyra)
@@ -60,12 +107,12 @@ pub fn create_or_silence(id: &str) -> Box<dyn Plugin> {
 
 /// Parameter descriptions for an instrument id (empty if unknown).
 pub fn params(id: &str) -> &'static [ParamInfo] {
-    create(id).map_or(&[], |p| p.params())
+    info(id).map_or(&[], |i| i.params)
 }
 
 /// Editor layout groups for an instrument id (empty = one flat group).
 pub fn groups(id: &str) -> &'static [ParamGroup] {
-    create(id).map_or(&[], |p| p.groups())
+    groups_table().get(id).copied().unwrap_or(&[])
 }
 
 /// Default parameter values for an instrument id (empty if unknown).
@@ -253,6 +300,19 @@ impl Plugin for Silence {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The catalog names each plugin's parameter table itself: it must be the
+    /// one the plugin really uses.
+    #[test]
+    fn catalog_tables_match_their_plugins() {
+        for i in INSTRUMENTS {
+            assert!(std::ptr::eq(i.params, (i.create)().params()), "{}", i.id);
+        }
+        for e in effects::EFFECTS {
+            assert!(std::ptr::eq(e.params, (e.create)().params()), "{}", e.id);
+        }
+        assert!(!groups("lyra.fm").is_empty() && groups("lyra.kick").is_empty());
+    }
     use lyra_plugin::{Event, TimedEvent};
 
     /// Render `seconds` of audio in 256-frame blocks; `events` go in the first block.

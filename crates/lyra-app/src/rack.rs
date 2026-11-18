@@ -85,7 +85,6 @@ fn add_channel_menu(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiSt
 fn solo(p: &mut Project, ci: usize) {
     let alone = p.channels.iter().enumerate().all(|(i, c)| (i == ci) != c.mute);
     for (i, c) in p.channels.iter_mut().enumerate() {
-        c.solo = false; // the old flag; mute flags are the whole truth now
         c.mute = !alone && i != ci;
     }
 }
@@ -140,7 +139,6 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
     if !any_down {
         st.paint = None;
     }
-    let any_solo = p.any_solo();
     let mut delete = None;
 
     // Long patterns scroll sideways instead of growing the window forever.
@@ -158,13 +156,13 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
     if steps {
         egui::ScrollArea::horizontal().min_scrolled_width(row_w.min(1000.0)).show(ui, |ui| {
             for ci in 0..p.channels.len() {
-                row(ui, p, h, st, ci, pat, play_step, any_solo, input, true, &mut delete);
+                row(ui, p, h, st, ci, pat, play_step, input, true, &mut delete);
             }
         });
     } else {
         egui::ScrollArea::vertical().id_salt("plugin-rack").auto_shrink([false, true]).show(ui, |ui| {
             for ci in 0..p.channels.len() {
-                row(ui, p, h, st, ci, pat, None, any_solo, input, false, &mut delete);
+                row(ui, p, h, st, ci, pat, None, input, false, &mut delete);
             }
         });
     }
@@ -198,7 +196,6 @@ fn row(
     ci: usize,
     pat: usize,
     play_step: Option<u32>,
-    any_solo: bool,
     (pointer, primary, secondary, wheel, shift): Input,
     steps: bool,
     delete: &mut Option<usize>,
@@ -211,18 +208,14 @@ fn row(
         // Mute lights. Press one to flip it; keep the button down and sweep over
         // others to set them the same way (one gesture, one undo step).
         let mute = p.channels[ci].mute;
-        let audible = !mute && (!any_solo || p.channels[ci].solo);
+        let audible = !mute;
         let r = widgets::led(ui, audible, light, "Click / drag: mute · Right-click: solo");
         match widgets::sweep(ui, r.rect, "rack-mute", audible) {
             Some(widgets::Sweep::Begin(on)) => {
                 h.checkpoint(p);
                 p.channels[ci].mute = !on;
-                p.channels[ci].solo = false;
             }
-            Some(widgets::Sweep::Continue(on)) => {
-                p.channels[ci].mute = !on;
-                p.channels[ci].solo = false;
-            }
+            Some(widgets::Sweep::Continue(on)) => p.channels[ci].mute = !on,
             None => {}
         }
         if r.secondary_clicked() {
@@ -370,13 +363,8 @@ fn row(
         // Which mixer insert this instrument plays into (M = master).
         let mut insert = p.channels[ci].mixer;
         let inserts = p.mixer.len().saturating_sub(1);
-        let r = widgets::number_well(ui, &mut insert, 0..=inserts, ci + 1, vec2(m.step_h, m.step_h), |n| {
-            if n == 0 {
-                "M".into()
-            } else {
-                n.to_string()
-            }
-        });
+        let r =
+            widgets::number_well(ui, &mut insert, 0..=inserts, ci + 1, vec2(m.step_h, m.step_h), widgets::insert_label);
         if tracked(&r, h, p) {
             p.channels[ci].mixer = insert;
         }

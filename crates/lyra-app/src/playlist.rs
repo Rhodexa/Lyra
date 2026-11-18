@@ -28,7 +28,7 @@ use crate::browser::{AudioDrag, SampleDrag};
 use crate::keys::Action;
 use crate::samples::{self, Samples};
 use crate::theme::{self, cr, stroke};
-use crate::timeline::{self, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag};
+use crate::timeline::{self, Input, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag, Wheel};
 use crate::waveform::{self, End};
 use crate::widgets;
 use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, StrokeKind, Ui};
@@ -105,8 +105,7 @@ pub struct Playlist {
     pub snap: u32,
     selection: Vec<usize>,
     drag: Drag,
-    /// The last left press (time, place): our own double-click test, see `show`.
-    last_press: Option<(f64, Pos2)>,
+    clicks: timeline::Clicks,
 }
 
 impl Default for Playlist {
@@ -118,7 +117,7 @@ impl Default for Playlist {
             snap: TICKS_PER_BAR,
             selection: Vec::new(),
             drag: Drag::None,
-            last_press: None,
+            clicks: timeline::Clicks::default(),
         }
     }
 }
@@ -276,10 +275,6 @@ fn edge_hit(v: &View, clips: &[Clip], pos: Pos2) -> Option<usize> {
     })
 }
 
-fn snapped(raw: f32, snap: u32) -> f32 {
-    (raw / snap as f32).round() * snap as f32
-}
-
 impl Playlist {
     /// The tracks as rows for the vertical bar.
     fn rows(&self, grid: Rect, tracks: usize) -> RowView {
@@ -405,67 +400,45 @@ impl Playlist {
         let song_len = p.song_length() as f32;
         let overview = Overview { rect: overview_r, area: grid, content: song_len };
 
-        let (pos, pressed_p, pressed_s, pressed_m, down, mods, wheel, zoom, now) = ui.input(|i| {
-            (
-                i.pointer.interact_pos(),
-                i.pointer.primary_pressed(),
-                i.pointer.secondary_pressed(),
-                i.pointer.button_pressed(egui::PointerButton::Middle),
-                i.pointer.any_down(),
-                i.modifiers,
-                i.raw_scroll_delta,
-                i.zoom_delta(),
-                i.time,
-            )
-        });
-        // A double-click is decided on the second *press*, by us: egui only
-        // reports one on the release, a frame (or more) after the press that
-        // starts our gestures, so asking egui worked only when a quick click
-        // fit in one frame. A third press right after doesn't count again.
-        let double = pressed_p
-            && pos.is_some_and(|p| self.last_press.is_some_and(|(t, at)| now - t < 0.35 && at.distance(p) < 6.0));
-        if pressed_p {
-            self.last_press = if double { None } else { pos.map(|p| (now, p)) };
-        }
-        let hovering = ui.rect_contains_pointer(rect) && !crate::app::on_panel_edge(ui.ctx());
+        let input = timeline::Input::read(ui, rect);
+        let Input {
+            pos,
+            pressed: pressed_p,
+            pressed_right: pressed_s,
+            pressed_middle: pressed_m,
+            down,
+            mods,
+            hovering,
+            ..
+        } = input;
+        let double = self.clicks.double(&input);
 
         // ── Wheel ──
         let over_bars = pos.is_some_and(|p| overview_r.contains(p) || vbar.rect.contains(p));
         if hovering && over_bars {
             // Wheel over a scrollbar zooms its axis, anchored at the top-left edge.
             if pos.is_some_and(|p| overview_r.contains(p)) {
-                overview.wheel_zoom(&mut self.time, wheel.y, 0.01, 2.0);
+                overview.wheel_zoom(&mut self.time, input.wheel.y, 0.01, 2.0);
             } else {
                 let mut rv = self.rows(grid, p.tracks.len());
-                vbar.wheel_zoom(&mut rv, wheel.y, grid.height() / 140.0, grid.height() / 24.0);
+                vbar.wheel_zoom(&mut rv, input.wheel.y, grid.height() / 140.0, grid.height() / 24.0);
                 self.set_rows(rv, grid);
             }
         } else if hovering {
-            // egui turns Shift+wheel into sideways scroll, so with a modifier the
-            // wheel's amount is whichever axis it arrived on.
-            let amount = wheel.x + wheel.y;
-            let _ = zoom; // Ctrl+wheel is sideways scrolling now (raw delta below)
-            let over_ruler = pos.is_some_and(|p| ruler.contains(p));
-            if (mods.shift || over_ruler) && amount != 0.0 {
-                // Shift+wheel, or the wheel over the ruler: zoom time around the mouse.
-                self.time.zoom_at(grid, (amount * 0.004).exp(), pos.map_or(grid.left(), |p| p.x), 0.01, 2.0);
-            } else if mods.command && amount != 0.0 {
-                // Ctrl+wheel: sideways.
-                self.time.scroll = (self.time.scroll - amount / self.time.ppt).max(0.0);
-            } else if wheel.y != 0.0 && mods.alt {
-                // Alt+wheel: track height, keeping the track under the mouse in place.
-                let y = pos.map_or(grid.top(), |p| p.y) - grid.top();
-                let anchor = self.scroll_y + y / self.track_h;
-                self.track_h = (self.track_h * (wheel.y * 0.004).exp()).clamp(24.0, 140.0);
-                self.scroll_y = anchor - y / self.track_h;
-            } else {
-                // Plain wheel: up and down. A touchpad's sideways swipe: sideways.
-                if wheel.x != 0.0 {
-                    self.time.scroll = (self.time.scroll - wheel.x / self.time.ppt).max(0.0);
+            match timeline::wheel(&input, ruler) {
+                Wheel::ZoomTime { factor, at } => self.time.zoom_at(grid, factor, at, 0.01, 2.0),
+                Wheel::ZoomRows { factor, at } => {
+                    // Track height, keeping the track under the mouse in place.
+                    let y = at - grid.top();
+                    let anchor = self.scroll_y + y / self.track_h;
+                    self.track_h = (self.track_h * factor).clamp(24.0, 140.0);
+                    self.scroll_y = anchor - y / self.track_h;
                 }
-                if wheel.y != 0.0 {
-                    self.scroll_y -= wheel.y / self.track_h * 0.5;
+                Wheel::Scroll { x, y } => {
+                    self.time.scroll = (self.time.scroll + x / self.time.ppt).max(0.0);
+                    self.scroll_y += y / self.track_h;
                 }
+                Wheel::None => {}
             }
         }
         let rows = grid.height() / self.track_h;
@@ -569,9 +542,7 @@ impl Playlist {
                 let vertical = matches!(self.drag, Drag::Move { .. } | Drag::Select { .. });
                 let mut view = view;
                 if horizontal {
-                    let dt = ui.input(|i| i.stable_dt);
-                    let dx = timeline::edge_pan(pos.x, grid.left(), grid.right(), dt);
-                    let dy = if vertical { timeline::edge_pan(pos.y, grid.top(), grid.bottom(), dt) } else { 0.0 };
+                    let egui::Vec2 { x: dx, y: dy } = timeline::edge_pan_2d(pos, grid, input.dt, vertical);
                     if dx != 0.0 || dy != 0.0 {
                         let (scroll0, y0) = (self.time.scroll, self.scroll_y);
                         let rows = grid.height() / self.track_h;
@@ -649,9 +620,7 @@ impl Playlist {
             painter.rect_stroke(r, cr(4), stroke(1.5, theme::TEXT.gamma_multiply(0.6)), StrokeKind::Inside);
         }
         if let (Drag::Select { from, .. }, Some(pos)) = (&self.drag, pos) {
-            let r = Rect::from_two_pos(*from, pos);
-            painter.rect_filled(r, cr(0), theme::MINT.gamma_multiply(0.07));
-            painter.rect_stroke(r, cr(0), stroke(1.0, theme::MINT.gamma_multiply(0.7)), StrokeKind::Inside);
+            timeline::paint_rubber_band(&painter, *from, pos);
         }
         self.paint_headers(&painter, &view, headers, p);
         // Each track's insert for its audio clips, at the right end of its header.
@@ -660,13 +629,7 @@ impl Playlist {
             let mut insert = p.tracks[t].mixer;
             let inserts = p.mixer.len().saturating_sub(1);
             let r = ui.put(well, |ui: &mut Ui| {
-                widgets::number_well(ui, &mut insert, 0..=inserts, 0, well.size(), |n| {
-                    if n == 0 {
-                        "M".into()
-                    } else {
-                        n.to_string()
-                    }
-                })
+                widgets::number_well(ui, &mut insert, 0..=inserts, 0, well.size(), widgets::insert_label)
             });
             let r = r.on_hover_text("Mixer insert for this track's audio clips (M = master)");
             if crate::rack::tracked(&r, h, p) {
@@ -872,7 +835,7 @@ impl Playlist {
                 let lead_clip = &originals[*lead].1;
                 let raw = lead_clip.start as f32 + (v.tick(pos.x) - *anchor_tick);
                 let min_start = originals.iter().map(|(_, c)| c.start).min().unwrap_or(0) as i64;
-                let dt = (snapped(raw, snap).max(0.0) as i64 - lead_clip.start as i64).max(-min_start);
+                let dt = (timeline::snap(raw, snap).max(0.0) as i64 - lead_clip.start as i64).max(-min_start);
                 let (lo, hi) =
                     originals.iter().fold((usize::MAX, 0), |(lo, hi), (_, c)| (lo.min(c.track), hi.max(c.track)));
                 let max_down = p.tracks.len().saturating_sub(1).saturating_sub(hi) as i32;
@@ -889,7 +852,7 @@ impl Playlist {
                 let snap = if *free { 1 } else { self.snap };
                 let lead_clip = &originals[*lead].1;
                 let raw = lead_clip.len as f32 + (v.tick(pos.x) - *anchor_tick);
-                let new_len = snapped(raw, snap).max(snap.max(TICKS_PER_STEP) as f32) as i64;
+                let new_len = timeline::snap(raw, snap).max(snap.max(TICKS_PER_STEP) as f32) as i64;
                 let dl = new_len - lead_clip.len as i64;
                 for (i, c) in originals.iter() {
                     // An audio clip can't run past the end of its audio.
@@ -904,7 +867,7 @@ impl Playlist {
                 let snap = if *free { 1 } else { self.snap };
                 let lead_clip = &originals[*lead].1;
                 let raw = lead_clip.start as f32 + (v.tick(pos.x) - *anchor_tick);
-                let mut d = snapped(raw, snap) as i64 - lead_clip.start as i64;
+                let mut d = timeline::snap(raw, snap) as i64 - lead_clip.start as i64;
                 // Every audio clip in the selection moves its start the same
                 // amount: not before its audio's start, not past its own end.
                 let audio: Vec<&(usize, Clip)> = originals.iter().filter(|(_, c)| c.audio().is_some()).collect();
@@ -1200,7 +1163,7 @@ fn paint_audio(
     };
     let spt = p.seconds_per_tick();
     let sr = peaks.sample_rate() as f64;
-    let gain = waveform::db(a.gain + c.gain);
+    let gain = lyra_plugin::db_to_gain(a.gain + c.gain);
     let wave = g.body.shrink2(vec2(0.0, 2.0));
     waveform::paint(&clipped, wave, &peaks, light.hi, 1.0, |x| {
         if x < g.x0 || x >= g.x_end {

@@ -27,17 +27,11 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
         ui.painter().circle_filled(r.center(), 4.0, color);
-        let mut name = p.channels[ch].name.clone();
-        let edit = ui.add(egui::TextEdit::singleline(&mut name).desired_width(120.0).font(egui::TextStyle::Body));
-        if edit.changed() {
-            if edit.gained_focus() || !h_has_name_checkpoint(ui) {
+        if let Some(r) = widgets::name_field(ui, &p.channels[ch].name, 120.0) {
+            if r.first {
                 h.checkpoint(p);
-                set_name_checkpoint(ui, true);
             }
-            p.channels[ch].name = name;
-        }
-        if edit.lost_focus() {
-            set_name_checkpoint(ui, false);
+            p.channels[ch].name = r.text;
         }
         let label = lyra_dsp::info(&instrument).map_or(instrument.as_str(), |i| i.name);
         ui.label(RichText::new(label).small().color(theme::TEXT_DIM));
@@ -246,14 +240,6 @@ fn envelope(ui: &mut Ui, params: &[f32], color: Color32) {
             theme::TEXT_DIM,
         );
     }
-}
-
-// One undo checkpoint per rename (not one per keystroke), remembered in egui's temp memory.
-fn h_has_name_checkpoint(ui: &Ui) -> bool {
-    ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("rename-checkpoint")).unwrap_or(false))
-}
-fn set_name_checkpoint(ui: &Ui, v: bool) {
-    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("rename-checkpoint"), v));
 }
 
 /// The FM matrix as a 6×6 grid: row = modulator, column = carrier, the

@@ -6,7 +6,7 @@
 //! * mouse wheel = nudge
 //! * double-click = reset to default
 
-use crate::theme::{self, cr, stroke};
+use crate::theme::{self, cr, hex, stroke};
 use egui::{pos2, vec2, Color32, Pos2, Rect, Response, Sense, Shape, Ui};
 use lyra_plugin::ParamInfo;
 use std::f32::consts::PI;
@@ -112,10 +112,6 @@ impl KnobStyle {
             _ => KnobStyle::Polymer,
         }
     }
-}
-
-fn hex(v: u32) -> Color32 {
-    Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8)
 }
 
 /// Paint a knob into `rect` for `value`. Angles sweep 270° (7:30 → 4:30);
@@ -605,7 +601,7 @@ pub const METER_STOPS: [(f32, Color32); 4] = [
 
 /// Meter level (linear amplitude) to bar fraction: -60 dB .. 0 dB, linear in dB.
 pub fn meter_fraction(level: f32) -> f32 {
-    let db = 20.0 * level.max(1e-6).log10();
+    let db = lyra_plugin::gain_to_db(level);
     ((db + 60.0) / 60.0).clamp(0.0, 1.0)
 }
 
@@ -718,6 +714,39 @@ pub fn sweep(ui: &Ui, rect: Rect, group: &str, on: bool) -> Option<Sweep> {
         Some((g, target)) if over && g == group && on != target => Some(Sweep::Continue(target)),
         _ => None,
     }
+}
+
+/// How a mixer insert is written in a number well: M for the master.
+pub fn insert_label(n: usize) -> String {
+    if n == 0 {
+        "M".into()
+    } else {
+        n.to_string()
+    }
+}
+
+/// A name typed into [`name_field`].
+pub struct Renamed {
+    pub text: String,
+    /// The first change since the field got focus: take the undo step now,
+    /// so a whole rename is one step, not one per keystroke.
+    pub first: bool,
+}
+
+/// A one-line name field. Returns the new text when it changed.
+pub fn name_field(ui: &mut Ui, current: &str, width: f32) -> Option<Renamed> {
+    let mut text = current.to_string();
+    let edit = ui.add(egui::TextEdit::singleline(&mut text).desired_width(width).font(egui::TextStyle::Body));
+    let step = edit.id.with("undo-step");
+    if edit.lost_focus() {
+        ui.data_mut(|d| d.remove::<bool>(step));
+    }
+    if !edit.changed() {
+        return None;
+    }
+    let first = !ui.data(|d| d.get_temp::<bool>(step).unwrap_or(false));
+    ui.data_mut(|d| d.insert_temp(step, true));
+    Some(Renamed { text, first })
 }
 
 /// A small number in a well: drag up/down or scroll to change it,

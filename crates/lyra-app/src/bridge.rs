@@ -60,8 +60,6 @@ impl Bridge {
             }
         }
 
-        let any_solo = p.any_solo();
-        let solo_changed = last.as_ref().is_none_or(|l| l.any_solo() != any_solo);
         for (i, ch) in p.channels.iter().enumerate() {
             let prev = if rebuild { None } else { last.as_ref().map(|l| &l.channels[i]) };
             if let Some(prev) = prev {
@@ -71,16 +69,14 @@ impl Bridge {
                     }
                 }
             }
-            let mix_changed = solo_changed
-                || prev.is_none_or(|c| {
-                    (c.volume, c.pan, c.mute, c.solo, c.choke) != (ch.volume, ch.pan, ch.mute, ch.solo, ch.choke)
-                });
+            let mix_changed =
+                prev.is_none_or(|c| (c.volume, c.pan, c.mute, c.choke) != (ch.volume, ch.pan, ch.mute, ch.choke));
             if mix_changed {
                 eng.send(Command::SetMix {
                     channel: i,
                     volume: ch.volume,
                     pan: ch.pan,
-                    mute: ch.mute || (any_solo && !ch.solo),
+                    mute: ch.mute,
                     choke: ch.choke,
                 });
             }
@@ -235,7 +231,7 @@ pub fn compile_audio(p: &Project, samples: &mut Samples) -> AudioLane {
             from: a.start + clip.offset as f64 * spt,
             trim: (a.start, a.end.min(data.seconds() as f64)),
             // The source's gain and the clip's own, together.
-            gain: 10f32.powf((a.gain + clip.gain) / 20.0),
+            gain: lyra_plugin::db_to_gain(a.gain + clip.gain),
             fade_in: fade(clip.fade_in),
             fade_out: fade(clip.fade_out),
             source_fade_in: fade(a.fade_in),
