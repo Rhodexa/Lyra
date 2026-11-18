@@ -1,7 +1,8 @@
 //! The audio-clip editor: one audio clip, big.
 //!
-//! Everything here is *shared* by every copy of the clip on the playlist
-//! (like a pattern's notes), and none of it touches the file on disk:
+//! Everything here is the clip's *source*, shared by every copy on the
+//! playlist (like a pattern's notes); each copy adds its own gain and fades
+//! on top, on the playlist. None of it touches the file on disk:
 //!
 //! * **knobs** — gain, the fades' lengths and their curves
 //! * **the white lines** — trim: where in the file the clip starts and ends
@@ -416,7 +417,7 @@ impl AudioEditor {
         painter.rect_filled(trim.intersect(wave), cr(0), theme::mix(theme::PANEL, light.low, 0.24));
         painter.hline(wave.x_range(), wave.center().y, stroke(1.0, Color32::from_black_alpha(80)));
         let sr = peaks.sample_rate() as f64;
-        let gain = 10f32.powf(a.gain / 20.0);
+        let gain = waveform::db(a.gain);
         let column = |x: f32| (v.secs(x) * sr, v.secs(x + 1.0) * sr);
         // The whole file dim, then the part that plays, shaped by gain and fades.
         paint_wave(&painter, wave, &peaks, theme::TEXT_DIM.gamma_multiply(0.45), self.vzoom, |x| {
@@ -439,7 +440,7 @@ impl AudioEditor {
             [(End::In, g.x0, g.x_in, a.fade_in, g.x_in), (End::Out, g.x_out, g.x_end, a.fade_out, g.x_out)]
         {
             if f1 - f0 >= 2.0 {
-                let mid = waveform::paint_fade(&inside, wave, end, f0, f1, fade.tension, theme::TEXT);
+                let mid = waveform::paint_fade(&inside, wave, end, f0, f1, fade.tension, theme::TEXT, true);
                 if f1 - f0 >= 16.0 {
                     waveform::paint_tension(&painter, mid, hv == Some(Hover::Curve(end)));
                 }

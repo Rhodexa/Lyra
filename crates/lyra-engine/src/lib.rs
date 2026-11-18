@@ -78,15 +78,19 @@ pub struct AudioRegion {
     pub start: f64,
     pub end: f64,
     pub data: Arc<SampleData>,
-    /// Seconds into the file at `start`, and the point in the file where it
-    /// must stop (the end of the audio clip's trim).
+    /// Seconds into the file at `start`.
     pub from: f64,
-    pub until: f64,
-    /// Linear gain.
+    /// The source's trim, in seconds into the file: nothing outside it plays.
+    pub trim: (f64, f64),
+    /// Linear gain (the source's and the clip's together).
     pub gain: f32,
-    /// (seconds, tension) at each end of the region; see [`fade_curve`].
+    /// (seconds, tension) at each end of the region (the clip's own fades);
+    /// see [`fade_curve`].
     pub fade_in: (f32, f32),
     pub fade_out: (f32, f32),
+    /// The source's fades, at its trim points in the file.
+    pub source_fade_in: (f32, f32),
+    pub source_fade_out: (f32, f32),
     /// Mixer track it plays into.
     pub track: usize,
 }
@@ -94,8 +98,9 @@ pub struct AudioRegion {
 impl PartialEq for AudioRegion {
     fn eq(&self, o: &Self) -> bool {
         Arc::ptr_eq(&self.data, &o.data)
-            && (self.start, self.end, self.from, self.until) == (o.start, o.end, o.from, o.until)
+            && (self.start, self.end, self.from, self.trim) == (o.start, o.end, o.from, o.trim)
             && (self.gain, self.fade_in, self.fade_out, self.track) == (o.gain, o.fade_in, o.fade_out, o.track)
+            && (self.source_fade_in, self.source_fade_out) == (o.source_fade_in, o.source_fade_out)
     }
 }
 
@@ -144,8 +149,9 @@ impl AudioRegion {
         let frames = data.left.len().min(data.right.len());
         // How long this region really sounds: the clip's length, or less if
         // the audio runs out first.
-        let dur = ((self.end - self.start) * seconds_per_tick).min(self.until - self.from);
+        let dur = ((self.end - self.start) * seconds_per_tick).min(self.trim.1 - self.from);
         let (fi, fo) = (self.fade_in.0 as f64, self.fade_out.0 as f64);
+        let (sfi, sfo) = (self.source_fade_in.0 as f64, self.source_fade_out.0 as f64);
         for s in 0..n {
             let mut t = pos + s as f64 * ticks_per_sample;
             if t >= len {
@@ -166,10 +172,17 @@ impl AudioRegion {
             if left < fo {
                 g *= fade_curve((left / fo) as f32, self.fade_out.1);
             }
-            let at = (self.from + el) * data.sample_rate as f64;
-            if at < 0.0 {
+            let file = self.from + el;
+            if file < self.trim.0 {
                 continue;
             }
+            if file - self.trim.0 < sfi {
+                g *= fade_curve(((file - self.trim.0) / sfi) as f32, self.source_fade_in.1);
+            }
+            if self.trim.1 - file < sfo {
+                g *= fade_curve(((self.trim.1 - file) / sfo) as f32, self.source_fade_out.1);
+            }
+            let at = file * data.sample_rate as f64;
             let i = at as usize;
             if i + 1 >= frames {
                 continue;
@@ -976,10 +989,12 @@ mod tests {
             end,
             data: tone(),
             from: 0.0,
-            until: 1.0,
+            trim: (0.0, 1.0),
             gain: 1.0,
             fade_in: (0.0, 0.0),
             fade_out: (0.0, 0.0),
+            source_fade_in: (0.0, 0.0),
+            source_fade_out: (0.0, 0.0),
             track: 0,
         }
     }
@@ -1027,6 +1042,30 @@ mod tests {
         assert!((fade_curve(0.5, 0.5) - 0.5).abs() > 0.1 && fade_curve(0.5, 0.5) < 0.5, "tension bends it");
         assert!(fade_curve(0.5, -0.5) > 0.5);
         assert_eq!(fade_curve(1.0, 0.7), 1.0);
+    }
+
+    #[test]
+    fn source_fades_sit_in_the_file_and_stack_with_the_clips() {
+        let (mut eng, mut h, _) = setup();
+        // The clip starts half a second into the file, so the source's
+        // 0.25 s fade-in (at the file's start) is already over: full level.
+        let mut r = region(0.0, 96.0);
+        r.from = 0.5;
+        r.source_fade_in = (0.25, 0.0);
+        // The source fades out over its last 0.5 s: halfway down at 0.75 s.
+        r.source_fade_out = (0.5, 0.0);
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] })));
+        h.send(Command::SetAudio(Box::new(AudioLane { regions: vec![r] })));
+        h.send(Command::SetMasterVolume(1.0));
+        h.send(Command::Play);
+        let out = capture(&mut eng, 24_000);
+        // 0.54 s into the file: the fade-in is over, the fade-out (from 0.5 s)
+        // has just begun: (1.0 - 0.5417) / 0.5 = 0.917 of full level.
+        let early = out[2_000];
+        assert!(early > 0.3, "source fade-in already past, got {early}");
+        // 0.75 s: halfway through the fade-out.
+        let ratio = out[12_000] / early;
+        assert!((ratio - 0.5 / 0.917).abs() < 0.03, "got {ratio}");
     }
 
     #[test]

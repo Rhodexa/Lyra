@@ -36,8 +36,9 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Delete | right-click or right-drag, or `Delete` |
 | Select | Ctrl+drag, `Ctrl+A` · duplicate after: `Ctrl+D` / `Ctrl+B` |
 | Audio clip | drop a sample from the browser on a track (or an audio clip from the browser for another copy) |
-| Trim a copy / fade / bend a fade | drag either end · drag the small squares on the title strip · drag the dot on a fade's curve up/down |
-| Edit an audio clip | double-click it: gain, fades and trim in the *Audio clip* editor. Copies share all that, like patterns; `Ctrl+U` gives the selected ones their own |
+| Trim a clip | drag either end: a clip is a window onto its audio |
+| A clip's own fades and gain | hover it: the squares on the title strip are the fades (drag sideways), the dot on a curve bends it (up/down), the pill is gain (up/down, Shift = fine, double-click = 0 dB). Each clip has its own |
+| Edit what all copies share | double-click a clip: trim, plus the source's gain and fades, in the *Audio clip* editor. `Ctrl+U` gives the selected clips their own source |
 | Where a track's audio plays | the number at the right of its header: mixer insert (M = master) |
 | Play from here | click the ruler (switches to song mode) |
 | Mute a track | click its light |

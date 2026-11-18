@@ -169,10 +169,11 @@ pub struct Fade {
     pub tension: f32,
 }
 
-/// An audio clip: a sample plus how to play it. Like a pattern, it is
-/// *shared*: every clip on the playlist that points at it plays it, so a
-/// change here (gain, fades, trim) changes all of them. Nothing touches the
-/// file on disk.
+/// An audio clip's *source*: a sample plus how to play it. Like a pattern,
+/// it is shared: every clip on the playlist that points at it plays it, so a
+/// change here (trim, gain, fades) changes all of them. Each placed clip adds
+/// its own gain and fades on top (see [`Clip`]). Nothing touches the file on
+/// disk.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Audio {
     pub id: AudioId,
@@ -185,8 +186,9 @@ pub struct Audio {
     /// The part of the file that plays, in seconds from its start.
     pub start: f64,
     pub end: f64,
-    /// Fades sit at the edges of each placed clip, so cutting a clip on the
-    /// playlist keeps its fade.
+    /// Fades at the trim points (in the file, so a clip that starts later in
+    /// the audio doesn't hear the source's fade-in). Usually none: each clip
+    /// has its own fades.
     #[serde(default)]
     pub fade_in: Fade,
     #[serde(default)]
@@ -214,8 +216,9 @@ pub enum Source {
 ///
 /// * A **pattern** clip longer than its pattern repeats the pattern inside it
 ///   (stretch a 2-bar beat across 16 bars).
-/// * An **audio** clip plays its audio from `offset` ticks in: dragging its
-///   left edge moves both `start` and `offset`, so the sound stays in place.
+/// * An **audio** clip is a window onto its audio: it plays from `offset`
+///   ticks in, for `len` ticks. Dragging its left edge moves both `start` and
+///   `offset`, so the sound stays in place. Its gain and fades are its own.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(from = "ClipFile", into = "ClipFile")]
 pub struct Clip {
@@ -227,15 +230,36 @@ pub struct Clip {
     pub len: u32,
     /// Ticks into the source where this clip begins (audio clips).
     pub offset: u32,
+    /// This clip's own gain (dB) and fades, at its own edges (audio clips).
+    pub gain: f32,
+    pub fade_in: Fade,
+    pub fade_out: Fade,
 }
+
+/// New audio clips fade 5 ms at each end: no clicks where the sound is cut.
+pub const EDGE_FADE: Fade = Fade { len: 0.005, tension: 0.0 };
 
 impl Clip {
     pub fn of_pattern(pattern: PatternId, track: usize, start: u32, len: u32) -> Self {
-        Self { source: Source::Pattern(pattern), track, start, len, offset: 0 }
+        Self {
+            source: Source::Pattern(pattern),
+            track,
+            start,
+            len,
+            offset: 0,
+            gain: 0.0,
+            fade_in: Fade::default(),
+            fade_out: Fade::default(),
+        }
     }
 
     pub fn of_audio(audio: AudioId, track: usize, start: u32, len: u32) -> Self {
-        Self { source: Source::Audio(audio), track, start, len, offset: 0 }
+        Self {
+            source: Source::Audio(audio),
+            fade_in: EDGE_FADE,
+            fade_out: EDGE_FADE,
+            ..Self::of_pattern(0, track, start, len)
+        }
     }
 
     pub fn end(&self) -> u32 {
@@ -270,6 +294,12 @@ struct ClipFile {
     len: u32,
     #[serde(default, skip_serializing_if = "is_zero")]
     offset: u32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    gain: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    fade_in: Fade,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    fade_out: Fade,
 }
 
 impl From<ClipFile> for Clip {
@@ -278,7 +308,16 @@ impl From<ClipFile> for Clip {
             (Some(a), _) => Source::Audio(a),
             (None, p) => Source::Pattern(p.unwrap_or(0)),
         };
-        Clip { source, track: f.track, start: f.start, len: f.len, offset: f.offset }
+        Clip {
+            source,
+            track: f.track,
+            start: f.start,
+            len: f.len,
+            offset: f.offset,
+            gain: f.gain,
+            fade_in: f.fade_in,
+            fade_out: f.fade_out,
+        }
     }
 }
 
@@ -291,6 +330,9 @@ impl From<Clip> for ClipFile {
             start: c.start,
             len: c.len,
             offset: c.offset,
+            gain: c.gain,
+            fade_in: c.fade_in,
+            fade_out: c.fade_out,
         }
     }
 }
@@ -441,8 +483,6 @@ impl Project {
     pub fn add_audio(&mut self, name: &str, sample: &str, seconds: f64) -> usize {
         let id = self.next_audio_id;
         self.next_audio_id += 1;
-        // Short fades by default: no clicks where the sound is cut.
-        let edge = Fade { len: 0.005, tension: 0.0 };
         let color = self.patterns.len() + self.audio.len();
         self.audio.push(Audio {
             id,
@@ -451,8 +491,8 @@ impl Project {
             gain: 0.0,
             start: 0.0,
             end: seconds.max(0.0),
-            fade_in: edge,
-            fade_out: edge,
+            fade_in: Fade::default(),
+            fade_out: Fade::default(),
             color,
         });
         self.audio.len() - 1

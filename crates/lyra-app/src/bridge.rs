@@ -228,15 +228,18 @@ pub fn compile_audio(p: &Project, samples: &mut Samples) -> AudioLane {
         }
         let Some(a) = clip.audio().and_then(|id| p.audio(id)) else { continue };
         let Ok(data) = samples.get(&a.sample) else { continue };
-        let until = a.end.min(data.seconds() as f64);
+        let fade = |f: lyra_model::Fade| (f.len, f.tension);
         regions.push(AudioRegion {
             start: clip.start as f64,
             end: clip.end() as f64,
             from: a.start + clip.offset as f64 * spt,
-            until,
-            gain: 10f32.powf(a.gain / 20.0),
-            fade_in: (a.fade_in.len, a.fade_in.tension),
-            fade_out: (a.fade_out.len, a.fade_out.tension),
+            trim: (a.start, a.end.min(data.seconds() as f64)),
+            // The source's gain and the clip's own, together.
+            gain: 10f32.powf((a.gain + clip.gain) / 20.0),
+            fade_in: fade(clip.fade_in),
+            fade_out: fade(clip.fade_out),
+            source_fade_in: fade(a.fade_in),
+            source_fade_out: fade(a.fade_out),
             track: track.mixer,
             data,
         });
@@ -290,6 +293,7 @@ mod tests {
         let id = p.audio[a].id;
         let mut c = Clip::of_audio(id, 2, TICKS_PER_BAR, 48);
         c.offset = 19; // a tenth of a second in
+        c.gain = -6.0; // the clip's own gain adds to the source's
         p.clips.push(c);
         p.clips.push(Clip::of_audio(id, 3, 0, 48));
         p.tracks[2].mixer = 5;
@@ -299,7 +303,8 @@ mod tests {
         let r = &lane.regions[0];
         assert_eq!((r.start, r.end, r.track), (TICKS_PER_BAR as f64, (TICKS_PER_BAR + 48) as f64, 5));
         assert!((r.from - 19.0 / 192.0).abs() < 1e-9);
-        assert!((r.gain - 0.501).abs() < 0.01);
-        assert!(r.until <= 0.3);
+        assert!((r.gain - 0.251).abs() < 0.01, "-6 dB twice, got {}", r.gain);
+        assert!(r.trim.1 <= 0.3);
+        assert_eq!(r.fade_in, (0.005, 0.0), "new clips fade 5 ms at each end");
     }
 }

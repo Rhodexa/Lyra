@@ -61,11 +61,12 @@ mixed into the master before master volume. Waveforms draw from `Peaks`
 (min/max per 64 and per 4096 frames, built once per file), so a long take
 zoomed out never walks every sample.
 
-**Audio clips** mirror patterns. `Project.audio` holds the shared `Audio`
-(sample, gain, trim in seconds, fade in/out with a tension), and a `Clip`'s
-`source` is `Pattern(id)` or `Audio(id)`; each placed copy has its own start,
-length and `offset` (ticks into the audio, for a trimmed left end). Fades sit
-at each copy's own edges. In song mode `bridge::compile_audio` turns every
+**Audio clips** mirror patterns, on two levels. `Project.audio` holds the
+shared source, `Audio` (sample, trim in seconds, the source's gain and fades,
+which sit at the trim points in the file). A `Clip`'s `source` is
+`Pattern(id)` or `Audio(id)`, and each placed clip has its own start, length,
+`offset` (ticks into the audio: a clip is a window onto it), gain, and fades
+at its own edges. The two gains add (in dB) and all four fades multiply. In song mode `bridge::compile_audio` turns every
 audio clip into an `AudioRegion` (song ticks, seconds into the file, gain,
 fades, the track's insert) and sends the list as one `AudioLane`. The engine
 renders regions *from the song position*, not from triggers, so seeking into

@@ -63,13 +63,48 @@ pub fn fade_gain(end: End, x: f32, x0: f32, x1: f32, tension: f32) -> f32 {
     }
 }
 
-/// Shade the part of `rect` above a fade's curve (what the fade takes away)
-/// and draw the curve. Returns the curve's midpoint: where its tension
-/// handle sits.
-pub fn paint_fade(painter: &Painter, rect: Rect, end: End, x0: f32, x1: f32, tension: f32, ink: Color32) -> Pos2 {
+/// Decibels to a linear gain.
+pub fn db(db: f32) -> f32 {
+    10f32.powf(db / 20.0)
+}
+
+/// What an audio clip's *source* fades do at file second `t`: they sit at
+/// its trim points, in the file (see `lyra_model::Audio`).
+pub fn source_gain(a: &lyra_model::Audio, t: f64) -> f32 {
+    let mut g = 1.0;
+    let (fi, fo) = (a.fade_in.len as f64, a.fade_out.len as f64);
+    if fi > 0.0 && t - a.start < fi {
+        g *= fade_curve(((t - a.start) / fi) as f32, a.fade_in.tension);
+    }
+    if fo > 0.0 && a.end - t < fo {
+        g *= fade_curve(((a.end - t) / fo) as f32, a.fade_out.tension);
+    }
+    g
+}
+
+/// Draw a fade's curve, and with `shade` darken the part of `rect` above it
+/// (what the fade takes away). Returns the curve's midpoint: where its
+/// tension handle sits.
+#[allow(clippy::too_many_arguments)]
+pub fn paint_fade(
+    painter: &Painter,
+    rect: Rect,
+    end: End,
+    x0: f32,
+    x1: f32,
+    tension: f32,
+    ink: Color32,
+    shade: bool,
+) -> Pos2 {
     let y_of = |x: f32| rect.bottom() - fade_gain(end, x, x0, x1, tension) * rect.height();
     let steps = ((x1 - x0) / 3.0).ceil().clamp(2.0, 96.0) as usize;
     let xs: Vec<f32> = (0..=steps).map(|i| x0 + (x1 - x0) * i as f32 / steps as f32).collect();
+    let line: Vec<Pos2> = xs.iter().map(|&x| pos2(x, y_of(x))).collect();
+    let mx = (x0 + x1) * 0.5;
+    if !shade {
+        painter.add(Shape::line(line, stroke(1.0, ink)));
+        return pos2(mx, y_of(mx));
+    }
     let mut shade = Mesh::default();
     let dim = Color32::from_black_alpha(110);
     for w in xs.windows(2) {
@@ -82,9 +117,7 @@ pub fn paint_fade(painter: &Painter, rect: Rect, end: End, x0: f32, x1: f32, ten
         shade.add_triangle(base, base + 2, base + 3);
     }
     painter.add(Shape::mesh(shade));
-    let line: Vec<Pos2> = xs.iter().map(|&x| pos2(x, y_of(x))).collect();
     painter.add(Shape::line(line, stroke(1.5, ink)));
-    let mx = (x0 + x1) * 0.5;
     pos2(mx, y_of(mx))
 }
 
@@ -99,6 +132,13 @@ pub fn paint_handle(painter: &Painter, at: Pos2, hot: bool) {
 pub fn paint_tension(painter: &Painter, at: Pos2, hot: bool) {
     painter.circle_filled(at, 4.5, theme::LINE);
     painter.circle_filled(at, 3.2, if hot { theme::TEXT } else { theme::TEXT_DIM });
+}
+
+/// A gain handle: a small pill (drag up/down: louder/quieter).
+pub fn paint_gain(painter: &Painter, at: Pos2, hot: bool) {
+    let r = Rect::from_center_size(at, egui::vec2(16.0, 7.0));
+    painter.rect_filled(r.expand(1.0), theme::cr(4), theme::LINE);
+    painter.rect_filled(r, theme::cr(3), if hot { theme::TEXT } else { theme::TEXT_DIM });
 }
 
 /// Tension after dragging a curve by `dy` points. Dragging up raises the

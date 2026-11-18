@@ -7,11 +7,13 @@
 //!   resize (longer than the pattern = the pattern repeats) · **Shift+drag** — duplicate
 //! * **click a clip** — makes its pattern the current one · **double-click** — open it in the piano roll
 //!   (an audio clip: in the audio-clip editor)
-//! * **audio clips** — drop a sample from the browser onto a track · drag the
-//!   *left* end to trim the start · the little squares on the title strip are
-//!   the fades (drag sideways), the dot on a fade's curve bends it (drag up and
-//!   down). Fades and gain are shared by every copy of the clip, like a
-//!   pattern's notes; where each copy starts and ends is its own.
+//! * **audio clips** — drop a sample from the browser onto a track · drag
+//!   either end to trim it (a clip is a window onto its audio). Hover a clip
+//!   for its handles: the squares on the title strip are its fades (drag
+//!   sideways), the dot on a fade's curve bends it (drag up and down), the pill
+//!   in the middle is its gain (drag up and down, double-click for 0 dB).
+//!   These are each clip's own; the audio-clip editor edits what all copies
+//!   share (trim, the source's gain and fades).
 //! * **right-drag** — delete · **Ctrl+drag** — box select (Shift adds) · **Alt** — no snap
 //! * **wheel** — scroll tracks · **Shift+wheel** — zoom time · **Ctrl+wheel** — sideways ·
 //!   **Alt+wheel** — track height · **middle-drag** — pan
@@ -59,19 +61,25 @@ enum Drag {
         lead: usize,
         free: bool,
     },
-    /// A fade's length (shared by every copy of the audio clip).
+    /// A clip's fade length.
     Fade {
-        audio: usize,
+        clip: usize,
         end: End,
         orig: f32,
         anchor_x: f32,
         seconds_per_px: f32,
         max: f32,
     },
-    /// A fade's curve.
+    /// A clip's fade curve.
     Tension {
-        audio: usize,
+        clip: usize,
         end: End,
+        orig: f32,
+        anchor_y: f32,
+    },
+    /// A clip's gain.
+    Gain {
+        clip: usize,
         orig: f32,
         anchor_y: f32,
     },
@@ -172,57 +180,75 @@ struct FadeGeo {
     x_end: f32,
 }
 
-fn fade_geo(v: &View, p: &Project, c: &Clip, a: &Audio) -> FadeGeo {
+fn fade_geo(v: &View, p: &Project, c: &Clip) -> FadeGeo {
     let (_, strip, body) = parts(v.clip_rect(c));
     let spt = p.seconds_per_tick() as f32;
     let room = audio_room(p, c).unwrap_or(c.len);
     let x0 = body.left();
     let x_end = v.x((c.start + c.len.min(room)) as f32).min(body.right());
     let px = |secs: f32| secs / spt * v.time.ppt;
-    let x_in = (x0 + px(a.fade_in.len)).min(x_end);
-    let x_out = (x_end - px(a.fade_out.len)).max(x0);
+    let x_in = (x0 + px(c.fade_in.len)).min(x_end);
+    let x_out = (x_end - px(c.fade_out.len)).max(x0);
     FadeGeo { body, handles_y: strip.bottom(), x0, x_in, x_out, x_end }
 }
 
-/// A fade handle or curve under the mouse.
+/// The part of an audio clip's handles a press lands on.
 #[derive(Clone, Copy, PartialEq)]
-struct FadeHit {
+enum Grip {
+    /// A fade's square (its length).
+    Fade(End),
+    /// The dot on a fade's curve (its tension).
+    Curve(End),
+    /// The gain pill.
+    Gain,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct Handle {
     clip: usize,
-    end: End,
-    /// The curve's dot (tension) rather than the square (length).
-    curve: bool,
+    grip: Grip,
 }
 
 const HANDLE_R: f32 = 6.0;
 /// Fades narrower than this show no curve dot (too fiddly).
 const CURVE_MIN_W: f32 = 16.0;
+/// Clips shorter than this show no handles at all: just the waveform.
+const HANDLES_MIN_H: f32 = 40.0;
 
-fn fade_hit(v: &View, p: &Project, pos: Pos2) -> Option<FadeHit> {
-    (0..p.clips.len()).rev().find_map(|i| {
-        let c = &p.clips[i];
-        let a = p.audio(c.audio()?)?;
-        let r = v.clip_rect(c);
-        if r.height() < 28.0 || !r.expand(HANDLE_R).contains(pos) {
-            return None;
-        }
-        let g = fade_geo(v, p, c, a);
-        for (end, x, fade) in [(End::In, g.x_in, a.fade_in), (End::Out, g.x_out, a.fade_out)] {
-            if pos.distance(pos2(x, g.handles_y)) <= HANDLE_R {
-                return Some(FadeHit { clip: i, end, curve: false });
-            }
-            let (f0, f1) = if end == End::In { (g.x0, g.x_in) } else { (g.x_out, g.x_end) };
-            if f1 - f0 >= CURVE_MIN_W {
-                let mid = pos2(
-                    (f0 + f1) * 0.5,
-                    g.body.bottom() - lyra_engine::fade_curve(0.5, fade.tension) * g.body.height(),
-                );
-                if pos.distance(mid) <= HANDLE_R {
-                    return Some(FadeHit { clip: i, end, curve: true });
-                }
-            }
-        }
-        None
-    })
+fn curve_mid(g: &FadeGeo, end: End, tension: f32) -> Option<Pos2> {
+    let (f0, f1) = if end == End::In { (g.x0, g.x_in) } else { (g.x_out, g.x_end) };
+    (f1 - f0 >= CURVE_MIN_W)
+        .then(|| pos2((f0 + f1) * 0.5, g.body.bottom() - lyra_engine::fade_curve(0.5, tension) * g.body.height()))
+}
+
+fn gain_pos(g: &FadeGeo) -> Pos2 {
+    pos2((g.x0 + g.x_end) * 0.5, g.handles_y)
+}
+
+/// The handle under `pos`, on the clip it hovers (only that clip shows them).
+fn handle_hit(v: &View, p: &Project, pos: Pos2) -> Option<Handle> {
+    let i = hit(v, &p.clips, pos)?;
+    let c = &p.clips[i];
+    c.audio()?;
+    if v.clip_rect(c).height() < HANDLES_MIN_H {
+        return None;
+    }
+    let g = fade_geo(v, p, c);
+    let near = |at: Pos2| pos.distance(at) <= HANDLE_R;
+    let grip = if near(pos2(g.x_in, g.handles_y)) {
+        Grip::Fade(End::In)
+    } else if near(pos2(g.x_out, g.handles_y)) {
+        Grip::Fade(End::Out)
+    } else if near(gain_pos(&g)) {
+        Grip::Gain
+    } else if curve_mid(&g, End::In, c.fade_in.tension).is_some_and(near) {
+        Grip::Curve(End::In)
+    } else if curve_mid(&g, End::Out, c.fade_out.tension).is_some_and(near) {
+        Grip::Curve(End::Out)
+    } else {
+        return None;
+    };
+    Some(Handle { clip: i, grip })
 }
 
 fn left_edge_hit(v: &View, clips: &[Clip], pos: Pos2) -> Option<usize> {
@@ -427,7 +453,11 @@ impl Playlist {
                 // Ctrl+wheel: sideways.
                 self.time.scroll = (self.time.scroll - amount / self.time.ppt).max(0.0);
             } else if wheel.y != 0.0 && mods.alt {
+                // Alt+wheel: track height, keeping the track under the mouse in place.
+                let y = pos.map_or(grid.top(), |p| p.y) - grid.top();
+                let anchor = self.scroll_y + y / self.track_h;
                 self.track_h = (self.track_h * (wheel.y * 0.004).exp()).clamp(24.0, 140.0);
+                self.scroll_y = anchor - y / self.track_h;
             } else {
                 // Plain wheel: up and down. A touchpad's sideways swipe: sideways.
                 if wheel.x != 0.0 {
@@ -566,11 +596,11 @@ impl Playlist {
         // Cursor feedback
         if let (true, Some(pos), Drag::None) = (hovering, pos, &self.drag) {
             if grid.contains(pos) {
-                if let Some(f) = fade_hit(&view, p, pos) {
-                    ui.ctx().set_cursor_icon(if f.curve {
-                        CursorIcon::ResizeVertical
-                    } else {
+                if let Some(hd) = handle_hit(&view, p, pos) {
+                    ui.ctx().set_cursor_icon(if matches!(hd.grip, Grip::Fade(_)) {
                         CursorIcon::ResizeHorizontal
+                    } else {
+                        CursorIcon::ResizeVertical
                     });
                 } else if edge_hit(&view, &p.clips, pos).is_some() || left_edge_hit(&view, &p.clips, pos).is_some() {
                     ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
@@ -586,7 +616,7 @@ impl Playlist {
                 | Drag::VBar(VDrag::Pan { .. })
         ) {
             ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
-        } else if matches!(self.drag, Drag::VBar(VDrag::Edge { .. }) | Drag::Tension { .. }) {
+        } else if matches!(self.drag, Drag::VBar(VDrag::Edge { .. }) | Drag::Tension { .. } | Drag::Gain { .. }) {
             ui.ctx().set_cursor_icon(CursorIcon::ResizeVertical);
         } else if matches!(
             self.drag,
@@ -602,15 +632,14 @@ impl Playlist {
         let view = self.view(grid);
         let painter = ui.painter_at(rect);
         self.paint_grid(&painter, &view, p, song_len);
-        let hot = match &self.drag {
-            Drag::Fade { audio, end, .. } | Drag::Tension { audio, end, .. } => {
-                let curve = matches!(self.drag, Drag::Tension { .. });
-                Some((Some(*audio), *end, curve))
-            }
+        // Handles show on the clip under the mouse (or the one being changed).
+        let hot = match self.drag {
+            Drag::Fade { clip, end, .. } => Some((clip, Some(Grip::Fade(end)))),
+            Drag::Tension { clip, end, .. } => Some((clip, Some(Grip::Curve(end)))),
+            Drag::Gain { clip, .. } => Some((clip, Some(Grip::Gain))),
             Drag::None => pos
-                .filter(|_| hovering)
-                .and_then(|pos| fade_hit(&view, p, pos))
-                .map(|f| (p.clips[f.clip].audio().and_then(|id| p.audio_index(id)), f.end, f.curve)),
+                .filter(|p| hovering && grid.contains(*p))
+                .and_then(|pos| hit(&view, &p.clips, pos).map(|i| (i, handle_hit(&view, p, pos).map(|hd| hd.grip)))),
             _ => None,
         };
         self.paint_clips(&painter, &view, p, st, playing.then_some(playhead), samples, hot);
@@ -719,25 +748,31 @@ impl Playlist {
             self.drag = Drag::Select { from: pos, base };
             return;
         }
-        // A fade's handle or curve (audio clips): change the shared fade.
-        if let Some(f) = fade_hit(v, p, pos) {
-            let c = &p.clips[f.clip];
-            let Some(ai) = c.audio().and_then(|id| p.audio_index(id)) else { return };
+        // An audio clip's handles: its own fades and gain.
+        if let Some(hd) = handle_hit(v, p, pos) {
             h.checkpoint(p);
-            let a = &p.audio[ai];
-            let fade = if f.end == End::In { a.fade_in } else { a.fade_out };
-            self.drag = if f.curve {
-                Drag::Tension { audio: ai, end: f.end, orig: fade.tension, anchor_y: pos.y }
-            } else {
-                let spt = p.seconds_per_tick() as f32;
-                let room = audio_room(p, c).unwrap_or(c.len).min(c.len);
-                Drag::Fade {
-                    audio: ai,
-                    end: f.end,
-                    orig: fade.len,
-                    anchor_x: pos.x,
-                    seconds_per_px: spt / v.time.ppt,
-                    max: room as f32 * spt,
+            let c = &mut p.clips[hd.clip];
+            let fade = |end| if end == End::In { c.fade_in } else { c.fade_out };
+            self.drag = match hd.grip {
+                Grip::Gain if double => {
+                    c.gain = 0.0;
+                    Drag::None
+                }
+                Grip::Gain => Drag::Gain { clip: hd.clip, orig: c.gain, anchor_y: pos.y },
+                Grip::Curve(end) => Drag::Tension { clip: hd.clip, end, orig: fade(end).tension, anchor_y: pos.y },
+                Grip::Fade(end) => {
+                    let orig = fade(end).len;
+                    let spt = p.seconds_per_tick() as f32;
+                    let c = &p.clips[hd.clip];
+                    let room = audio_room(p, c).unwrap_or(c.len).min(c.len);
+                    Drag::Fade {
+                        clip: hd.clip,
+                        end,
+                        orig,
+                        anchor_x: pos.x,
+                        seconds_per_px: spt / v.time.ppt,
+                        max: room as f32 * spt,
+                    }
                 }
             };
             return;
@@ -884,24 +919,31 @@ impl Playlist {
                     }
                 }
             }
-            Drag::Fade { audio, end, orig, anchor_x, seconds_per_px, max } => {
+            Drag::Fade { clip, end, orig, anchor_x, seconds_per_px, max } => {
                 let dx = pos.x - *anchor_x;
                 let d = if *end == End::In { dx } else { -dx };
                 let len = (*orig + d * *seconds_per_px).clamp(0.0, max.max(0.0));
-                if let Some(a) = p.audio.get_mut(*audio) {
+                if let Some(c) = p.clips.get_mut(*clip) {
                     match end {
-                        End::In => a.fade_in.len = len,
-                        End::Out => a.fade_out.len = len,
+                        End::In => c.fade_in.len = len,
+                        End::Out => c.fade_out.len = len,
                     }
                 }
             }
-            Drag::Tension { audio, end, orig, anchor_y } => {
+            Drag::Tension { clip, end, orig, anchor_y } => {
                 let t = waveform::drag_tension(*orig, pos.y - *anchor_y);
-                if let Some(a) = p.audio.get_mut(*audio) {
+                if let Some(c) = p.clips.get_mut(*clip) {
                     match end {
-                        End::In => a.fade_in.tension = t,
-                        End::Out => a.fade_out.tension = t,
+                        End::In => c.fade_in.tension = t,
+                        End::Out => c.fade_out.tension = t,
                     }
+                }
+            }
+            Drag::Gain { clip, orig, anchor_y } => {
+                // Up = louder, 0.1 dB per point (Shift: finer).
+                let per = if mods.shift { 0.02 } else { 0.1 };
+                if let Some(c) = p.clips.get_mut(*clip) {
+                    c.gain = (*orig - (pos.y - *anchor_y) * per).clamp(-60.0, 24.0);
                 }
             }
             Drag::Select { from, base } => {
@@ -990,7 +1032,7 @@ impl Playlist {
         st: &UiState,
         playhead: Option<f64>,
         samples: &mut Samples,
-        hot: Option<(Option<usize>, End, bool)>,
+        hot: Option<(usize, Option<Grip>)>,
     ) {
         let m = theme::m();
         for (i, c) in p.clips.iter().enumerate() {
@@ -1036,8 +1078,8 @@ impl Playlist {
                     }
                 }
                 Source::Audio(id) => {
-                    if let (Some(a), Some(ai)) = (p.audio(id), p.audio_index(id)) {
-                        let hot = hot.filter(|h| h.0 == Some(ai)).map(|h| (h.1, h.2));
+                    if let Some(a) = p.audio(id) {
+                        let hot = hot.filter(|h| h.0 == i).map(|h| h.1);
                         paint_audio(painter, v, p, c, a, light, samples, hot);
                     }
                 }
@@ -1124,8 +1166,9 @@ fn paint_notes(painter: &egui::Painter, v: &View, p: &Project, c: &Clip, pat: &l
     }
 }
 
-/// An audio clip's body: its waveform, shaped by its gain and fades, with
-/// the fades' curves and handles on top. `hot` = the fade part under the mouse.
+/// An audio clip's body: its waveform, shaped by the gain and fades it
+/// plays with, and a thin line for each of its fades. Hovered (`hot` is
+/// Some: the handle under the mouse, if any), it shows its handles too.
 #[allow(clippy::too_many_arguments)]
 fn paint_audio(
     painter: &egui::Painter,
@@ -1135,9 +1178,10 @@ fn paint_audio(
     a: &Audio,
     light: theme::Light,
     samples: &mut Samples,
-    hot: Option<(End, bool)>,
+    hot: Option<Option<Grip>>,
 ) {
-    let g = fade_geo(v, p, c, a);
+    let m = theme::m();
+    let g = fade_geo(v, p, c);
     let clipped = painter.with_clip_rect(g.body.intersect(v.grid));
     if g.x_end < g.body.right() {
         // The clip runs on past the end of its sound: nothing plays here.
@@ -1149,42 +1193,58 @@ fn paint_audio(
             g.body.left_center() + vec2(5.0, 0.0),
             Align2::LEFT_CENTER,
             "file missing",
-            FontId::proportional(theme::m().text_small),
+            FontId::proportional(m.text_small),
             theme::TEXT_DIM,
         );
         return;
     };
     let spt = p.seconds_per_tick();
     let sr = peaks.sample_rate() as f64;
-    let gain = 10f32.powf(a.gain / 20.0);
+    let gain = waveform::db(a.gain + c.gain);
     let wave = g.body.shrink2(vec2(0.0, 2.0));
     waveform::paint(&clipped, wave, &peaks, light.hi, 1.0, |x| {
         if x < g.x0 || x >= g.x_end {
             return None;
         }
         let secs = |x: f32| a.start + (c.offset as f64 + (v.tick(x) - c.start as f32) as f64) * spt;
-        let mut gain = gain;
+        let mut gain = gain * waveform::source_gain(a, secs(x));
         if x < g.x_in {
-            gain *= waveform::fade_gain(End::In, x, g.x0, g.x_in, a.fade_in.tension);
+            gain *= waveform::fade_gain(End::In, x, g.x0, g.x_in, c.fade_in.tension);
         }
         if x > g.x_out {
-            gain *= waveform::fade_gain(End::Out, x, g.x_out, g.x_end, a.fade_out.tension);
+            gain *= waveform::fade_gain(End::Out, x, g.x_out, g.x_end, c.fade_out.tension);
         }
         Some((secs(x) * sr, secs(x + 1.0) * sr, gain))
     });
-    if g.body.height() < 26.0 {
-        return; // too short for fades to be grabbed: just the waveform
-    }
-    for (end, f0, f1, fade, handle) in
-        [(End::In, g.x0, g.x_in, a.fade_in, g.x_in), (End::Out, g.x_out, g.x_end, a.fade_out, g.x_out)]
+    // The fades' curves: thin, so they never hide the waveform.
+    let ink = theme::TEXT.gamma_multiply(if hot.is_some() { 0.8 } else { 0.45 });
+    let mut mids = [None, None];
+    for (k, (end, f0, f1, fade)) in
+        [(End::In, g.x0, g.x_in, c.fade_in), (End::Out, g.x_out, g.x_end, c.fade_out)].into_iter().enumerate()
     {
-        let h = hot.filter(|h| h.0 == end);
-        if f1 - f0 >= 2.0 {
-            let mid = waveform::paint_fade(&clipped, g.body, end, f0, f1, fade.tension, theme::TEXT);
-            if f1 - f0 >= CURVE_MIN_W {
-                waveform::paint_tension(&clipped, mid, h.is_some_and(|h| h.1));
-            }
+        if f1 - f0 >= 3.0 {
+            waveform::paint_fade(&clipped, g.body, end, f0, f1, fade.tension, ink, false);
+            mids[k] = curve_mid(&g, end, fade.tension);
         }
-        waveform::paint_handle(&painter.with_clip_rect(v.grid), pos2(handle, g.handles_y), h.is_some_and(|h| !h.1));
+    }
+    let Some(hot) = hot else { return };
+    if v.clip_rect(c).height() < HANDLES_MIN_H {
+        return; // too short to grab anything: just the waveform
+    }
+    let on_grid = painter.with_clip_rect(v.grid);
+    for (k, end) in [End::In, End::Out].into_iter().enumerate() {
+        if let Some(mid) = mids[k] {
+            waveform::paint_tension(&clipped, mid, hot == Some(Grip::Curve(end)));
+        }
+        let x = if end == End::In { g.x_in } else { g.x_out };
+        waveform::paint_handle(&on_grid, pos2(x, g.handles_y), hot == Some(Grip::Fade(end)));
+    }
+    // The gain pill, with its value while it's the one under the mouse.
+    let at = gain_pos(&g);
+    let gain_hot = hot == Some(Grip::Gain);
+    waveform::paint_gain(&on_grid, at, gain_hot);
+    if gain_hot || c.gain != 0.0 {
+        let text = format!("{:+.1} dB", c.gain);
+        clipped.text(at + vec2(0.0, 6.0), Align2::CENTER_TOP, text, FontId::monospace(m.text_small), theme::TEXT);
     }
 }

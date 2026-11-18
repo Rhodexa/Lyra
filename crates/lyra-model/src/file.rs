@@ -51,6 +51,8 @@ mod tests {
         p.audio[a].fade_out = crate::Fade { len: 0.25, tension: -0.5 };
         let mut cl = Clip::of_audio(p.audio[a].id, 3, 0, 100);
         cl.offset = 12;
+        cl.gain = -3.5;
+        cl.fade_in = crate::Fade { len: 0.1, tension: 0.3 };
         p.clips.push(cl);
         p.tracks[3].mixer = 4;
         p.tracks[2].mute = true;
