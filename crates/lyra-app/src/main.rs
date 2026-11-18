@@ -16,6 +16,7 @@ mod mixer;
 mod piano_roll;
 mod playlist;
 mod rack;
+mod samples;
 mod theme;
 mod timeline;
 mod transport;

@@ -35,6 +35,11 @@ built before the line it depends on.
 - Save/load projects; render to WAV (the same engine running offline)
 
 ## M4: Audio
+- [x] Sampler instrument (one-shot / hold, root key, tune, attack/release, start), WAV + FLAC
+- [x] Starter Kit: 65 CC0 one-shots (from Sonic Pi via Freesound, credits per file)
+- [x] Browser: sample library (kit + your folder), click to hear, double-click / drag onto the plugin rack
+- [ ] Audio clips in the arrangement (drop a sample on a track)
+- [ ] Settings saving (layout, sizes, zoom); WAV export
 - Sampler, sample browser (drag from disk), audio clips
 - Waveform editing (cut, fade, normalize): the voice-acting workflow
 

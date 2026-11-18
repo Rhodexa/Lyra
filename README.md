@@ -48,6 +48,17 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Effects | "+ add effect"; light = bypass; ^ v reorder; x remove |
 | Route a channel | instrument editor (F8) → "mixer" menu |
 
+**Samples** (browser → Samples)
+
+| Do | How |
+|---|---|
+| Hear a sample | click it |
+| Make a sampler for it | double-click it, or drag it onto the plugin rack |
+| Swap a sample in | drag it onto an instrument's name in the plugin rack (any instrument becomes a sampler) |
+| Your own samples | put WAV/FLAC files (folders are fine) in `~/.local/share/lyra/library` ("Your folder…" opens it), then Rescan |
+
+Lyra ships a **Starter Kit** of 65 CC0 one-shots (see `assets/samples/Starter Kit/CREDITS.md`).
+
 **Plugin rack** (right panel; the step grid lives in the *Step sequencer* editor)
 
 | Do | How |

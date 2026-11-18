@@ -242,6 +242,28 @@ fn row(
 
         // Name button (flashes on every hit)
         let (rect, r) = ui.allocate_exact_size(vec2(m.name_w, m.step_h), Sense::click());
+        // A sample dropped on the name: this instrument becomes a sampler playing it.
+        let dragging_sample = egui::DragAndDrop::has_payload_of_type::<crate::browser::SampleDrag>(ui.ctx());
+        let drop_here = dragging_sample && ui.rect_contains_pointer(rect);
+        if drop_here && ui.input(|i| i.pointer.any_released()) {
+            if let Some(drag) = egui::DragAndDrop::take_payload::<crate::browser::SampleDrag>(ui.ctx()) {
+                h.checkpoint(p);
+                let ch = &mut p.channels[ci];
+                // Rename only channels still named after their instrument or old sample.
+                let old_name = ch.sample.as_deref().map(crate::samples::display_name);
+                let generic = lyra_dsp::info(&ch.instrument).map(|i| i.name) == Some(ch.name.as_str())
+                    || old_name.as_deref() == Some(ch.name.as_str());
+                if ch.instrument != "lyra.sampler" {
+                    ch.instrument = "lyra.sampler".into();
+                    ch.params = lyra_dsp::default_params("lyra.sampler");
+                }
+                if generic {
+                    ch.name = crate::samples::display_name(&drag.0);
+                }
+                ch.sample = Some(drag.0.to_string());
+                st.selected = ci;
+            }
+        }
         let selected = st.selected == ci;
         let flash = st.flash.get(ci).copied().unwrap_or(0.0);
         let painter = ui.painter().clone();
@@ -261,7 +283,13 @@ fn row(
         painter.rect_stroke(
             rect,
             cr(3),
-            if selected { stroke(1.0, color.gamma_multiply(0.6)) } else { stroke(1.0, theme::LINE) },
+            if drop_here {
+                stroke(1.5, theme::TEXT)
+            } else if selected {
+                stroke(1.0, color.gamma_multiply(0.6))
+            } else {
+                stroke(1.0, theme::LINE)
+            },
             StrokeKind::Inside,
         );
         painter.text(

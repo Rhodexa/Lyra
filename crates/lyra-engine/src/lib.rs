@@ -209,6 +209,15 @@ pub enum Command {
         channel: usize,
         event: Event,
     },
+    /// Audition something outside the song (a sample clicked in the browser):
+    /// this slot plays `key` once, straight into the master, replacing any
+    /// preview still sounding.
+    Preview {
+        slot: Box<ChannelSlot>,
+        key: u8,
+    },
+    /// Fade the preview out.
+    StopPreview,
 }
 
 enum Trash {
@@ -332,6 +341,8 @@ pub struct Engine {
     mixer: Vec<MixerTrack>,
     mix_l: Vec<f32>,
     mix_r: Vec<f32>,
+    /// What the browser is auditioning (see `Command::Preview`).
+    preview: Option<Box<ChannelSlot>>,
     /// (sample offset, choke group, source channel) collected while scheduling.
     chokes: Vec<(u32, u8, usize)>,
 }
@@ -370,6 +381,7 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
             .collect(),
         mix_l: vec![0.0; BLOCK],
         mix_r: vec![0.0; BLOCK],
+        preview: None,
         chokes: Vec::with_capacity(64),
     };
     let handle = EngineHandle { tx, trash: trash_rx, shared, sample_rate };
@@ -491,6 +503,19 @@ impl Engine {
                         ch.choke = choke;
                     }
                 }
+                Command::Preview { mut slot, key } => {
+                    slot.pending.push(Event::NoteOn { key, velocity: 0.9 }); // capacity reserved
+                    if let Some(old) = self.preview.replace(slot) {
+                        self.discard(Trash::Channel(old));
+                    }
+                }
+                Command::StopPreview => {
+                    if let Some(p) = &mut self.preview {
+                        if p.pending.len() < p.pending.capacity() {
+                            p.pending.push(Event::AllNotesOff);
+                        }
+                    }
+                }
                 Command::Live { channel, event } => {
                     if let Some(ch) = self.channels.get_mut(channel) {
                         if ch.pending.len() < ch.pending.capacity() {
@@ -601,6 +626,25 @@ impl Engine {
         }
         self.mix_l[..n].copy_from_slice(&self.mixer[0].buf_l[..n]);
         self.mix_r[..n].copy_from_slice(&self.mixer[0].buf_r[..n]);
+
+        // The browser's preview goes straight into the master (before master volume).
+        if let Some(pv) = &mut self.preview {
+            let ChannelSlot { plugin, events, pending, buf_l, buf_r, .. } = &mut **pv;
+            events.clear();
+            for e in pending.drain(..) {
+                events.push(TimedEvent { offset: 0, event: e });
+            }
+            plugin.process(ProcessContext {
+                sample_rate: self.sr,
+                events,
+                out_l: &mut buf_l[..n],
+                out_r: &mut buf_r[..n],
+            });
+            for s in 0..n {
+                self.mix_l[s] += buf_l[s] * 0.8;
+                self.mix_r[s] += buf_r[s] * 0.8;
+            }
+        }
 
         // 4. Master volume + a hard safety clamp (protects ears and speakers).
         let (mut pl, mut pr) = (0.0f32, 0.0f32);

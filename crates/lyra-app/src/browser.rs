@@ -1,22 +1,53 @@
 //! The browser: the docked panel on the left (F4 shows / hides it).
 //!
-//! For now it lists what Lyra already has, so it's useful from day one:
+//! * **Samples** — Lyra's Starter Kit and your library folder. Click a sample
+//!   to hear it; double-click (or drag it onto the plugin rack) to make a
+//!   sampler that plays it; drag it onto a rack row to swap that sample in
 //! * **Patterns** — click to edit (and place) that pattern
 //! * **Instruments** — click to add one to the instrument rack; open the
 //!   arrow for its presets
 //! * **Effects** — click to plug one into the selected mixer track
 //!
-//! Samples (a library folder on disk) join it in the next stage.
+//! The library is scanned when Lyra starts; the ↻ on the Samples header
+//! scans again (after you add files to your library folder).
 
 use crate::app::{Focus, UiState};
+use crate::samples::{self, Folder};
 use crate::theme::{self, cr};
 use egui::{pos2, vec2, Align2, FontId, Rect, Response, Sense, Ui};
 use lyra_model::{EffectSlot, History, Project};
 
 pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
-    let m = theme::m();
     egui::ScrollArea::vertical().id_salt("browser").auto_shrink([false, false]).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 1.0;
+
+        // ── Samples ──
+        let library = std::mem::take(&mut st.library);
+        let count = library.iter().map(count_files).sum();
+        if section(ui, "Samples", count) {
+            for root in &library {
+                folder(ui, root, 0, p, h, st);
+            }
+            if library.iter().all(|f| f.files.is_empty() && f.folders.is_empty()) {
+                ui.label(egui::RichText::new("No samples found.").small().color(theme::TEXT_DIM));
+            }
+            let lib = samples::user_root();
+            ui.horizontal(|ui| {
+                if ui.small_button("Rescan").on_hover_text("Look for new files in the library folders").clicked() {
+                    st.rescan = true;
+                }
+                if ui
+                    .small_button("Your folder…")
+                    .on_hover_text(format!("Put your own samples in {}", lib.display()))
+                    .clicked()
+                {
+                    let _ = std::fs::create_dir_all(&lib);
+                    let _ = std::process::Command::new("xdg-open").arg(&lib).spawn();
+                    st.rescan = true;
+                }
+            });
+        }
+        st.library = library;
 
         // ── Patterns ──
         if section(ui, "Patterns", p.patterns.len()) {
@@ -78,10 +109,87 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
                 }
             }
         }
-
-        ui.add_space(m.text);
-        ui.label(egui::RichText::new("Samples arrive in the next stage.").small().color(theme::TEXT_DIM));
     });
+}
+
+fn count_files(f: &Folder) -> usize {
+    f.files.len() + f.folders.iter().map(count_files).sum::<usize>()
+}
+
+/// A library folder: a foldable row, then its subfolders and samples.
+fn folder(ui: &mut Ui, f: &Folder, depth: usize, p: &mut Project, h: &mut History, st: &mut UiState) {
+    let id = ui.id().with(("folder", &f.path));
+    let mut open: bool = ui.data(|d| d.get_temp(id)).unwrap_or(depth == 0);
+    let indent = depth as f32 * 12.0;
+    let r = row(ui, &f.name, None, false, indent + 12.0);
+    chevron(ui.painter(), pos2(r.rect.left() + indent + 10.0, r.rect.center().y), open, theme::TEXT_DIM);
+    if r.clicked() {
+        open ^= true;
+        ui.data_mut(|d| d.insert_temp(id, open));
+    }
+    if !open {
+        return;
+    }
+    for sub in &f.folders {
+        folder(ui, sub, depth + 1, p, h, st);
+    }
+    for file in &f.files {
+        let name = samples::name_for(file);
+        let shown = samples::display_name(&name);
+        let (r, resp) = {
+            let m = theme::m();
+            ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click_and_drag())
+        };
+        paint_row(ui, r, &resp, &shown, None, st.previewing.as_deref() == Some(name.as_str()), indent + 24.0);
+        // A small speaker mark: "click to hear".
+        let c = pos2(r.left() + indent + 16.0, r.center().y);
+        let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+        ui.painter().add(egui::Shape::convex_polygon(
+            vec![
+                c + vec2(-3.0, -2.0),
+                c + vec2(0.0, -2.0),
+                c + vec2(3.0, -4.5),
+                c + vec2(3.0, 4.5),
+                c + vec2(0.0, 2.0),
+                c + vec2(-3.0, 2.0),
+            ],
+            ink,
+            egui::Stroke::NONE,
+        ));
+        if resp.drag_started() {
+            egui::DragAndDrop::set_payload(ui.ctx(), SampleDrag(name.clone()));
+        }
+        let resp = resp.on_hover_text("Click: hear it · double-click: new sampler · drag: onto the plugin rack");
+        if resp.clicked() {
+            // Our own double-click test: egui's doesn't fire on rows that can
+            // also be dragged. A second click on the same sample within 0.35 s.
+            let now = ui.input(|i| i.time);
+            let key = egui::Id::new("browser-last-sample-click");
+            let last: Option<(String, f64)> = ui.data(|d| d.get_temp(key));
+            if last.is_some_and(|(n, t)| n == name && now - t < 0.35) {
+                ui.data_mut(|d| d.remove::<(String, f64)>(key));
+                add_sampler(p, h, st, &name);
+            } else {
+                ui.data_mut(|d| d.insert_temp(key, (name.clone(), now)));
+                st.preview = Some(name.clone());
+            }
+        }
+    }
+}
+
+/// A sample being dragged out of the browser (its stored name).
+#[derive(Clone, Debug)]
+pub struct SampleDrag(pub String);
+
+/// A new sampler instrument playing `sample`, named after it.
+pub fn add_sampler(p: &mut Project, h: &mut History, st: &mut UiState, sample: &str) {
+    h.checkpoint(p);
+    p.add_channel(&samples::display_name(sample), "lyra.sampler", lyra_dsp::default_params("lyra.sampler"));
+    if let Some(ch) = p.channels.last_mut() {
+        ch.sample = Some(sample.to_string());
+    }
+    st.selected = p.channels.len() - 1;
+    st.show_plugins = true;
 }
 
 fn add_instrument(p: &mut Project, h: &mut History, st: &mut UiState, name: &str, id: &str, params: Vec<f32>) {

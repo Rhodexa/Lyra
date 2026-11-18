@@ -5,6 +5,7 @@
 //! emits only the commands for what changed. Views never send engine commands
 //! for edits themselves — they just change the project. One direction, one place.
 
+use crate::samples::Samples;
 use lyra_engine::{ChannelSlot, Command, EngineHandle, FxChain, SeqNote, Sequence};
 use lyra_model::{Pattern, Project, TICKS_PER_STEP};
 
@@ -25,7 +26,7 @@ pub struct Bridge {
 }
 
 impl Bridge {
-    pub fn sync(&mut self, p: &Project, target: Playing, eng: &mut EngineHandle) {
+    pub fn sync(&mut self, p: &Project, target: Playing, eng: &mut EngineHandle, samples: &mut Samples) {
         if self.last.as_ref() == Some(p) && self.last_target == Some(target) {
             return; // nothing changed — the common case
         }
@@ -37,7 +38,10 @@ impl Bridge {
             None => true,
             Some(l) => {
                 l.channels.len() != p.channels.len()
-                    || l.channels.iter().zip(&p.channels).any(|(a, b)| a.id != b.id || a.instrument != b.instrument)
+                    || l.channels
+                        .iter()
+                        .zip(&p.channels)
+                        .any(|(a, b)| a.id != b.id || a.instrument != b.instrument || a.sample != b.sample)
             }
         };
         if rebuild {
@@ -46,6 +50,10 @@ impl Bridge {
                 let mut plugin = lyra_dsp::create_or_silence(&ch.instrument);
                 for (id, v) in ch.params.iter().enumerate() {
                     plugin.set_param(id as u32, *v);
+                }
+                // Samplers get their sample here, decoded on this (UI) thread.
+                if let Some(Ok(data)) = ch.sample.as_deref().map(|name| samples.get(name)) {
+                    plugin.set_sample(data);
                 }
                 eng.send(Command::AddChannel(ChannelSlot::new(plugin, eng.sample_rate())));
             }

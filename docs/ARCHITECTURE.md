@@ -52,6 +52,13 @@ areas remember their scroll/zoom and two can show the same editor. Editing
 keys go to the area under the mouse (`key_target`); F5/F7/F9 open or fold the
 bottom area on an editor. Instrument and effect editors stay floating windows.
 
+**Samples** (`samples.rs`): WAV/FLAC are decoded on the UI thread into
+`lyra_plugin::SampleData` (cached per file, shared by `Arc`). The bridge hands
+a sampler its sample (`Plugin::set_sample`) before the plugin goes to the audio
+thread. Projects store `bundled:<path>` for Lyra's own library, else a full
+path. Browser previews use the engine's preview slot (`Command::Preview`),
+mixed into the master before master volume.
+
 Views **only edit the project**. `bridge.rs` is the only file that talks to the
 engine about edits. Live playing (notes, play/stop) goes straight to the engine
 as commands.

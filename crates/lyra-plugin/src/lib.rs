@@ -134,6 +134,11 @@ impl ParamInfo {
             "pan" if v.abs() < 0.01 => "Centre".to_string(),
             "pan" if v < 0.0 => format!("L {:.0}", -v * 100.0),
             "pan" => format!("R {:.0}", v * 100.0),
+            "note" => {
+                const NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+                let k = v.round().clamp(0.0, 127.0) as i32;
+                format!("{}{}", NAMES[k as usize % 12], k / 12 - 1)
+            }
             _ => format!("{v:.2}"),
         }
     }
@@ -169,6 +174,28 @@ pub struct ProcessContext<'a> {
     pub out_r: &'a mut [f32],
 }
 
+/// Decoded audio, ready to play: one buffer per side (a mono file has the
+/// same samples in both). Shared between the UI and audio threads by `Arc`;
+/// decoded on the UI thread, never on the audio thread.
+#[derive(Debug, Default)]
+pub struct SampleData {
+    pub sample_rate: f32,
+    pub left: Vec<f32>,
+    pub right: Vec<f32>,
+}
+
+impl SampleData {
+    pub fn len(&self) -> usize {
+        self.left.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.left.is_empty()
+    }
+    pub fn seconds(&self) -> f32 {
+        self.len() as f32 / self.sample_rate.max(1.0)
+    }
+}
+
 pub trait Plugin: Send {
     fn name(&self) -> &'static str;
     fn params(&self) -> &'static [ParamInfo];
@@ -184,6 +211,9 @@ pub trait Plugin: Send {
     /// REAL-TIME. Tempo and song position, called right before `process`.
     /// Tempo-synced plugins (delays, sidechain pumps) override this.
     fn transport(&mut self, _transport: Transport) {}
+    /// Give the plugin a sample to play (samplers). Called on the UI thread,
+    /// before the plugin goes to the audio thread. Others ignore it.
+    fn set_sample(&mut self, _sample: std::sync::Arc<SampleData>) {}
 }
 
 /// Default values of a parameter list, in id order.

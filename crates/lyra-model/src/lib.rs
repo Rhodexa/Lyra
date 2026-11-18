@@ -55,6 +55,10 @@ pub struct Channel {
     /// Mixer track this channel plays into (0 = master).
     #[serde(default)]
     pub mixer: usize,
+    /// The sample a sampler plays: "bundled:<path>" for Lyra's own library,
+    /// otherwise a path on disk. None for every other instrument.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -254,6 +258,7 @@ impl Project {
             choke: 0,
             color,
             mixer,
+            sample: None,
         });
         id
     }

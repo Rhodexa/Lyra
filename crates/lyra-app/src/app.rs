@@ -54,6 +54,12 @@ pub struct UiState {
     /// "Open this pattern in the piano roll" (double-click in the browser or
     /// on a clip): the top area switches to the piano roll for it.
     pub open_pattern: Option<usize>,
+    /// The sample library, as scanned (see `samples`); `rescan` asks for a new scan.
+    pub library: Vec<crate::samples::Folder>,
+    pub rescan: bool,
+    /// "Play this sample now" (a click in the browser), and the last one played.
+    pub preview: Option<String>,
+    pub previewing: Option<String>,
     /// The browser panel on the left (F4).
     pub show_browser: bool,
     /// The mixer track whose effects are shown.
@@ -85,6 +91,10 @@ impl Default for UiState {
             show: None,
             visible: Vec::new(),
             open_pattern: None,
+            library: Vec::new(),
+            rescan: true,
+            preview: None,
+            previewing: None,
             show_browser: true,
             mixer_selected: 1,
             effect: None,
@@ -117,6 +127,8 @@ pub struct LyraApp {
     key_area: usize,
     /// The playhead as of this frame (for seeks that depend on where we are).
     playhead: f64,
+    /// Decoded samples (shared with samplers on the audio thread).
+    samples: crate::samples::Samples,
     textures: theme::Textures,
     frame_count: u64,
     /// A window being raised, and for how many more frames (see `windows`).
@@ -186,6 +198,7 @@ impl LyraApp {
             area_rects: [None; 2],
             key_area: 0,
             playhead: 0.0,
+            samples: crate::samples::Samples::default(),
             textures: theme::Textures::new(&cc.egui_ctx),
             frame_count: 0,
             raising: None,
@@ -369,6 +382,48 @@ impl LyraApp {
             self.key_area = 0;
         }
         Some(self.key_area)
+    }
+
+    /// Library scans, previews, the dragged-sample label, drops that nobody
+    /// else took, and sample-loading errors.
+    fn sample_housekeeping(&mut self, ctx: &egui::Context) {
+        if std::mem::take(&mut self.ui.rescan) {
+            use crate::samples::{bundled_root, scan, user_root};
+            self.ui.library = [(bundled_root(), "Lyra"), (user_root(), "Your library")]
+                .into_iter()
+                .filter_map(|(path, name)| scan(&path, name))
+                .collect();
+        }
+        if let Some(name) = self.ui.preview.take() {
+            match self.samples.get(&name) {
+                Ok(data) => {
+                    if let Some(e) = &mut self.engine {
+                        let mut sampler = lyra_dsp::sampler::Sampler::new();
+                        lyra_plugin::Plugin::set_sample(&mut sampler, data);
+                        let slot = lyra_engine::ChannelSlot::new(Box::new(sampler), e.sample_rate());
+                        e.send(Command::Preview { slot, key: 60 });
+                    }
+                    self.ui.previewing = Some(name);
+                }
+                Err(err) => self.notify(&err, true),
+            }
+        }
+        // While a sample is dragged, its name follows the mouse.
+        if let Some(drag) = egui::DragAndDrop::payload::<crate::browser::SampleDrag>(ctx) {
+            if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                let layer = egui::LayerId::new(egui::Order::Tooltip, Id::new("sample-drag"));
+                let painter = ctx.layer_painter(layer);
+                let text = crate::samples::display_name(&drag.0);
+                let galley = painter.layout_no_wrap(text, egui::FontId::proportional(theme::m().text), theme::TEXT);
+                let r = egui::Rect::from_min_size(pos + egui::vec2(14.0, 8.0), galley.size() + egui::vec2(16.0, 8.0));
+                painter.rect_filled(r, cr(4), theme::PANEL_HI);
+                painter.rect_stroke(r, cr(4), theme::stroke(1.0, theme::LINE), egui::StrokeKind::Inside);
+                painter.galley(r.min + egui::vec2(8.0, 4.0), galley, theme::TEXT);
+            }
+        }
+        for err in self.samples.take_errors() {
+            self.notify(&err, true);
+        }
     }
 
     /// A seek inside the current pattern (the piano roll's ruler). In pattern
@@ -645,6 +700,8 @@ impl eframe::App for LyraApp {
             ctx.request_repaint();
         }
 
+        self.sample_housekeeping(ctx);
+
         // ── Actions ──
         let target = self.key_target(ctx);
         for a in actions {
@@ -654,7 +711,7 @@ impl eframe::App for LyraApp {
         // ── Push changes to the engine ──
         if let Some(e) = &mut self.engine {
             let target = if self.ui.song_mode { Playing::Song } else { Playing::Pattern(self.ui.pattern) };
-            self.bridge.sync(&self.project, target, e);
+            self.bridge.sync(&self.project, target, e, &mut self.samples);
             if let Some(tick) = self.pending_seek.take() {
                 e.send(Command::Seek(tick));
             }
@@ -715,6 +772,13 @@ impl LyraApp {
                         });
                     });
                     rack::plugins(ui, &mut self.project, &mut self.history, &mut self.ui);
+                    // A sample dropped anywhere else on the panel: a new sampler for it.
+                    let released = ui.input(|i| i.pointer.any_released());
+                    if released && ui.rect_contains_pointer(ui.max_rect()) {
+                        if let Some(drag) = egui::DragAndDrop::take_payload::<crate::browser::SampleDrag>(ui.ctx()) {
+                            crate::browser::add_sampler(&mut self.project, &mut self.history, &mut self.ui, &drag.0);
+                        }
+                    }
                 });
         } else {
             folded_strip(ctx, "plugins-folded", false, "Unfold the plugin rack  (F6)", &mut self.ui.show_plugins);

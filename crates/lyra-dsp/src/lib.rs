@@ -7,6 +7,7 @@
 pub mod drums;
 pub mod effects;
 pub mod fm;
+pub mod sampler;
 pub mod synth;
 pub mod util;
 
@@ -29,6 +30,8 @@ pub const INSTRUMENTS: &[InstrumentInfo] = &[
     InstrumentInfo { id: "lyra.synth", name: "Lyra Synth", melodic: true },
     // The id stays "lyra.fm" (saved projects use it); the name is the synth's own.
     InstrumentInfo { id: "lyra.fm", name: "Fluttersine", melodic: true },
+    // Plays one sample (drop a sample on the plugin rack to make one).
+    InstrumentInfo { id: "lyra.sampler", name: "Sampler", melodic: false },
 ];
 
 pub fn info(id: &str) -> Option<&'static InstrumentInfo> {
@@ -44,6 +47,7 @@ pub fn create(id: &str) -> Option<Box<dyn Plugin>> {
         "lyra.hat" => Box::new(drums::Hat::new()),
         "lyra.synth" => Box::new(synth::Synth::new()),
         "lyra.fm" => Box::new(fm::Fm::new()),
+        "lyra.sampler" => Box::new(sampler::Sampler::new()),
         _ => return None,
     })
 }
