@@ -2013,6 +2013,25 @@ mod tests {
     }
 
     #[test]
+    fn mono_legato_steps_pitch_without_restarting_the_envelope() {
+        // The tracker-arp trick: overlapping notes on a mono voice.
+        let mut fm =
+            with(&[(p::MODE, 1.0), (p::GLIDE, 0.0), (p::op(0, p::OP_DECAY), 0.05), (p::op(0, p::OP_SUSTAIN), 0.5)]);
+        render(&mut fm, &[on(60)], 0.3); // settled on its sustain
+        let before = fm.voices[0].ev[0];
+        render(&mut fm, &[on(64), off(60)], 0.002);
+        let v = &fm.voices[0];
+        assert_eq!(v.key, 64);
+        assert!((v.semi - 64.0).abs() < 1e-3, "no glide: the pitch jumps");
+        assert!(
+            v.est[0] != ATTACK && (v.ev[0] - before).abs() < 1e-3,
+            "no restart: stage {} level {} (was {before})",
+            v.est[0],
+            v.ev[0]
+        );
+    }
+
+    #[test]
     fn sine_poly_is_accurate() {
         for k in -4000..4000 {
             let x = k as f32 / 1000.0;
