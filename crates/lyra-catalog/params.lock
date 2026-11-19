@@ -257,3 +257,15 @@ lyra.fluttersine	181	Mod 5 amount
 lyra.fluttersine	182	Mod 6 source
 lyra.fluttersine	183	Mod 6 dest
 lyra.fluttersine	184	Mod 6 amount
+lyra.limiter	0	Gain
+lyra.limiter	1	Ceiling
+lyra.limiter	2	Release
+lyra.chorus	0	Rate
+lyra.chorus	1	Depth
+lyra.chorus	2	Delay
+lyra.chorus	3	Mix
+lyra.drive	0	Shape
+lyra.drive	1	Drive
+lyra.drive	2	Tone
+lyra.drive	3	Mix
+lyra.drive	4	Output

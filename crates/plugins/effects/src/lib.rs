@@ -10,6 +10,9 @@
 //! | `lyra.delay` | tempo-synced echo, optional ping-pong |
 //! | `lyra.reverb` | Freeverb-style room |
 //! | `lyra.pump` | beat-synced ducking: the house "sidechain" breathing |
+//! | `lyra.limiter` | look-ahead brickwall: nothing passes the ceiling (1.5 ms latency) |
+//! | `lyra.chorus` | two modulated delays, a quarter cycle apart: width and shimmer |
+//! | `lyra.drive` | saturation: soft, hard, fold, or bit-crush, with a tone control |
 
 use lyra_dsp::{tau_coeff, Biquad, FilterKind};
 use lyra_plugin::{Curve, ParamInfo, Plugin, PluginInfo, ProcessContext, Transport};
@@ -25,6 +28,9 @@ pub const PLUGINS: &[PluginInfo] = &[
     effect("lyra.delay", "Delay", &DELAY_PARAMS, || Box::new(Delay::new())),
     effect("lyra.reverb", "Reverb", &REVERB_PARAMS, || Box::new(Reverb::new())),
     effect("lyra.pump", "Pump", &PUMP_PARAMS, || Box::new(Pump::new())),
+    effect("lyra.limiter", "Limiter", &LIMITER_PARAMS, || Box::new(Limiter::new())),
+    effect("lyra.chorus", "Chorus", &CHORUS_PARAMS, || Box::new(Chorus::new())),
+    effect("lyra.drive", "Drive", &DRIVE_PARAMS, || Box::new(Drive::new())),
 ];
 
 const fn effect(
@@ -522,6 +528,238 @@ impl Pump {
 }
 effect_plugin!(Pump, "Pump", PUMP_PARAMS);
 
+// ─────────────────────────────── Limiter ───────────────────────────────
+
+pub static LIMITER_PARAMS: [ParamInfo; 3] = [
+    ParamInfo::new(0, "Gain", 0.0, 18.0, 0.0, "dB", Lin),
+    ParamInfo::new(1, "Ceiling", -12.0, 0.0, -0.3, "dB", Lin),
+    ParamInfo::new(2, "Release", 0.01, 1.0, 0.1, "s", Exp),
+];
+
+/// Look-ahead time: the signal is delayed by this much so the gain can be
+/// down before a peak arrives.
+const LOOKAHEAD_S: f32 = 0.0015;
+
+/// A brickwall limiter. Each sample's required gain (ceiling / peak) goes
+/// through a sliding minimum over the look-ahead window, then a moving
+/// average over the same window: the average of values that are all at or
+/// below a peak's gain is at or below it too, so by the time that peak leaves
+/// the delay the gain is low enough, and it got there along a smooth ramp
+/// instead of a click. Release then lets the gain back up gently.
+pub struct Limiter {
+    p: Vec<f32>,
+    sr: f32,
+    dirty: bool,
+    /// Window length in samples (the delay is `len - 1`).
+    len: usize,
+    delay: [Vec<f32>; 2],
+    at: usize,
+    /// Sliding minimum: a monotonic queue of (sample index, gain) in a ring.
+    q: Vec<(u64, f32)>,
+    q_head: usize,
+    q_len: usize,
+    n: u64,
+    /// Moving average of the minimum.
+    avg: Vec<f32>,
+    sum: f64,
+    gain: f32,
+    release_k: f32,
+}
+
+impl Limiter {
+    fn new() -> Self {
+        let mut l = Self {
+            p: lyra_plugin::default_params(&LIMITER_PARAMS),
+            sr: 48_000.0,
+            dirty: true,
+            len: 1,
+            delay: [Vec::new(), Vec::new()],
+            at: 0,
+            q: Vec::new(),
+            q_head: 0,
+            q_len: 0,
+            n: 0,
+            avg: Vec::new(),
+            sum: 0.0,
+            gain: 1.0,
+            release_k: 0.0,
+        };
+        l.prepare();
+        l
+    }
+    fn prepare(&mut self) {
+        self.len = ((LOOKAHEAD_S * self.sr) as usize).max(2);
+        self.delay = [vec![0.0; self.len], vec![0.0; self.len]];
+        self.q = vec![(0, 1.0); self.len + 1];
+        self.avg = vec![1.0; self.len];
+        self.sum = self.len as f64;
+        (self.at, self.q_head, self.q_len, self.n, self.gain) = (0, 0, 0, 0, 1.0);
+    }
+    fn update(&mut self) {
+        self.release_k = tau_coeff(self.p[2] / 4.6, self.sr); // ~99% back up over `release`
+    }
+    fn run(&mut self, l: &mut [f32], r: &mut [f32]) {
+        let input = db(self.p[0]);
+        let ceiling = db(self.p[1]);
+        let (len, cap) = (self.len, self.q.len());
+        for i in 0..l.len() {
+            let (xl, xr) = (l[i] * input, r[i] * input);
+            let peak = xl.abs().max(xr.abs());
+            let need = if peak > ceiling { ceiling / peak } else { 1.0 };
+            // Sliding minimum of `need` over the last `len` samples.
+            while self.q_len > 0 && self.q[(self.q_head + self.q_len - 1) % cap].1 >= need {
+                self.q_len -= 1;
+            }
+            self.q[(self.q_head + self.q_len) % cap] = (self.n, need);
+            self.q_len += 1;
+            if self.q[self.q_head].0 + len as u64 <= self.n {
+                self.q_head = (self.q_head + 1) % cap;
+                self.q_len -= 1;
+            }
+            let min = self.q[self.q_head].1;
+            // Moving average of the minimum over the same window.
+            let slot = (self.n % len as u64) as usize;
+            self.sum += (min - self.avg[slot]) as f64;
+            self.avg[slot] = min;
+            let smooth = (self.sum / len as f64) as f32;
+            self.gain = if smooth < self.gain { smooth } else { smooth + (self.gain - smooth) * self.release_k };
+            // The delayed sample leaves now (the window is `len`, the delay `len - 1`).
+            let out = (self.at + 1) % len;
+            let (dl, dr) = (self.delay[0][out], self.delay[1][out]);
+            self.delay[0][self.at] = xl;
+            self.delay[1][self.at] = xr;
+            self.at = out;
+            self.n += 1;
+            // The guard is for float rounding only; the gain already did the work.
+            l[i] = (dl * self.gain).clamp(-ceiling, ceiling);
+            r[i] = (dr * self.gain).clamp(-ceiling, ceiling);
+        }
+    }
+    fn on_transport(&mut self, _: Transport) {}
+}
+effect_plugin!(Limiter, "Limiter", LIMITER_PARAMS);
+
+// ─────────────────────────────── Chorus ───────────────────────────────
+
+pub static CHORUS_PARAMS: [ParamInfo; 4] = [
+    ParamInfo::new(0, "Rate", 0.05, 5.0, 0.6, "Hz", Exp),
+    ParamInfo::new(1, "Depth", 0.0, 1.0, 0.5, "%", Lin),
+    ParamInfo::new(2, "Delay", 0.002, 0.03, 0.012, "s", Exp),
+    ParamInfo::new(3, "Mix", 0.0, 1.0, 0.5, "%", Lin),
+];
+
+/// The most the delay swings either way, at full depth (seconds).
+const CHORUS_SWING_S: f32 = 0.005;
+
+/// One delay line per side, each swung by the same LFO a quarter cycle apart,
+/// so even a mono sound comes out wide.
+pub struct Chorus {
+    p: Vec<f32>,
+    sr: f32,
+    dirty: bool,
+    buf: [Vec<f32>; 2],
+    write: usize,
+    phase: f32,
+}
+
+impl Chorus {
+    fn new() -> Self {
+        let mut c = Self {
+            p: lyra_plugin::default_params(&CHORUS_PARAMS),
+            sr: 48_000.0,
+            dirty: true,
+            buf: [Vec::new(), Vec::new()],
+            write: 0,
+            phase: 0.0,
+        };
+        c.prepare();
+        c
+    }
+    fn prepare(&mut self) {
+        let len = ((0.03 + CHORUS_SWING_S) * self.sr) as usize + 4;
+        self.buf = [vec![0.0; len], vec![0.0; len]];
+        self.write = 0;
+    }
+    fn update(&mut self) {}
+    fn run(&mut self, l: &mut [f32], r: &mut [f32]) {
+        let len = self.buf[0].len();
+        let inc = self.p[0] / self.sr;
+        let base = self.p[2] * self.sr;
+        let swing = self.p[1] * CHORUS_SWING_S * self.sr;
+        let (wet, dry) = (self.p[3], 1.0 - self.p[3] * 0.5);
+        for i in 0..l.len() {
+            self.phase = (self.phase + inc).fract();
+            for (side, x) in [&mut l[i], &mut r[i]].into_iter().enumerate() {
+                self.buf[side][self.write] = *x;
+                let lfo = (TAU * (self.phase + 0.25 * side as f32)).sin();
+                let d = (base + swing * lfo).clamp(1.0, (len - 2) as f32);
+                let (i0, i1, frac) = ring_read(self.write, d, len);
+                let delayed = self.buf[side][i0] + (self.buf[side][i1] - self.buf[side][i0]) * frac;
+                *x = *x * dry + delayed * wet;
+            }
+            self.write = (self.write + 1) % len;
+        }
+    }
+    fn on_transport(&mut self, _: Transport) {}
+}
+effect_plugin!(Chorus, "Chorus", CHORUS_PARAMS);
+
+// ─────────────────────────────── Drive ───────────────────────────────
+
+pub static DRIVE_PARAMS: [ParamInfo; 5] = [
+    ParamInfo::choice(0, "Shape", &["Soft", "Hard", "Fold", "Crush"], 0),
+    ParamInfo::new(1, "Drive", 0.0, 36.0, 12.0, "dB", Lin),
+    ParamInfo::new(2, "Tone", 500.0, 20_000.0, 12_000.0, "Hz", Exp),
+    ParamInfo::new(3, "Mix", 0.0, 1.0, 1.0, "%", Lin),
+    ParamInfo::new(4, "Output", -24.0, 6.0, -6.0, "dB", Lin),
+];
+
+/// Saturation. Soft is tanh, hard clips at ±1, fold mirrors the wave back
+/// (sin), crush keeps fewer bits the harder you drive (16 down to 3). Then a
+/// gentle low-pass ("Tone") tames the fizz, and Mix blends the dry signal.
+/// No oversampling: the hard shapes alias a little, which suits grit.
+pub struct Drive {
+    p: Vec<f32>,
+    sr: f32,
+    dirty: bool,
+    tone: [f32; 2],
+    tone_k: f32,
+}
+
+impl Drive {
+    fn new() -> Self {
+        Self { p: lyra_plugin::default_params(&DRIVE_PARAMS), sr: 48_000.0, dirty: true, tone: [0.0; 2], tone_k: 0.0 }
+    }
+    fn prepare(&mut self) {}
+    fn update(&mut self) {
+        // Fully open = no filter at all (a crushed signal stays exactly stepped).
+        self.tone_k =
+            if self.p[2] >= 19_999.0 { 1.0 } else { 1.0 - (-TAU * self.p[2].min(self.sr * 0.45) / self.sr).exp() };
+    }
+    fn run(&mut self, l: &mut [f32], r: &mut [f32]) {
+        let shape = self.p[0].round() as u8;
+        let drive = db(self.p[1]);
+        let (mix, out) = (self.p[3], db(self.p[4]));
+        // Crush: 16 bits at no drive, 3 at full.
+        let steps = 2f32.powf(16.0 - 13.0 * self.p[1] / 36.0) * 0.5;
+        for i in 0..l.len() {
+            for (side, x) in [&mut l[i], &mut r[i]].into_iter().enumerate() {
+                let d = *x * drive;
+                let y = match shape {
+                    1 => d.clamp(-1.0, 1.0),
+                    2 => (d * std::f32::consts::FRAC_PI_2).sin(),
+                    3 => (*x * steps).round() / steps,
+                    _ => d.tanh(),
+                };
+                self.tone[side] += (y - self.tone[side]) * self.tone_k;
+                *x = *x * (1.0 - mix) + self.tone[side] * out * mix;
+            }
+        }
+    }
+    fn on_transport(&mut self, _: Transport) {}
+}
+effect_plugin!(Drive, "Drive", DRIVE_PARAMS);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,6 +803,63 @@ mod tests {
             n += 256;
         }
         out
+    }
+
+    #[test]
+    fn the_limiter_never_passes_the_ceiling() {
+        let mut fx = create("lyra.limiter").unwrap();
+        fx.activate(48_000.0);
+        fx.set_param(0, 12.0); // push a loud signal 12 dB harder
+        fx.set_param(1, -1.0);
+        // A loud sine with sudden spikes, the worst case for a look-ahead.
+        let input = |n: usize| (n as f32 * 0.05).sin() * 0.9 + if n.is_multiple_of(4801) { 3.0 } else { 0.0 };
+        let out = render(fx.as_mut(), input, 2.0);
+        let ceiling = lyra_plugin::db_to_gain(-1.0);
+        let peak = out.iter().fold(0.0f32, |m, x| m.max(*x));
+        assert!(peak <= ceiling + 1e-6, "peak {peak} over the ceiling {ceiling}");
+        assert!(peak > ceiling * 0.9, "and it still gets loud: {peak}");
+    }
+
+    #[test]
+    fn the_limiter_leaves_quiet_audio_alone() {
+        let mut fx = create("lyra.limiter").unwrap();
+        fx.activate(48_000.0);
+        let input = |n: usize| (n as f32 * 0.05).sin() * 0.5;
+        let out = render(fx.as_mut(), input, 0.5);
+        let lat = (LOOKAHEAD_S * 48_000.0) as usize - 1;
+        for (n, y) in out.iter().enumerate().take(20_000).skip(1000) {
+            assert!((y - input(n - lat).abs()).abs() < 1e-6, "sample {n}");
+        }
+    }
+
+    #[test]
+    fn chorus_widens_a_mono_sound() {
+        let mut fx = create("lyra.chorus").unwrap();
+        fx.activate(48_000.0);
+        let mut l: Vec<f32> = (0..48_000).map(|n| (n as f32 * 0.04).sin()).collect();
+        let mut r = l.clone();
+        for (cl, cr) in l.chunks_mut(256).zip(r.chunks_mut(256)) {
+            fx.process(ProcessContext { sample_rate: 48_000.0, events: &[], out_l: cl, out_r: cr });
+        }
+        let diff = l.iter().zip(&r).skip(4800).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+        assert!(diff > 0.1, "left and right should differ, max {diff}");
+    }
+
+    #[test]
+    fn crush_keeps_few_levels_at_full_drive() {
+        let mut fx = create("lyra.drive").unwrap();
+        fx.activate(48_000.0);
+        fx.set_param(0, 3.0); // Crush
+        fx.set_param(1, 36.0); // 3 bits
+        fx.set_param(2, 20_000.0);
+        fx.set_param(4, 0.0);
+        let mut l: Vec<f32> = (0..4800).map(|n| (n as f32 * 0.01).sin() * 0.9).collect();
+        let mut r = l.clone();
+        fx.process(ProcessContext { sample_rate: 48_000.0, events: &[], out_l: &mut l, out_r: &mut r });
+        let mut levels: Vec<i32> = l.iter().map(|x| (x * 1000.0).round() as i32).collect();
+        levels.sort();
+        levels.dedup();
+        assert!(levels.len() <= 9, "3 bits is at most 9 levels here, got {}", levels.len());
     }
 
     #[test]
