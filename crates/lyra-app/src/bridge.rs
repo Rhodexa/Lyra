@@ -234,8 +234,6 @@ pub fn compile_audio(p: &Project, samples: &mut Samples) -> AudioLane {
             gain: lyra_plugin::db_to_gain(a.gain + clip.gain),
             fade_in: fade(clip.fade_in),
             fade_out: fade(clip.fade_out),
-            source_fade_in: fade(a.fade_in),
-            source_fade_out: fade(a.fade_out),
             track: track.mixer,
             data,
         });

@@ -63,20 +63,6 @@ pub fn fade_gain(end: End, x: f32, x0: f32, x1: f32, tension: f32) -> f32 {
     }
 }
 
-/// What an audio clip's *source* fades do at file second `t`: they sit at
-/// its trim points, in the file (see `lyra_model::Audio`).
-pub fn source_gain(a: &lyra_model::Audio, t: f64) -> f32 {
-    let mut g = 1.0;
-    let (fi, fo) = (a.fade_in.len as f64, a.fade_out.len as f64);
-    if fi > 0.0 && t - a.start < fi {
-        g *= fade_curve(((t - a.start) / fi) as f32, a.fade_in.tension);
-    }
-    if fo > 0.0 && a.end - t < fo {
-        g *= fade_curve(((a.end - t) / fo) as f32, a.fade_out.tension);
-    }
-    g
-}
-
 /// Draw a fade's curve, and with `shade` darken the part of `rect` above it
 /// (what the fade takes away). Returns the curve's midpoint: where its
 /// tension handle sits.

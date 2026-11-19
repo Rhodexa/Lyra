@@ -31,7 +31,9 @@ pub fn from_json(text: &str) -> Result<Project, String> {
     if file.version > VERSION {
         return Err(format!("made by a newer Lyra (file v{}, this Lyra reads up to v{VERSION})", file.version));
     }
-    Ok(file.project)
+    let mut project = file.project;
+    project.number_clips();
+    Ok(project)
 }
 
 #[cfg(test)]
@@ -48,7 +50,7 @@ mod tests {
         let id = p.patterns[0].id;
         p.clips.push(Clip::of_pattern(id, 2, TICKS_PER_BAR, 4 * TICKS_PER_BAR));
         let a = p.add_audio("Hello", "/tmp/hello.wav", 1.5);
-        p.audio[a].fade_out = crate::Fade { len: 0.25, tension: -0.5 };
+        p.audio[a].gain = -2.0;
         let mut cl = Clip::of_audio(p.audio[a].id, 3, 0, 100);
         cl.offset = 12;
         cl.gain = -3.5;
@@ -57,6 +59,7 @@ mod tests {
         p.tracks[3].mixer = 4;
         p.tracks[2].mute = true;
         p.bpm = 128.5;
+        p.number_clips(); // clip ids aren't saved: reading numbers them like this
         let back = from_json(&to_json(&p)).unwrap();
         assert_eq!(back, p);
         // ids keep counting from where they were (no reuse after loading)

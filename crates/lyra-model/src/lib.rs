@@ -27,6 +27,10 @@ pub type ChannelId = u32;
 pub type PatternId = u32;
 /// Stable identity of an audio clip (the shared thing clips point at).
 pub type AudioId = u32;
+/// Identity of one clip on the playlist, while Lyra runs (so the UI can
+/// say "this clip" even as others are added and deleted). Not saved: clips
+/// are numbered afresh when a project is opened.
+pub type ClipId = u32;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Note {
@@ -171,8 +175,8 @@ pub struct Fade {
 
 /// An audio clip's *source*: a sample plus how to play it. Like a pattern,
 /// it is shared: every clip on the playlist that points at it plays it, so a
-/// change here (trim, gain, fades) changes all of them. Each placed clip adds
-/// its own gain and fades on top (see [`Clip`]). Nothing touches the file on
+/// change here (trim, gain) changes all of them. Fades belong to each placed
+/// clip (see [`Clip`]), along with its own gain. Nothing touches the file on
 /// disk.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Audio {
@@ -186,13 +190,6 @@ pub struct Audio {
     /// The part of the file that plays, in seconds from its start.
     pub start: f64,
     pub end: f64,
-    /// Fades at the trim points (in the file, so a clip that starts later in
-    /// the audio doesn't hear the source's fade-in). Usually none: each clip
-    /// has its own fades.
-    #[serde(default)]
-    pub fade_in: Fade,
-    #[serde(default)]
-    pub fade_out: Fade,
     /// Index into the theme's palette.
     #[serde(default)]
     pub color: usize,
@@ -222,6 +219,8 @@ pub enum Source {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(from = "ClipFile", into = "ClipFile")]
 pub struct Clip {
+    /// Given by [`Project::add_clip`]; see [`ClipId`].
+    pub id: ClipId,
     pub source: Source,
     /// Playlist row.
     pub track: usize,
@@ -242,6 +241,7 @@ pub const EDGE_FADE: Fade = Fade { len: 0.005, tension: 0.0 };
 impl Clip {
     pub fn of_pattern(pattern: PatternId, track: usize, start: u32, len: u32) -> Self {
         Self {
+            id: 0,
             source: Source::Pattern(pattern),
             track,
             start,
@@ -309,6 +309,7 @@ impl From<ClipFile> for Clip {
             (None, p) => Source::Pattern(p.unwrap_or(0)),
         };
         Clip {
+            id: 0, // numbered by the project once it's read
             source,
             track: f.track,
             start: f.start,
@@ -391,6 +392,8 @@ pub struct Project {
     next_id: ChannelId,
     next_pattern_id: PatternId,
     next_audio_id: AudioId,
+    #[serde(skip)]
+    next_clip_id: ClipId,
 }
 
 impl Default for Project {
@@ -410,6 +413,7 @@ impl Default for Project {
             next_id: 1,
             next_pattern_id: 2,
             next_audio_id: 1,
+            next_clip_id: 1,
         }
     }
 }
@@ -478,6 +482,26 @@ impl Project {
         self.patterns.iter().find(|p| p.id == id)
     }
 
+    /// Puts a clip on the playlist with a fresh id; returns its index.
+    pub fn add_clip(&mut self, mut clip: Clip) -> usize {
+        clip.id = self.next_clip_id.max(1);
+        self.next_clip_id = clip.id + 1;
+        self.clips.push(clip);
+        self.clips.len() - 1
+    }
+
+    pub fn clip_index(&self, id: ClipId) -> Option<usize> {
+        self.clips.iter().position(|c| c.id == id)
+    }
+
+    /// Give every clip a fresh id (after reading a project file).
+    pub fn number_clips(&mut self) {
+        for (i, c) in self.clips.iter_mut().enumerate() {
+            c.id = i as ClipId + 1;
+        }
+        self.next_clip_id = self.clips.len() as ClipId + 1;
+    }
+
     /// Adds an audio clip playing all `seconds` of `sample`; returns its index.
     pub fn add_audio(&mut self, name: &str, sample: &str, seconds: f64) -> usize {
         let id = self.next_audio_id;
@@ -490,8 +514,6 @@ impl Project {
             gain: 0.0,
             start: 0.0,
             end: seconds.max(0.0),
-            fade_in: Fade::default(),
-            fade_out: Fade::default(),
             color,
         });
         self.audio.len() - 1
@@ -631,8 +653,12 @@ mod tests {
         let mut proj = Project::default();
         let i = proj.add_audio("line 1", "/voice/line1.wav", 2.5);
         let id = proj.audio[i].id;
-        proj.clips.push(Clip::of_audio(id, 0, 0, TICKS_PER_BAR));
-        proj.clips.push(Clip::of_audio(id, 1, TICKS_PER_BAR, TICKS_PER_BAR));
+        let first = proj.add_clip(Clip::of_audio(id, 0, 0, TICKS_PER_BAR));
+        let second = proj.add_clip(Clip::of_audio(id, 1, TICKS_PER_BAR, TICKS_PER_BAR));
+        assert_ne!(proj.clips[first].id, proj.clips[second].id, "every clip is told apart");
+        let second_id = proj.clips[second].id;
+        proj.clips.remove(first);
+        assert_eq!(proj.clip_index(second_id), Some(0), "found by id after the list shifts");
         assert_eq!(proj.audio(id).unwrap().length(), 2.5);
         let c = proj.clone_audio(i);
         assert_ne!(proj.audio[c].id, id, "a copy gets its own id");

@@ -83,7 +83,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
                     resp.on_hover_text("Click: place it with a click · double-click: open it · drag: onto a track");
                 if resp.clicked() {
                     st.audio = Some(id);
-                    st.audio_clip = None; // the source alone, not one clip of it
+                    st.clip = None; // the source alone, not one clip of it
                     st.place_audio = true;
                     if double_click(ui, "browser-last-audio-click", id) {
                         st.open_audio = Some(id);

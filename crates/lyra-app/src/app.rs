@@ -76,9 +76,11 @@ pub struct UiState {
     /// a click on empty arrangement places it (instead of the current pattern).
     pub audio: Option<lyra_model::AudioId>,
     pub place_audio: bool,
-    /// The playlist clip (index) the audio-clip editor shows the window and
-    /// own settings of: the one last clicked. None = just the source.
-    pub audio_clip: Option<usize>,
+    /// The clip last clicked on the arrangement: the next click on empty
+    /// space places a copy of it, and the audio-clip editor shows its window
+    /// and own settings. None = nothing picked (or a pattern / audio clip
+    /// picked in the top bar or the browser).
+    pub clip: Option<lyra_model::ClipId>,
     /// "Open this audio clip in the audio-clip editor" (a double-click).
     pub open_audio: Option<lyra_model::AudioId>,
     /// The pattern last frame: picking another one goes back to placing patterns.
@@ -114,7 +116,7 @@ impl Default for UiState {
             song_mode: false,
             audio: None,
             place_audio: false,
-            audio_clip: None,
+            clip: None,
             open_audio: None,
             last_pattern: 0,
         }
@@ -815,6 +817,13 @@ impl LyraApp {
         // already shows it, otherwise the bottom area opens on it.
         if self.ui.pattern != self.ui.last_pattern {
             self.ui.place_audio = false;
+            // Picked another pattern (top bar, browser, [ ]): the next click
+            // places that one, not a copy of the last clip.
+            if self.ui.clip.and_then(|id| self.project.clip_index(id)).is_some_and(|i| {
+                self.project.clips[i].pattern() != self.project.patterns.get(self.ui.pattern).map(|p| p.id)
+            }) {
+                self.ui.clip = None;
+            }
             self.ui.last_pattern = self.ui.pattern;
         }
         // Double-clicked an audio clip: show it in the audio-clip editor.

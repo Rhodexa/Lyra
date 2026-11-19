@@ -317,7 +317,7 @@ impl Playlist {
                 for &i in &self.selection.clone() {
                     let mut c = p.clips[i].clone();
                     c.start += shift;
-                    p.clips.push(c);
+                    p.add_clip(c);
                 }
                 self.selection = (base..p.clips.len()).collect();
             }
@@ -500,10 +500,10 @@ impl Playlist {
                         None
                     };
                     if let Some(id) = id {
-                        p.clips.push(Clip::of_audio(id, track, start, len));
-                        self.selection = vec![p.clips.len() - 1];
+                        let i = p.add_clip(Clip::of_audio(id, track, start, len));
+                        self.selection = vec![i];
                         st.audio = Some(id);
-                        st.audio_clip = Some(p.clips.len() - 1);
+                        st.clip = Some(p.clips[i].id);
                         st.place_audio = true;
                         ghost = None;
                     }
@@ -748,7 +748,8 @@ impl Playlist {
         let left = if edge.is_none() { left_edge_hit(v, &p.clips, pos) } else { None };
         if let Some(i) = edge.or(left).or_else(|| hit(v, &p.clips, pos)) {
             // Clicking a clip makes it the current one (FL-style): the next click
-            // on empty space places another of it.
+            // on empty space places a copy of it, settings and all.
+            st.clip = Some(p.clips[i].id);
             match p.clips[i].source {
                 Source::Pattern(id) => {
                     if let Some(idx) = p.pattern_index(id) {
@@ -758,7 +759,6 @@ impl Playlist {
                 }
                 Source::Audio(id) => {
                     st.audio = Some(id);
-                    st.audio_clip = Some(i);
                     st.place_audio = true;
                 }
             }
@@ -782,7 +782,7 @@ impl Playlist {
                 let at = self.selection.iter().position(|&j| j == i).unwrap_or(0);
                 for &j in &self.selection.clone() {
                     let c = p.clips[j].clone();
-                    p.clips.push(c);
+                    p.add_clip(c);
                 }
                 self.selection = (base..p.clips.len()).collect();
                 lead_i = self.selection[at];
@@ -800,11 +800,15 @@ impl Playlist {
             if track >= p.tracks.len() {
                 return;
             }
-            // Place the current pattern (or audio clip) here, full length, and
-            // keep dragging it.
+            // Place a copy of the current clip here (its length, window, fades
+            // and gain too), or else the current pattern / audio clip at full
+            // length, and keep dragging it.
             let start = (anchor_tick.max(0.0) as u32 / snap) * snap;
             let placing = st.audio.filter(|_| st.place_audio).filter(|&id| p.audio(id).is_some());
-            let clip = if let Some(id) = placing {
+            let template = st.clip.and_then(|id| p.clip_index(id)).map(|i| p.clips[i].clone());
+            let clip = if let Some(t) = template {
+                Clip { track, start, ..t }
+            } else if let Some(id) = placing {
                 let probe = Clip::of_audio(id, track, start, 1);
                 Clip::of_audio(id, track, start, audio_room(p, &probe).unwrap_or(TICKS_PER_BAR))
             } else if let Some(pat) = p.patterns.get(st.pattern) {
@@ -813,11 +817,8 @@ impl Playlist {
                 return;
             };
             h.checkpoint(p);
-            p.clips.push(clip);
-            let i = p.clips.len() - 1;
-            if p.clips[i].audio().is_some() {
-                st.audio_clip = Some(i);
-            }
+            let i = p.add_clip(clip);
+            st.clip = Some(p.clips[i].id);
             self.selection = vec![i];
             self.drag =
                 Drag::Move { anchor_tick, anchor_track, originals: vec![(i, p.clips[i].clone())], lead: 0, free };
@@ -1012,6 +1013,9 @@ impl Playlist {
             if !r.intersects(v.grid) {
                 continue;
             }
+            // Current: the clip the next click copies; with none, every copy of
+            // what the next click places (the current pattern or audio clip).
+            let template = st.clip.filter(|&id| p.clip_index(id).is_some());
             let (name, current) = match c.source {
                 Source::Pattern(id) => match p.pattern(id) {
                     Some(pat) => (pat.name.as_str(), !st.place_audio && p.pattern_index(id) == Some(st.pattern)),
@@ -1022,16 +1026,25 @@ impl Playlist {
                     None => continue,
                 },
             };
+            let current = template.map_or(current, |t| t == c.id);
             let light = clip_light(p, c);
             let playing = playhead.is_some_and(|t| (c.start as f64..c.end() as f64).contains(&t));
             let selected = self.selection.contains(&i);
             // The body is a see-through tint of the clip's light, so what's in it
             // (notes, waveform) stands out against the grid.
             let (_, strip, body) = parts(r);
-            let alpha = if current { 0.24 } else { 0.16 } + if playing { 0.08 } else { 0.0 };
+            let alpha = if current { theme::CLIP_BODY_CURRENT } else { theme::CLIP_BODY }
+                + if playing { theme::CLIP_BODY_PLAYING } else { 0.0 };
             painter.rect_filled(r, cr(4), light.mid.gamma_multiply(alpha));
-            painter.rect_stroke(r, cr(4), stroke(1.0, light.mid.gamma_multiply(0.45)), StrokeKind::Inside);
-            let strip_fill = if playing { theme::shade(light.mid, 1.04) } else { light.mid };
+            if theme::CLIP_EDGE > 0.0 {
+                painter.rect_stroke(
+                    r,
+                    cr(4),
+                    stroke(1.0, light.mid.gamma_multiply(theme::CLIP_EDGE)),
+                    StrokeKind::Inside,
+                );
+            }
+            let strip_fill = theme::clip_strip(light, playing);
             painter.rect_filled(strip, egui::CornerRadius { nw: 3, ne: 3, sw: 0, se: 0 }, strip_fill);
             if r.width() > 24.0 {
                 painter.with_clip_rect(strip.intersect(v.grid)).text(
@@ -1039,7 +1052,7 @@ impl Playlist {
                     Align2::LEFT_CENTER,
                     name,
                     FontId::proportional(m.text_small),
-                    theme::key_ink(true),
+                    theme::clip_ink(light),
                 );
             }
             match c.source {
@@ -1178,7 +1191,7 @@ fn paint_audio(
             return None;
         }
         let secs = |x: f32| a.start + (c.offset as f64 + (v.tick(x) - c.start as f32) as f64) * spt;
-        let mut gain = gain * waveform::source_gain(a, secs(x));
+        let mut gain = gain;
         if x < g.x_in {
             gain *= waveform::fade_gain(End::In, x, g.x0, g.x_in, c.fade_in.tension);
         }

@@ -74,11 +74,15 @@ mixed into the master before master volume. Waveforms draw from `Peaks`
 zoomed out never walks every sample.
 
 **Audio clips** mirror patterns, on two levels. `Project.audio` holds the
-shared source, `Audio` (sample, trim in seconds, the source's gain and fades,
-which sit at the trim points in the file). A `Clip`'s `source` is
-`Pattern(id)` or `Audio(id)`, and each placed clip has its own start, length,
-`offset` (ticks into the audio: a clip is a window onto it), gain, and fades
-at its own edges. The two gains add (in dB) and all four fades multiply. In song mode `bridge::compile_audio` turns every
+shared source, `Audio` (sample, trim in seconds, a gain). A `Clip`'s `source`
+is `Pattern(id)` or `Audio(id)`, and each placed clip has its own start,
+length, `offset` (ticks into the audio: a clip is a window onto it), gain,
+and fades at its own edges. The two gains add (in dB).
+
+Clips have an `id` (`ClipId`) that lives only while Lyra runs: given by
+`Project::add_clip`, renumbered when a file is read. `UiState::clip` is the
+clip last clicked: the next click on empty arrangement places a copy of it
+(settings and all), and the audio-clip editor shows its window and handles. In song mode `bridge::compile_audio` turns every
 audio clip into an `AudioRegion` (song ticks, seconds into the file, gain,
 fades, the track's insert) and sends the list as one `AudioLane`. The engine
 renders regions *from the song position*, not from triggers, so seeking into

@@ -779,3 +779,26 @@ pub fn well(p: &Painter, r: Rect) {
     let shadow = Rect::from_min_size(r.min + egui::vec2(rad * 0.7, 1.0), egui::vec2(r.width() - rad * 1.4, 1.5));
     p.rect_filled(shadow, cr(0), Color32::from_black_alpha(50));
 }
+
+// ── Clips on the arrangement ──
+// Tuned by hand (Rhodexa): big areas of the pastel lights shout, so bodies
+// are a faint tint and title strips a darkened light, with light ink.
+
+/// A clip body's tint: the clip's light at this opacity.
+pub const CLIP_BODY: f32 = 0.06;
+/// The current clip (the one the next click places a copy of).
+pub const CLIP_BODY_CURRENT: f32 = 0.10;
+/// Added while the playhead is in the clip.
+pub const CLIP_BODY_PLAYING: f32 = 0.08;
+/// The outline's opacity (0 = no outline).
+pub const CLIP_EDGE: f32 = 0.0;
+
+/// A clip's title strip.
+pub fn clip_strip(light: Light, playing: bool) -> Color32 {
+    shade(light.mid, if playing { 0.6 } else { 0.5 })
+}
+
+/// The name on a clip's title strip.
+pub fn clip_ink(light: Light) -> Color32 {
+    light.hi
+}

@@ -135,7 +135,7 @@ pub fn project() -> Project {
         p.tracks[t].name = name.to_string();
     }
     for &(track, start, bars) in &[(0, 0, 8), (0, 10, 6), (1, 4, 4), (1, 10, 6), (2, 8, 8)] {
-        p.clips.push(Clip::of_pattern(ids[track], track, start * bar, bars * bar));
+        p.add_clip(Clip::of_pattern(ids[track], track, start * bar, bars * bar));
     }
     p
 }
