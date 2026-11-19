@@ -51,7 +51,7 @@ const W_SSAW: usize = 9;
 const SS_DETUNE: [f32; 6] = [-0.110, -0.063, -0.020, 0.020, 0.062, 0.107];
 
 /// Padding inside a plate.
-pub(crate) const PAD: f32 = 8.0;
+const PAD: f32 = 8.0;
 /// Space between the matrix and its OUT column.
 const OUT_GAP: f32 = 6.0;
 
@@ -239,7 +239,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
 }
 
 /// A flat plate (`theme::PANEL`) filling `r`, with its contents laid out inside the padding.
-pub(crate) fn plate<R>(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash, add: impl FnOnce(&mut Ui) -> R) -> R {
+fn plate<R>(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash, add: impl FnOnce(&mut Ui) -> R) -> R {
     ui.painter().rect_filled(r, cr(0), theme::PANEL);
     let mut child =
         ui.new_child(UiBuilder::new().id_salt(salt).max_rect(r.shrink(PAD)).layout(Layout::top_down(Align::Min)));
@@ -445,7 +445,7 @@ fn switch_row(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
 
 /// Merged radio keys with text legends; returns the clicked option. Every
 /// switch in the editor has the same key size, whatever its labels say.
-pub(crate) fn switch(ui: &mut Ui, labels: &[&str], chosen: usize, light: Light, hint: &str) -> Option<usize> {
+fn switch(ui: &mut Ui, labels: &[&str], chosen: usize, light: Light, hint: &str) -> Option<usize> {
     let s = sizes();
     let w = 6.0 * 6.2 + 20.0; // room for six letters
     let options: Vec<(Legend, Light)> = labels.iter().map(|l| (Legend::Text(l), light)).collect();
@@ -1051,7 +1051,7 @@ fn glyph_key(ui: &mut Ui, size: Vec2, glyph: Glyph, light: Option<Light>) -> Res
 }
 
 /// A thin seam between groups of knobs.
-pub(crate) fn divider(ui: &mut Ui, h: f32) {
+fn divider(ui: &mut Ui, h: f32) {
     let (r, _) = ui.allocate_exact_size(vec2(6.0, h), Sense::hover());
     let x = r.center().x;
     ui.painter().rect_filled(
@@ -1062,16 +1062,16 @@ pub(crate) fn divider(ui: &mut Ui, h: f32) {
 }
 
 /// Faint LCD grid lines.
-pub(crate) fn lcd_grid() -> Color32 {
+fn lcd_grid() -> Color32 {
     theme::mix(theme::LCD, theme::LCD_INK, 0.13)
 }
 /// The shading under a curve on an LCD.
-pub(crate) fn lcd_fill() -> Color32 {
+fn lcd_fill() -> Color32 {
     theme::LCD_INK.gamma_multiply(0.09)
 }
 
 /// A draggable point on an LCD: dark ink; `solid` = filled, else a ring.
-pub(crate) fn dot(painter: &egui::Painter, at: egui::Pos2, solid: bool, hot: bool) {
+fn dot(painter: &egui::Painter, at: egui::Pos2, solid: bool, hot: bool) {
     if hot {
         painter.circle_stroke(at, 8.5, stroke(1.2, theme::LCD_INK_DIM));
     }
@@ -1109,7 +1109,7 @@ fn draw_curve(
 }
 
 /// Shade between a polyline (left to right) and a baseline, as one mesh.
-pub(crate) fn fill_under(painter: &egui::Painter, pts: &[egui::Pos2], base: f32, color: Color32) {
+fn fill_under(painter: &egui::Painter, pts: &[egui::Pos2], base: f32, color: Color32) {
     let mut mesh = egui::Mesh::default();
     for q in pts {
         mesh.colored_vertex(*q, color);

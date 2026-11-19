@@ -209,12 +209,16 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   Fluttersine (id `lyra.fluttersine`) has one: `fm_editor.rs` (operator tabs, always-visible
   matrix, draggable envelopes and filter curve, the LFO page for both LFOs and
   their sync, the MOD page for the mod envelopes and slots). It still only
-  edits `params`. Chrysalis (`lyra.chrysalis`) has `chrysalis_editor.rs`
-  (the table as stacked frames, the drive curve, the filters' combined
-  response, envelopes with curve handles, the LFO shape editor, 16 matrix
-  slots, 4 macros); it borrows the FM editor's plate and LCD helpers, and
-  draws with the plugin's own functions (`Table::sample`, `warp_preview`,
-  `drive_shape`, `curve::bend`), so the pictures are what plays.
+  edits `params`. Chrysalis (`lyra.chrysalis`) has `chrysalis_editor.rs`,
+  with **its own look** (the user's call: the sound is aggressive, the editor
+  shouldn't whisper): teal-black panels, dark screens with glowing curves,
+  neon knobs (`widgets::knob_painted`: Lyra's knob feel, its own drawing),
+  green/cyan for the sound and violet for modulation, the emblem as a badge
+  in the header. Everything is on one page except modulation (ENV / LFO /
+  MATRIX tabs). It draws with the plugin's own functions (`Table::sample`,
+  `warp_preview`, `drive_shape`, `curve::bend`), so the pictures are what
+  plays. Its palette lives in that file, not in `theme.rs`: it is
+  Chrysalis's, not Lyra's.
 * Plugin artwork (Fluttersine's wordmark, Chrysalis's emblem) lives in
   `lyra-app/assets/` and is live-reloaded from there while Lyra runs from the
   source tree (`theme::live_logo`).

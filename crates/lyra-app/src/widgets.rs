@@ -37,14 +37,29 @@ pub fn knob_at(ui: &mut Ui, id: egui::Id, rect: Rect, value: &mut f32, info: &Pa
     knob_with(ui, resp, rect, value, info, color)
 }
 
-fn knob_with(
+/// A knob that feels exactly like [`knob`] but is drawn by `paint(painter,
+/// rect, value, hot)`: for instruments with their own look (Chrysalis).
+pub fn knob_painted(
     ui: &mut Ui,
-    mut resp: Response,
-    rect: Rect,
     value: &mut f32,
     info: &ParamInfo,
-    color: Color32,
+    diameter: f32,
+    paint: impl FnOnce(&egui::Painter, Rect, f32, bool),
 ) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(diameter, diameter), Sense::click_and_drag());
+    let (resp, hot) = knob_turn(ui, resp, value, info);
+    paint(ui.painter(), rect, *value, hot);
+    resp.on_hover_text(format!("{}: {}", info.name, info.format(*value)))
+}
+
+fn knob_with(ui: &mut Ui, resp: Response, rect: Rect, value: &mut f32, info: &ParamInfo, color: Color32) -> Response {
+    let (resp, hot) = knob_turn(ui, resp, value, info);
+    paint_knob(ui.painter(), rect, info, *value, color, hot);
+    resp.on_hover_text(format!("{}: {}", info.name, info.format(*value)))
+}
+
+/// What every knob does with the mouse; returns the response and whether it is "hot".
+fn knob_turn(ui: &mut Ui, mut resp: Response, value: &mut f32, info: &ParamInfo) -> (Response, bool) {
     let n0 = info.to_normalized(*value);
     let mut n = n0;
     let before = *value;
@@ -83,10 +98,8 @@ fn knob_with(
     if *value != before {
         resp.mark_changed();
     }
-
     let hot = resp.hovered() || resp.dragged();
-    paint_knob(ui.painter(), rect, info, *value, color, hot);
-    resp.on_hover_text(format!("{}: {}", info.name, info.format(*value)))
+    (resp, hot)
 }
 
 /// The knob families from the control library, by size.

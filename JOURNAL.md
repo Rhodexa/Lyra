@@ -64,6 +64,10 @@ no marks would default to not urgent or 'coding teams judges'
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Chrysalis gets its own face (2026-11-19)**
+- [x] *(chat)* "The logo is way too cool while the UI is way too quiet and the sound is super aggressive"; the emblem "looks like a sticker"
+  *→ a new editor with Chrysalis's own look, from your banner: teal-black, dark screens with glowing curves, neon knobs; green and cyan for the sound, violet for everything that moves it. One page instead of seven tabs: both oscillators side by side, then sub/noise, drive and filters, then modulation (ENV / LFO / MATRIX, all 16 slots at once) beside the macros. The emblem is a badge in the header that breaks out of its bar, with its glow trailing along it.*
+
 **Chrysalis, the wavetable synth (2026-11-19)**
 - [x] *(spec)* `docs/specs/chrysalis.md`
   *→ built. Two wavetable oscillators (nine built-in tables, or load your own WAV), each with position, seven warps and up to 16 unison voices; a sub and a noise; per-voice drive; two filters (low/high/band/notch, a formant filter that sings A-E-I-O-U, combs); four envelopes with bendable curves; four LFOs you draw yourself; 16 mod slots (any source → anything, scaled "via" a second source); four macros. Seven presets: Growl, Talking bass, Reese, Pluck, Supersaw lead, Evolving pad, and Init. Its editor has the table as a stack of frames (drag it to move through it), and your emblem lives in the corner. Demo: `cargo run --release -p lyra-app --example chrysalis -- <dir>`, then `lyra --render "<dir>/Metamorphosis.lyra"`.*
