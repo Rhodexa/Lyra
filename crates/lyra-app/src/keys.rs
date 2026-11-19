@@ -74,6 +74,9 @@ pub enum Action {
     OpenBackup,
     Save,
     SaveAs,
+    /// Render the song to a WAV file (Ctrl+E), or one WAV per channel (Ctrl+Shift+E).
+    ExportWav,
+    ExportStems,
 }
 
 #[derive(Default)]
@@ -180,6 +183,8 @@ impl Keyboard {
                         Key::U => out.push(Action::MakeUnique),
                         Key::S if modifiers.shift => out.push(Action::SaveAs),
                         Key::S => out.push(Action::Save),
+                        Key::E if modifiers.shift => out.push(Action::ExportStems),
+                        Key::E => out.push(Action::ExportWav),
                         Key::O => out.push(Action::OpenProject),
                         Key::N => out.push(Action::NewProject),
                         Key::Q => out.push(Action::Quantize),

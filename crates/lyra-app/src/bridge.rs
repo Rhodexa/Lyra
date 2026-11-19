@@ -182,7 +182,7 @@ fn compile(p: &Project, pat: &Pattern) -> Sequence {
 
 /// Flatten the whole playlist: every clip plays its pattern from the clip's
 /// start, repeating it to fill the clip and cutting notes at the clip's end.
-fn compile_song(p: &Project) -> Sequence {
+pub fn compile_song(p: &Project) -> Sequence {
     let mut notes = Vec::new();
     for clip in &p.clips {
         if p.tracks.get(clip.track).is_some_and(|t| t.mute) {

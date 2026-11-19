@@ -167,6 +167,15 @@ pub struct LyraApp {
     title: String,
     /// A short status message (saved, opened, errors) and when it appeared.
     toast: Option<(String, bool, std::time::Instant)>,
+    /// A WAV export running on its own thread.
+    export: Option<Export>,
+}
+
+/// An export in progress: the render runs on a thread (it takes seconds),
+/// the UI keeps going and shows how far it got.
+struct Export {
+    progress: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    thread: std::thread::JoinHandle<Result<String, String>>,
 }
 
 impl LyraApp {
@@ -236,6 +245,7 @@ impl LyraApp {
             engine_restarts: Vec::new(),
             title: String::new(),
             toast,
+            export: None,
         }
     }
 
@@ -285,6 +295,58 @@ impl LyraApp {
                 self.notify(&format!("Opened {name}"), false);
             }
             Err(e) => self.notify(&e, true),
+        }
+    }
+
+    /// Export WAV (or stems): pick where, then render on a thread.
+    fn export(&mut self, stems: bool) {
+        if self.export.is_some() {
+            self.notify("Already exporting", false);
+            return;
+        }
+        let name = files::display_name(self.path.as_deref());
+        let target = if stems {
+            files::pick_folder("Export stems: pick a folder").map(|d| d.join(format!("{name} stems")))
+        } else {
+            files::pick_export(&name)
+        };
+        let Some(target) = target else { return }; // dialog cancelled
+        let project = self.project.clone();
+        let progress = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let counter = progress.clone();
+        let thread = std::thread::spawn(move || {
+            let mut samples = crate::samples::Samples::default();
+            let shown = files::display_name(Some(&target));
+            if stems {
+                let written = crate::render::render_stems(&project, &mut samples, &target, Some(&counter))?;
+                Ok(format!("Exported {} stems to {shown}", written.len()))
+            } else {
+                let r =
+                    crate::render::render(&project, &mut samples, &target, crate::render::Part::Mix, Some(&counter))?;
+                let clip = if r.peak > 1.0 { " · it clipped: turn the master down" } else { "" };
+                Ok(format!(
+                    "Exported {shown}.wav · {:.0} s, peak {:+.1} dB{clip}",
+                    r.seconds,
+                    crate::render::db(r.peak)
+                ))
+            }
+        });
+        self.export = Some(Export { progress, thread });
+    }
+
+    fn poll_export(&mut self, ctx: &egui::Context) {
+        let Some(export) = &self.export else { return };
+        if !export.thread.is_finished() {
+            let permille = export.progress.load(std::sync::atomic::Ordering::Relaxed);
+            self.toast = Some((format!("Exporting… {}%", permille / 10), false, std::time::Instant::now()));
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            return;
+        }
+        let export = self.export.take().expect("checked above");
+        match export.thread.join() {
+            Ok(Ok(text)) => self.notify(&text, false),
+            Ok(Err(e)) => self.notify(&format!("Export failed: {e}"), true),
+            Err(_) => self.notify("Export failed: the renderer crashed", true),
         }
     }
 
@@ -585,6 +647,7 @@ impl LyraApp {
             }
             Action::Save => self.save(false),
             Action::SaveAs => self.save(true),
+            Action::ExportWav | Action::ExportStems => self.export(a == Action::ExportStems),
             Action::Arrow { dy, .. } if dy != 0 => {
                 let last = self.project.channels.len().saturating_sub(1);
                 self.ui.selected =
@@ -661,6 +724,7 @@ impl eframe::App for LyraApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.read_engine();
         self.housekeeping(ctx);
+        self.poll_export(ctx);
         let (playing, playhead) =
             self.engine.as_ref().map_or((false, 0.0), |e| (e.shared().is_playing(), e.shared().playhead()));
         self.playhead = playhead;

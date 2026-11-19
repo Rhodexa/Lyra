@@ -47,6 +47,8 @@ pub fn show(
                     ("Open…", "Ctrl+O", Action::OpenProject),
                     ("Save", "Ctrl+S", Action::Save),
                     ("Save as…", "Ctrl+Shift+S", Action::SaveAs),
+                    ("Export WAV…", "Ctrl+E", Action::ExportWav),
+                    ("Export stems…", "Ctrl+Shift+E", Action::ExportStems),
                 ] {
                     if ui.add(egui::Button::new(label).shortcut_text(keys)).clicked() {
                         actions.push(action);
@@ -60,7 +62,7 @@ pub fn show(
                 }
             })
             .response
-            .on_hover_text("Project: new, open, save");
+            .on_hover_text("Project: new, open, save, export");
         });
 
         // The deck: what plays, play / stop, where we are, the beat.

@@ -115,6 +115,26 @@ pub fn pick_save(suggested: &str) -> Option<PathBuf> {
     })
 }
 
+/// "Export WAV" dialog: where the render goes.
+pub fn pick_export(suggested: &str) -> Option<PathBuf> {
+    let path = rfd::FileDialog::new()
+        .set_title("Export WAV")
+        .add_filter("WAV audio", &["wav"])
+        .set_directory(default_dir())
+        .set_file_name(format!("{suggested}.wav"))
+        .save_file()?;
+    Some(if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("wav")) {
+        path
+    } else {
+        path.with_extension("wav")
+    })
+}
+
+/// "Export stems" dialog: the folder the stems go into.
+pub fn pick_folder(title: &str) -> Option<PathBuf> {
+    rfd::FileDialog::new().set_title(title).set_directory(default_dir()).pick_folder()
+}
+
 /// "My Song" for `/…/My Song.lyra`.
 pub fn display_name(path: Option<&Path>) -> String {
     path.and_then(|p| p.file_stem()).map_or("Untitled".into(), |s| s.to_string_lossy().into_owned())

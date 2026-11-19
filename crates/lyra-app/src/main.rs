@@ -17,6 +17,7 @@ mod mixer;
 mod piano_roll;
 mod playlist;
 mod rack;
+mod render;
 mod samples;
 mod theme;
 mod timeline;
@@ -28,6 +29,11 @@ mod widgets;
 const _: () = assert!(lyra_model::TICKS_PER_STEP == lyra_engine::TICKS_PER_STEP);
 
 fn main() -> eframe::Result {
+    // `lyra --render song.lyra [out.wav] [--stems dir]`: no window, no sound card.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "--render") {
+        std::process::exit(render::cli(&args[1..]));
+    }
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Lyra")
