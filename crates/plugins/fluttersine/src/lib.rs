@@ -20,7 +20,7 @@
 //!   plus a mono mode with a note stack, legato and glide.
 
 use lyra_dsp::Rng;
-use lyra_plugin::{Curve, Event, ParamGroup, ParamInfo, Plugin, PluginInfo, ProcessContext};
+use lyra_plugin::{Curve, Event, ParamGroup, ParamInfo, Plugin, PluginInfo, ProcessContext, Transport};
 use std::f32::consts::{PI, TAU};
 
 const MAX_VOICES: usize = 16;
@@ -123,8 +123,68 @@ pub mod p {
     /// 0 = glide only between overlapping (legato) notes, 1 = always.
     pub const GLIDE_MODE: usize = VOLUME + 3;
 
-    pub const COUNT: usize = GLIDE_MODE + 1;
+    // ── Added in Lyra (after the port; ids continue at the end) ──
+    /// LFO 1 tempo sync: 0 = free (use LFO_RATE), else a note length (`SYNC_BEATS`).
+    pub const LFO_SYNC: usize = GLIDE_MODE + 1;
+    pub const LFO2_SHAPE: usize = LFO_SYNC + 1;
+    pub const LFO2_RATE: usize = LFO_SYNC + 2;
+    pub const LFO2_SYNC: usize = LFO_SYNC + 3;
+    pub const LFO2_RETRIG: usize = LFO_SYNC + 4;
+
+    /// Two modulation envelopes (attack, decay, sustain, release), sources for the mod slots.
+    pub const ENV1: usize = LFO2_RETRIG + 1;
+    pub const ENV2: usize = ENV1 + 4;
+    pub const ENV_ATTACK: usize = 0;
+    pub const ENV_DECAY: usize = 1;
+    pub const ENV_SUSTAIN: usize = 2;
+    pub const ENV_RELEASE: usize = 3;
+    pub const fn env(e: usize, param: usize) -> usize {
+        ENV1 + e * 4 + param
+    }
+
+    /// Mod slots: each routes a source (`MOD_SOURCES`) to a destination
+    /// (`MOD_DESTS`) by a bipolar amount.
+    pub const MOD_SLOTS: usize = 6;
+    pub const MODS: usize = ENV2 + 4;
+    pub const fn mod_src(k: usize) -> usize {
+        MODS + k * 3
+    }
+    pub const fn mod_dest(k: usize) -> usize {
+        MODS + k * 3 + 1
+    }
+    pub const fn mod_amt(k: usize) -> usize {
+        MODS + k * 3 + 2
+    }
+
+    pub const COUNT: usize = MODS + MOD_SLOTS * 3;
 }
+
+/// LFO sync choices, as labels; `SYNC_BEATS` gives each one's length in quarter notes.
+pub const SYNC_LABELS: [&str; 13] =
+    ["Free", "4 bars", "2 bars", "1 bar", "1/2", "1/4", "1/4 T", "1/8", "1/8 D", "1/8 T", "1/16", "1/16 T", "1/32"];
+pub const SYNC_BEATS: [f32; 13] =
+    [0.0, 16.0, 8.0, 4.0, 2.0, 1.0, 2.0 / 3.0, 0.5, 0.75, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125];
+
+/// What a mod slot listens to. LFOs are bipolar (-1..1), envelopes and
+/// velocity 0..1, key -1..1 around C4, random -1..1 (new on every note).
+pub const MOD_SOURCES: [&str; 8] = ["Off", "LFO 1", "LFO 2", "Env 1", "Env 2", "Velocity", "Key", "Random"];
+
+/// Where a mod slot goes, and what an amount of 1 at a full source means:
+/// pitch ±24 st, cutoff ±6 oct, volume and op levels ±100%, FM depth ×(1 ± 2)
+/// (it scales the modulation already set in the matrix), op warp ±0.48.
+#[rustfmt::skip]
+pub const MOD_DESTS: [&str; 29] = [
+    "Off", "Pitch", "Cutoff", "Volume", "All FM",
+    "Op 1 level", "Op 2 level", "Op 3 level", "Op 4 level", "Op 5 level", "Op 6 level",
+    "Op 1 FM in", "Op 2 FM in", "Op 3 FM in", "Op 4 FM in", "Op 5 FM in", "Op 6 FM in",
+    "Op 1 pitch", "Op 2 pitch", "Op 3 pitch", "Op 4 pitch", "Op 5 pitch", "Op 6 pitch",
+    "Op 1 warp", "Op 2 warp", "Op 3 warp", "Op 4 warp", "Op 5 warp", "Op 6 warp",
+];
+/// First index of each per-operator block in `MOD_DESTS`.
+pub const DEST_LEVEL: usize = 5;
+pub const DEST_FM_IN: usize = 11;
+pub const DEST_OP_PITCH: usize = 17;
+pub const DEST_WARP: usize = 23;
 
 const W_TRI: u8 = 6;
 const W_SAW: u8 = 7;
@@ -222,6 +282,40 @@ const fn build_params() -> [ParamInfo; p::COUNT] {
     set!(MODE, choice "Mode", &["Poly", "Mono"], 0);
     set!(GLIDE, new "Glide", 0.0, 2.0, 0.08, "s", Lin);
     set!(GLIDE_MODE, choice "Glide when", &["Legato", "Always"], 0);
+
+    set!(LFO_SYNC, choice "Sync", &SYNC_LABELS, 0);
+    set!(LFO2_SHAPE, choice "LFO 2 shape", &["Sine", "Triangle", "Saw", "Square", "S&H"], 0);
+    set!(LFO2_RATE, new "LFO 2 rate", 0.05, 30.0, 1.0, "Hz", Exp);
+    set!(LFO2_SYNC, choice "LFO 2 sync", &SYNC_LABELS, 0);
+    set!(LFO2_RETRIG, choice "LFO 2 retrigger", &OFF_ON, 0);
+    let mut e = 0;
+    while e < 2 {
+        let names = if e == 0 {
+            ["Env 1 attack", "Env 1 decay", "Env 1 sustain", "Env 1 release"]
+        } else {
+            ["Env 2 attack", "Env 2 decay", "Env 2 sustain", "Env 2 release"]
+        };
+        set!(env(e, ENV_ATTACK), new names[0], 0.001, 10.0, 0.001, "s", Exp);
+        set!(env(e, ENV_DECAY), new names[1], 0.001, 10.0, 0.3, "s", Exp);
+        set!(env(e, ENV_SUSTAIN), new names[2], 0.0, 1.0, 0.0, "%", Lin);
+        set!(env(e, ENV_RELEASE), new names[3], 0.001, 10.0, 0.2, "s", Exp);
+        e += 1;
+    }
+    const SLOT_NAMES: [[&str; 3]; MOD_SLOTS] = [
+        ["Mod 1 source", "Mod 1 dest", "Mod 1 amount"],
+        ["Mod 2 source", "Mod 2 dest", "Mod 2 amount"],
+        ["Mod 3 source", "Mod 3 dest", "Mod 3 amount"],
+        ["Mod 4 source", "Mod 4 dest", "Mod 4 amount"],
+        ["Mod 5 source", "Mod 5 dest", "Mod 5 amount"],
+        ["Mod 6 source", "Mod 6 dest", "Mod 6 amount"],
+    ];
+    let mut k = 0;
+    while k < MOD_SLOTS {
+        set!(mod_src(k), choice SLOT_NAMES[k][0], &MOD_SOURCES, 0);
+        set!(mod_dest(k), choice SLOT_NAMES[k][1], &MOD_DESTS, 0);
+        set!(mod_amt(k), new SLOT_NAMES[k][2], -1.0, 1.0, 0.0, "%", Lin);
+        k += 1;
+    }
     a
 }
 
@@ -231,7 +325,7 @@ const fn op_group(name: &'static str, i: usize) -> ParamGroup {
     ParamGroup { name, ids: (i * p::OP_STRIDE) as u32..((i + 1) * p::OP_STRIDE) as u32 }
 }
 
-static FM_GROUPS: [ParamGroup; 10] = [
+static FM_GROUPS: [ParamGroup; 14] = [
     op_group("Op 1", 0),
     op_group("Op 2", 1),
     op_group("Op 3", 2),
@@ -241,7 +335,11 @@ static FM_GROUPS: [ParamGroup; 10] = [
     ParamGroup { name: "Matrix", ids: p::MATRIX as u32..p::LP_ON as u32 },
     ParamGroup { name: "Filter", ids: p::LP_ON as u32..p::LFO_SHAPE as u32 },
     ParamGroup { name: "LFO", ids: p::LFO_SHAPE as u32..p::OUT as u32 },
-    ParamGroup { name: "Output", ids: p::OUT as u32..p::COUNT as u32 },
+    ParamGroup { name: "Output", ids: p::OUT as u32..p::LFO_SYNC as u32 },
+    ParamGroup { name: "LFO sync, LFO 2", ids: p::LFO_SYNC as u32..p::ENV1 as u32 },
+    ParamGroup { name: "Env 1", ids: p::ENV1 as u32..p::ENV2 as u32 },
+    ParamGroup { name: "Env 2", ids: p::ENV2 as u32..p::MODS as u32 },
+    ParamGroup { name: "Mod slots", ids: p::MODS as u32..p::COUNT as u32 },
 ];
 
 /// Fluttersine's factory patches: (name, parameters that differ from the defaults).
@@ -843,12 +941,74 @@ struct Prep {
     lfo_retrig: bool,
     /// Vibrato depth in semitones.
     vibrato: f32,
+    lfo2_shape: u8,
+    lfo2_inc: f32,
+    lfo2_retrig: bool,
+    /// Tempo sync per LFO, in quarter notes per cycle (0 = free).
+    lfo_beats: [f32; 2],
+    env: [EnvPrep; 2],
+    /// The active mod slots: (source, destination, amount).
+    slots: [(u8, u8, f32); p::MOD_SLOTS],
+    n_slots: usize,
 
     volume: f32,
     mono: bool,
     glide_k: f32,
     glide_on: bool,
     glide_always: bool,
+}
+
+/// A modulation envelope's rates, per control-rate tick.
+#[derive(Clone, Copy, Default)]
+struct EnvPrep {
+    attack_inc: f32,
+    decay_k: f32,
+    sustain: f32,
+    release_k: f32,
+}
+
+/// One control tick of an ADSR (`(stage, level)`), shared by the mod envelopes.
+fn env_tick(e: &EnvPrep, (st, lv): (u8, f32)) -> (u8, f32) {
+    match st {
+        ATTACK => {
+            let lv = lv + e.attack_inc;
+            if lv >= 1.0 {
+                (DECAY, 1.0)
+            } else {
+                (ATTACK, lv)
+            }
+        }
+        DECAY => {
+            let lv = e.sustain + (lv - e.sustain) * e.decay_k;
+            if lv - e.sustain < 1e-4 {
+                (SUSTAIN, e.sustain)
+            } else {
+                (DECAY, lv)
+            }
+        }
+        RELEASE => {
+            let lv = lv * e.release_k;
+            if lv < 1e-4 {
+                (OFF, 0.0)
+            } else {
+                (RELEASE, lv)
+            }
+        }
+        _ => (st, lv),
+    }
+}
+
+/// What the mod slots add up to for one voice at one control tick (all zero = untouched).
+#[derive(Default)]
+struct Mods {
+    pitch: f32,
+    cutoff: f32,
+    volume: f32,
+    all_fm: f32,
+    level: [f32; OPS],
+    fm_in: [f32; OPS],
+    op_pitch: [f32; OPS],
+    warp: [f32; OPS],
 }
 
 /// Per-sample multiplier that falls by 60 dB (×0.001) over `seconds` (Fluttersine's curve).
@@ -928,6 +1088,28 @@ impl Prep {
         q.lfo_inc = p[LFO_RATE] / csr;
         q.lfo_retrig = p[LFO_RETRIG] >= 0.5;
         q.vibrato = p[VIBRATO] / 100.0;
+        q.lfo2_shape = p[LFO2_SHAPE].round().max(0.0) as u8;
+        q.lfo2_inc = p[LFO2_RATE] / csr;
+        q.lfo2_retrig = p[LFO2_RETRIG] >= 0.5;
+        let beats = |id: usize| SYNC_BEATS[(p[id].round().max(0.0) as usize).min(SYNC_BEATS.len() - 1)];
+        q.lfo_beats = [beats(LFO_SYNC), beats(LFO2_SYNC)];
+        for e in 0..2 {
+            q.env[e] = EnvPrep {
+                attack_inc: 1.0 / (p[env(e, ENV_ATTACK)].max(0.0005) * csr),
+                decay_k: fall(p[env(e, ENV_DECAY)], csr),
+                sustain: p[env(e, ENV_SUSTAIN)].clamp(0.0, 1.0),
+                release_k: fall(p[env(e, ENV_RELEASE)], csr),
+            };
+        }
+        for k in 0..MOD_SLOTS {
+            let src = p[mod_src(k)].round().clamp(0.0, (MOD_SOURCES.len() - 1) as f32) as u8;
+            let dest = p[mod_dest(k)].round().clamp(0.0, (MOD_DESTS.len() - 1) as f32) as u8;
+            let amt = p[mod_amt(k)].clamp(-1.0, 1.0);
+            if src != 0 && dest != 0 && amt != 0.0 {
+                q.slots[q.n_slots] = (src, dest, amt);
+                q.n_slots += 1;
+            }
+        }
 
         let v = p[VOLUME].max(0.0);
         q.volume = v * v * 0.6;
@@ -978,6 +1160,17 @@ struct Voice {
     s2: (f32, f32),
     sh: (f32, f32),
     rng: Rng,
+
+    /// Mod envelopes: (stage, level), ticked at control rate.
+    menv: [(u8, f32); 2],
+    /// This note's velocity (0..1) and random value (-1..1), as mod sources.
+    vel: f32,
+    rnd: f32,
+    /// Results of the mod slots, applied per sample: operator level and
+    /// FM-depth multipliers, and the voice's gain.
+    lvl: [f32; OPS],
+    fmx: [f32; OPS],
+    gain: f32,
 }
 
 impl Voice {
@@ -1009,6 +1202,12 @@ impl Voice {
             s2: (0.0, 0.0),
             sh: (0.0, 0.0),
             rng: Rng::new(seed),
+            menv: [(OFF, 0.0); 2],
+            vel: 0.0,
+            rnd: 0.0,
+            lvl: [1.0; OPS],
+            fmx: [1.0; OPS],
+            gain: 1.0,
         }
     }
 
@@ -1025,26 +1224,72 @@ impl Voice {
         if self.fst != OFF {
             self.fst = RELEASE;
         }
+        for e in self.menv.iter_mut().filter(|e| e.0 != OFF) {
+            e.0 = RELEASE;
+        }
+    }
+
+    /// Sum the mod slots for this voice right now.
+    fn modulate(&self, q: &Prep, lfo: [f32; 2]) -> Mods {
+        let mut m = Mods::default();
+        for &(src, dest, amt) in &q.slots[..q.n_slots] {
+            let s = match src {
+                1 => lfo[0],
+                2 => lfo[1],
+                3 => self.menv[0].1,
+                4 => self.menv[1].1,
+                5 => self.vel,
+                6 => (self.key as f32 - 60.0) / 60.0,
+                7 => self.rnd,
+                _ => 0.0,
+            };
+            let x = amt * s;
+            let d = dest as usize;
+            match d {
+                1 => m.pitch += 24.0 * x,
+                2 => m.cutoff += 6.0 * x,
+                3 => m.volume += x,
+                4 => m.all_fm += x,
+                _ if d >= DEST_WARP => m.warp[d - DEST_WARP] += 0.48 * x,
+                _ if d >= DEST_OP_PITCH => m.op_pitch[d - DEST_OP_PITCH] += 24.0 * x,
+                _ if d >= DEST_FM_IN => m.fm_in[d - DEST_FM_IN] += x,
+                _ if d >= DEST_LEVEL => m.level[d - DEST_LEVEL] += x,
+                _ => {}
+            }
+        }
+        m
     }
 
     /// Control-rate update: pitch, pulse width, filter envelope and coefficients.
-    fn ctrl(&mut self, q: &Prep, lfo: f32, sr: f32) {
+    fn ctrl(&mut self, q: &Prep, lfos: [f32; 2], sr: f32) {
         if self.semi != self.target {
             self.semi += (self.target - self.semi) * q.glide_k;
             if (self.target - self.semi).abs() < 1e-4 {
                 self.semi = self.target;
             }
         }
-        let f = 440.0 * 2f32.powf((self.semi + lfo * q.vibrato - 69.0) / 12.0);
+        for (e, prep) in self.menv.iter_mut().zip(&q.env) {
+            *e = env_tick(prep, *e);
+        }
+        // With no slots in use every term below is exactly what it was before
+        // the mod slots existed (+ 0.0, × 1.0): old patches sound bit-identical.
+        let m = if q.n_slots > 0 { self.modulate(q, lfos) } else { Mods::default() };
+        let lfo = lfos[0];
+        let f = 440.0 * 2f32.powf((self.semi + lfo * q.vibrato + m.pitch - 69.0) / 12.0);
+        let all_fm = (1.0 + 2.0 * m.all_fm).max(0.0);
+        self.gain = (1.0 + m.volume).clamp(0.0, 2.0);
         for i in 0..OPS {
             let o = &q.ops[i];
             let hz = if o.fixed { o.hz } else { f * o.ratio };
+            let hz = if m.op_pitch[i] != 0.0 { hz * 2f32.powf(m.op_pitch[i] / 12.0) } else { hz };
+            self.lvl[i] = (1.0 + m.level[i]).max(0.0);
+            self.fmx[i] = all_fm * (1.0 + 2.0 * m.fm_in[i]).max(0.0);
             let inc = (hz * o.mul / sr).min(0.45);
             self.inc[i] = inc;
             if o.wave == W_SSAW {
                 self.ss_inc[i] = SSD.map(|d| inc * (1.0 + d * o.spread));
             }
-            let pw = (o.pw + o.pwm * lfo * 0.48).clamp(0.02, 0.98);
+            let pw = (o.pw + o.pwm * lfo * 0.48 + m.warp[i]).clamp(0.02, 0.98);
             self.pw[i] = pw;
             self.warp[i] = (0.5 / pw, 0.5 / (1.0 - pw));
         }
@@ -1075,7 +1320,7 @@ impl Voice {
         }
         self.fv = fv;
         if q.lp_on {
-            let oct = q.f_env * fv + q.keytrack * (self.semi - 60.0) / 12.0 + q.f_lfo * lfo;
+            let oct = q.f_env * fv + q.keytrack * (self.semi - 60.0) / 12.0 + q.f_lfo * lfo + m.cutoff;
             let fc = (q.cutoff * 2f32.powf(oct)).clamp(16.0, sr * 0.45);
             let g = (PI * fc / sr).tan();
             self.lp = svf_coeffs_g(g, q.lp_k);
@@ -1125,6 +1370,7 @@ impl Voice {
         for &(j, amt) in &q.mods[i][..q.n_mods[i]] {
             m += amt * self.cur[j as usize];
         }
+        m *= self.fmx[i];
         let dt = self.inc[i];
         let mut ph = self.ph[i] + dt;
         if ph >= 1.0 {
@@ -1175,7 +1421,7 @@ impl Voice {
                 }
             }
         };
-        let y = y * (lv * self.vs[i]);
+        let y = y * (lv * self.vs[i] * self.lvl[i]);
         self.fb[i] = self.cur[i];
         self.cur[i] = y;
         q.out[i] * y
@@ -1224,11 +1470,34 @@ fn render_lanes<const N: usize>(q: &Prep, mut lanes: [&mut Voice; N], out: &mut 
             }
         }
         for (v, s) in lanes.iter_mut().zip(s) {
-            *x += v.filter(q, s);
+            *x += v.filter(q, s) * v.gain;
         }
     }
     for v in lanes {
         v.check_done(q);
+    }
+}
+
+/// An LFO's value (-1..1) at phase `ph` (0..1); `sh` is the held random value.
+fn lfo_value(shape: u8, ph: f32, sh: f32) -> f32 {
+    match shape {
+        1 => {
+            if ph < 0.5 {
+                4.0 * ph - 1.0
+            } else {
+                3.0 - 4.0 * ph
+            }
+        }
+        2 => 1.0 - 2.0 * ph,
+        3 => {
+            if ph < 0.5 {
+                1.0
+            } else {
+                -1.0
+            }
+        }
+        4 => sh,
+        _ => sin_turns(ph),
     }
 }
 
@@ -1249,6 +1518,15 @@ pub struct Fm {
     lfo_ph: f32,
     lfo: f32,
     sh: f32,
+    /// LFO 2 keeps its own random numbers, so it never changes LFO 1's or
+    /// the supersaw phases (which share `rng`).
+    lfo2_ph: f32,
+    lfo2: f32,
+    sh2: f32,
+    rng2: Rng,
+    /// This block's LFO increments per control tick (synced ones follow the tempo).
+    lfo_inc: [f32; 2],
+    transport: Transport,
     /// Samples until the next control-rate tick.
     ctrl_left: usize,
     dc_x: f32,
@@ -1281,6 +1559,12 @@ impl Fm {
             lfo_ph: 0.0,
             lfo: 0.0,
             sh: 0.0,
+            lfo2_ph: 0.0,
+            lfo2: 0.0,
+            sh2: 0.0,
+            rng2: Rng::new(0x2f_10_a2),
+            lfo_inc: [0.0; 2],
+            transport: Transport { tempo: 120.0, playing: false, position: 0.0 },
             ctrl_left: 0,
             dc_x: 0.0,
             dc_y: 0.0,
@@ -1340,14 +1624,29 @@ impl Fm {
                 }
             }
             v.fst = ATTACK;
+            if fresh {
+                v.menv = [(ATTACK, 0.0); 2];
+            } else {
+                v.menv.iter_mut().for_each(|e| e.0 = ATTACK);
+            }
+            v.vel = velocity;
+            // Random per note without drawing from `rng` (that would move the supersaw phases).
+            let mut h = (v.serial as u32).wrapping_mul(0x9e37_79b9) ^ 0x85eb_ca6b;
+            h ^= h >> 15;
+            h = h.wrapping_mul(0x2c1b_3c6d);
+            h ^= h >> 12;
+            v.rnd = (h >> 8) as f32 / (1u32 << 23) as f32 - 1.0;
         }
         v.active = true;
-        v.ctrl(q, self.lfo, self.sr);
+        v.ctrl(q, [self.lfo, self.lfo2], self.sr);
     }
 
     fn note_on(&mut self, key: u8, velocity: f32) {
         if self.q.lfo_retrig {
             self.lfo_ph = 0.0;
+        }
+        if self.q.lfo2_retrig {
+            self.lfo2_ph = 0.0;
         }
         if self.q.mono {
             for v in self.voices[1..].iter_mut().filter(|v| v.gate) {
@@ -1420,31 +1719,50 @@ impl Fm {
     }
 
     fn lfo_tick(&mut self) {
-        let mut ph = self.lfo_ph + self.q.lfo_inc;
+        let mut ph = self.lfo_ph + self.lfo_inc[0];
         if ph >= 1.0 {
             ph = wrap(ph);
             self.sh = self.rng.bipolar();
         }
         self.lfo_ph = ph;
-        self.lfo = match self.q.lfo_shape {
-            1 => {
-                if ph < 0.5 {
-                    4.0 * ph - 1.0
+        self.lfo = lfo_value(self.q.lfo_shape, ph, self.sh);
+
+        let mut ph = self.lfo2_ph + self.lfo_inc[1];
+        if ph >= 1.0 {
+            ph = wrap(ph);
+            self.sh2 = self.rng2.bipolar();
+        }
+        self.lfo2_ph = ph;
+        self.lfo2 = lfo_value(self.q.lfo2_shape, ph, self.sh2);
+    }
+
+    /// Set this block's LFO speeds. A synced LFO runs at its note length at
+    /// the song's tempo and, while the song plays (and it isn't retriggered
+    /// per note), stays locked to the song position, so a 1/8 wobble lands
+    /// on the 8ths wherever playback starts.
+    fn sync_lfos(&mut self) {
+        let csr = self.sr / CR as f32;
+        let t = self.transport;
+        let free = [self.q.lfo_inc, self.q.lfo2_inc];
+        let retrig = [self.q.lfo_retrig, self.q.lfo2_retrig];
+        for k in 0..2 {
+            let beats = self.q.lfo_beats[k];
+            if beats <= 0.0 {
+                self.lfo_inc[k] = free[k];
+                continue;
+            }
+            let hz = t.tempo.max(1.0) as f32 / 60.0 / beats;
+            self.lfo_inc[k] = hz / csr;
+            if t.playing && !retrig[k] {
+                let cycle = 96.0 * beats as f64; // ticks per cycle (96 per quarter)
+                let ph = (t.position / cycle).fract() as f32;
+                if k == 0 {
+                    self.lfo_ph = ph;
                 } else {
-                    3.0 - 4.0 * ph
+                    self.lfo2_ph = ph;
                 }
             }
-            2 => 1.0 - 2.0 * ph,
-            3 => {
-                if ph < 0.5 {
-                    1.0
-                } else {
-                    -1.0
-                }
-            }
-            4 => self.sh,
-            _ => sin_turns(ph),
-        };
+        }
     }
 
     #[cfg(test)]
@@ -1471,6 +1789,9 @@ impl Plugin for Fm {
             }
         }
     }
+    fn transport(&mut self, transport: Transport) {
+        self.transport = transport;
+    }
     fn activate(&mut self, sample_rate: f32) {
         self.sr = sample_rate;
         self.q = Prep::compute(&self.p, sample_rate);
@@ -1482,6 +1803,7 @@ impl Plugin for Fm {
             self.q = Prep::compute(&self.p, self.sr);
             self.dirty = false;
         }
+        self.sync_lfos();
         let n = out_l.len().min(out_r.len());
         let mut next = 0;
         let mut i = 0;
@@ -1493,7 +1815,7 @@ impl Plugin for Fm {
             }
             if self.ctrl_left == 0 {
                 self.lfo_tick();
-                let (q, lfo, sr) = (&self.q, self.lfo, self.sr);
+                let (q, lfo, sr) = (&self.q, [self.lfo, self.lfo2], self.sr);
                 for v in self.voices.iter_mut().filter(|v| v.active) {
                     v.ctrl(q, lfo, sr);
                 }
@@ -1594,6 +1916,100 @@ mod tests {
                 assert!((info.min..=info.max).contains(&v), "{name}: {} = {v} out of range", info.name);
             }
         }
+    }
+
+    /// Index of a sync choice by its label.
+    fn sync(label: &str) -> f32 {
+        SYNC_LABELS.iter().position(|l| *l == label).unwrap() as f32
+    }
+
+    #[test]
+    fn a_synced_lfo_follows_the_tempo() {
+        let mut fm = with(&[(p::LFO_SYNC, sync("1/4"))]);
+        fm.transport(Transport { tempo: 120.0, playing: false, position: 0.0 });
+        render(&mut fm, &[], 0.25); // a quarter note at 120 is 0.5 s: half a cycle
+        assert!((fm.lfo_ph - 0.5).abs() < 0.01, "phase {}", fm.lfo_ph);
+        fm.transport(Transport { tempo: 60.0, playing: false, position: 0.0 });
+        render(&mut fm, &[], 0.25); // at 60 it takes a full second
+        assert!((fm.lfo_ph - 0.75).abs() < 0.01, "phase {}", fm.lfo_ph);
+    }
+
+    #[test]
+    fn a_synced_lfo_locks_to_the_song_while_playing() {
+        let mut fm = with(&[(p::LFO2_SYNC, sync("1/8"))]);
+        // 1/8 = 48 ticks per cycle; at tick 60 the cycle is a quarter through.
+        fm.transport(Transport { tempo: 140.0, playing: true, position: 60.0 });
+        fm.process(ProcessContext { sample_rate: SR, events: &[], out_l: &mut [0.0; 1], out_r: &mut [0.0; 1] });
+        assert!((fm.lfo2_ph - 0.25).abs() < 0.01, "phase {}", fm.lfo2_ph);
+    }
+
+    #[test]
+    fn an_envelope_on_pitch_falls_an_octave() {
+        use p::*;
+        let mut fm = with(&[
+            (env(0, ENV_DECAY), 0.4),
+            (env(0, ENV_SUSTAIN), 0.0),
+            (mod_src(0), 3.0),  // Env 1
+            (mod_dest(0), 1.0), // Pitch
+            (mod_amt(0), 0.5),  // +12 st at the envelope's peak
+        ]);
+        render(&mut fm, &[on(69)], 0.004);
+        let early = fm.voices[0].inc[0] * SR;
+        render(&mut fm, &[], 1.0);
+        let late = fm.voices[0].inc[0] * SR;
+        assert!(early > 800.0 && (late - 440.0).abs() < 1.0, "{early} Hz, then {late} Hz");
+    }
+
+    #[test]
+    fn fm_in_scales_what_the_matrix_sends() {
+        use p::*;
+        let loud = TimedEvent { offset: 0, event: Event::NoteOn { key: 60, velocity: 1.0 } };
+        let plain = render(&mut with(&[(op(0, OP_VEL), 0.0)]), &[loud], 0.2);
+        // Op 2 modulates op 1, but velocity × -0.5 on "Op 1 FM in" scales that to zero.
+        let cancelled = render(
+            &mut with(&[
+                (op(0, OP_VEL), 0.0),
+                (matrix(1, 0), 0.6),
+                (mod_src(0), 5.0),                // Velocity
+                (mod_dest(0), DEST_FM_IN as f32), // Op 1 FM in
+                (mod_amt(0), -0.5),
+            ]),
+            &[loud],
+            0.2,
+        );
+        assert!(plain.iter().zip(&cancelled).all(|(a, b)| (a - b).abs() < 1e-6));
+        // And with it doubled instead, the matrix does change the sound.
+        let doubled = render(
+            &mut with(&[
+                (op(0, OP_VEL), 0.0),
+                (matrix(1, 0), 0.6),
+                (mod_src(0), 5.0),
+                (mod_dest(0), DEST_FM_IN as f32),
+                (mod_amt(0), 0.5),
+            ]),
+            &[loud],
+            0.2,
+        );
+        assert!(plain.iter().zip(&doubled).any(|(a, b)| (a - b).abs() > 0.1));
+    }
+
+    #[test]
+    fn an_lfo_on_volume_gates_the_sound() {
+        use p::*;
+        // A square LFO at 1/8 on Volume, amount -1: off half the time, on the other half.
+        let mut fm = with(&[
+            (LFO_SHAPE, 3.0),
+            (LFO_SYNC, sync("1/8")),
+            (mod_src(0), 1.0),
+            (mod_dest(0), 3.0),
+            (mod_amt(0), -1.0),
+        ]);
+        fm.transport(Transport { tempo: 120.0, playing: false, position: 0.0 });
+        let out = render(&mut fm, &[on(60)], 1.0);
+        let quarter = (0.25 * SR) as usize; // one 1/8 cycle at 120
+        let half =
+            |k: usize| out[k * quarter / 2 + 200..(k + 1) * quarter / 2 - 200].iter().fold(0.0f32, |m, x| m.max(*x));
+        assert!(half(0) < 1e-3 && half(1) > 0.1, "first half {}, second half {}", half(0), half(1));
     }
 
     #[test]

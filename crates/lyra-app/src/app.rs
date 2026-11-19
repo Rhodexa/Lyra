@@ -186,6 +186,9 @@ impl LyraApp {
         if dev.wants("piano") || dev.wants("editor") {
             ui.selected = 5; // the demo's bass: something melodic to look at
         }
+        if let Some(n) = std::env::var("LYRA_SELECT").ok().and_then(|v| v.trim().parse().ok()) {
+            ui.selected = n;
+        }
         // LYRA_OPEN=piano / mixer / steps opens the bottom area on that editor.
         let bottom = [
             ("piano", Editor::PianoRoll),

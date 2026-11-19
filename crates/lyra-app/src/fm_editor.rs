@@ -2,7 +2,7 @@
 //!
 //! ```text
 //!  ┌ ◀ [ preset ▾ ] ▶ ───────────────────────┐   Fluttersine (logo,
-//!  ├OP1┼OP2┼OP3┼OP4┼OP5┼OP6┼FILTER┼LFO───────┤   no frame)
+//!  ├OP1┼OP2┼OP3┼OP4┼OP5┼OP6┼FILTER┼LFO┼MOD───┤   no frame)
 //!  ┌ the open page ──────────────────────────┐┌ FM matrix ──────┐
 //!  │ wave keys · LCD wave · LCD envelope     ││ 6×7 knobs       │
 //!  │ knobs                                   │├ voice ──────────┤
@@ -18,6 +18,8 @@
 //! * Envelope dots and the filter dots can be dragged; the knobs below are the
 //!   same parameters.
 //! * Wheel over the tabs, the wave keys or the preset dropdown steps through them.
+//! * LFO holds both LFOs (one at a time) with their tempo sync; MOD holds the
+//!   two mod envelopes and the six mod slots (source → destination × amount).
 //!
 //! Like every view, this only edits `channel.params`; the bridge does the rest.
 //! The waveform pictures are display-only copies of `lyra_fluttersine`'s shapes.
@@ -39,6 +41,8 @@ const OP_LIGHTS: [Light; OPS] =
 const FILTER_LIGHT: Light = theme::L_CYAN;
 const LFO_LIGHT: Light = theme::L_LIME;
 const VOICE_LIGHT: Light = theme::L_MINT;
+/// The MOD page shares the voice's light: both are about the whole patch.
+const MOD_LIGHT: Light = VOICE_LIGHT;
 
 /// Waveform indices that behave differently (see `lyra_fluttersine`).
 const W_PULSE: usize = 8;
@@ -56,22 +60,25 @@ enum Page {
     Op(usize),
     Filter,
     Lfo,
+    Mod,
 }
 
 impl Page {
-    const COUNT: usize = OPS + 2;
+    const COUNT: usize = OPS + 3;
     fn index(self) -> usize {
         match self {
             Page::Op(i) => i,
             Page::Filter => OPS,
             Page::Lfo => OPS + 1,
+            Page::Mod => OPS + 2,
         }
     }
     fn from_index(i: usize) -> Page {
         match i {
             i if i < OPS => Page::Op(i),
             i if i == OPS => Page::Filter,
-            _ => Page::Lfo,
+            i if i == OPS + 1 => Page::Lfo,
+            _ => Page::Mod,
         }
     }
     fn light(self) -> Light {
@@ -79,6 +86,7 @@ impl Page {
             Page::Op(i) => OP_LIGHTS[i],
             Page::Filter => FILTER_LIGHT,
             Page::Lfo => LFO_LIGHT,
+            Page::Mod => MOD_LIGHT,
         }
     }
     fn name(self) -> String {
@@ -86,6 +94,7 @@ impl Page {
             Page::Op(i) => format!("OP{}", i + 1),
             Page::Filter => "FILTER".into(),
             Page::Lfo => "LFO".into(),
+            Page::Mod => "MOD".into(),
         }
     }
 }
@@ -146,6 +155,10 @@ struct Sizes {
     mlabel_w: f32,
     /// Height of the LCD displays on the operator page.
     display_h: f32,
+    /// The MOD page: small knob cells (envelopes) and one row per slot.
+    small_cell_w: f32,
+    small_cell_h: f32,
+    slot_h: f32,
 }
 
 fn sizes() -> Sizes {
@@ -173,6 +186,9 @@ fn sizes() -> Sizes {
         mcell,
         mlabel_w,
         display_h,
+        small_cell_w: m.knob_small + 24.0,
+        small_cell_h: m.knob_small + 2.0 * m.text_small + 12.0,
+        slot_h: key_h + 6.0,
     }
 }
 
@@ -213,6 +229,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
         Page::Op(i) => op_page(ui, &mut ed, i),
         Page::Filter => filter_page(ui, &mut ed),
         Page::Lfo => lfo_page(ui, &mut ed),
+        Page::Mod => mod_page(ui, &mut ed),
     });
     logo(ui, logo_r);
     plate(ui, matrix_r, "fm-matrix-plate", |ui| matrix(ui, &mut ed, &mut page, &used));
@@ -693,54 +710,194 @@ fn lfo_page(ui: &mut Ui, ed: &mut Ed) {
     let s = sizes();
     let lt = LFO_LIGHT;
     let c = lt.mid;
-    let shape = ed.choice(p::LFO_SHAPE);
-    let retrig = ed.choice(p::LFO_RETRIG);
+    // Which LFO the page shows (remembered per channel, like the page itself).
+    let which_id = Id::new(("fm-lfo", ed.ch));
+    let mut which = ui.ctx().data(|d| d.get_temp::<usize>(which_id)).unwrap_or(0);
+    let [shape_id, rate_id, sync_id, retrig_id] = if which == 0 {
+        [p::LFO_SHAPE, p::LFO_RATE, p::LFO_SYNC, p::LFO_RETRIG]
+    } else {
+        [p::LFO2_SHAPE, p::LFO2_RATE, p::LFO2_SYNC, p::LFO2_RETRIG]
+    };
+    let shape = ed.choice(shape_id);
+    let retrig = ed.choice(retrig_id);
     let mut set = None;
     switch_row(ui, |ui| {
+        if let Some(k) = switch(
+            ui,
+            &["LFO 1", "LFO 2"],
+            which,
+            lt,
+            "LFO 1 also has fixed routes (vibrato, cutoff, PWM); both feed the MOD slots.",
+        ) {
+            which = k;
+        }
         if let Some(k) = switch(ui, &["FREE", "RETRIG"], retrig, lt, "Retrigger: the LFO restarts on every note.") {
-            set = Some((p::LFO_RETRIG, k));
+            set = Some((retrig_id, k));
         }
     });
-    let labels = FM_PARAMS[p::LFO_SHAPE].labels;
+    ui.ctx().data_mut(|d| d.insert_temp(which_id, which));
+    let labels = FM_PARAMS[shape_id].labels;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 3.0;
         for (k, name) in labels.iter().enumerate() {
             if glyph_key(ui, vec2(58.0, 32.0), Glyph::Lfo(k), (k == shape).then_some(lt)).on_hover_text(*name).clicked()
             {
-                set = Some((p::LFO_SHAPE, k));
+                set = Some((shape_id, k));
             }
         }
     });
     if let Some((id, k)) = set {
         ed.set(id, k as f32);
     }
-    // One second of the LFO, so the rate is visible.
+    // One second of the LFO, so the rate is visible (a synced one at the song's tempo).
+    let beats = lyra_fluttersine::SYNC_BEATS[ed.choice(sync_id).min(lyra_fluttersine::SYNC_BEATS.len() - 1)];
+    let synced = beats > 0.0;
+    let rate = if synced { ed.p.bpm as f32 / 60.0 / beats } else { ed.v(rate_id) };
     let (rect, _) = ui.allocate_exact_size(vec2(s.left_w, s.display_h - 12.0), Sense::hover());
     let painter = ui.painter_at(rect);
     theme::lcd_panel(&painter, rect);
     let inner = rect.shrink2(vec2(10.0, 14.0));
     painter.line_segment([inner.left_center(), inner.right_center()], stroke(1.0, lcd_grid()));
-    let rate = ed.v(p::LFO_RATE);
     draw_curve(&painter, inner, &|t| lfo_at(shape, t), rate, theme::LCD_INK, 1.8, Some(inner.center().y));
+    let caption = if synced { format!("1 second at {:.0} BPM", ed.p.bpm) } else { "1 second".into() };
     painter.text(
         rect.right_bottom() - vec2(9.0, 3.0),
         Align2::RIGHT_BOTTOM,
-        "1 second",
+        caption,
         FontId::proportional(theme::m().text_small - 1.0),
         theme::LCD_INK_DIM,
     );
 
     ui.horizontal(|ui| {
-        knob_cell(ui, ed, p::LFO_RATE, "Rate", c, true);
-        divider(ui, s.cell_h);
-        knob_cell(ui, ed, p::VIBRATO, "Vibrato", c, true);
-        knob_cell(ui, ed, p::F_LFO, "Cutoff", FILTER_LIGHT.mid, ed.on(p::LP_ON));
-    });
-    ui.horizontal(|ui| {
-        for (i, lt) in OP_LIGHTS.iter().enumerate() {
-            let warps = ed.choice(op(i, p::OP_WAVE)) <= W_PULSE;
-            knob_cell(ui, ed, op(i, p::OP_PWM), &format!("PWM {}", i + 1), lt.mid, warps)
+        knob_cell(ui, ed, rate_id, "Rate", c, !synced);
+        knob_cell(ui, ed, sync_id, "Sync", c, true);
+        if which == 0 {
+            divider(ui, s.cell_h);
+            knob_cell(ui, ed, p::VIBRATO, "Vibrato", c, true);
+            knob_cell(ui, ed, p::F_LFO, "Cutoff", FILTER_LIGHT.mid, ed.on(p::LP_ON));
         }
+    });
+    if which == 0 {
+        ui.horizontal(|ui| {
+            for (i, lt) in OP_LIGHTS.iter().enumerate() {
+                let warps = ed.choice(op(i, p::OP_WAVE)) <= W_PULSE;
+                knob_cell(ui, ed, op(i, p::OP_PWM), &format!("PWM {}", i + 1), lt.mid, warps)
+            }
+        });
+    }
+}
+
+// ───────────────────────────────────────────────────────────── MOD page
+
+/// Two mod envelopes on top; below them the six slots, each a source, a
+/// destination and a bipolar amount. A slot only sounds when all three are set.
+fn mod_page(ui: &mut Ui, ed: &mut Ed) {
+    use p::{env, mod_amt, mod_dest, mod_src, ENV_ATTACK, ENV_DECAY, ENV_RELEASE, ENV_SUSTAIN};
+    let s = sizes();
+    let c = MOD_LIGHT.mid;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for e in 0..2 {
+            if e == 1 {
+                divider(ui, s.small_cell_h);
+            }
+            for (k, label) in
+                [(ENV_ATTACK, "Attack"), (ENV_DECAY, "Decay"), (ENV_SUSTAIN, "Sustain"), (ENV_RELEASE, "Release")]
+            {
+                let name = if k == ENV_ATTACK { format!("Env {} A", e + 1) } else { label[..1].to_string() };
+                small_cell(ui, ed, env(e, k), &name, c, true);
+            }
+        }
+    });
+    ui.add_space(4.0);
+    for k in 0..p::MOD_SLOTS {
+        let live = ed.choice(mod_src(k)) != 0 && ed.choice(mod_dest(k)) != 0;
+        ui.allocate_ui_with_layout(vec2(s.left_w, s.slot_h), Layout::left_to_right(Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            let ink = if live { theme::TEXT } else { theme::TEXT_DIM };
+            ui.add_sized(vec2(14.0, s.key_h), egui::Label::new(RichText::new(format!("{}", k + 1)).small().color(ink)));
+            choice_well(ui, ed, mod_src(k), 116.0, "Source: what moves this slot");
+            // An arrow, drawn (the UI font has no "→").
+            let (ar, _) = ui.allocate_exact_size(vec2(14.0, s.key_h), Sense::hover());
+            let (y, x0, x1) = (ar.center().y, ar.left() + 1.0, ar.right() - 1.0);
+            let arrow = stroke(1.4, theme::TEXT_DIM);
+            ui.painter().line_segment([pos2(x0, y), pos2(x1, y)], arrow);
+            ui.painter().add(Shape::line(vec![pos2(x1 - 4.0, y - 3.5), pos2(x1, y), pos2(x1 - 4.0, y + 3.5)], arrow));
+            choice_well(ui, ed, mod_dest(k), 150.0, "Destination: what it moves");
+            let info = &FM_PARAMS[mod_amt(k)];
+            let mut v = ed.v(mod_amt(k));
+            let r = widgets::knob(ui, &mut v, info, theme::m().knob_small, if live { c } else { theme::TEXT_DIM });
+            ed.track(&r, mod_amt(k), v);
+            r.on_hover_text("Amount: how far, and which way (double-click: 0)");
+            ui.label(RichText::new(info.format(ed.v(mod_amt(k)))).small().color(ink));
+        });
+    }
+}
+
+/// A dropdown well for a choice parameter: click for the list, wheel to step.
+fn choice_well(ui: &mut Ui, ed: &mut Ed, id: usize, width: f32, hint: &str) {
+    let s = sizes();
+    let m = theme::m();
+    let info = &FM_PARAMS[id];
+    let n = info.labels.len();
+    let at = ed.choice(id).min(n - 1);
+    let (r, resp) = ui.allocate_exact_size(vec2(width, s.key_h), Sense::click());
+    let painter = ui.painter();
+    theme::well(painter, r);
+    let ink = if at == 0 { theme::TEXT_DIM } else { theme::TEXT };
+    painter.text(
+        r.left_center() + vec2(8.0, 0.0),
+        Align2::LEFT_CENTER,
+        info.labels[at],
+        FontId::proportional(m.text_small + 1.0),
+        ink,
+    );
+    let c = r.right_center() - vec2(10.0, 1.0);
+    let chevron = vec![c + vec2(-3.0, -1.2), c + vec2(0.0, 1.8), c + vec2(3.0, -1.2)];
+    painter.add(Shape::line(chevron, stroke(1.4, theme::TEXT_DIM)));
+    if let Some(step) = wheel_step(ui, r) {
+        ed.set(id, (at as i32 + step).clamp(0, n as i32 - 1) as f32);
+    }
+    let popup = ui.make_persistent_id(("fm-choice", ed.ch, id));
+    if resp.clicked() {
+        ui.memory_mut(|mem| mem.toggle_popup(popup));
+    }
+    let resp = resp.on_hover_text(hint);
+    let mut pick = None;
+    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
+        ui.set_min_width(width);
+        for (k, label) in info.labels.iter().enumerate() {
+            if ui.selectable_label(k == at, *label).clicked() {
+                pick = Some(k);
+            }
+        }
+    });
+    if let Some(k) = pick {
+        ed.set(id, k as f32);
+    }
+}
+
+/// A smaller knob cell, for rows that need more than seven knobs.
+fn small_cell(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, enabled: bool) {
+    let s = sizes();
+    let m = theme::m();
+    let info = &FM_PARAMS[id];
+    ui.allocate_ui(vec2(s.small_cell_w, s.small_cell_h), |ui| {
+        ui.add_enabled_ui(enabled, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
+                ui.add_space(2.0);
+                let mut v = ed.v(id);
+                let r = widgets::knob(ui, &mut v, info, m.knob_small, color);
+                if enabled {
+                    ed.track(&r, id, v);
+                }
+                r.on_hover_text(info.name);
+                ui.add_space(2.0);
+                ui.label(RichText::new(label).small().color(theme::TEXT_DIM));
+                ui.label(RichText::new(info.format(ed.v(id))).small().color(theme::TEXT));
+            });
+        });
     });
 }
 

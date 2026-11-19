@@ -245,8 +245,9 @@ pub trait Plugin: Send {
     fn activate(&mut self, sample_rate: f32);
     /// REAL-TIME. See the module docs.
     fn process(&mut self, ctx: ProcessContext<'_>);
-    /// REAL-TIME. Tempo and song position, called right before `process`.
-    /// Tempo-synced plugins (delays, sidechain pumps) override this.
+    /// REAL-TIME. Tempo and song position, called right before `process`,
+    /// for instruments and effects alike. Tempo-synced plugins (delays,
+    /// sidechain pumps, synced LFOs) override this.
     fn transport(&mut self, _transport: Transport) {}
     /// Give the plugin a sample to play (samplers). Called on the UI thread,
     /// before the plugin goes to the audio thread. Others ignore it.

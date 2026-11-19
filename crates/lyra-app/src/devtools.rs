@@ -9,6 +9,7 @@
 //! | `LYRA_SILENT=1` | engine runs normally, but the sound card gets zeros (see `audio.rs`) |
 //! | `LYRA_OPEN=piano,mixer,steps,audio,editor,design` | open these on launch (the first four: in the bottom area) |
 //! | `LYRA_ZOOM=1.3` | starting UI zoom (read in `app.rs`) |
+//! | `LYRA_SELECT=n` | select channel n on launch (what `editor` and `piano` show; read in `app.rs`) |
 //! | `LYRA_BUFFER=n` | audio ring size in frames (see `audio.rs`) |
 //! | `LYRA_AUDIO_PANIC_AFTER=n` | panic inside the audio callback after n callbacks, once (tests crash recovery; add `LYRA_AUDIO_PANIC_ALWAYS=1` to test the crash-loop guard) |
 //! | `LYRA_SCRIPT="…"` | synthetic input, one step per frame (see below) |

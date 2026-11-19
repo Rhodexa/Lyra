@@ -691,6 +691,7 @@ impl Engine {
             // AllNotesOff sorts before a NoteOn at the same sample, so a choke
             // never kills the note that's starting right then. (In-place sort: no allocation.)
             events.sort_unstable_by_key(|e| (e.offset, !matches!(e.event, Event::AllNotesOff)));
+            plugin.transport(transport);
             plugin.process(ProcessContext {
                 sample_rate: self.sr,
                 events,

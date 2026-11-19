@@ -51,7 +51,28 @@ pub fn save(path: &Path, project: &Project) -> Result<(), String> {
 
 pub fn load(path: &Path) -> Result<Project, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("can't read {}: {e}", path.display()))?;
-    file::from_json(&text).map_err(|e| format!("{}: {e}", path.display()))
+    let mut project = file::from_json(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    fill_new_params(&mut project);
+    Ok(project)
+}
+
+/// Parameters a plugin gained after the project was saved get their
+/// defaults. Ids are forever and new ones go at the end, so the saved values
+/// still line up; this only adds the missing tail (and editors can index
+/// every parameter the plugin has).
+pub fn fill_new_params(project: &mut Project) {
+    fn fill(params: &mut Vec<f32>, defaults: Vec<f32>) {
+        if params.len() < defaults.len() {
+            let n = params.len();
+            params.extend_from_slice(&defaults[n..]);
+        }
+    }
+    for ch in &mut project.channels {
+        fill(&mut ch.params, lyra_catalog::default_params(&ch.instrument));
+    }
+    for slot in project.mixer.iter_mut().flat_map(|t| &mut t.effects) {
+        fill(&mut slot.params, lyra_catalog::effects::default_params(&slot.effect));
+    }
 }
 
 pub fn remember(path: &Path) {
@@ -97,4 +118,31 @@ pub fn pick_save(suggested: &str) -> Option<PathBuf> {
 /// "My Song" for `/…/My Song.lyra`.
 pub fn display_name(path: Option<&Path>) -> String {
     path.and_then(|p| p.file_stem()).map_or("Untitled".into(), |s| s.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn older_projects_get_new_parameters_at_their_defaults() {
+        let mut p = Project::default();
+        let full = lyra_catalog::default_params("lyra.fluttersine");
+        let mut old = full[..154].to_vec(); // Fluttersine as first ported
+        old[0] = 8.0; // a saved value
+        p.add_channel("Lead", "lyra.fluttersine", old);
+        p.mixer[1].effects.push(lyra_model::EffectSlot {
+            effect: "lyra.delay".into(),
+            params: vec![1.0],
+            bypass: false,
+        });
+        fill_new_params(&mut p);
+        let params = &p.channels[0].params;
+        assert_eq!(params.len(), full.len());
+        assert_eq!(params[0], 8.0, "saved values stay");
+        assert_eq!(params[154..], full[154..]);
+        let delay = &p.mixer[1].effects[0].params;
+        assert_eq!(delay.len(), lyra_catalog::effects::default_params("lyra.delay").len());
+        assert_eq!(delay[0], 1.0);
+    }
 }

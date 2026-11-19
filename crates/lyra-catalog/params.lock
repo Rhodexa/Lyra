@@ -226,3 +226,34 @@ lyra.reverb	3	Mix
 lyra.pump	0	Depth
 lyra.pump	1	Recovery
 lyra.pump	2	Rate
+lyra.fluttersine	154	Sync
+lyra.fluttersine	155	LFO 2 shape
+lyra.fluttersine	156	LFO 2 rate
+lyra.fluttersine	157	LFO 2 sync
+lyra.fluttersine	158	LFO 2 retrigger
+lyra.fluttersine	159	Env 1 attack
+lyra.fluttersine	160	Env 1 decay
+lyra.fluttersine	161	Env 1 sustain
+lyra.fluttersine	162	Env 1 release
+lyra.fluttersine	163	Env 2 attack
+lyra.fluttersine	164	Env 2 decay
+lyra.fluttersine	165	Env 2 sustain
+lyra.fluttersine	166	Env 2 release
+lyra.fluttersine	167	Mod 1 source
+lyra.fluttersine	168	Mod 1 dest
+lyra.fluttersine	169	Mod 1 amount
+lyra.fluttersine	170	Mod 2 source
+lyra.fluttersine	171	Mod 2 dest
+lyra.fluttersine	172	Mod 2 amount
+lyra.fluttersine	173	Mod 3 source
+lyra.fluttersine	174	Mod 3 dest
+lyra.fluttersine	175	Mod 3 amount
+lyra.fluttersine	176	Mod 4 source
+lyra.fluttersine	177	Mod 4 dest
+lyra.fluttersine	178	Mod 4 amount
+lyra.fluttersine	179	Mod 5 source
+lyra.fluttersine	180	Mod 5 dest
+lyra.fluttersine	181	Mod 5 amount
+lyra.fluttersine	182	Mod 6 source
+lyra.fluttersine	183	Mod 6 dest
+lyra.fluttersine	184	Mod 6 amount
