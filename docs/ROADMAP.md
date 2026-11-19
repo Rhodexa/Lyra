@@ -42,7 +42,7 @@ built before the line it depends on.
 - [ ] Settings saving (layout, sizes, zoom); WAV export
 - [ ] Add any folder to the browser (your animation project's voice folder), not only the library
 - More waveform editing: split at the playhead, normalize, reverse; clips that follow tempo changes
-- The audio-clip editor as a small recording editor (Rhodexa's idea): New, Save, Record; select a range, then Silence it or Close the gap; Invert selection. Few tools, all non-destructive (an edit list over the file)
+- The audio-clip editor as a small *destructive* recording editor (Rhodexa's idea; non-destructive editing is the arrangement's job): New, Save, Record (always appends to the end of the audio), select a range, then Silence it (clears the samples) or Collapse it (closes the gap: everything after moves up, so cutting from the start shifts the rest to the beginning); Invert selection. A few tools, on the sample data itself
 - Sample browser: drag files in from the file manager (needs window drag-and-drop on Wayland)
 
 ## M5: Plugins & automation

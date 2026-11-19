@@ -11,7 +11,8 @@
 //!   either end to trim it (a clip is a window onto its audio). Hover a clip
 //!   for its handles: the dots on the title strip are its fades (drag
 //!   sideways), the ring on a fade's curve bends it (drag up and down), the ↕
-//!   in the middle is its gain (drag up and down, double-click for 0 dB).
+//!   in the middle is its gain (drag up and down). A double-click anywhere on
+//!   a clip opens it in the audio-clip editor.
 //!   These are each clip's own. Double-click: the audio-clip editor, where
 //!   its window onto the audio slides, and what all copies share is edited.
 //! * a click never moves anything: moves and resizes start once the mouse
@@ -210,9 +211,9 @@ struct Handle {
     grip: Grip,
 }
 
-const HANDLE_R: f32 = 6.0;
-/// Fades narrower than this show no curve dot (too fiddly).
-const CURVE_MIN_W: f32 = 16.0;
+const HANDLE_R: f32 = 10.0;
+/// Fades narrower than this show no curve ring (too fiddly).
+const CURVE_MIN_W: f32 = 28.0;
 /// Clips shorter than this show no handles at all: just the waveform.
 const HANDLES_MIN_H: f32 = 40.0;
 
@@ -716,15 +717,12 @@ impl Playlist {
             return;
         }
         // An audio clip's handles: its own fades and gain.
-        if let Some(hd) = handle_hit(v, p, pos) {
+        // (A double-click always opens the clip, handles or not.)
+        if let Some(hd) = handle_hit(v, p, pos).filter(|_| !double) {
             h.checkpoint(p);
             let c = &mut p.clips[hd.clip];
             let fade = |end| if end == End::In { c.fade_in } else { c.fade_out };
             self.drag = match hd.grip {
-                Grip::Gain if double => {
-                    c.gain = 0.0;
-                    Drag::None
-                }
                 Grip::Gain => Drag::Gain { clip: hd.clip, orig: c.gain, anchor_y: pos.y },
                 Grip::Curve(end) => Drag::Tension { clip: hd.clip, end, orig: fade(end).tension, anchor_y: pos.y },
                 Grip::Fade(end) => {
@@ -904,7 +902,8 @@ impl Playlist {
                 }
             }
             Drag::Tension { clip, end, orig, anchor_y } => {
-                let t = waveform::drag_tension(*orig, pos.y - *anchor_y);
+                let body = fade_geo(v, p, &p.clips[*clip]).body;
+                let t = waveform::drag_tension(*orig, *anchor_y, pos.y, body);
                 if let Some(c) = p.clips.get_mut(*clip) {
                     match end {
                         End::In => c.fade_in.tension = t,

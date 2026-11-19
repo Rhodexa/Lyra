@@ -29,9 +29,11 @@ use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText
 use lyra_model::{AudioId, Clip, Fade, History, Project, Source};
 use lyra_plugin::{Curve, ParamInfo};
 
-const GAIN: ParamInfo = ParamInfo::new(0, "Gain", -36.0, 12.0, 0.0, "dB", Curve::Linear);
-const FADE_IN: ParamInfo = ParamInfo::new(1, "Fade in", 0.001, 10.0, 0.005, "s", Curve::Exponential);
-const FADE_OUT: ParamInfo = ParamInfo::new(3, "Fade out", 0.001, 10.0, 0.005, "s", Curve::Exponential);
+// Ranges sized for voice work: every knob in Lyra turns 0.6% of its range per
+// point dragged (Shift: finer), so a wide range feels fast.
+const GAIN: ParamInfo = ParamInfo::new(0, "Gain", -24.0, 12.0, 0.0, "dB", Curve::Linear);
+const FADE_IN: ParamInfo = ParamInfo::new(1, "Fade in", 0.001, 5.0, 0.005, "s", Curve::Exponential);
+const FADE_OUT: ParamInfo = ParamInfo::new(3, "Fade out", 0.001, 5.0, 0.005, "s", Curve::Exponential);
 const CURVE_IN: ParamInfo = ParamInfo::new(2, "Curve", -1.0, 1.0, 0.0, "", Curve::Linear);
 const CURVE_OUT: ParamInfo = ParamInfo::new(4, "Curve", -1.0, 1.0, 0.0, "", Curve::Linear);
 
@@ -43,11 +45,11 @@ const SOURCE_KNOBS: [(&ParamInfo, (usize, usize)); 1] = [(&GAIN, (0, 0))];
 /// The plates of knobs (this clip's is two knobs wide, every copy's one).
 const PLATE_W: f32 = 150.0;
 const SOURCE_W: f32 = 84.0;
-const HANDLE_R: f32 = 6.0;
+const HANDLE_R: f32 = 10.0;
 /// The trim lines can be grabbed this far to either side.
 const TRIM_GRAB: f32 = 5.0;
 /// Fades narrower than this show no curve ring.
-const CURVE_MIN_W: f32 = 16.0;
+const CURVE_MIN_W: f32 = 28.0;
 
 enum Drag {
     None,
@@ -195,7 +197,7 @@ impl Frame {
             rect,
             x_in: v.x(from + c.fade_in.len as f64).min(rect.right()),
             x_out: v.x(to - c.fade_out.len as f64).max(rect.left()),
-            handles_y: rect.top() + 8.0,
+            handles_y: rect.top() + 12.0,
         }
     }
 
@@ -231,7 +233,7 @@ fn hover(v: &View, p: &Project, a: &lyra_model::Audio, frame: Option<&Frame>, po
         if near(pos2(f.x_out, f.handles_y)) {
             return Some(Hover::Fade(End::Out));
         }
-        if pos.distance(f.rect.center()) <= HANDLE_R + 3.0 {
+        if pos.distance(f.rect.center()) <= HANDLE_R + 4.0 {
             return Some(Hover::Gain);
         }
         if f.curve_mid(End::In, c.fade_in.tension).is_some_and(near) {
@@ -431,7 +433,8 @@ impl AudioEditor {
                         }
                     }
                     Drag::Tension { clip, end, orig, anchor_y } => {
-                        let t = waveform::drag_tension(*orig, pos.y - *anchor_y);
+                        let area = frame.as_ref().map_or(wave, |f| f.rect);
+                        let t = waveform::drag_tension(*orig, *anchor_y, pos.y, area);
                         let c = &mut p.clips[*clip];
                         match end {
                             End::In => c.fade_in.tension = t,
@@ -606,7 +609,7 @@ fn knob_plate(
         theme::TEXT_DIM,
     );
     let top = area.top() + 12.0 + m.text_small;
-    let cell = vec2(area.width() * 0.5, m.knob_small + 2.0 * m.text_small + 12.0);
+    let cell = vec2(area.width() * 0.5, m.knob_large + 2.0 * m.text_small + 12.0);
     let mut edit = PlateEdit { checkpoint: false, change: None };
     for (k, &(info, (col, row))) in knobs.iter().enumerate() {
         let r = Rect::from_min_size(pos2(area.left() + col as f32 * cell.x, top + row as f32 * cell.y), cell);
@@ -615,7 +618,7 @@ fn knob_plate(
         }
         let mut v = vals[k];
         let knob =
-            Rect::from_center_size(pos2(r.center().x, r.top() + m.knob_small * 0.5), vec2(m.knob_small, m.knob_small));
+            Rect::from_center_size(pos2(r.center().x, r.top() + m.knob_large * 0.5), vec2(m.knob_large, m.knob_large));
         let resp = widgets::knob_at(ui, ui.id().with((salt, k)), knob, &mut v, info, color);
         // Same rule as `rack::tracked`: one undo step per grab, or per click/wheel change.
         edit.checkpoint |= resp.drag_started() || (resp.changed() && !resp.dragged());

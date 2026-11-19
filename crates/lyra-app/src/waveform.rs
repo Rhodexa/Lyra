@@ -105,8 +105,8 @@ pub fn paint_fade(
 /// A fade handle: a dot at a fade's end (drag sideways: length), in the
 /// clip's own colour.
 pub fn paint_handle(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
-    halo(painter, at, 6.0);
-    painter.circle_filled(at, if hot { 4.5 } else { 3.5 }, color);
+    halo(painter, at, 11.0);
+    painter.circle_filled(at, if hot { 8.5 } else { 7.0 }, color);
 }
 
 /// A soft dark disc behind a handle, so it reads on top of the waveform.
@@ -116,14 +116,14 @@ fn halo(painter: &Painter, at: Pos2, r: f32) {
 
 /// A tension handle: a ring on a fade's curve (drag up/down: bend it).
 pub fn paint_tension(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
-    halo(painter, at, 6.5);
-    painter.circle_stroke(at, if hot { 4.5 } else { 3.5 }, stroke(1.5, color));
+    halo(painter, at, 11.5);
+    painter.circle_stroke(at, if hot { 8.5 } else { 7.0 }, stroke(2.0, color));
 }
 
 /// The gain grip: a small up/down arrow (drag up/down: louder/quieter).
 pub fn paint_gain(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
-    let s = if hot { 1.25 } else { 1.0 };
-    halo(painter, at, 9.0 * s);
+    let s = if hot { 2.4 } else { 2.0 };
+    halo(painter, at, 8.0 * s);
     let tri = |dir: f32| {
         let tip = at + egui::vec2(0.0, -6.0 * dir * s);
         let base = at + egui::vec2(0.0, -2.0 * dir * s);
@@ -134,8 +134,12 @@ pub fn paint_gain(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
     }
 }
 
-/// Tension after dragging a curve by `dy` points. Dragging up raises the
-/// curve (louder sooner), which is lower tension, for both fades.
-pub fn drag_tension(start: f32, dy: f32) -> f32 {
-    (start + dy / 80.0).clamp(-1.0, 1.0)
+/// A curve's tension while its ring is dragged (grabbed at `anchor_y` when
+/// the tension was `orig`, the mouse now at `y`): the ring stays under the
+/// mouse. `area` is the rect the curve is drawn in.
+pub fn drag_tension(orig: f32, anchor_y: f32, y: f32, area: Rect) -> f32 {
+    // Where the ring was when grabbed, moved by the mouse: the curve passes there.
+    let ring = area.bottom() - fade_curve(0.5, orig) * area.height();
+    let at = ring + (y - anchor_y);
+    lyra_engine::tension_through((area.bottom() - at) / area.height().max(1.0))
 }

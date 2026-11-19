@@ -37,6 +37,7 @@ no marks would default to not urgent or 'coding teams judges'
 - [ ] Remember sizes / zoom between runs (needs settings saving, comes with project save/load). Until then, "Copy as code" in F12 and I'll make your numbers the defaults.
 - [ ] Wheel-over-note changes velocity only while *hovering* a note. With a selection but no hover, the wheel still scrolls, otherwise you couldn't scroll while anything is selected. Tell me if you want it the other way.
 
+- [ ] *(deferred, 2026-11-19)* The ↕ gain grip sits in the middle of a clip (or of its frame in the audio-clip editor), so on a clip wider than the view it can be off screen. Fix: keep it in the middle of the clip's *visible* part.
 - [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
 
 - [ ] KDE shows a generic "W" icon for Lyra (title bar and taskbar): Wayland takes the icon from a `.desktop` file, which Lyra doesn't have yet. Needs a `lyra.desktop` + icon install (app id `lyra`).

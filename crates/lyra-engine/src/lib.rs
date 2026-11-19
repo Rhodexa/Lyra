@@ -106,13 +106,24 @@ pub struct AudioLane {
     pub regions: Vec<AudioRegion>,
 }
 
+/// How far tension ±1 bends a fade (the exponent at full tension).
+pub const FADE_BEND: f32 = 6.0;
+
+/// The tension whose curve passes through `gain` halfway through the fade:
+/// the inverse of `fade_curve(0.5, t)`, which is 1 / (e^(BEND·t/2) + 1).
+/// Dragging a curve's ring uses it, so the curve follows the mouse.
+pub fn tension_through(gain: f32) -> f32 {
+    let g = gain.clamp(0.005, 0.995);
+    (2.0 * (1.0 / g - 1.0).ln() / FADE_BEND).clamp(-1.0, 1.0)
+}
+
 /// A fade's shape: `x` (0..1, how far towards full volume) to gain (0..1).
 /// `tension` 0 is a straight line; above 0 the curve bows down (quieter
 /// through the fade), below 0 it bows up (louder). A fade-out uses the same
 /// curve read backwards, so the same tension looks the same at both ends.
 pub fn fade_curve(x: f32, tension: f32) -> f32 {
     let x = x.clamp(0.0, 1.0);
-    let c = tension.clamp(-1.0, 1.0) * 6.0;
+    let c = tension.clamp(-1.0, 1.0) * FADE_BEND;
     if c.abs() < 1e-3 {
         x
     } else {
@@ -1029,6 +1040,9 @@ mod tests {
         assert!((fade_curve(0.5, 0.5) - 0.5).abs() > 0.1 && fade_curve(0.5, 0.5) < 0.5, "tension bends it");
         assert!(fade_curve(0.5, -0.5) > 0.5);
         assert_eq!(fade_curve(1.0, 0.7), 1.0);
+        for t in [-0.8, -0.3, 0.0, 0.4, 0.9] {
+            assert!((tension_through(fade_curve(0.5, t)) - t).abs() < 1e-3, "inverse at {t}");
+        }
     }
 
     #[test]
