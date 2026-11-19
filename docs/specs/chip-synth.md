@@ -13,6 +13,10 @@ Lyra, 2026-11-19): chip arps had to be faked as a stream of 36 ms notes
 (clicky, "iffy"); noise drums were white noise, not pitched LFSR noise;
 duty-cycle movement and volume envelopes in steps had no way in.
 
+
+**House rules (docs/ARCHITECTURE.md, "Plugin parameters"):** stereo by
+default; note velocity sets loudness (fully by default); volumes use
+`Curve::Fader` and show dB; new parameters only ever go at the end.
 ## Sound
 
 | Wave | Notes |

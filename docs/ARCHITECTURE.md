@@ -186,6 +186,12 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   index the whole table.
 * Built-ins use the `lyra.` namespace (no real reverse-DNS name starts with
   it). Hosted CLAP plugins will keep their own ids, stored as `clap:<id>`.
+* **Instruments are stereo, and velocity is loudness.** A synth makes stereo
+  by default (pan, unison spread, width); only drums and deliberately mono
+  basses sit dead centre. Note velocity sets a voice's loudness, fully by
+  default (an amount knob may soften it); per-voice velocity → timbre is extra.
+* Volumes are linear gains with `Curve::Fader` and the `"gain"` unit: the knob
+  feels like a console fader and reads in dB.
 * Continuous: `ParamInfo::new(..)` with a linear or exponential knob curve.
 * Choices: `ParamInfo::choice(id, name, labels, default)`. The value is an index.
 * `Plugin::groups()` names runs of ids ("Filter": 6..11). The instrument

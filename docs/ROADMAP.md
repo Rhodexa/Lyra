@@ -29,7 +29,7 @@ built before the line it depends on.
 - [x] WAV export (the same bridge and engine, offline): project menu → Export WAV / Export stems (Ctrl+E / Ctrl+Shift+E), and `lyra --render song.lyra [out.wav] [--stems dir]`
 - [ ] Sends / sidechain from a real kick
 - [x] Fluttersine (FM synth, id `lyra.fluttersine`; port of the original: 6 operators, 6×6 matrix, filters, LFO, 18 presets) with a tabbed editor
-- [x] Fluttersine, beyond the port: tempo-synced LFOs (locked to the song while it plays), a second LFO, two mod envelopes, six mod slots (source → pitch, cutoff, volume, FM depth, or any operator's level / FM in / pitch / warp); the MOD page
+- [x] Fluttersine, beyond the port: tempo-synced LFOs (locked to the song while it plays), a second LFO, two mod envelopes, six mod slots (source → pitch, cutoff, volume, FM depth, or any operator's level / FM in / pitch / warp); the MOD page. Stereo (a PAN per operator, supersaw Width), and velocity sets loudness
 - [ ] Library folder for samples/plugins + "collect into project" (with M4)
 - Mixer inserts with effect slots; per-channel meters
 - Built-in FX: EQ, compressor, delay, reverb, filter, sidechain pump

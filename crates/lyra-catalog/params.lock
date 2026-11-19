@@ -269,3 +269,11 @@ lyra.drive	1	Drive
 lyra.drive	2	Tone
 lyra.drive	3	Mix
 lyra.drive	4	Output
+lyra.fluttersine	185	Op 1 pan
+lyra.fluttersine	186	Op 2 pan
+lyra.fluttersine	187	Op 3 pan
+lyra.fluttersine	188	Op 4 pan
+lyra.fluttersine	189	Op 5 pan
+lyra.fluttersine	190	Op 6 pan
+lyra.fluttersine	191	Width
+lyra.fluttersine	192	Velocity

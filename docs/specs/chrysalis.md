@@ -10,6 +10,10 @@ world. Modern bass design is wavetables morphing along *drawn* rhythmic
 curves, run through per-voice distortion and formant filters. That needs
 an instrument built around it, not more Fluttersine (it wasn't designed for that).
 
+
+**House rules (docs/ARCHITECTURE.md, "Plugin parameters"):** stereo by
+default; note velocity sets loudness (fully by default); volumes use
+`Curve::Fader` and show dB; new parameters only ever go at the end.
 ## Sound
 
 * **2 wavetable oscillators.** A table is up to 256 frames × 2048 samples;

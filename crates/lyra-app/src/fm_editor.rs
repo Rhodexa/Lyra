@@ -177,7 +177,7 @@ fn sizes() -> Sizes {
         cell_h,
         key_h,
         left_w: 7.0 * cell_w + 6.0 * 5.0,
-        right_w: mlabel_w + 6.0 * mcell.x + OUT_GAP + mcell.x,
+        right_w: mlabel_w + 6.0 * mcell.x + OUT_GAP + 2.0 * mcell.x,
         // Tall enough that the voice plate beside it (preset row + tabs) fits a row of knobs.
         preset_h: m.control_h + 14.0,
         tab_h: m.control_h + 8.0,
@@ -908,17 +908,23 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, page: &mut Page, used: &[bool; OPS]) {
     let small = FontId::proportional(theme::m().text_small);
     let origin = ui.cursor().min;
     // Square cells, packed edge to edge.
-    let col_x = |col: usize| origin.x + s.mlabel_w + col as f32 * s.mcell.x + if col == OPS { OUT_GAP } else { 0.0 };
+    // Columns: the 6×6 matrix, a gap, then OUT and PAN side by side.
+    let col_x = |col: usize| origin.x + s.mlabel_w + col as f32 * s.mcell.x + if col >= OPS { OUT_GAP } else { 0.0 };
     let row_y = |row: usize| origin.y + 18.0 + row as f32 * s.mcell.y;
     let (area, _) = ui.allocate_exact_size(vec2(s.right_w, s.matrix_h), Sense::hover());
     ui.interact(Rect::from_min_size(area.min, vec2(s.mlabel_w - 4.0, 16.0)), Id::new("fm-matrix-help"), Sense::hover())
         .on_hover_text(
             "FM matrix. Each row is an operator sending into each column: turn a knob up to modulate.\n\
-             The diagonal is feedback (an operator modulating itself). OUT is how loud it is.",
+             The diagonal is feedback (an operator modulating itself). OUT is how loud it is,\n\
+             PAN where it sits, left to right.",
         );
     // Column heads
-    for col in 0..=OPS {
-        let text = if col == OPS { "OUT".to_string() } else { (col + 1).to_string() };
+    for col in 0..=OPS + 1 {
+        let text = match col {
+            c if c == OPS => "OUT".to_string(),
+            c if c == OPS + 1 => "PAN".to_string(),
+            c => (c + 1).to_string(),
+        };
         let at = pos2(col_x(col) + s.mcell.x * 0.5, origin.y + 8.0);
         ui.painter().text(at, Align2::CENTER_CENTER, text, small.clone(), theme::TEXT_DIM);
     }
@@ -947,8 +953,12 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, page: &mut Page, used: &[bool; OPS]) {
         if resp.on_hover_text(format!("Operator {}: click to open it", row + 1)).clicked() {
             *page = Page::Op(row);
         }
-        for col in 0..=OPS {
-            let id = if col == OPS { p::out(row) } else { p::matrix(row, col) };
+        for col in 0..=OPS + 1 {
+            let id = match col {
+                c if c == OPS => p::out(row),
+                c if c == OPS + 1 => p::pan(row),
+                c => p::matrix(row, c),
+            };
             let cell = Rect::from_min_size(pos2(col_x(col), row_y(row)), s.mcell);
             if col == row {
                 // Feedback: the diagonal sits in a faint, square recess.
@@ -967,9 +977,14 @@ fn voice(ui: &mut Ui, ed: &mut Ed) {
     let (mode, glide_mode) = (ed.choice(p::MODE), ed.choice(p::GLIDE_MODE));
     let glides = ed.v(p::GLIDE) > 0.0;
     let mut set = None;
+    let saws = (0..OPS).any(|i| ed.choice(op(i, p::OP_WAVE)) == W_SSAW);
     ui.horizontal_top(|ui| {
-        knob_cell(ui, ed, p::VOLUME, "Volume", c, true);
-        knob_cell(ui, ed, p::GLIDE, "Glide", c, true);
+        ui.spacing_mut().item_spacing.x = 0.0;
+        small_cell(ui, ed, p::VOLUME, "Volume", c, true);
+        small_cell(ui, ed, p::AMP_VEL, "Velocity", c, true);
+        small_cell(ui, ed, p::WIDTH, "Width", c, saws);
+        small_cell(ui, ed, p::GLIDE, "Glide", c, true);
+        ui.add_space(6.0);
         ui.vertical(|ui| {
             ui.add_space(8.0);
             ui.spacing_mut().item_spacing.y = 8.0;

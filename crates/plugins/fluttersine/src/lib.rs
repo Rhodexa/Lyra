@@ -3,12 +3,14 @@
 //!
 //! ```text
 //!  per voice:  6 operators ──► 6×6 matrix (row modulates column, diagonal = feedback)
-//!              └─ OUT mix ──► [24 dB Butterworth] ─► resonant SVF low-pass ─► SVF high-pass ─► sum
-//!  global:     sum × volume ─► DC blocker ─► tanh soft clip ─► out L = R
+//!              └─ OUT mix × PAN (+ supersaw width) ─► L/R: [24 dB Butterworth] ─► SVF low-pass ─► SVF high-pass
+//!  global:     L/R × volume ─► DC blocker ─► tanh soft clip ─► out
+//!  (a patch with nothing panned and no wide supersaw renders one side and copies it: as cheap as mono)
 //! ```
 //! * Each operator: 11 waveforms (OPL-style sines, triangle, saw, pulse, 7-saw supersaw,
 //!   noise), a phase warp ("PW") that works on every shape, ratio or fixed Hz, fine tune,
-//!   its own ADSR and velocity sensitivity.
+//!   its own ADSR, velocity sensitivity (timbre) and pan. The voice's loudness follows
+//!   velocity by `AMP_VEL` (fully, by default, like Lyra's other synths).
 //! * Modulation is phase offset in cycles: a matrix value of 1 shifts the target by up to
 //!   one full cycle. Self-feedback averages the last two samples (DX7 style) to stay tame.
 //! * Saw, pulse and supersaw are band-limited with polyBLEP while unmodulated (once a
@@ -21,7 +23,7 @@
 
 use lyra_dsp::Rng;
 use lyra_plugin::{Curve, Event, ParamGroup, ParamInfo, Plugin, PluginInfo, ProcessContext, Transport};
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::{FRAC_PI_4, PI, SQRT_2, TAU};
 
 const MAX_VOICES: usize = 16;
 const OPS: usize = p::OPS;
@@ -156,7 +158,17 @@ pub mod p {
         MODS + k * 3 + 2
     }
 
-    pub const COUNT: usize = MODS + MOD_SLOTS * 3;
+    /// Stereo: each operator's place in the stereo field (−1 left … 1 right).
+    pub const PAN: usize = MODS + MOD_SLOTS * 3;
+    pub const fn pan(i: usize) -> usize {
+        PAN + i
+    }
+    /// Supersaw stereo: how far apart its seven saws are spread (0 = mono).
+    pub const WIDTH: usize = PAN + OPS;
+    /// How much note velocity sets the voice's loudness (1 = fully, like the other synths).
+    pub const AMP_VEL: usize = WIDTH + 1;
+
+    pub const COUNT: usize = AMP_VEL + 1;
 }
 
 /// LFO sync choices, as labels; `SYNC_BEATS` gives each one's length in quarter notes.
@@ -171,20 +183,22 @@ pub const MOD_SOURCES: [&str; 8] = ["Off", "LFO 1", "LFO 2", "Env 1", "Env 2", "
 
 /// Where a mod slot goes, and what an amount of 1 at a full source means:
 /// pitch ±24 st, cutoff ±6 oct, volume and op levels ±100%, FM depth ×(1 ± 2)
-/// (it scales the modulation already set in the matrix), op warp ±0.48.
+/// (it scales the modulation already set in the matrix), op warp ±0.48, op pan ±1.
 #[rustfmt::skip]
-pub const MOD_DESTS: [&str; 29] = [
+pub const MOD_DESTS: [&str; 35] = [
     "Off", "Pitch", "Cutoff", "Volume", "All FM",
     "Op 1 level", "Op 2 level", "Op 3 level", "Op 4 level", "Op 5 level", "Op 6 level",
     "Op 1 FM in", "Op 2 FM in", "Op 3 FM in", "Op 4 FM in", "Op 5 FM in", "Op 6 FM in",
     "Op 1 pitch", "Op 2 pitch", "Op 3 pitch", "Op 4 pitch", "Op 5 pitch", "Op 6 pitch",
     "Op 1 warp", "Op 2 warp", "Op 3 warp", "Op 4 warp", "Op 5 warp", "Op 6 warp",
+    "Op 1 pan", "Op 2 pan", "Op 3 pan", "Op 4 pan", "Op 5 pan", "Op 6 pan",
 ];
 /// First index of each per-operator block in `MOD_DESTS`.
 pub const DEST_LEVEL: usize = 5;
 pub const DEST_FM_IN: usize = 11;
 pub const DEST_OP_PITCH: usize = 17;
 pub const DEST_WARP: usize = 23;
+pub const DEST_PAN: usize = 29;
 
 const W_TRI: u8 = 6;
 const W_SAW: u8 = 7;
@@ -241,7 +255,9 @@ const fn build_params() -> [ParamInfo; p::COUNT] {
         set!(op(i, OP_PWM), new "PWM", 0.0, 1.0, 0.0, "%", Lin);
         set!(op(i, OP_SPREAD), new "SS spread", 0.0, 1.0, 0.35, "%", Lin);
         set!(op(i, OP_SS_MIX), new "SS mix", 0.0, 1.0, 0.6, "%", Lin);
-        set!(op(i, OP_VEL), new "Velocity", 0.0, 1.0, 0.5, "%", Lin);
+        // Per operator, velocity is extra (mostly timbre: on a modulator it's
+        // brightness); the voice's loudness follows AMP_VEL.
+        set!(op(i, OP_VEL), new "Velocity", 0.0, 1.0, 0.0, "%", Lin);
         set!(op(i, OP_ATTACK), new "Attack", 0.001, 10.0, 0.003, "s", Exp);
         set!(op(i, OP_DECAY), new "Decay", 0.001, 10.0, 0.4, "s", Exp);
         set!(op(i, OP_SUSTAIN), new "Sustain", 0.0, 1.0, 1.0, "%", Lin);
@@ -318,6 +334,14 @@ const fn build_params() -> [ParamInfo; p::COUNT] {
         set!(mod_amt(k), new SLOT_NAMES[k][2], -1.0, 1.0, 0.0, "%", Lin);
         k += 1;
     }
+    const PAN_NAMES: [&str; OPS] = ["Op 1 pan", "Op 2 pan", "Op 3 pan", "Op 4 pan", "Op 5 pan", "Op 6 pan"];
+    let mut o = 0;
+    while o < OPS {
+        set!(pan(o), new PAN_NAMES[o], -1.0, 1.0, 0.0, "pan", Lin);
+        o += 1;
+    }
+    set!(WIDTH, new "Width", 0.0, 1.0, 0.5, "%", Lin);
+    set!(AMP_VEL, new "Velocity", 0.0, 1.0, 1.0, "%", Lin);
     a
 }
 
@@ -327,7 +351,7 @@ const fn op_group(name: &'static str, i: usize) -> ParamGroup {
     ParamGroup { name, ids: (i * p::OP_STRIDE) as u32..((i + 1) * p::OP_STRIDE) as u32 }
 }
 
-static FM_GROUPS: [ParamGroup; 14] = [
+static FM_GROUPS: [ParamGroup; 15] = [
     op_group("Op 1", 0),
     op_group("Op 2", 1),
     op_group("Op 3", 2),
@@ -341,7 +365,8 @@ static FM_GROUPS: [ParamGroup; 14] = [
     ParamGroup { name: "LFO sync, LFO 2", ids: p::LFO_SYNC as u32..p::ENV1 as u32 },
     ParamGroup { name: "Env 1", ids: p::ENV1 as u32..p::ENV2 as u32 },
     ParamGroup { name: "Env 2", ids: p::ENV2 as u32..p::MODS as u32 },
-    ParamGroup { name: "Mod slots", ids: p::MODS as u32..p::COUNT as u32 },
+    ParamGroup { name: "Mod slots", ids: p::MODS as u32..p::PAN as u32 },
+    ParamGroup { name: "Stereo, velocity", ids: p::PAN as u32..p::COUNT as u32 },
 ];
 
 /// Fluttersine's factory patches: (name, parameters that differ from the defaults).
@@ -952,6 +977,13 @@ struct Prep {
     /// The active mod slots: (source, destination, amount).
     slots: [(u8, u8, f32); p::MOD_SLOTS],
     n_slots: usize,
+    /// Stereo: per-operator pan, supersaw width, and whether anything is
+    /// stereo at all (if not, voices render through the mono path, as cheap as before).
+    pan: [f32; OPS],
+    width: f32,
+    wide_saw: bool,
+    stereo: bool,
+    amp_vel: f32,
 
     volume: f32,
     mono: bool,
@@ -1011,6 +1043,7 @@ struct Mods {
     fm_in: [f32; OPS],
     op_pitch: [f32; OPS],
     warp: [f32; OPS],
+    pan: [f32; OPS],
 }
 
 /// Per-sample multiplier that falls by 60 dB (×0.001) over `seconds` (Fluttersine's curve).
@@ -1118,6 +1151,15 @@ impl Prep {
         q.glide_on = p[GLIDE] > 0.0;
         q.glide_k = if q.glide_on { 1.0 - (-3.0 / (p[GLIDE] * csr)).exp() } else { 1.0 };
         q.glide_always = p[GLIDE_MODE] >= 0.5;
+
+        q.amp_vel = p[AMP_VEL].clamp(0.0, 1.0);
+        q.width = p[WIDTH].clamp(0.0, 1.0);
+        for i in 0..OPS {
+            q.pan[i] = p[pan(i)].clamp(-1.0, 1.0);
+        }
+        q.wide_saw = q.width > 0.0 && (0..OPS).any(|i| q.used[i] && q.out[i] > 0.0 && q.ops[i].wave == W_SSAW);
+        let pan_modulated = q.slots[..q.n_slots].iter().any(|s| s.1 as usize >= DEST_PAN);
+        q.stereo = q.wide_saw || pan_modulated || q.pan.iter().any(|&x| x != 0.0);
         q
     }
 }
@@ -1172,6 +1214,16 @@ struct Voice {
     lvl: [f32; OPS],
     fmx: [f32; OPS],
     gain: f32,
+    /// Loudness from this note's velocity (see AMP_VEL).
+    amp: f32,
+    /// Stereo: each operator's left/right gains (constant power, 1 at centre),
+    /// its supersaw side signal (left minus right), and the right side's filters.
+    pl: [f32; OPS],
+    pr: [f32; OPS],
+    side: [f32; OPS],
+    s1r: (f32, f32),
+    s2r: (f32, f32),
+    shr: (f32, f32),
 }
 
 impl Voice {
@@ -1209,6 +1261,13 @@ impl Voice {
             lvl: [1.0; OPS],
             fmx: [1.0; OPS],
             gain: 1.0,
+            amp: 1.0,
+            pl: [1.0; OPS],
+            pr: [1.0; OPS],
+            side: [0.0; OPS],
+            s1r: (0.0, 0.0),
+            s2r: (0.0, 0.0),
+            shr: (0.0, 0.0),
         }
     }
 
@@ -1251,6 +1310,7 @@ impl Voice {
                 2 => m.cutoff += 6.0 * x,
                 3 => m.volume += x,
                 4 => m.all_fm += x,
+                _ if d >= DEST_PAN => m.pan[d - DEST_PAN] += x,
                 _ if d >= DEST_WARP => m.warp[d - DEST_WARP] += 0.48 * x,
                 _ if d >= DEST_OP_PITCH => m.op_pitch[d - DEST_OP_PITCH] += 24.0 * x,
                 _ if d >= DEST_FM_IN => m.fm_in[d - DEST_FM_IN] += x,
@@ -1278,7 +1338,14 @@ impl Voice {
         let lfo = lfos[0];
         let f = 440.0 * 2f32.powf((self.semi + lfo * q.vibrato + m.pitch - 69.0) / 12.0);
         let all_fm = (1.0 + 2.0 * m.all_fm).max(0.0);
-        self.gain = (1.0 + m.volume).clamp(0.0, 2.0);
+        self.gain = (1.0 + m.volume).clamp(0.0, 2.0) * self.amp;
+        if q.stereo {
+            for i in 0..OPS {
+                let a = ((q.pan[i] + m.pan[i]).clamp(-1.0, 1.0) + 1.0) * FRAC_PI_4;
+                self.pl[i] = a.cos() * SQRT_2;
+                self.pr[i] = a.sin() * SQRT_2;
+            }
+        }
         for i in 0..OPS {
             let o = &q.ops[i];
             let hz = if o.fixed { o.hz } else { f * o.ratio };
@@ -1364,6 +1431,7 @@ impl Voice {
         if st == OFF {
             self.fb[i] = self.cur[i];
             self.cur[i] = 0.0;
+            self.side[i] = 0.0;
             return 0.0;
         }
 
@@ -1379,6 +1447,7 @@ impl Voice {
         }
         self.ph[i] = ph;
 
+        let mut side = 0.0f32;
         let y = match o.wave {
             W_SSAW => {
                 let (ss, inc) = (&mut self.ss[i], &self.ss_inc[i]);
@@ -1398,6 +1467,10 @@ impl Voice {
                     }
                 }
                 let all: f32 = saws.iter().sum();
+                if q.wide_saw {
+                    // Three side saws lean left, three right; the centre one stays put.
+                    side = (saws[0] - saws[1] + saws[2] - saws[4] + saws[5] - saws[6]) * o.side * o.ssn * q.width;
+                }
                 (o.side * all + (o.cen - o.side) * saws[3]) * o.ssn
             }
             W_NOISE => self.rng.bipolar(),
@@ -1422,7 +1495,9 @@ impl Voice {
                 }
             }
         };
-        let y = y * (lv * self.vs[i] * self.lvl[i]);
+        let k = lv * self.vs[i] * self.lvl[i];
+        let y = y * k;
+        self.side[i] = side * k * q.out[i];
         self.fb[i] = self.cur[i];
         self.cur[i] = y;
         q.out[i] * y
@@ -1444,6 +1519,22 @@ impl Voice {
         y
     }
 
+    /// The same filters for the right side (stereo patches only).
+    #[inline(always)]
+    fn filter_r(&mut self, q: &Prep, mut y: f32) -> f32 {
+        if q.lp_on {
+            if q.lp24 {
+                y = svf(&mut self.s2r, y, self.bw).1;
+            }
+            y = svf(&mut self.s1r, y, self.lp).1;
+        }
+        if q.hp_on {
+            let (band, low) = svf(&mut self.shr, y, q.hp);
+            y = y - q.hp_k * band - low;
+        }
+        y
+    }
+
     /// A voice is done once every operator you can hear has died (released or a
     /// finished pluck), so held-but-silent notes don't burn CPU either.
     fn check_done(&mut self, q: &Prep) {
@@ -1460,18 +1551,39 @@ impl Voice {
 /// Render `N` voices together and ADD them into `out`. The voices are independent, so
 /// stepping them side by side, operator by operator, lets the CPU overlap their long,
 /// serial modulation chains instead of waiting on one voice at a time.
-fn render_lanes<const N: usize>(q: &Prep, mut lanes: [&mut Voice; N], out: &mut [f32]) {
-    for x in out.iter_mut() {
-        let mut s = [0.0f32; N];
-        for i in 0..OPS {
-            if q.used[i] {
-                for (v, s) in lanes.iter_mut().zip(&mut s) {
-                    *s += v.op(q, i);
+fn render_lanes<const N: usize>(q: &Prep, mut lanes: [&mut Voice; N], out_l: &mut [f32], out_r: &mut [f32]) {
+    if !q.stereo {
+        // Mono patch: one signal (the caller copies it to the right).
+        for x in out_l.iter_mut() {
+            let mut s = [0.0f32; N];
+            for i in 0..OPS {
+                if q.used[i] {
+                    for (v, s) in lanes.iter_mut().zip(&mut s) {
+                        *s += v.op(q, i);
+                    }
                 }
             }
+            for (v, s) in lanes.iter_mut().zip(s) {
+                *x += v.filter(q, s) * v.gain;
+            }
         }
-        for (v, s) in lanes.iter_mut().zip(s) {
-            *x += v.filter(q, s) * v.gain;
+    } else {
+        for (xl, xr) in out_l.iter_mut().zip(out_r.iter_mut()) {
+            let (mut sl, mut sr) = ([0.0f32; N], [0.0f32; N]);
+            for i in 0..OPS {
+                if q.used[i] {
+                    for ((v, l), r) in lanes.iter_mut().zip(&mut sl).zip(&mut sr) {
+                        let y = v.op(q, i);
+                        let side = v.side[i];
+                        *l += y * v.pl[i] + side;
+                        *r += y * v.pr[i] - side;
+                    }
+                }
+            }
+            for ((v, l), r) in lanes.iter_mut().zip(sl).zip(sr) {
+                *xl += v.filter(q, l) * v.gain;
+                *xr += v.filter_r(q, r) * v.gain;
+            }
         }
     }
     for v in lanes {
@@ -1532,6 +1644,8 @@ pub struct Fm {
     ctrl_left: usize,
     dc_x: f32,
     dc_y: f32,
+    dc_xr: f32,
+    dc_yr: f32,
 }
 
 impl Default for Fm {
@@ -1569,6 +1683,8 @@ impl Fm {
             ctrl_left: 0,
             dc_x: 0.0,
             dc_y: 0.0,
+            dc_xr: 0.0,
+            dc_yr: 0.0,
         }
     }
 
@@ -1604,6 +1720,9 @@ impl Fm {
             v.s1 = (0.0, 0.0);
             v.s2 = (0.0, 0.0);
             v.sh = (0.0, 0.0);
+            v.s1r = (0.0, 0.0);
+            v.s2r = (0.0, 0.0);
+            v.shr = (0.0, 0.0);
         }
         if retrig {
             for i in 0..OPS {
@@ -1631,6 +1750,7 @@ impl Fm {
                 v.menv.iter_mut().for_each(|e| e.0 = ATTACK);
             }
             v.vel = velocity;
+            v.amp = 1.0 - q.amp_vel + q.amp_vel * velocity;
             // Random per note without drawing from `rng` (that would move the supersaw phases).
             let mut h = (v.serial as u32).wrapping_mul(0x9e37_79b9) ^ 0x85eb_ca6b;
             h ^= h >> 15;
@@ -1809,6 +1929,7 @@ impl Plugin for Fm {
         let mut next = 0;
         let mut i = 0;
         let mut mix = [0.0f32; CR];
+        let mut mix_r = [0.0f32; CR];
         while i < n {
             while next < events.len() && events[next].offset as usize <= i {
                 self.handle(events[next].event);
@@ -1829,6 +1950,8 @@ impl Plugin for Fm {
             let len = end - i;
             let buf = &mut mix[..len];
             buf.fill(0.0);
+            let buf_r = &mut mix_r[..len];
+            buf_r.fill(0.0);
             let q = &self.q;
             let mut group: [Option<&mut Voice>; LANES] = Default::default();
             let mut n_group = 0;
@@ -1836,21 +1959,29 @@ impl Plugin for Fm {
                 group[n_group] = Some(v);
                 n_group += 1;
                 if n_group == LANES {
-                    render_lanes(q, group.each_mut().map(|v| v.take().unwrap()), buf);
+                    render_lanes(q, group.each_mut().map(|v| v.take().unwrap()), buf, buf_r);
                     n_group = 0;
                 }
             }
             for v in group.iter_mut().filter_map(Option::take) {
-                render_lanes(q, [v], buf);
+                render_lanes(q, [v], buf, buf_r);
             }
-            for (k, &m) in buf.iter().enumerate() {
-                let x = m * q.volume;
+            for k in 0..len {
+                let x = buf[k] * q.volume;
                 let y = x - self.dc_x + 0.9995 * self.dc_y;
                 self.dc_x = x;
                 self.dc_y = y;
                 let y = y.tanh();
                 out_l[i + k] = y;
-                out_r[i + k] = y;
+                out_r[i + k] = if q.stereo {
+                    let x = buf_r[k] * q.volume;
+                    let y = x - self.dc_xr + 0.9995 * self.dc_yr;
+                    self.dc_xr = x;
+                    self.dc_yr = y;
+                    y.tanh()
+                } else {
+                    y
+                };
             }
             self.ctrl_left -= len;
             i = end;
@@ -2030,6 +2161,66 @@ mod tests {
             v.est[0],
             v.ev[0]
         );
+    }
+
+    /// Render both sides separately.
+    fn render_lr(p: &mut Fm, events: &[TimedEvent], seconds: f32) -> (Vec<f32>, Vec<f32>) {
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+        let (mut ol, mut or) = (Vec::new(), Vec::new());
+        let mut first = true;
+        while (ol.len() as f32) < seconds * SR {
+            let ev = if first { events } else { &[] };
+            first = false;
+            p.process(ProcessContext { sample_rate: SR, events: ev, out_l: &mut l, out_r: &mut r });
+            ol.extend_from_slice(&l);
+            or.extend_from_slice(&r);
+        }
+        (ol, or)
+    }
+
+    fn peak(x: &[f32]) -> f32 {
+        x.iter().fold(0.0f32, |m, v| m.max(v.abs()))
+    }
+
+    #[test]
+    fn a_mono_patch_is_the_same_on_both_sides() {
+        let (l, r) = render_lr(&mut with(&[(p::matrix(1, 0), 0.4)]), &[on(60)], 0.3);
+        assert!(peak(&l) > 0.05 && l == r);
+    }
+
+    #[test]
+    fn a_panned_operator_goes_to_its_side() {
+        use p::*;
+        let (l, r) = render_lr(&mut with(&[(pan(0), -1.0)]), &[on(60)], 0.3);
+        assert!(peak(&l) > 0.1 && peak(&r) < 1e-4, "left {}, right {}", peak(&l), peak(&r));
+        // Two operators panned apart: both sides sound, differently.
+        let (l, r) = render_lr(
+            &mut with(&[(out(1), 1.0), (op(1, OP_RATIO), 2.0), (pan(0), -0.7), (pan(1), 0.7)]),
+            &[on(60)],
+            0.3,
+        );
+        assert!(peak(&l) > 0.1 && peak(&r) > 0.1 && l != r);
+    }
+
+    #[test]
+    fn supersaw_width_spreads_it() {
+        use p::*;
+        let saw = [(op(0, OP_WAVE), W_SSAW as f32)];
+        let (l, r) = render_lr(&mut with(&[saw[0], (WIDTH, 0.0)]), &[on(48)], 0.3);
+        assert!(l == r, "width 0 is mono");
+        let (l, r) = render_lr(&mut with(&[saw[0], (WIDTH, 1.0)]), &[on(48)], 0.3);
+        let diff = l.iter().zip(&r).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+        assert!(diff > 0.1, "width 1 is stereo (max L-R {diff})");
+    }
+
+    #[test]
+    fn velocity_sets_the_loudness() {
+        let at = |velocity: f32| {
+            let e = TimedEvent { offset: 0, event: Event::NoteOn { key: 60, velocity } };
+            peak(&render_lr(&mut with(&[]), &[e], 0.2).0)
+        };
+        let ratio = at(1.0) / at(0.25);
+        assert!((ratio - 4.0).abs() < 0.2, "a quarter velocity is 12 dB down, got ×{ratio}");
     }
 
     #[test]

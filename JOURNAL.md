@@ -56,6 +56,12 @@ no marks would default to not urgent or 'coding teams judges'
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Fluttersine in stereo, and velocity you can hear (2026-11-19)**
+- [x] *(chat)* "Shouldn't it just generate stereo? The OUT column should have left/right knobs"
+  *→ yes, it was mono to the end (one signal copied to both sides). Now there's a PAN column beside OUT in the matrix, a Width knob that spreads a supersaw's seven saws left and right, and Pan as a MOD destination (auto-pan). A patch that stays centred still renders as mono, so it costs nothing extra.*
+- [x] *(chat)* "The volume of the notes doesn't affect the synth's volume at all"
+  *→ in Fluttersine it barely did: each operator's Velocity defaulted to 0.5, so the softest note was only 6 dB down. Now the voice plate has a Velocity knob (how much velocity sets the loudness, full by default, like Lyra Synth and the drums): a quarter velocity is 12 dB quieter. The per-operator Velocity stays as extra (on a modulator it's brightness) and defaults to 0.*
+
 **Faders that feel like faders (2026-11-19)**
 - [x] *(chat)* "The mixer doesn't behave too well", and Fluttersine's Volume said "100%" for −4.4 dB
   *→ it wasn't you: the mixer faders, the rack's volume knobs and the master knob moved linearly in gain, so everything you mix with (−20 to 0 dB) was squeezed into the top third. Now all of them use one console-style taper (`Curve::Fader`): unity at about 79 % of the travel, +6 dB at the top, and they read in dB. Fluttersine's Volume is a plain gain now, shown in dB (same sound: the reel renders bit-identical).*
