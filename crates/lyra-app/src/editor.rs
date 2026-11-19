@@ -11,7 +11,8 @@ use egui::{pos2, vec2, Color32, Rect, RichText, Sense, Ui};
 use lyra_model::{History, Project};
 use lyra_plugin::ParamInfo;
 
-pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
+/// `live`: what the plugin is doing right now, if it shares that (see `Bridge::live`).
+pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Option<crate::bridge::Live>) {
     let instrument = p.channels[ch].instrument.clone();
     let params = lyra_catalog::params(&instrument);
     let groups = lyra_catalog::groups(&instrument);
@@ -93,7 +94,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
         return;
     }
     if instrument == "lyra.chrysalis" {
-        crate::chrysalis_editor::show(ui, p, h, ch);
+        crate::chrysalis_editor::show(ui, p, h, ch, live);
         return;
     }
 

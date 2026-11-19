@@ -28,6 +28,7 @@ mod engine;
 pub mod params;
 mod presets;
 pub mod table;
+pub mod telemetry;
 
 pub use engine::{drive_consts, drive_shape, warp_consts, warp_preview, Chrysalis, CR, MAX_UNISON, MAX_VOICES};
 pub use params::{p, DESTS, GROUPS, PARAMS, SOURCES};

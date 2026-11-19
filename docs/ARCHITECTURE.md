@@ -219,6 +219,13 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   `warp_preview`, `drive_shape`, `curve::bend`), so the pictures are what
   plays. Its palette lives in that file, not in `theme.rs`: it is
   Chrysalis's, not Lyra's.
+* **Live state for editors:** `Plugin::telemetry()` (default none) returns an
+  object the audio thread updates with atomics only, at the end of each
+  block; the bridge keeps it per channel when it makes the plugin
+  (`Bridge::live`) and the app passes it to the editor, which downcasts it.
+  Chrysalis shares its newest voice's playing positions, LFO phases,
+  envelope stages, matrix sums and output level (`telemetry.rs`); its editor
+  animates from that and repaints only while something moves.
 * Plugin artwork (Fluttersine's wordmark, Chrysalis's emblem) lives in
   `lyra-app/assets/` and is live-reloaded from there while Lyra runs from the
   source tree (`theme::live_logo`).

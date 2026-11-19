@@ -272,6 +272,15 @@ pub trait Plugin: Send {
     /// Give the plugin a sample to play (samplers). Called on the UI thread,
     /// before the plugin goes to the audio thread. Others ignore it.
     fn set_sample(&mut self, _sample: std::sync::Arc<SampleData>) {}
+    /// What the sound is doing, for the plugin's own editor (the playing
+    /// wavetable frame, LFO playheads, live modulation…): an object the audio
+    /// thread updates with atomics, never locks. Asked once, on the UI thread,
+    /// when the plugin is made; the editor downcasts it. Most plugins have
+    /// none. (A CLAP plugin's GUI talks to its DSP inside the plugin; this is
+    /// the same thing for editors Lyra draws itself.)
+    fn telemetry(&self) -> Option<std::sync::Arc<dyn std::any::Any + Send + Sync>> {
+        None
+    }
 }
 
 /// Default values of a parameter list, in id order.

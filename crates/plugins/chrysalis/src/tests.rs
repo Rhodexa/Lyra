@@ -451,3 +451,28 @@ fn preset_loudness() {
         );
     }
 }
+
+#[test]
+fn telemetry_follows_the_newest_voice() {
+    use crate::telemetry::Telemetry;
+    let mut c = with(&[
+        (p::osc(0, p::POS), 0.0),
+        (p::lfo(0, p::L_SYNC), 0.0),
+        (p::lfo(0, p::L_RATE), 3.0),
+        (p::slot(0, p::S_SRC), 1.0),
+        (p::slot(0, p::S_DEST), dest::osc(0, dest::O_POS) as f32),
+        (p::slot(0, p::S_AMT), 1.0),
+    ]);
+    let live = c.telemetry().expect("Chrysalis shares its state").downcast::<Telemetry>().expect("a Telemetry");
+    render(&mut c, &[on(60)], 0.05);
+    let a = live.snapshot();
+    render(&mut c, &[], 0.1);
+    let b = live.snapshot();
+    assert_eq!(a.voices, 1);
+    assert!(a.blocks > 0 && b.blocks > a.blocks);
+    assert_ne!(a.env_stage[0], 0, "the amp envelope is running");
+    assert!((a.pos[0] - b.pos[0]).abs() > 0.05, "the LFO moves the playing frame: {} → {}", a.pos[0], b.pos[0]);
+    assert!(b.mods[dest::osc(0, dest::O_POS)] > 0.0);
+    render(&mut c, &[off(60)], 1.5);
+    assert_eq!(live.snapshot().voices, 0);
+}

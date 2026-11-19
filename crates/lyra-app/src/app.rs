@@ -1026,6 +1026,7 @@ impl LyraApp {
 
         if self.ui.show_editor && has_channel {
             let mut open = true;
+            let live = self.bridge.live(self.project.channels[ch].id);
             egui::Window::new(format!("Instrument · {}", self.project.channels[ch].name))
                 .id(Id::new("editor"))
                 .open(&mut open)
@@ -1034,7 +1035,7 @@ impl LyraApp {
                 .resizable(false)
                 .frame(frame)
                 .show(ctx, |ui| {
-                    editor::show(ui, &mut self.project, &mut self.history, ch);
+                    editor::show(ui, &mut self.project, &mut self.history, ch, live.clone());
                 });
             self.ui.show_editor = open;
         }

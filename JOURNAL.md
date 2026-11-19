@@ -64,6 +64,12 @@ no marks would default to not urgent or 'coding teams judges'
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Chrysalis comes alive (2026-11-19)**
+- [x] *(chat)* "It's only missing animations": the playing frame, LFO playheads, envelope dots, modulation on the knobs, screens that breathe
+  *→ all of them. A plugin can now share what it's doing with its editor (`Plugin::telemetry`: atomics the audio thread writes at the end of each block; the bridge hands it to the editor). While notes sound, the table view's bold curve is the frame that really plays (your setting stays as a faint line), each LFO has a glowing playhead and a dot on its curve, a dot rides the envelope, modulated knobs show a lighter arc and dot where the matrix has them right now (the pointer stays where you set it), and the screens' backlight rises with the output. The editor only redraws continuously while something moves.*
+- [x] *(chat)* Readout and preset picker side by side looked odd; the bottom keys didn't feel like tabs ("not flat on the bottom and round on top!"); drag the amount bars up/down too
+  *→ readout on the left, the picker on the right with "PRESET" inside it. Each tab group is one recess (a view switcher), the open tab solid with a small notch pointing down into what it shows. Amount bars follow up/down drags as well as sideways.*
+
 **Chrysalis, third pass: layout that fits (2026-11-19)**
 - [x] *(chat)* Overlap in the filters, too much text under the knobs, tiny header knobs too high, empty space in SUB·NOISE, mod tabs that look like text, thin bars, too much space between routes, and "is there a flexbox?"
   *→ there wasn't: now `flex.rs` lays out a panel by arithmetic (fixed and growing parts), and every Chrysalis panel uses it. Knobs show only their names; hovered or turned, the name becomes the value, and a readout beside the preset shows the full name and value. SUB and NOISE split their panel in half with full-width keys, the filter rows can't overlap, the macros are smaller, the mod tabs are keys, the matrix rows are taller with thick amount bars and tight gaps.*

@@ -39,6 +39,7 @@ use egui::{
 use lyra_chrysalis::curve::{self, Point, MAX_POINTS, SHAPES};
 use lyra_chrysalis::params::{ft, warp};
 use lyra_chrysalis::table::{self, Table, IMPORTED};
+use lyra_chrysalis::telemetry::{Snapshot, Telemetry};
 use lyra_chrysalis::{p, PARAMS, PRESETS};
 use lyra_model::{History, Project};
 use std::f32::consts::PI;
@@ -88,6 +89,10 @@ struct Ed<'a> {
     p: &'a mut Project,
     h: &'a mut History,
     ch: usize,
+    /// What the sound is doing right now (None before the engine has the plugin).
+    live: Option<Snapshot>,
+    /// The output level, smoothed for the screens' backlight (0..1).
+    glow: f32,
 }
 
 impl Ed<'_> {
@@ -142,8 +147,19 @@ const KEY_H: f32 = 24.0;
 /// The one line of text under a knob.
 const LABEL_H: f32 = 15.0;
 
-pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
-    let mut ed = Ed { p, h, ch };
+pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Option<crate::bridge::Live>) {
+    let live = live.and_then(|l| l.downcast::<Telemetry>().ok()).map(|t| t.snapshot());
+    // The backlight follows the output: up at once, down gently.
+    let glow_id = Id::new(("chrys-glow", ch));
+    let before: f32 = ui.ctx().data(|d| d.get_temp(glow_id)).unwrap_or(0.0);
+    let glow = live.map_or(0.0, |l| l.level.min(1.0)).max(before * 0.88);
+    ui.ctx().data_mut(|d| d.insert_temp(glow_id, glow));
+    // Animate only while something moves: notes sounding, a free LFO, a fading glow.
+    let free_lfo = (0..4).any(|l| p.channels[ch].params[p::lfo(l, p::L_MODE)] < 0.5);
+    if live.is_some_and(|l| l.voices > 0) || glow > 0.01 || (live.is_some() && free_lfo) {
+        ui.ctx().request_repaint();
+    }
+    let mut ed = Ed { p, h, ch, live, glow };
     let total = vec2(W, HEADER_H + OSC_H + FX_H + MOD_H + 3.0 * GAP);
     let (all, _) = ui.allocate_exact_size(total, Sense::hover());
     backdrop(ui, all);
@@ -166,6 +182,72 @@ fn place<R>(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash, enabled: bool, add
     let mut child = ui.new_child(UiBuilder::new().id_salt(salt).max_rect(r).layout(Layout::top_down(Align::Center)));
     child.spacing_mut().item_spacing = vec2(0.0, 0.0);
     child.add_enabled_ui(enabled, add).inner
+}
+
+// ───────────────────────────────────────────────────────────── live
+
+/// The snapshot, while at least one voice sounds.
+fn sounding(ed: &Ed) -> Option<Snapshot> {
+    ed.live.filter(|l| l.voices > 0)
+}
+
+/// Where the matrix is pushing parameter `id` right now (its value with the
+/// newest voice's modulation, the way the engine applies it), if anywhere.
+fn modulated(ed: &Ed, id: usize) -> Option<f32> {
+    use lyra_chrysalis::params::dest;
+    let live = sounding(ed)?;
+    let info = &PARAMS[id];
+    let base = ed.v(id);
+    let m = |d: usize| live.mods[d];
+    let add = |d: usize| base + m(d);
+    let times = |d: usize| base * (1.0 + m(d)).clamp(0.0, 2.0);
+    let v = if id < p::SUB_ON {
+        let (o, k) = (id / p::OSC_STRIDE, id % p::OSC_STRIDE);
+        let d = |q: usize| dest::osc(o, q);
+        match k {
+            p::POS => add(d(dest::O_POS)),
+            p::LEVEL => times(d(dest::O_LEVEL)),
+            p::PAN => add(d(dest::O_PAN)),
+            p::WARP => add(d(dest::O_WARP)),
+            p::DETUNE => add(d(dest::O_DETUNE)),
+            p::BLEND => add(d(dest::O_BLEND)),
+            _ => return None,
+        }
+    } else if (p::FILTERS..p::ROUTING).contains(&id) {
+        let (f, k) = ((id - p::FILTERS) / p::F_STRIDE, (id - p::FILTERS) % p::F_STRIDE);
+        let d = |q: usize| dest::filter(f, q);
+        match k {
+            p::F_CUTOFF => base * (6.0 * m(d(dest::F_CUTOFF))).exp2(),
+            p::F_RESO => add(d(dest::F_RESO)),
+            p::F_DRIVE => add(d(dest::F_DRIVE)),
+            p::F_VOWEL => add(d(dest::F_VOWEL)),
+            p::F_MIX => add(d(dest::F_MIX)),
+            _ => return None,
+        }
+    } else if let Some(l) = (0..4).find(|&l| id == p::lfo(l, p::L_RATE)) {
+        base * (4.0 * m(dest::LFO_RATE + l)).exp2()
+    } else {
+        match id {
+            p::SUB_LEVEL => times(dest::SUB_LEVEL),
+            p::NOISE_LEVEL => times(dest::NOISE_LEVEL),
+            p::NOISE_COLOR => base + 2.0 * m(dest::NOISE_COLOR),
+            p::DIST_DRIVE => add(dest::DRIVE),
+            p::DIST_MIX => add(dest::DRIVE_MIX),
+            p::VOLUME => base * (1.0 + m(dest::VOLUME)).max(0.0),
+            _ => return None,
+        }
+    };
+    let v = v.clamp(info.min, info.max);
+    ((info.to_normalized(v) - info.to_normalized(base)).abs() > 0.002).then_some(v)
+}
+
+/// A screen's backlight, rising with the output level.
+fn breathe(p: &egui::Painter, r: Rect, color: Color32, glow: f32) {
+    if glow > 0.01 {
+        let at = r.center_bottom();
+        let stops = [(0.0, alpha(color, 0.16 * glow)), (1.0, Color32::TRANSPARENT)];
+        theme::radial_circle(p, at, r.width().max(r.height()) * 0.7, at, &stops);
+    }
 }
 
 // ───────────────────────────────────────────────────────────── the readout
@@ -214,8 +296,9 @@ fn knob_in(ui: &mut Ui, ed: &mut Ed, r: Rect, id: usize, label: &str, color: Col
     let lr = Rect::from_min_size(pos2(r.left(), kr.bottom() + 2.0), vec2(r.width(), LABEL_H));
     place(ui, kr.union(lr), ("chrys-knob", id), enabled, |ui| {
         let mut v = ed.v(id);
+        let live = if enabled { modulated(ed, id) } else { None };
         let resp = crate::widgets::knob_painted(ui, &mut v, info, d, |p, rect, v, hot| {
-            paint_knob(p, rect, info, v, color, hot)
+            paint_knob_live(p, rect, info, v, color, hot, live)
         });
         if enabled {
             ed.track(&resp, id, v);
@@ -350,12 +433,9 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
 
     let [left, _, right] = flex::row(r.shrink2(vec2(PAD + 4.0, 0.0)), [Grow(1.0), Px(190.0), Grow(1.0)], 0.0);
     // Left: the preset, and the readout of whatever the mouse is on.
-    let [preset, read] = flex::row(left, [Grow(1.0), Px(150.0)], 10.0);
-    let block = flex::center(preset, vec2(preset.width(), 12.0 + 4.0 + 30.0));
-    let [cap, field] = flex::col(block, [Px(12.0), Px(30.0)], 4.0);
-    caps(ui.painter(), cap.left_center() + vec2(2.0, 0.0), "preset", TEXT_FAINT, Align2::LEFT_CENTER);
-    preset_row(ui, ed, field);
+    let [read, preset] = flex::row(left, [Px(150.0), Grow(1.0)], 10.0);
     readout_display(ui, flex::center(read, vec2(read.width(), 46.0)));
+    preset_row(ui, ed, flex::center(preset, vec2(preset.width(), 34.0)));
     // Right: the voice.
     let [_, knobs, switches] = flex::row(right, [Grow(1.0), Px(3.0 * 62.0), Px(140.0)], 10.0);
     let cells = flex::even_row(flex::center(knobs, vec2(knobs.width(), 60.0)), 3, 0.0);
@@ -412,7 +492,8 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     let resp = ui.interact(field, Id::new(("chrys-preset-field", ed.ch)), Sense::click());
     let p = ui.painter();
     p.rect_filled(field, cr(3), if resp.hovered() { HOVER } else { SCREEN });
-    let t = p.text(field.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(15.0), TEXT);
+    let cap = caps(p, field.left_center() + vec2(10.0, 0.0), "preset", TEXT_FAINT, Align2::LEFT_CENTER);
+    let t = p.text(cap.right_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(15.0), TEXT);
     if edited {
         p.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", FontId::proportional(10.5), TEXT_DIM);
     }
@@ -613,13 +694,36 @@ fn mod_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     // names are fainter when nothing uses that source. Gaps group them.
     let view_id = Id::new(("chrys-mod-view", ed.ch));
     let mut view = ModView::from_index(ui.ctx().data(|d| d.get_temp::<usize>(view_id)).unwrap_or(4));
-    let t = Px(64.0);
-    let slots = flex::row(tabs, [t, t, t, t, Px(10.0), t, t, t, t, Px(10.0), Px(84.0)], 3.0);
+    let t = Px(66.0);
+    let slots = flex::row(tabs, [t, t, t, t, Px(12.0), t, t, t, t, Px(12.0), Px(84.0)], 0.0);
+    for (a, b) in [(0, 3), (5, 8), (10, 10)] {
+        ui.painter().rect_filled(slots[a].union(slots[b]), cr(3), SCREEN);
+    }
     for (i, name) in MOD_TABS.iter().enumerate() {
         let rect = slots[[0, 1, 2, 3, 5, 6, 7, 8, 10][i]];
         let resp = ui.interact(rect, Id::new(("chrys-mod-tab", i)), Sense::click());
-        let ink = if mod_used(ed, i) { TEXT_DIM } else { TEXT_FAINT };
-        paint_key(ui.painter(), rect, name, view.index() == i, resp.hovered(), VIOLET, ink);
+        let open = view.index() == i;
+        let face = rect.shrink(2.0);
+        let p = ui.painter();
+        if open {
+            p.rect_filled(face, cr(2), VIOLET);
+            caps_style(p, face.center(), name, INK_ON, Align2::CENTER_CENTER, 1.0, true);
+            let c = rect.center_bottom();
+            let notch = vec![c + vec2(-6.0, 2.0), c + vec2(6.0, 2.0), c + vec2(0.0, 7.0)];
+            p.add(Shape::convex_polygon(notch, VIOLET, egui::Stroke::NONE));
+        } else {
+            if resp.hovered() {
+                p.rect_filled(face, cr(2), HOVER);
+            }
+            let ink = if resp.hovered() {
+                TEXT
+            } else if mod_used(ed, i) {
+                TEXT_DIM
+            } else {
+                TEXT_FAINT
+            };
+            caps_spaced(p, face.center(), name, ink, Align2::CENTER_CENTER, 1.0);
+        }
         if resp.clicked() {
             view = ModView::from_index(i);
         }
@@ -811,7 +915,8 @@ fn amount_bar(ui: &mut Ui, ed: &mut Ed, id: usize, r: Rect, color: Color32) {
         ed.put(id, 0.0);
     } else if resp.dragged() {
         let fine = if ui.input(|i| i.modifiers.shift) { 0.2 } else { 1.0 };
-        ed.put(id, ed.v(id) + resp.drag_delta().x / r.width() * (info.max - info.min) * fine);
+        let d = resp.drag_delta();
+        ed.put(id, ed.v(id) + (d.x - d.y) / r.width() * (info.max - info.min) * fine);
     }
     if let Some(step) = wheel_step(ui, r) {
         ed.h.checkpoint(ed.p);
@@ -832,7 +937,7 @@ fn amount_bar(ui: &mut Ui, ed: &mut Ed, id: usize, r: Rect, color: Color32) {
         p.rect_filled(fill, cr(2), color);
     }
     p.line_segment([pos2(mid, r.top() + 4.0), pos2(mid, r.bottom() - 4.0)], stroke(1.0, TEXT_FAINT));
-    resp.on_hover_text("Drag sideways (Shift: fine); double-click: 0");
+    resp.on_hover_text("Drag up/down or sideways (Shift: fine); double-click: 0");
 }
 
 // ───────────────────────────────────────────────────────────── macros
@@ -916,7 +1021,17 @@ fn caps_style(
 }
 
 /// A neon knob: a dark cap, a dim track, the value as a glowing arc.
-fn paint_knob(p: &egui::Painter, r: Rect, info: &lyra_plugin::ParamInfo, v: f32, color: Color32, hot: bool) {
+/// While it's modulated, a lighter arc runs from the setting to where the
+/// modulation has it right now, with a dot there. The pointer stays put.
+fn paint_knob_live(
+    p: &egui::Painter,
+    r: Rect,
+    info: &lyra_plugin::ParamInfo,
+    v: f32,
+    color: Color32,
+    hot: bool,
+    live: Option<f32>,
+) {
     let c = r.center();
     let rad = r.width() * 0.5;
     let n = info.to_normalized(v);
@@ -959,6 +1074,14 @@ fn paint_knob(p: &egui::Painter, r: Rect, info: &lyra_plugin::ParamInfo, v: f32,
         [c + dir * cap * 0.35, c + dir * cap * 0.9],
         stroke(2.0, if hot { color } else { alpha(color, 0.85) }),
     );
+    if let Some(m) = live {
+        let to = start + sweep * info.to_normalized(m);
+        let bright = theme::mix(color, Color32::WHITE, 0.55);
+        p.add(Shape::line(arc(angle.min(to), angle.max(to), ring), stroke(2.0, bright)));
+        let at = c + Vec2::angled(to) * ring;
+        p.circle_filled(at, 4.5, alpha(bright, 0.25));
+        p.circle_filled(at, 2.6, bright);
+    }
 }
 
 fn chevron(p: &egui::Painter, c: Pos2, w: f32, color: Color32) {
@@ -1160,13 +1283,28 @@ fn table_view(ui: &mut Ui, ed: &mut Ed, o: usize, rect: Rect, color: Color32) {
         let ink = alpha(color, 0.07 + 0.1 * (1.0 - d) + 0.25 * near);
         painter.add(Shape::line(curve(f as f32, d, 0, 0.0), stroke(1.0, ink)));
     }
-    let fpos = pos * (frames - 1) as f32;
-    let d = if frames > 1 { pos } else { 0.0 };
     let mode = ed.choice(p::osc(o, p::WARP_MODE)) as u8;
     let w = ed.v(p::osc(o, p::WARP));
-    let pts = curve(fpos, d, if mode == warp::FM { 0 } else { mode }, w);
+    let warp_shown = if mode == warp::FM { 0 } else { mode };
+    // While notes sound, the bold curve is the frame that plays (modulation
+    // included) and the setting stays as a faint line.
+    let playing = sounding(ed).filter(|_| enabled && ed.on(p::osc(o, p::OSC_ON))).map(|l| l.pos[o]);
+    if let Some(now) = playing {
+        if (now - pos).abs() > 0.002 {
+            let set = pos * (frames - 1) as f32;
+            painter.add(Shape::line(
+                curve(set, if frames > 1 { pos } else { 0.0 }, warp_shown, w),
+                stroke(1.2, alpha(color, 0.45)),
+            ));
+        }
+    }
+    let shown_pos = playing.unwrap_or(pos);
+    let fpos = shown_pos * (frames - 1) as f32;
+    let d = if frames > 1 { shown_pos } else { 0.0 };
+    let pts = curve(fpos, d, warp_shown, w);
     let (_, base) = place(d);
     let ink = if enabled { color } else { TEXT_FAINT };
+    breathe(&painter, rect, color, ed.glow);
     glow_fill(&painter, &pts, base, ink);
     glow_line(&painter, pts, ink, 1.8);
     let caption = if frames > 1 { format!("{:.0} / {frames}", fpos.round() + 1.0) } else { "1 frame".to_string() };
@@ -1177,6 +1315,7 @@ fn table_view(ui: &mut Ui, ed: &mut Ed, o: usize, rect: Rect, color: Color32) {
 fn drive_view(ui: &Ui, ed: &Ed, r: Rect) {
     let painter = ui.painter_at(r);
     screen(&painter, r);
+    breathe(&painter, r, LIME, ed.glow);
     let inner = r.shrink2(vec2(10.0, 8.0));
     painter.line_segment([inner.left_center(), inner.right_center()], stroke(1.0, GRID));
     let mode = ed.choice(p::DIST_MODE) as u8;
@@ -1301,6 +1440,7 @@ fn filter_graph(ui: &mut Ui, ed: &mut Ed, rect: Rect) {
     }
     let painter = ui.painter_at(rect);
     screen(&painter, rect);
+    breathe(&painter, rect, AQUA, ed.glow);
     for hz in [100.0, 1000.0, 10_000.0] {
         painter.line_segment([pos2(fx(hz), inner.top()), pos2(fx(hz), inner.bottom())], stroke(1.0, GRID));
     }
@@ -1487,6 +1627,25 @@ fn envelope(ui: &mut Ui, ed: &mut Ed, e: usize, rect: Rect) {
     for (k, at) in [pos2(xa, y(1.0)), pos2(xd, y(s)), pos2(xr, y(0.0))].into_iter().enumerate() {
         handle(&painter, at, VIOLET, true, hot == Some(k));
     }
+    // The newest note's place on it: through each stage's lane by its
+    // progress, at the level the envelope really has.
+    if let Some(live) = sounding(ed) {
+        let (stage, t, level) = (live.env_stage[e], live.env_t[e].clamp(0.0, 1.0), live.env_level[e]);
+        let x = match stage {
+            1 => inner.left() + (xa - inner.left()) * t,
+            2 => xa + (xd - xa) * t,
+            3 => xd + (xs - xd) * 0.5,
+            4 => xs + (xr - xs) * t,
+            _ => f32::NAN,
+        };
+        if x.is_finite() {
+            let at = pos2(x, y(level.clamp(0.0, 1.0)));
+            let bright = theme::mix(VIOLET, Color32::WHITE, 0.6);
+            painter.circle_filled(at, 9.0, alpha(VIOLET, 0.25));
+            painter.circle_filled(at, 4.0, bright);
+        }
+    }
+    breathe(&painter, rect, VIOLET, ed.glow);
 }
 
 fn read_points(ed: &Ed, l: usize) -> Vec<Point> {
@@ -1639,6 +1798,20 @@ fn lfo_editor(ui: &mut Ui, ed: &mut Ed, l: usize, rect: Rect) {
     for (k, q) in pts.iter().enumerate() {
         handle(&painter, pos2(sx(q.x), sy(q.y)), VIOLET, k > 0, hot == Some(k));
     }
+    // The playhead: a free LFO always runs (it's shared); a per-note one
+    // shows the newest note's.
+    let free = ed.choice(p::lfo(l, p::L_MODE)) == 0;
+    if let Some(live) = ed.live.filter(|lv| free || lv.voices > 0) {
+        let (ph, val) = (live.lfo_phase[l].clamp(0.0, 1.0), live.lfo_value[l].clamp(0.0, 1.0));
+        let x = sx(ph);
+        let bright = theme::mix(VIOLET, Color32::WHITE, 0.6);
+        painter.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], stroke(5.0, alpha(VIOLET, 0.12)));
+        painter.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], stroke(1.2, alpha(bright, 0.7)));
+        let at = pos2(x, sy(val));
+        painter.circle_filled(at, 9.0, alpha(VIOLET, 0.25));
+        painter.circle_filled(at, 4.0, bright);
+    }
+    breathe(&painter, rect, VIOLET, ed.glow);
 }
 
 /// A key with an LFO shape drawn on it: solid violet when it's the shape you have.

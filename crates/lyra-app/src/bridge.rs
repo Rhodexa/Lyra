@@ -24,9 +24,20 @@ pub struct Bridge {
     /// only re-sent when it actually differs.
     last_seq: Option<Sequence>,
     last_audio: Option<AudioLane>,
+    /// Each channel's live state for its editor (see `Plugin::telemetry`),
+    /// taken when the bridge makes the plugin.
+    live: std::collections::HashMap<lyra_model::ChannelId, Live>,
 }
 
+/// A plugin's live state, shared with the audio thread (atomics only).
+pub type Live = std::sync::Arc<dyn std::any::Any + Send + Sync>;
+
 impl Bridge {
+    /// The live state of a channel's plugin, if it shares one.
+    pub fn live(&self, ch: lyra_model::ChannelId) -> Option<Live> {
+        self.live.get(&ch).cloned()
+    }
+
     pub fn sync(&mut self, p: &Project, target: Playing, eng: &mut EngineHandle, samples: &mut Samples) {
         if self.last.as_ref() == Some(p) && self.last_target == Some(target) {
             return; // nothing changed — the common case
@@ -47,8 +58,12 @@ impl Bridge {
         };
         if rebuild {
             eng.send(Command::ClearChannels);
+            self.live.clear();
             for ch in &p.channels {
                 let mut plugin = lyra_catalog::create_or_silence(&ch.instrument);
+                if let Some(live) = plugin.telemetry() {
+                    self.live.insert(ch.id, live);
+                }
                 for (id, v) in ch.params.iter().enumerate() {
                     plugin.set_param(id as u32, *v);
                 }

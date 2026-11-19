@@ -4,6 +4,7 @@
 use crate::curve::{bend_coeff, bend_k, Point, Shape, MAX_POINTS};
 use crate::params::{dest, ft, p, src, warp, PARAMS};
 use crate::table::{builtin, Table, GUARD, IMPORTED};
+use crate::telemetry::{Report, Telemetry};
 use lyra_dsp::{poly_blep, round_fast, sin_turns, svf, svf_coeffs, tanh_fast, wrap, Rng, SYNC_BEATS};
 use lyra_plugin::{Event, ParamGroup, ParamInfo, Plugin, ProcessContext, SampleData, Transport};
 use std::f32::consts::SQRT_2;
@@ -1091,6 +1092,8 @@ pub struct Chrysalis {
     transport: Transport,
     ctrl_left: usize,
     dc: [(f32, f32); 2],
+    /// What the editor sees (written at the end of every block).
+    live: Arc<Telemetry>,
 }
 
 impl Default for Chrysalis {
@@ -1123,6 +1126,7 @@ impl Chrysalis {
             transport: Transport { tempo: 120.0, playing: false, position: 0.0 },
             ctrl_left: 0,
             dc: [(0.0, 0.0); 2],
+            live: Arc::new(Telemetry::default()),
         }
     }
 
@@ -1354,6 +1358,7 @@ impl Plugin for Chrysalis {
         }
         self.sync_lfos();
         let n = out_l.len().min(out_r.len());
+        let mut peak = 0.0f32;
         let mut next = 0;
         let mut i = 0;
         let mut mix_l = [0.0f32; CR];
@@ -1397,6 +1402,7 @@ impl Plugin for Chrysalis {
                     let y = x - px + 0.9995 * py;
                     self.dc[side] = (x, y);
                     *out = soft_clip(y);
+                    peak = peak.max(out.abs());
                 }
             }
             self.ctrl_left -= len;
@@ -1405,6 +1411,47 @@ impl Plugin for Chrysalis {
         for e in &events[next..] {
             self.handle(e.event);
         }
+        self.report(peak);
+    }
+
+    fn telemetry(&self) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
+        Some(self.live.clone())
+    }
+}
+
+impl Chrysalis {
+    /// Tell the editor what the newest sounding voice is doing (allocation-free).
+    fn report(&self, level: f32) {
+        let q = &*self.q;
+        let tables = tables(q, &self.imported);
+        let newest = self.voices.iter().filter(|v| v.active).max_by_key(|v| v.serial);
+        let voices = self.voices.iter().filter(|v| v.active).count() as u32;
+        let mut r = Report {
+            voices,
+            pos: [0.0; 2],
+            lfo_phase: self.lfo_ph,
+            lfo_value: self.lfo,
+            env: [(0, 0.0, 0.0); 4],
+            mods: [0.0; dest::COUNT],
+            level,
+        };
+        if let Some(v) = newest {
+            for (o, table) in tables.iter().enumerate() {
+                let last = (table.frames() - 1).max(1) as f32;
+                r.pos[o] = (v.osc[o].fpos / last).clamp(0.0, 1.0);
+            }
+            for l in 0..4 {
+                if q.lfo[l].mode != 0 {
+                    r.lfo_phase[l] = v.lfo_ph[l];
+                    r.lfo_value[l] = v.lfo[l];
+                }
+            }
+            for e in 0..4 {
+                r.env[e] = (v.env[e].stage, v.env[e].t, v.env[e].level);
+            }
+            r.mods = v.m;
+        }
+        self.live.write(&r);
     }
 }
 
