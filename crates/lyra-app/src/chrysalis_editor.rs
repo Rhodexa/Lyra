@@ -53,10 +53,14 @@ const fn hex(v: u32) -> Color32 {
 const VOID: Color32 = hex(0x050c0e);
 const VIOLET_GLOW: Color32 = Color32::from_rgba_premultiplied(0x22, 0x14, 0x48, 0x60);
 const PANEL: Color32 = hex(0x0a1618);
-const PANEL_EDGE: Color32 = hex(0x17302f);
+/// Edges are darker than what they edge, never lighter.
+const PANEL_EDGE: Color32 = hex(0x040b0c);
 /// Screens and recesses: darker than the panels.
 const SCREEN: Color32 = hex(0x030809);
-const SCREEN_EDGE: Color32 = hex(0x112426);
+/// A control or segment under the mouse.
+const HOVER: Color32 = hex(0x112224);
+/// Lettering on a solid, lit colour.
+const INK_ON: Color32 = hex(0x041012);
 const GRID: Color32 = Color32::from_rgba_premultiplied(0x10, 0x2a, 0x2a, 0x80);
 const TEXT: Color32 = hex(0xcde8df);
 const TEXT_DIM: Color32 = hex(0x6a8a84);
@@ -123,13 +127,13 @@ impl Ed<'_> {
 
 const W: f32 = 1100.0;
 const HEADER_H: f32 = 80.0;
-const OSC_H: f32 = 316.0;
+const OSC_H: f32 = 330.0;
 const FX_H: f32 = 206.0;
 const MOD_H: f32 = 250.0;
 const GAP: f32 = 6.0;
 const PAD: f32 = 10.0;
 const TITLE_H: f32 = 20.0;
-const KEY_H: f32 = 22.0;
+const KEY_H: f32 = 24.0;
 const KNOB: f32 = 34.0;
 const CELL: Vec2 = vec2(64.0, 64.0);
 
@@ -178,17 +182,16 @@ fn backdrop(ui: &Ui, r: Rect) {
     }
 }
 
-/// A panel: dark teal, a thin edge, and its name in spaced capitals with a
-/// short line of its colour. Returns the inside, below the title.
-fn panel(ui: &Ui, r: Rect, title: &str, color: Color32) -> Rect {
+/// A panel: dark teal with a dark edge, and its name (if any) in spaced
+/// capitals. Returns the inside, below the name.
+fn panel(ui: &Ui, r: Rect, title: &str, _color: Color32) -> Rect {
     let p = ui.painter();
     p.rect_filled(r, cr(5), PANEL);
-    p.rect_stroke(r, cr(5), stroke(1.0, PANEL_EDGE), egui::StrokeKind::Inside);
-    if !title.is_empty() {
-        let at = r.left_top() + vec2(PAD, PAD + 6.0);
-        p.line_segment([at, at + vec2(10.0, 0.0)], stroke(2.0, color));
-        caps(p, at + vec2(16.0, 0.0), title, TEXT_DIM, Align2::LEFT_CENTER);
+    p.rect_stroke(r, cr(5), stroke(1.0, PANEL_EDGE), egui::StrokeKind::Outside);
+    if title.is_empty() {
+        return r.shrink(PAD);
     }
+    caps(p, r.left_top() + vec2(PAD + 2.0, PAD + 6.0), title, TEXT_DIM, Align2::LEFT_CENTER);
     Rect::from_min_max(r.left_top() + vec2(PAD, PAD + TITLE_H), r.right_bottom() - vec2(PAD, PAD))
 }
 
@@ -199,19 +202,32 @@ fn caps(p: &egui::Painter, at: Pos2, text: &str, color: Color32, align: Align2) 
 
 /// Small capitals, `spacing` points apart (switch segments use less).
 fn caps_spaced(p: &egui::Painter, at: Pos2, text: &str, color: Color32, align: Align2, spacing: f32) -> Rect {
+    caps_style(p, at, text, color, align, spacing, false)
+}
+
+/// Small capitals; `bold` thickens them (the UI font has no bold: the text is
+/// drawn twice, half a point apart).
+fn caps_style(
+    p: &egui::Painter,
+    at: Pos2,
+    text: &str,
+    color: Color32,
+    align: Align2,
+    spacing: f32,
+    bold: bool,
+) -> Rect {
     let mut job = LayoutJob::default();
+    let font_id = FontId::proportional(if bold { 10.5 } else { 10.0 });
     job.append(
         &text.to_uppercase(),
         0.0,
-        egui::TextFormat {
-            font_id: FontId::proportional(10.0),
-            color,
-            extra_letter_spacing: spacing,
-            ..Default::default()
-        },
+        egui::TextFormat { font_id, color, extra_letter_spacing: spacing, ..Default::default() },
     );
     let galley = p.layout_job(job);
     let rect = align.anchor_size(at, galley.size());
+    if bold {
+        p.galley(rect.min + vec2(0.5, 0.0), galley.clone(), color);
+    }
     p.galley(rect.min, galley, color);
     rect
 }
@@ -303,56 +319,36 @@ fn knob_sized(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, 
     });
 }
 
-/// Segmented switch: one recess, the chosen segment glows. Returns the click.
+/// Segmented switch: one dark recess; the chosen segment is solid colour with
+/// dark lettering. Returns the click.
 fn seg(ui: &mut Ui, labels: &[&str], chosen: usize, color: Color32, seg_w: f32, hint: &str) -> Option<usize> {
     let size = vec2(seg_w * labels.len() as f32, KEY_H);
     let (r, resp) = ui.allocate_exact_size(size, Sense::click());
     let p = ui.painter();
     p.rect_filled(r, cr(3), SCREEN);
-    p.rect_stroke(r, cr(3), stroke(1.0, SCREEN_EDGE), egui::StrokeKind::Inside);
     let hover = resp.hover_pos().map(|pos| (((pos.x - r.left()) / seg_w) as usize).min(labels.len() - 1));
     for (i, l) in labels.iter().enumerate() {
         let s = Rect::from_min_size(pos2(r.left() + i as f32 * seg_w, r.top()), vec2(seg_w, KEY_H)).shrink(2.0);
-        let on = i == chosen;
-        if on {
-            p.rect_filled(s, cr(2), alpha(color, 0.2));
-            p.rect_stroke(s, cr(2), stroke(1.0, alpha(color, 0.8)), egui::StrokeKind::Inside);
-        } else if hover == Some(i) {
-            p.rect_filled(s, cr(2), hex(0x0f2022));
-        }
-        let ink = if on {
-            color
-        } else if hover == Some(i) {
-            TEXT
+        if i == chosen {
+            p.rect_filled(s, cr(2), color);
+            caps_style(p, s.center(), l, INK_ON, Align2::CENTER_CENTER, 0.8, true);
         } else {
-            TEXT_DIM
-        };
-        caps_spaced(p, s.center(), l, ink, Align2::CENTER_CENTER, 0.6);
+            if hover == Some(i) {
+                p.rect_filled(s, cr(2), HOVER);
+            }
+            let ink = if hover == Some(i) { TEXT } else { TEXT_DIM };
+            caps_spaced(p, s.center(), l, ink, Align2::CENTER_CENTER, 0.8);
+        }
     }
     let clicked = resp.clicked().then_some(()).and(hover);
     resp.on_hover_text(hint);
     clicked
 }
 
-/// A round power button for on/off parameters.
-fn power(ui: &mut Ui, ed: &mut Ed, id: usize, color: Color32, hint: &str) {
-    let (r, resp) = ui.allocate_exact_size(vec2(KEY_H, KEY_H), Sense::click());
+/// An on/off parameter as a key with its name on it: solid in its colour when on.
+fn toggle(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, hint: &str) {
     let on = ed.on(id);
-    let p = ui.painter();
-    let c = r.center();
-    if on {
-        p.circle_filled(c, 9.0, alpha(color, 0.18));
-    }
-    p.circle_filled(c, 6.5, if on { color } else { SCREEN });
-    let edge = if on {
-        color
-    } else if resp.hovered() {
-        TEXT_DIM
-    } else {
-        hex(0x2a4a48)
-    };
-    p.circle_stroke(c, 6.5, stroke(1.0, edge));
-    if resp.on_hover_text(hint).clicked() {
+    if key(ui, label, 0.0, on, color, hint).clicked() {
         ed.toggle(id);
     }
 }
@@ -364,12 +360,10 @@ fn well(ui: &mut Ui, ed: &mut Ed, id: usize, width: f32, color: Color32, hint: &
     let at = ed.choice(id).min(n - 1);
     let (r, resp) = ui.allocate_exact_size(vec2(width, KEY_H), Sense::click());
     let p = ui.painter();
-    p.rect_filled(r, cr(3), SCREEN);
-    let edge = if resp.hovered() { alpha(color, 0.6) } else { SCREEN_EDGE };
-    p.rect_stroke(r, cr(3), stroke(1.0, edge), egui::StrokeKind::Inside);
+    p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
     let ink = if at == 0 { TEXT_DIM } else { TEXT };
-    p.text(r.left_center() + vec2(8.0, 0.0), Align2::LEFT_CENTER, info.labels[at], FontId::proportional(11.5), ink);
-    chevron(p, r.right_center() - vec2(9.0, 1.0), 3.0, alpha(color, 0.9));
+    p.text(r.left_center() + vec2(8.0, 0.0), Align2::LEFT_CENTER, info.labels[at], FontId::proportional(12.0), ink);
+    chevron(p, r.right_center() - vec2(10.0, 1.0), 3.0, alpha(color, 0.7));
     if let Some(step) = wheel_step(ui, r) {
         ed.set(id, (at as i32 + step).clamp(0, n as i32 - 1) as f32);
     }
@@ -399,21 +393,25 @@ fn chevron(p: &egui::Painter, c: Pos2, w: f32, color: Color32) {
     p.add(Shape::line(pts, stroke(1.4, color)));
 }
 
-/// A small text button.
-fn button(ui: &mut Ui, text: &str, w: f32, lit: bool, color: Color32, hint: &str) -> Response {
+/// A key with a word on it (`w` 0 = as wide as the word): solid colour with
+/// dark lettering when lit, a dark recess otherwise.
+fn key(ui: &mut Ui, text: &str, w: f32, lit: bool, color: Color32, hint: &str) -> Response {
+    let w = if w > 0.0 { w } else { text.chars().count() as f32 * 8.0 + 20.0 };
     let (r, resp) = ui.allocate_exact_size(vec2(w, KEY_H), Sense::click());
     let p = ui.painter();
-    p.rect_filled(r, cr(3), if lit { alpha(color, 0.18) } else { SCREEN });
-    let edge = if lit || resp.hovered() { alpha(color, 0.7) } else { SCREEN_EDGE };
-    p.rect_stroke(r, cr(3), stroke(1.0, edge), egui::StrokeKind::Inside);
-    caps_spaced(p, r.center(), text, if lit { color } else { TEXT_DIM }, Align2::CENTER_CENTER, 0.6);
+    if lit {
+        p.rect_filled(r, cr(3), if resp.hovered() { theme::shade(color, 1.08) } else { color });
+        caps_style(p, r.center(), text, INK_ON, Align2::CENTER_CENTER, 1.0, true);
+    } else {
+        p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
+        caps_spaced(p, r.center(), text, if resp.hovered() { TEXT } else { TEXT_DIM }, Align2::CENTER_CENTER, 1.0);
+    }
     resp.on_hover_text(hint)
 }
 
-/// A dark screen with a faint edge; what's drawn on it glows.
+/// A dark screen (darker than its panel, no edge); what's drawn on it glows.
 fn screen(p: &egui::Painter, r: Rect) {
     p.rect_filled(r, cr(4), SCREEN);
-    p.rect_stroke(r, cr(4), stroke(1.0, SCREEN_EDGE), egui::StrokeKind::Inside);
 }
 
 /// A neon line: a wide faint halo under a bright core.
@@ -543,7 +541,7 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     caps(ui.painter(), left.left_top() + vec2(2.0, 16.0), "preset", TEXT_FAINT, Align2::LEFT_CENTER);
     let mut lu = row_ui(ui, Rect::from_min_max(left.left_top() + vec2(0.0, 28.0), left.max), "chrys-preset");
     preset_row(&mut lu, ed, left.width());
-    let right = Rect::from_min_max(pos2(c.x + 160.0, r.top() + 4.0), r.right_bottom() - vec2(PAD, 0.0));
+    let right = Rect::from_min_max(pos2(c.x + 150.0, c.y - 31.0), pos2(r.right() - PAD, r.bottom()));
     let mut ru = row_ui(ui, right, "chrys-voice");
     voice(&mut ru, ed);
 }
@@ -578,9 +576,7 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, width: f32) {
     let arrow = |ui: &mut Ui, left: bool| {
         let (r, resp) = ui.allocate_exact_size(vec2(h, h), Sense::click());
         let p = ui.painter();
-        p.rect_filled(r, cr(3), SCREEN);
-        let edge = if resp.hovered() { alpha(GREEN, 0.6) } else { SCREEN_EDGE };
-        p.rect_stroke(r, cr(3), stroke(1.0, edge), egui::StrokeKind::Inside);
+        p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
         let s = if left { -1.0 } else { 1.0 };
         let c = r.center();
         let pts = vec![c + vec2(-2.5 * s, -5.0), c + vec2(2.5 * s, 0.0), c + vec2(-2.5 * s, 5.0)];
@@ -592,8 +588,7 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, width: f32) {
     }
     let (r, resp) = ui.allocate_exact_size(vec2(width - 2.0 * h - 8.0, h), Sense::click());
     let p = ui.painter();
-    p.rect_filled(r, cr(3), SCREEN);
-    p.rect_stroke(r, cr(3), stroke(1.0, SCREEN_EDGE), egui::StrokeKind::Inside);
+    p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
     let t = p.text(r.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(14.0), TEXT);
     if edited {
         p.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", FontId::proportional(10.5), TEXT_DIM);
@@ -626,22 +621,22 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, width: f32) {
 }
 
 fn voice(ui: &mut Ui, ed: &mut Ed) {
-    let small = vec2(54.0, 66.0);
+    let small = vec2(56.0, 64.0);
     knob_sized(ui, ed, p::VOLUME, "Volume", GREEN, true, 30.0, small);
     knob_sized(ui, ed, p::AMP_VEL, "Velocity", GREEN, true, 30.0, small);
     knob_sized(ui, ed, p::GLIDE, "Glide", GREEN, true, 30.0, small);
-    ui.add_space(6.0);
+    ui.add_space(10.0);
     let mut set = None;
     ui.vertical(|ui| {
-        ui.add_space(8.0);
+        ui.add_space(4.0);
         ui.spacing_mut().item_spacing.y = 6.0;
         let hint = "Mono: one note at a time, with legato and glide";
-        if let Some(k) = seg(ui, &["poly", "mono"], ed.choice(p::MODE), GREEN, 54.0, hint) {
+        if let Some(k) = seg(ui, &["poly", "mono"], ed.choice(p::MODE), GREEN, 66.0, hint) {
             set = Some((p::MODE, k));
         }
         ui.add_enabled_ui(ed.v(p::GLIDE) > 0.0, |ui| {
             let hint = "Glide only between overlapping notes (legato), or on every note";
-            if let Some(k) = seg(ui, &["legato", "always"], ed.choice(p::GLIDE_MODE), GREEN, 54.0, hint) {
+            if let Some(k) = seg(ui, &["legato", "always"], ed.choice(p::GLIDE_MODE), GREEN, 66.0, hint) {
                 set = Some((p::GLIDE_MODE, k));
             }
         });
@@ -697,18 +692,20 @@ fn imported_table(ui: &Ui, ed: &Ed) -> Option<Arc<Table>> {
 
 fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
     let color = OSC_COLORS[o];
-    let inner = panel(ui, r, if o == 0 { "osc a" } else { "osc b" }, color);
+    let whole = panel(ui, r, "", color);
+    let inner = Rect::from_min_max(pos2(whole.left(), whole.top() + KEY_H + 8.0), whole.max);
     let at = |k: usize| p::osc(o, k);
     let on = ed.on(at(p::OSC_ON));
     let is_import = ed.choice(at(p::TABLE)) == IMPORTED;
     // Controls on the title line, right of the name.
-    let bar = Rect::from_min_size(pos2(r.left() + 76.0, r.top() + PAD - 5.0), vec2(r.width() - 76.0 - PAD, KEY_H));
+    let bar = Rect::from_min_size(whole.min, vec2(whole.width(), KEY_H));
     let mut b = row_ui(ui, bar, ("chrys-osc-bar", o));
-    power(&mut b, ed, at(p::OSC_ON), color, "Oscillator on / off");
+    b.spacing_mut().item_spacing.x = 6.0;
+    toggle(&mut b, ed, at(p::OSC_ON), if o == 0 { "osc a" } else { "osc b" }, color, "Oscillator on / off");
     well(&mut b, ed, at(p::TABLE), 112.0, color, "Wavetable: scroll to flip through");
     let has = ed.p.channels[ed.ch].sample.is_some();
     let hint = "Import a WAV as a wavetable (cut into frames of 2048 samples). Both oscillators can play it.";
-    if button(&mut b, "load", 46.0, is_import && has, color, hint).clicked() {
+    if key(&mut b, "load", 46.0, is_import && has, color, hint).clicked() {
         if let Some(path) = rfd::FileDialog::new().add_filter("Audio", &["wav", "flac"]).pick_file() {
             ed.h.checkpoint(ed.p);
             ed.p.channels[ed.ch].sample = Some(crate::samples::name_for(&path));
@@ -725,7 +722,7 @@ fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
         caps(ui.painter(), lr.right_center() - vec2(2.0, 0.0), "warp", TEXT_FAINT, Align2::RIGHT_CENTER);
     });
 
-    let scope_r = Rect::from_min_size(inner.min, vec2(inner.width(), 150.0));
+    let scope_r = Rect::from_min_size(inner.min, vec2(inner.width(), 148.0));
     let mut su = ui.new_child(UiBuilder::new().id_salt(("chrys-scope", o)).max_rect(scope_r));
     su.add_enabled_ui(on, |ui| table_view(ui, ed, o, scope_r, color));
     let knobs_r = Rect::from_min_max(pos2(inner.left() + 4.0, scope_r.bottom() + 8.0), inner.max);
@@ -815,38 +812,32 @@ fn table_view(ui: &mut Ui, ed: &mut Ed, o: usize, rect: Rect, color: Color32) {
 // ───────────────────────────────────────────────────────────── sub, noise, drive
 
 fn sub_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let inner = panel(ui, r, "sub · noise", GREEN);
-    let mut u =
-        ui.new_child(UiBuilder::new().id_salt("chrys-sub").max_rect(inner).layout(Layout::top_down(Align::Min)));
-    u.spacing_mut().item_spacing = vec2(4.0, 4.0);
+    let inner = panel(ui, r, "", GREEN);
+    let half = inner.width() / 2.0;
+    let col = |k: f32| Rect::from_min_size(pos2(inner.left() + k * half, inner.top()), vec2(half, inner.height()));
     let mut set = None;
-    u.horizontal(|ui| {
-        power(ui, ed, p::SUB_ON, GREEN, "Sub oscillator on / off");
-        if let Some(k) = seg(ui, &["sin", "sqr"], ed.choice(p::SUB_SHAPE), GREEN, 40.0, "Sub shape") {
+    let mut a =
+        ui.new_child(UiBuilder::new().id_salt("chrys-sub").max_rect(col(0.0)).layout(Layout::top_down(Align::Center)));
+    a.spacing_mut().item_spacing.y = 6.0;
+    toggle(&mut a, ed, p::SUB_ON, "sub", GREEN, "Sub oscillator on / off");
+    let sub = ed.on(p::SUB_ON);
+    a.add_enabled_ui(sub, |ui| {
+        if let Some(k) = seg(ui, &["sin", "sqr"], ed.choice(p::SUB_SHAPE), GREEN, 42.0, "Sub shape") {
             set = Some((p::SUB_SHAPE, k));
         }
-        if let Some(k) = seg(ui, &["−1", "−2"], ed.choice(p::SUB_OCT), GREEN, 34.0, "Octaves below the note") {
+        if let Some(k) = seg(ui, &["−1", "−2"], ed.choice(p::SUB_OCT), GREEN, 42.0, "Octaves below the note") {
             set = Some((p::SUB_OCT, k));
         }
+        ui.add_space(2.0);
+        knob(ui, ed, p::SUB_LEVEL, "Level", GREEN, sub);
     });
-    let (sub, noise) = (ed.on(p::SUB_ON), ed.on(p::NOISE_ON));
-    u.horizontal(|ui| {
-        knob(ui, ed, p::SUB_LEVEL, "Sub", GREEN, sub);
-        ui.add_space(8.0);
-        ui.vertical(|ui| {
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                power(ui, ed, p::NOISE_ON, GREEN, "Noise on / off (a little different on each side)");
-                let (lr, _) = ui.allocate_exact_size(vec2(50.0, KEY_H), Sense::hover());
-                caps(ui.painter(), lr.left_center(), "noise", TEXT_DIM, Align2::LEFT_CENTER);
-            });
-        });
-    });
-    u.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        knob(ui, ed, p::NOISE_COLOR, "Colour", GREEN, noise);
-        knob(ui, ed, p::NOISE_LEVEL, "Noise", GREEN, noise);
-    });
+    let mut b = ui
+        .new_child(UiBuilder::new().id_salt("chrys-noise").max_rect(col(1.0)).layout(Layout::top_down(Align::Center)));
+    b.spacing_mut().item_spacing.y = 6.0;
+    toggle(&mut b, ed, p::NOISE_ON, "noise", GREEN, "Noise on / off (a little different on each side)");
+    let noise = ed.on(p::NOISE_ON);
+    knob(&mut b, ed, p::NOISE_COLOR, "Colour", GREEN, noise);
+    knob(&mut b, ed, p::NOISE_LEVEL, "Level", GREEN, noise);
     if let Some((id, k)) = set {
         ed.set(id, k as f32);
     }
@@ -901,10 +892,10 @@ fn drive_view(ui: &Ui, ed: &Ed, r: Rect) {
 
 fn filter_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     let inner = panel(ui, r, "filters", AQUA);
-    let bar = Rect::from_min_size(pos2(r.right() - PAD - 152.0, r.top() + PAD - 5.0), vec2(152.0, KEY_H));
+    let bar = Rect::from_min_size(pos2(r.right() - PAD - 160.0, r.top() + PAD - 4.0), vec2(160.0, KEY_H));
     let mut b = row_ui(ui, bar, "chrys-route");
     let hint = "Serial: filter 1 into filter 2. Parallel: both hear the voice, side by side.";
-    if let Some(k) = seg(&mut b, &["serial", "parallel"], ed.choice(p::ROUTING), AQUA, 76.0, hint) {
+    if let Some(k) = seg(&mut b, &["serial", "parallel"], ed.choice(p::ROUTING), AQUA, 80.0, hint) {
         ed.set(p::ROUTING, k as f32);
     }
     let cell = vec2(54.0, 60.0);
@@ -922,10 +913,8 @@ fn filter_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         let kind = ed.choice(at(p::F_TYPE)) as u8;
         u.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            power(ui, ed, at(p::F_ON), AQUA, "Filter on / off");
-            let (lr, _) = ui.allocate_exact_size(vec2(12.0, KEY_H), Sense::hover());
-            caps(ui.painter(), lr.left_center(), if f == 0 { "1" } else { "2" }, TEXT_DIM, Align2::LEFT_CENTER);
-            well(ui, ed, at(p::F_TYPE), 96.0, AQUA, "Filter type");
+            toggle(ui, ed, at(p::F_ON), if f == 0 { "filter 1" } else { "filter 2" }, AQUA, "Filter on / off");
+            well(ui, ed, at(p::F_TYPE), 100.0, AQUA, "Filter type");
         });
         let comb = kind >= ft::COMB_PLUS;
         let label = match kind {
@@ -1115,38 +1104,37 @@ impl ModView {
 const MOD_TABS: [&str; 9] = ["amp", "env 2", "env 3", "env 4", "lfo 1", "lfo 2", "lfo 3", "lfo 4", "matrix"];
 
 fn mod_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let pnt = ui.painter();
-    pnt.rect_filled(r, cr(5), PANEL);
-    pnt.rect_stroke(r, cr(5), stroke(1.0, PANEL_EDGE), egui::StrokeKind::Inside);
-    // Tabs along the top: text, the open one underlined in violet; a little
-    // gap between envelopes, LFOs and the matrix. Unused sources are fainter.
+    panel(ui, r, "", VIOLET);
+    // Tabs along the top: the open one is a solid violet key, the others
+    // just their names (fainter when nothing uses them). Gaps group them.
     let view_id = Id::new(("chrys-mod-view", ed.ch));
     let mut view = ModView::from_index(ui.ctx().data(|d| d.get_temp::<usize>(view_id)).unwrap_or(4));
     let mut x = r.left() + PAD;
-    let y = r.top() + PAD - 2.0;
+    let y = r.top() + PAD;
     for (i, name) in MOD_TABS.iter().enumerate() {
         if i == 4 || i == 8 {
-            x += 14.0;
+            x += 16.0;
         }
-        let w = if i == 8 { 70.0 } else { 56.0 };
-        let t = Rect::from_min_size(pos2(x, y), vec2(w, 24.0));
+        let w = if i == 8 { 76.0 } else { 62.0 };
+        let t = Rect::from_min_size(pos2(x, y), vec2(w - 4.0, KEY_H));
         let resp = ui.interact(t, Id::new(("chrys-mod-tab", i)), Sense::click());
         let open = view.index() == i;
         let p = ui.painter();
-        let ink = if open {
-            VIOLET
-        } else if resp.hovered() {
-            TEXT
-        } else if mod_used(ed, i) {
-            TEXT_DIM
-        } else {
-            TEXT_FAINT
-        };
-        caps(p, t.center() - vec2(0.0, 2.0), name, ink, Align2::CENTER_CENTER);
         if open {
-            let line = [t.left_bottom() + vec2(10.0, -2.0), t.right_bottom() + vec2(-10.0, -2.0)];
-            p.line_segment(line, stroke(6.0, alpha(VIOLET, 0.15)));
-            p.line_segment(line, stroke(2.0, VIOLET));
+            p.rect_filled(t, cr(3), VIOLET);
+            caps_style(p, t.center(), name, INK_ON, Align2::CENTER_CENTER, 1.0, true);
+        } else {
+            if resp.hovered() {
+                p.rect_filled(t, cr(3), HOVER);
+            }
+            let ink = if resp.hovered() {
+                TEXT
+            } else if mod_used(ed, i) {
+                TEXT_DIM
+            } else {
+                TEXT_FAINT
+            };
+            caps_spaced(p, t.center(), name, ink, Align2::CENTER_CENTER, 1.0);
         }
         if resp.clicked() {
             view = ModView::from_index(i);
@@ -1154,7 +1142,7 @@ fn mod_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         x += w;
     }
     ui.ctx().data_mut(|d| d.insert_temp(view_id, view.index()));
-    let inner = Rect::from_min_max(r.left_top() + vec2(PAD, PAD + 30.0), r.right_bottom() - vec2(PAD, PAD));
+    let inner = Rect::from_min_max(r.left_top() + vec2(PAD, PAD + KEY_H + 10.0), r.right_bottom() - vec2(PAD, PAD));
     match view {
         ModView::Env(e) => env_view(ui, ed, e, inner),
         ModView::Lfo(l) => lfo_view(ui, ed, l, inner),
@@ -1351,7 +1339,7 @@ fn lfo_view(ui: &mut Ui, ed: &mut Ed, l: usize, inner: Rect) {
     let col = Rect::from_min_max(pos2(graph.right() + 14.0, inner.top()), inner.max);
     let mut u = ui
         .new_child(UiBuilder::new().id_salt(("chrys-lfo-side", l)).max_rect(col).layout(Layout::top_down(Align::Min)));
-    u.spacing_mut().item_spacing = vec2(4.0, 6.0);
+    u.spacing_mut().item_spacing = vec2(4.0, 8.0);
     let hint = "Free: one shared LFO (locked to the song when synced). Retrig: restarts on every note. \
                 One-shot: runs once per note and holds its end, like an envelope.";
     let mode = ed.choice(p::lfo(l, p::L_MODE));
@@ -1366,7 +1354,7 @@ fn lfo_view(ui: &mut Ui, ed: &mut Ed, l: usize, inner: Rect) {
             for (name, pts) in row {
                 let shape: Vec<Point> = pts.iter().map(|&(x, y, bend)| Point { x, y, bend }).collect();
                 let w = (col.width() - 12.0) / 4.0;
-                if shape_key(ui, vec2(w, 26.0), &shape, now == shape).on_hover_text(*name).clicked() {
+                if shape_key(ui, vec2(w, 34.0), &shape, now == shape).on_hover_text(*name).clicked() {
                     ed.h.checkpoint(ed.p);
                     write_points(ed, l, &shape);
                 }
@@ -1385,16 +1373,15 @@ fn lfo_view(ui: &mut Ui, ed: &mut Ed, l: usize, inner: Rect) {
 fn shape_key(ui: &mut Ui, size: Vec2, shape: &[Point], lit: bool) -> Response {
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     let p = ui.painter();
-    p.rect_filled(rect, cr(3), if lit { alpha(VIOLET, 0.16) } else { SCREEN });
-    let edge = if lit {
-        alpha(VIOLET, 0.8)
+    let fill = if lit {
+        VIOLET
     } else if resp.hovered() {
-        alpha(VIOLET, 0.5)
+        HOVER
     } else {
-        SCREEN_EDGE
+        SCREEN
     };
-    p.rect_stroke(rect, cr(3), stroke(1.0, edge), egui::StrokeKind::Inside);
-    let face = rect.shrink2(vec2(7.0, 6.0));
+    p.rect_filled(rect, cr(3), fill);
+    let face = rect.shrink2(vec2(9.0, 8.0));
     let s = curve::Shape::new(shape);
     let pts: Vec<Pos2> = (0..=40)
         .map(|k| {
@@ -1402,7 +1389,7 @@ fn shape_key(ui: &mut Ui, size: Vec2, shape: &[Point], lit: bool) -> Response {
             pos2(face.left() + t * face.width(), face.bottom() - s.eval(t.min(0.9999)) * face.height())
         })
         .collect();
-    p.add(Shape::line(pts, stroke(1.4, if lit { VIOLET } else { TEXT_DIM })));
+    p.add(Shape::line(pts, stroke(if lit { 2.0 } else { 1.5 }, if lit { INK_ON } else { TEXT_DIM })));
     resp
 }
 
@@ -1531,17 +1518,54 @@ fn lfo_editor(ui: &mut Ui, ed: &mut Ed, l: usize, rect: Rect) {
     }
 }
 
-/// All 16 slots, two columns of 8: # · source → destination · amount · via · Bi.
+/// The routes in use, one per row (the rest of the 16 slots stay out of the
+/// way), and "+ route" to start another.
 fn matrix_view(ui: &mut Ui, ed: &mut Ed, inner: Rect) {
-    let col_w = (inner.width() - 16.0) / 2.0;
-    let row_h = (inner.height() / 8.0).floor();
-    for k in 0..p::SLOT_COUNT {
-        let (c, rr) = (k / 8, k % 8);
-        let at = pos2(inner.left() + c as f32 * (col_w + 16.0), inner.top() + rr as f32 * row_h);
-        let mut u = row_ui(ui, Rect::from_min_size(at, vec2(col_w, row_h)), ("chrys-slot", k));
-        u.spacing_mut().item_spacing.x = 4.0;
-        slot_row(&mut u, ed, k);
+    let used: Vec<usize> = (0..p::SLOT_COUNT)
+        .filter(|&k| ed.choice(p::slot(k, p::S_SRC)) != 0 || ed.choice(p::slot(k, p::S_DEST)) != 0)
+        .collect();
+    let mut child = ui.new_child(
+        UiBuilder::new().id_salt(("chrys-matrix", ed.ch)).max_rect(inner).layout(Layout::top_down(Align::Min)),
+    );
+    // A long list scrolls; its bar is dark violet, not the default light grey.
+    let v = child.visuals_mut();
+    v.extreme_bg_color = SCREEN;
+    for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active] {
+        w.bg_fill = hex(0x2a2152);
+        w.fg_stroke = stroke(1.0, hex(0x2a2152));
     }
+    v.widgets.hovered.bg_fill = hex(0x3d3075);
+    v.widgets.active.bg_fill = VIOLET;
+    egui::ScrollArea::vertical().id_salt(("chrys-matrix-scroll", ed.ch)).max_height(inner.height()).show(
+        &mut child,
+        |ui| {
+            ui.spacing_mut().item_spacing.y = 3.0;
+            for &k in &used {
+                ui.allocate_ui_with_layout(
+                    vec2(inner.width() - 14.0, KEY_H + 4.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        slot_row(ui, ed, k);
+                    },
+                );
+            }
+            if let Some(free) = (0..p::SLOT_COUNT).find(|k| !used.contains(k)) {
+                ui.horizontal(|ui| {
+                    ui.add_space(22.0);
+                    let hint =
+                        "A new route: pick what moves (an LFO, an envelope, velocity, a macro…) and where it goes";
+                    if key(ui, "+ route", 0.0, false, VIOLET, hint).clicked() {
+                        ed.set(p::slot(free, p::S_SRC), 1.0);
+                    }
+                    if used.is_empty() {
+                        let t = "Send the LFOs, envelopes and macros anywhere.";
+                        ui.label(egui::RichText::new(t).size(11.5).color(TEXT_FAINT));
+                    }
+                });
+            }
+        },
+    );
 }
 
 fn slot_row(ui: &mut Ui, ed: &mut Ed, k: usize) {
@@ -1549,37 +1573,77 @@ fn slot_row(ui: &mut Ui, ed: &mut Ed, k: usize) {
     let live = ed.choice(at(p::S_SRC)) != 0 && ed.choice(at(p::S_DEST)) != 0;
     let (nr, _) = ui.allocate_exact_size(vec2(16.0, KEY_H), Sense::hover());
     let num_ink = if live { VIOLET } else { TEXT_FAINT };
-    ui.painter().text(nr.center(), Align2::CENTER_CENTER, format!("{}", k + 1), FontId::proportional(10.5), num_ink);
-    well(ui, ed, at(p::S_SRC), 86.0, VIOLET, "Source: what moves this slot");
-    let (ar, _) = ui.allocate_exact_size(vec2(10.0, KEY_H), Sense::hover());
+    ui.painter().text(nr.center(), Align2::CENTER_CENTER, format!("{}", k + 1), FontId::proportional(11.0), num_ink);
+    well(ui, ed, at(p::S_SRC), 116.0, VIOLET, "Source: what moves this route");
+    let (ar, _) = ui.allocate_exact_size(vec2(14.0, KEY_H), Sense::hover());
     let (y, x0, x1) = (ar.center().y, ar.left(), ar.right());
-    let st = stroke(1.3, if live { VIOLET } else { TEXT_FAINT });
+    let st = stroke(1.5, if live { VIOLET } else { TEXT_FAINT });
     ui.painter().line_segment([pos2(x0, y), pos2(x1, y)], st);
-    ui.painter().add(Shape::line(vec![pos2(x1 - 3.5, y - 3.0), pos2(x1, y), pos2(x1 - 3.5, y + 3.0)], st));
-    well(ui, ed, at(p::S_DEST), 112.0, VIOLET, "Destination: what it moves");
-    let info = &PARAMS[at(p::S_AMT)];
-    let mut v = ed.v(at(p::S_AMT));
-    let color = if live { VIOLET } else { TEXT_FAINT };
-    let r = crate::widgets::knob_painted(ui, &mut v, info, KEY_H, |p, rect, v, hot| {
-        paint_knob(p, rect, info, v, color, hot)
-    });
-    ed.track(&r, at(p::S_AMT), v);
-    r.on_hover_text("Amount: how far, and which way (double-click: 0)");
-    let (vr, _) = ui.allocate_exact_size(vec2(34.0, KEY_H), Sense::hover());
+    ui.painter().add(Shape::line(vec![pos2(x1 - 4.0, y - 3.5), pos2(x1, y), pos2(x1 - 4.0, y + 3.5)], st));
+    well(ui, ed, at(p::S_DEST), 150.0, VIOLET, "Destination: what it moves");
+    amount_bar(ui, ed, at(p::S_AMT), 190.0, if live { VIOLET } else { TEXT_FAINT });
+    let (vr, _) = ui.allocate_exact_size(vec2(40.0, KEY_H), Sense::hover());
     let ink = if live { TEXT } else { TEXT_FAINT };
-    ui.painter().text(
-        vr.left_center(),
-        Align2::LEFT_CENTER,
-        info.format(ed.v(at(p::S_AMT))),
-        FontId::proportional(10.5),
-        ink,
-    );
-    well(ui, ed, at(p::S_VIA), 66.0, VIOLET, "Via: a second source that scales the amount (e.g. velocity)");
+    let amount = PARAMS[at(p::S_AMT)].format(ed.v(at(p::S_AMT)));
+    ui.painter().text(vr.right_center(), Align2::RIGHT_CENTER, amount, FontId::proportional(11.5), ink);
+    ui.add_space(6.0);
+    let (lr, _) = ui.allocate_exact_size(vec2(24.0, KEY_H), Sense::hover());
+    caps(ui.painter(), lr.right_center(), "via", TEXT_FAINT, Align2::RIGHT_CENTER);
+    well(ui, ed, at(p::S_VIA), 96.0, VIOLET, "Via: a second source that scales the amount (e.g. velocity)");
     let bi = ed.on(at(p::S_BIPOLAR));
     let hint = "Bi: centre the source (−1..1), so it swings both ways around the knob";
-    if button(ui, "bi", 26.0, bi, VIOLET, hint).clicked() {
+    if key(ui, "bi", 32.0, bi, VIOLET, hint).clicked() {
         ed.toggle(at(p::S_BIPOLAR));
     }
+    // Remove: the route goes back to an empty slot.
+    let (xr, xresp) = ui.allocate_exact_size(vec2(KEY_H, KEY_H), Sense::click());
+    let hot = xresp.hovered();
+    if hot {
+        ui.painter().rect_filled(xr, cr(3), HOVER);
+    }
+    let c = xr.center();
+    let xs = stroke(1.4, if hot { TEXT } else { TEXT_FAINT });
+    ui.painter().line_segment([c + vec2(-4.0, -4.0), c + vec2(4.0, 4.0)], xs);
+    ui.painter().line_segment([c + vec2(-4.0, 4.0), c + vec2(4.0, -4.0)], xs);
+    if xresp.on_hover_text("Remove this route").clicked() {
+        ed.h.checkpoint(ed.p);
+        for q in [p::S_SRC, p::S_DEST, p::S_AMT, p::S_VIA, p::S_BIPOLAR] {
+            ed.put(at(q), PARAMS[at(q)].default);
+        }
+    }
+}
+
+/// A route's amount as a wide bar from the middle (−100 % … +100 %): drag
+/// sideways (Shift = fine), scroll to nudge, double-click for 0.
+fn amount_bar(ui: &mut Ui, ed: &mut Ed, id: usize, width: f32, color: Color32) {
+    let (r, resp) = ui.allocate_exact_size(vec2(width, KEY_H), Sense::click_and_drag());
+    let info = &PARAMS[id];
+    let reset = dbl(ui, &resp, ("amount", id));
+    if resp.drag_started() || reset {
+        ed.h.checkpoint(ed.p);
+    }
+    if reset {
+        ed.put(id, 0.0);
+    } else if resp.dragged() {
+        let fine = if ui.input(|i| i.modifiers.shift) { 0.2 } else { 1.0 };
+        ed.put(id, ed.v(id) + resp.drag_delta().x / width * (info.max - info.min) * fine);
+    }
+    if let Some(step) = wheel_step(ui, r) {
+        ed.h.checkpoint(ed.p);
+        ed.put(id, ed.v(id) - step as f32 * 0.01);
+    }
+    let p = ui.painter();
+    let track = r.shrink2(vec2(0.0, 7.0));
+    p.rect_filled(track, cr(2), if resp.hovered() || resp.dragged() { HOVER } else { SCREEN });
+    let mid = track.center().x;
+    let x = mid + ed.v(id) / info.max * track.width() * 0.5;
+    let bar = Rect::from_x_y_ranges(mid.min(x)..=mid.max(x), track.y_range());
+    if bar.width() > 0.5 {
+        p.rect_filled(bar.expand2(vec2(0.0, 3.0)), cr(2), alpha(color, 0.12));
+        p.rect_filled(bar, cr(2), color);
+    }
+    p.line_segment([pos2(mid, r.top() + 4.0), pos2(mid, r.bottom() - 4.0)], stroke(1.0, TEXT_FAINT));
+    resp.on_hover_text(format!("{}: {} (drag sideways; double-click: 0)", info.name, info.format(ed.v(id))));
 }
 
 // ───────────────────────────────────────────────────────────── macros

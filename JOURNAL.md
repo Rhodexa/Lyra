@@ -64,6 +64,10 @@ no marks would default to not urgent or 'coding teams judges'
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Chrysalis, second pass on its face (2026-11-19)**
+- [x] *(chat)* Too many light, Android/Qt-style borders; the matrix crowded and tiny; toggles as dots; empty space in SUB·NOISE and the LFO side; header knobs off-centre
+  *→ no light outlines anywhere: edges are darker than what they edge (ink, not black). Anything chosen or on is solid colour with darker, bolder letters (tabs, switches, keys). The panels' names are their on/off keys (OSC A, SUB, NOISE, FILTER 1/2). Dropdowns are dark fields with no border. The matrix lists only the routes in use, in bigger rows with a wide glowing amount bar (drag sideways, double-click for 0), an × to remove, and "+ route" to add.*
+
 **Chrysalis gets its own face (2026-11-19)**
 - [x] *(chat)* "The logo is way too cool while the UI is way too quiet and the sound is super aggressive"; the emblem "looks like a sticker"
   *→ a new editor with Chrysalis's own look, from your banner: teal-black, dark screens with glowing curves, neon knobs; green and cyan for the sound, violet for everything that moves it. One page instead of seven tabs: both oscillators side by side, then sub/noise, drive and filters, then modulation (ENV / LFO / MATRIX, all 16 slots at once) beside the macros. The emblem is a badge in the header that breaks out of its bar, with its glow trailing along it.*
