@@ -38,6 +38,8 @@ no marks would default to not urgent or 'coding teams judges'
 - [ ] Wheel-over-note changes velocity only while *hovering* a note. With a selection but no hover, the wheel still scrolls, otherwise you couldn't scroll while anything is selected. Tell me if you want it the other way.
 
 - [ ] *(deferred, 2026-11-19)* The ↕ gain grip sits in the middle of a clip (or of its frame in the audio-clip editor), so on a clip wider than the view it can be off screen. Fix: keep it in the middle of the clip's *visible* part.
+- [ ] *(same)* Fluttersine's Volume knob is squared (`v² × 0.6`), so 0.45 reads as "almost half" but is about −18 dB. My first mix had the snare 20 dB too quiet because of it. Show it in dB, or make it linear.
+- [ ] *(from writing "Lyra Ascendant", 2026-11-19)* No automation yet. Risers had to be faked (an 8-second attack plus a 10-second filter-envelope attack on noise, and a supersaw gliding between overlapping notes). Synced LFOs now cover the wobble speeds; automation (M5, after CLAP) is still the real fix for risers and swells.
 - [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
 
 - [ ] KDE shows a generic "W" icon for Lyra (title bar and taskbar): Wayland takes the icon from a `.desktop` file, which Lyra doesn't have yet. Needs a `lyra.desktop` + icon install (app id `lyra`).
@@ -54,6 +56,16 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**After writing two test songs in Lyra (2026-11-19) → `18381f6`, `5fdf189`, `13fc580`**
+- [x] *(Noticed by Claude)* Lyra couldn't export audio; my song scripts copied the bridge to get a WAV
+  *→ Export WAV / Export stems in the project menu (Ctrl+E / Ctrl+Shift+E), and `lyra --render song.lyra` from a terminal. Same bridge and engine as playback, through the tails.* (`13fc580`)
+- [x] *(Noticed by Claude)* No limiter: a couple of clipped samples meant turning the whole master down
+  *→ Limiter (look-ahead brickwall), plus Chorus and Drive (soft / hard / fold / bit-crush).* (`5fdf189`)
+- [x] *(chat)* "The wobble is too early-dubstep", "Fluttersine's matrix isn't complete"
+  *→ Fluttersine's new MOD page: two mod envelopes and six slots (LFOs, envelopes, velocity, key, random → pitch, cutoff, volume, FM depth, or any operator's level / FM in / pitch / warp), a second LFO, and tempo sync for both (locked to the song while it plays). An envelope on Pitch is a pitch drop; an LFO on "Op 1 FM in" is a growl that changes vowel, not just brightness.* (`18381f6`)
+- [x] *(chat)* "The arps are iffy"
+  *→ They restarted the envelope on every 36 ms note. In the test song they're now one mono legato voice stepping through the chord (no restart). The real home for this is the chip synth's chord mode: see `docs/specs/chip-synth.md`.*
 
 **Cleanup pass → `d742c6f`**
 - [x] *(Noticed by Claude)* Some undo steps do nothing

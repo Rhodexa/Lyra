@@ -137,8 +137,9 @@ inserts). New channels take the next free insert. Per block, the engine:
 Effect chains (`FxChain`) are built and activated on the UI thread and
 swapped in whole with `SetFxChain`; the old chain goes back as trash. The bridge
 rebuilds a chain only when its list of effects changes. Knob moves are plain
-`SetFxParam`. Tempo-synced effects get `Plugin::transport()` (tempo, playing,
-position) before each block. Effects live in `crates/plugins/effects`, and
+`SetFxParam`. Every plugin, instrument or effect, gets `Plugin::transport()`
+(tempo, playing, position) before each block: tempo-synced delays and pumps,
+and Fluttersine's synced LFOs, which lock to the song position while it plays. Effects live in `crates/plugins/effects`, and
 their editors are generated from their parameter tables, like instruments.
 
 ## Project files
@@ -151,6 +152,18 @@ writes (temp file + rename), native dialogs through the desktop portal (`rfd`),
 `~/.local/share/lyra/backup.lyra` (every 30 s while changed, on quit, and
 before New/Open), and reopening the last project. Tests that run the app set
 `XDG_DATA_HOME` to a scratch folder so they never touch the real backup.
+
+## Rendering
+
+`lyra-app/src/render.rs` plays the song through the same `Bridge` and engine
+as live playback, as fast as the CPU goes: the bridge sets up the engine, the
+sequence gets extra length so the song doesn't loop, and the render runs on
+through the tails until half a second of silence (15 s at most). 24-bit WAV.
+Parts: the mix, one channel alone (stems), or the audio clips alone. The
+project menu runs it on a thread (Export WAV / stems, Ctrl+E / Ctrl+Shift+E);
+`lyra --render song.lyra [out.wav] [--stems dir]` runs it without a window or a
+sound card, which is also how sound changes get checked: render a song before
+and after, and compare.
 
 ## Held notes
 
@@ -168,6 +181,9 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   (groups decide where they show), retired ones keep their slot, and plugin
   ids never change. `crates/lyra-catalog/params.lock` records every id Lyra
   has shipped; a test fails if one changes meaning, and adds new ones itself.
+  Opening a project gives every channel and effect the parameters its plugin
+  gained since (`files::fill_new_params`, defaults at the end), so editors can
+  index the whole table.
 * Built-ins use the `lyra.` namespace (no real reverse-DNS name starts with
   it). Hosted CLAP plugins will keep their own ids, stored as `clap:<id>`.
 * Continuous: `ParamInfo::new(..)` with a linear or exponential knob curve.
@@ -177,7 +193,9 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   future plugin gets an editor for free.
 * Hand-made editors take over below the editor's header for one instrument id.
   Fluttersine (id `lyra.fluttersine`) has one: `fm_editor.rs` (operator tabs, always-visible
-  matrix, draggable envelopes and filter curve). It still only edits `params`.
+  matrix, draggable envelopes and filter curve, the LFO page for both LFOs and
+  their sync, the MOD page for the mod envelopes and slots). It still only
+  edits `params`.
 
 ## Music theory
 

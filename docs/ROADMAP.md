@@ -52,6 +52,8 @@ built before the line it depends on.
 - Docs for writing Lyra/CLAP plugins
 
 ## Later
+- Chip synth: tracker-style macros (volume / arp / pitch / duty), LFSR noise, chord-arp mode. Spec: [specs/chip-synth.md](specs/chip-synth.md)
+- Wavetable synth: morphing tables, drawable LFOs, formant/comb filters, per-voice drive. Spec: [specs/wavetable-synth.md](specs/wavetable-synth.md)
 - VST3 / LV2, MIDI hardware input, JACK
 - Video / image-sequence lane synced to the timeline (for animation timing)
 - Theme packs from hand-made assets
