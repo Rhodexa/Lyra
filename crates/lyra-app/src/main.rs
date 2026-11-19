@@ -6,6 +6,7 @@ mod audio;
 mod audio_editor;
 mod bridge;
 mod browser;
+mod chrysalis_editor;
 mod demo;
 mod design;
 mod devtools;
@@ -34,6 +35,8 @@ fn main() -> eframe::Result {
     if args.first().is_some_and(|a| a == "--render") {
         std::process::exit(render::cli(&args[1..]));
     }
+    // Chrysalis's built-in wavetables take a moment to build: start now, off the UI thread.
+    lyra_chrysalis::warm_up();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Lyra")

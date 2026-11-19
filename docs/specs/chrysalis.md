@@ -1,5 +1,9 @@
 # Spec: Chrysalis, the wavetable synth (id `lyra.chrysalis`)
 
+**Status (2026-11-19): built.** Everything below exists; how it is built is in
+`docs/ARCHITECTURE.md` ("Chrysalis"). What was left out or done differently
+is listed in `JOURNAL.md` under "Noticed by Claude".
+
 A built-in instrument for modern electronic sound design: growls, talking
 basses, evolving pads, big supersaw-plus leads. Serum and Vital territory,
 smaller.

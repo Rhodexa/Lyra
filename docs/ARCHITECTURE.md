@@ -9,9 +9,9 @@ lyra-app ─────► lyra-model      project data + undo            (no a
    │  │
    │  └───────► lyra-catalog    which plugins exist, by id
    │               │
-   │               ├──► plugins/fluttersine, drums, synth, sampler, effects
+   │               ├──► plugins/fluttersine, chrysalis, drums, synth, sampler, effects
    │               │        │  (each: its DSP, its params, its presets)
-   │               │        └──► lyra-dsp   shared building blocks (filters, envelopes, noise)
+   │               │        └──► lyra-dsp   shared building blocks (SVF, FFT, fast sine, noise, sync lengths)
    │               ▼
    └──► lyra-engine ──────► lyra-plugin     the ONE plugin interface (trait Plugin)
 ```
@@ -184,6 +184,14 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   Opening a project gives every channel and effect the parameters its plugin
   gained since (`files::fill_new_params`, defaults at the end), so editors can
   index the whole table.
+* **A plugin's whole state is its parameters** (CLAP-shaped: a CLAP host
+  sees parameters plus an optional state blob, and we use only the first).
+  Chrysalis even keeps its drawn LFO shapes as parameters (32 points × x, y,
+  bend per LFO), so undo, saving, presets and later automation need nothing
+  extra. The one thing that isn't a number, an imported WAV, travels as the
+  channel's `sample` (`Plugin::set_sample`, built on the UI thread). If a
+  plugin ever needs more than one such file, that is the moment for a real
+  state blob.
 * Built-ins use the `lyra.` namespace (no real reverse-DNS name starts with
   it). Hosted CLAP plugins will keep their own ids, stored as `clap:<id>`.
 * **Instruments are stereo, and velocity is loudness.** A synth makes stereo
@@ -201,7 +209,32 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   Fluttersine (id `lyra.fluttersine`) has one: `fm_editor.rs` (operator tabs, always-visible
   matrix, draggable envelopes and filter curve, the LFO page for both LFOs and
   their sync, the MOD page for the mod envelopes and slots). It still only
-  edits `params`.
+  edits `params`. Chrysalis (`lyra.chrysalis`) has `chrysalis_editor.rs`
+  (the table as stacked frames, the drive curve, the filters' combined
+  response, envelopes with curve handles, the LFO shape editor, 16 matrix
+  slots, 4 macros); it borrows the FM editor's plate and LCD helpers, and
+  draws with the plugin's own functions (`Table::sample`, `warp_preview`,
+  `drive_shape`, `curve::bend`), so the pictures are what plays.
+* Plugin artwork (Fluttersine's wordmark, Chrysalis's emblem) lives in
+  `lyra-app/assets/` and is live-reloaded from there while Lyra runs from the
+  source tree (`theme::live_logo`).
+
+## Chrysalis (wavetable synth)
+
+`crates/plugins/chrysalis`. A table is up to 256 frames × 2048 samples, kept
+at 20 band-limited levels half an octave apart (level `L` keeps harmonics up
+to ⌊1024 / 2^(L/2)⌋, at 32 samples per harmonic, max 2048). An oscillator
+picks the fullest level whose top harmonic stays below Nyquist, reads the
+five fullest levels with cubic interpolation and the rest linearly: images
+and aliasing stay at −74 dB or lower across the keyboard (tested). The nine
+built-in tables are generated additively once (`table::builtin()`, ~37 MB,
+~0.2 s; `lyra_chrysalis::warm_up()` starts it on a thread at launch).
+Per voice: 2 oscillators (warp, unison ≤ 16), sub, noise, drive, 2 filters
+(SVF / formant / comb), 4 envelopes, 4 per-note LFOs (free ones are shared
+and song-locked when synced), 16 matrix slots, all at a 32-sample control
+rate with per-sample ramps for position and levels. The inner loop runs one
+sample at a time with the unison voices inside it (independent phases keep
+the CPU busy); 16 notes × 2 oscillators × 8 unison costs ~12 % of a core.
 
 ## Music theory
 

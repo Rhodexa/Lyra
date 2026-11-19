@@ -277,3 +277,579 @@ lyra.fluttersine	189	Op 5 pan
 lyra.fluttersine	190	Op 6 pan
 lyra.fluttersine	191	Width
 lyra.fluttersine	192	Velocity
+lyra.chrysalis	0	Osc 1
+lyra.chrysalis	1	Osc 1 table
+lyra.chrysalis	2	Osc 1 position
+lyra.chrysalis	3	Osc 1 octave
+lyra.chrysalis	4	Osc 1 semi
+lyra.chrysalis	5	Osc 1 fine
+lyra.chrysalis	6	Osc 1 level
+lyra.chrysalis	7	Osc 1 pan
+lyra.chrysalis	8	Osc 1 warp mode
+lyra.chrysalis	9	Osc 1 warp
+lyra.chrysalis	10	Osc 1 unison
+lyra.chrysalis	11	Osc 1 detune
+lyra.chrysalis	12	Osc 1 blend
+lyra.chrysalis	13	Osc 1 spread
+lyra.chrysalis	14	Osc 1 phase
+lyra.chrysalis	15	Osc 1 random phase
+lyra.chrysalis	16	Osc 2
+lyra.chrysalis	17	Osc 2 table
+lyra.chrysalis	18	Osc 2 position
+lyra.chrysalis	19	Osc 2 octave
+lyra.chrysalis	20	Osc 2 semi
+lyra.chrysalis	21	Osc 2 fine
+lyra.chrysalis	22	Osc 2 level
+lyra.chrysalis	23	Osc 2 pan
+lyra.chrysalis	24	Osc 2 warp mode
+lyra.chrysalis	25	Osc 2 warp
+lyra.chrysalis	26	Osc 2 unison
+lyra.chrysalis	27	Osc 2 detune
+lyra.chrysalis	28	Osc 2 blend
+lyra.chrysalis	29	Osc 2 spread
+lyra.chrysalis	30	Osc 2 phase
+lyra.chrysalis	31	Osc 2 random phase
+lyra.chrysalis	32	Sub
+lyra.chrysalis	33	Sub shape
+lyra.chrysalis	34	Sub octave
+lyra.chrysalis	35	Sub level
+lyra.chrysalis	36	Noise
+lyra.chrysalis	37	Noise colour
+lyra.chrysalis	38	Noise level
+lyra.chrysalis	39	Drive mode
+lyra.chrysalis	40	Drive
+lyra.chrysalis	41	Drive mix
+lyra.chrysalis	42	Filter 1
+lyra.chrysalis	43	Filter 1 type
+lyra.chrysalis	44	Filter 1 cutoff
+lyra.chrysalis	45	Filter 1 reso
+lyra.chrysalis	46	Filter 1 drive
+lyra.chrysalis	47	Filter 1 key track
+lyra.chrysalis	48	Filter 1 vowel
+lyra.chrysalis	49	Filter 1 mix
+lyra.chrysalis	50	Filter 2
+lyra.chrysalis	51	Filter 2 type
+lyra.chrysalis	52	Filter 2 cutoff
+lyra.chrysalis	53	Filter 2 reso
+lyra.chrysalis	54	Filter 2 drive
+lyra.chrysalis	55	Filter 2 key track
+lyra.chrysalis	56	Filter 2 vowel
+lyra.chrysalis	57	Filter 2 mix
+lyra.chrysalis	58	Filter routing
+lyra.chrysalis	59	Amp attack
+lyra.chrysalis	60	Amp decay
+lyra.chrysalis	61	Amp sustain
+lyra.chrysalis	62	Amp release
+lyra.chrysalis	63	Amp attack curve
+lyra.chrysalis	64	Amp decay curve
+lyra.chrysalis	65	Amp release curve
+lyra.chrysalis	66	Env 2 attack
+lyra.chrysalis	67	Env 2 decay
+lyra.chrysalis	68	Env 2 sustain
+lyra.chrysalis	69	Env 2 release
+lyra.chrysalis	70	Env 2 attack curve
+lyra.chrysalis	71	Env 2 decay curve
+lyra.chrysalis	72	Env 2 release curve
+lyra.chrysalis	73	Env 3 attack
+lyra.chrysalis	74	Env 3 decay
+lyra.chrysalis	75	Env 3 sustain
+lyra.chrysalis	76	Env 3 release
+lyra.chrysalis	77	Env 3 attack curve
+lyra.chrysalis	78	Env 3 decay curve
+lyra.chrysalis	79	Env 3 release curve
+lyra.chrysalis	80	Env 4 attack
+lyra.chrysalis	81	Env 4 decay
+lyra.chrysalis	82	Env 4 sustain
+lyra.chrysalis	83	Env 4 release
+lyra.chrysalis	84	Env 4 attack curve
+lyra.chrysalis	85	Env 4 decay curve
+lyra.chrysalis	86	Env 4 release curve
+lyra.chrysalis	87	LFO 1 rate
+lyra.chrysalis	88	LFO 1 sync
+lyra.chrysalis	89	LFO 1 mode
+lyra.chrysalis	90	LFO 1 points
+lyra.chrysalis	91	LFO 1 point 1 x
+lyra.chrysalis	92	LFO 1 point 1 y
+lyra.chrysalis	93	LFO 1 point 1 bend
+lyra.chrysalis	94	LFO 1 point 2 x
+lyra.chrysalis	95	LFO 1 point 2 y
+lyra.chrysalis	96	LFO 1 point 2 bend
+lyra.chrysalis	97	LFO 1 point 3 x
+lyra.chrysalis	98	LFO 1 point 3 y
+lyra.chrysalis	99	LFO 1 point 3 bend
+lyra.chrysalis	100	LFO 1 point 4 x
+lyra.chrysalis	101	LFO 1 point 4 y
+lyra.chrysalis	102	LFO 1 point 4 bend
+lyra.chrysalis	103	LFO 1 point 5 x
+lyra.chrysalis	104	LFO 1 point 5 y
+lyra.chrysalis	105	LFO 1 point 5 bend
+lyra.chrysalis	106	LFO 1 point 6 x
+lyra.chrysalis	107	LFO 1 point 6 y
+lyra.chrysalis	108	LFO 1 point 6 bend
+lyra.chrysalis	109	LFO 1 point 7 x
+lyra.chrysalis	110	LFO 1 point 7 y
+lyra.chrysalis	111	LFO 1 point 7 bend
+lyra.chrysalis	112	LFO 1 point 8 x
+lyra.chrysalis	113	LFO 1 point 8 y
+lyra.chrysalis	114	LFO 1 point 8 bend
+lyra.chrysalis	115	LFO 1 point 9 x
+lyra.chrysalis	116	LFO 1 point 9 y
+lyra.chrysalis	117	LFO 1 point 9 bend
+lyra.chrysalis	118	LFO 1 point 10 x
+lyra.chrysalis	119	LFO 1 point 10 y
+lyra.chrysalis	120	LFO 1 point 10 bend
+lyra.chrysalis	121	LFO 1 point 11 x
+lyra.chrysalis	122	LFO 1 point 11 y
+lyra.chrysalis	123	LFO 1 point 11 bend
+lyra.chrysalis	124	LFO 1 point 12 x
+lyra.chrysalis	125	LFO 1 point 12 y
+lyra.chrysalis	126	LFO 1 point 12 bend
+lyra.chrysalis	127	LFO 1 point 13 x
+lyra.chrysalis	128	LFO 1 point 13 y
+lyra.chrysalis	129	LFO 1 point 13 bend
+lyra.chrysalis	130	LFO 1 point 14 x
+lyra.chrysalis	131	LFO 1 point 14 y
+lyra.chrysalis	132	LFO 1 point 14 bend
+lyra.chrysalis	133	LFO 1 point 15 x
+lyra.chrysalis	134	LFO 1 point 15 y
+lyra.chrysalis	135	LFO 1 point 15 bend
+lyra.chrysalis	136	LFO 1 point 16 x
+lyra.chrysalis	137	LFO 1 point 16 y
+lyra.chrysalis	138	LFO 1 point 16 bend
+lyra.chrysalis	139	LFO 1 point 17 x
+lyra.chrysalis	140	LFO 1 point 17 y
+lyra.chrysalis	141	LFO 1 point 17 bend
+lyra.chrysalis	142	LFO 1 point 18 x
+lyra.chrysalis	143	LFO 1 point 18 y
+lyra.chrysalis	144	LFO 1 point 18 bend
+lyra.chrysalis	145	LFO 1 point 19 x
+lyra.chrysalis	146	LFO 1 point 19 y
+lyra.chrysalis	147	LFO 1 point 19 bend
+lyra.chrysalis	148	LFO 1 point 20 x
+lyra.chrysalis	149	LFO 1 point 20 y
+lyra.chrysalis	150	LFO 1 point 20 bend
+lyra.chrysalis	151	LFO 1 point 21 x
+lyra.chrysalis	152	LFO 1 point 21 y
+lyra.chrysalis	153	LFO 1 point 21 bend
+lyra.chrysalis	154	LFO 1 point 22 x
+lyra.chrysalis	155	LFO 1 point 22 y
+lyra.chrysalis	156	LFO 1 point 22 bend
+lyra.chrysalis	157	LFO 1 point 23 x
+lyra.chrysalis	158	LFO 1 point 23 y
+lyra.chrysalis	159	LFO 1 point 23 bend
+lyra.chrysalis	160	LFO 1 point 24 x
+lyra.chrysalis	161	LFO 1 point 24 y
+lyra.chrysalis	162	LFO 1 point 24 bend
+lyra.chrysalis	163	LFO 1 point 25 x
+lyra.chrysalis	164	LFO 1 point 25 y
+lyra.chrysalis	165	LFO 1 point 25 bend
+lyra.chrysalis	166	LFO 1 point 26 x
+lyra.chrysalis	167	LFO 1 point 26 y
+lyra.chrysalis	168	LFO 1 point 26 bend
+lyra.chrysalis	169	LFO 1 point 27 x
+lyra.chrysalis	170	LFO 1 point 27 y
+lyra.chrysalis	171	LFO 1 point 27 bend
+lyra.chrysalis	172	LFO 1 point 28 x
+lyra.chrysalis	173	LFO 1 point 28 y
+lyra.chrysalis	174	LFO 1 point 28 bend
+lyra.chrysalis	175	LFO 1 point 29 x
+lyra.chrysalis	176	LFO 1 point 29 y
+lyra.chrysalis	177	LFO 1 point 29 bend
+lyra.chrysalis	178	LFO 1 point 30 x
+lyra.chrysalis	179	LFO 1 point 30 y
+lyra.chrysalis	180	LFO 1 point 30 bend
+lyra.chrysalis	181	LFO 1 point 31 x
+lyra.chrysalis	182	LFO 1 point 31 y
+lyra.chrysalis	183	LFO 1 point 31 bend
+lyra.chrysalis	184	LFO 1 point 32 x
+lyra.chrysalis	185	LFO 1 point 32 y
+lyra.chrysalis	186	LFO 1 point 32 bend
+lyra.chrysalis	187	LFO 2 rate
+lyra.chrysalis	188	LFO 2 sync
+lyra.chrysalis	189	LFO 2 mode
+lyra.chrysalis	190	LFO 2 points
+lyra.chrysalis	191	LFO 2 point 1 x
+lyra.chrysalis	192	LFO 2 point 1 y
+lyra.chrysalis	193	LFO 2 point 1 bend
+lyra.chrysalis	194	LFO 2 point 2 x
+lyra.chrysalis	195	LFO 2 point 2 y
+lyra.chrysalis	196	LFO 2 point 2 bend
+lyra.chrysalis	197	LFO 2 point 3 x
+lyra.chrysalis	198	LFO 2 point 3 y
+lyra.chrysalis	199	LFO 2 point 3 bend
+lyra.chrysalis	200	LFO 2 point 4 x
+lyra.chrysalis	201	LFO 2 point 4 y
+lyra.chrysalis	202	LFO 2 point 4 bend
+lyra.chrysalis	203	LFO 2 point 5 x
+lyra.chrysalis	204	LFO 2 point 5 y
+lyra.chrysalis	205	LFO 2 point 5 bend
+lyra.chrysalis	206	LFO 2 point 6 x
+lyra.chrysalis	207	LFO 2 point 6 y
+lyra.chrysalis	208	LFO 2 point 6 bend
+lyra.chrysalis	209	LFO 2 point 7 x
+lyra.chrysalis	210	LFO 2 point 7 y
+lyra.chrysalis	211	LFO 2 point 7 bend
+lyra.chrysalis	212	LFO 2 point 8 x
+lyra.chrysalis	213	LFO 2 point 8 y
+lyra.chrysalis	214	LFO 2 point 8 bend
+lyra.chrysalis	215	LFO 2 point 9 x
+lyra.chrysalis	216	LFO 2 point 9 y
+lyra.chrysalis	217	LFO 2 point 9 bend
+lyra.chrysalis	218	LFO 2 point 10 x
+lyra.chrysalis	219	LFO 2 point 10 y
+lyra.chrysalis	220	LFO 2 point 10 bend
+lyra.chrysalis	221	LFO 2 point 11 x
+lyra.chrysalis	222	LFO 2 point 11 y
+lyra.chrysalis	223	LFO 2 point 11 bend
+lyra.chrysalis	224	LFO 2 point 12 x
+lyra.chrysalis	225	LFO 2 point 12 y
+lyra.chrysalis	226	LFO 2 point 12 bend
+lyra.chrysalis	227	LFO 2 point 13 x
+lyra.chrysalis	228	LFO 2 point 13 y
+lyra.chrysalis	229	LFO 2 point 13 bend
+lyra.chrysalis	230	LFO 2 point 14 x
+lyra.chrysalis	231	LFO 2 point 14 y
+lyra.chrysalis	232	LFO 2 point 14 bend
+lyra.chrysalis	233	LFO 2 point 15 x
+lyra.chrysalis	234	LFO 2 point 15 y
+lyra.chrysalis	235	LFO 2 point 15 bend
+lyra.chrysalis	236	LFO 2 point 16 x
+lyra.chrysalis	237	LFO 2 point 16 y
+lyra.chrysalis	238	LFO 2 point 16 bend
+lyra.chrysalis	239	LFO 2 point 17 x
+lyra.chrysalis	240	LFO 2 point 17 y
+lyra.chrysalis	241	LFO 2 point 17 bend
+lyra.chrysalis	242	LFO 2 point 18 x
+lyra.chrysalis	243	LFO 2 point 18 y
+lyra.chrysalis	244	LFO 2 point 18 bend
+lyra.chrysalis	245	LFO 2 point 19 x
+lyra.chrysalis	246	LFO 2 point 19 y
+lyra.chrysalis	247	LFO 2 point 19 bend
+lyra.chrysalis	248	LFO 2 point 20 x
+lyra.chrysalis	249	LFO 2 point 20 y
+lyra.chrysalis	250	LFO 2 point 20 bend
+lyra.chrysalis	251	LFO 2 point 21 x
+lyra.chrysalis	252	LFO 2 point 21 y
+lyra.chrysalis	253	LFO 2 point 21 bend
+lyra.chrysalis	254	LFO 2 point 22 x
+lyra.chrysalis	255	LFO 2 point 22 y
+lyra.chrysalis	256	LFO 2 point 22 bend
+lyra.chrysalis	257	LFO 2 point 23 x
+lyra.chrysalis	258	LFO 2 point 23 y
+lyra.chrysalis	259	LFO 2 point 23 bend
+lyra.chrysalis	260	LFO 2 point 24 x
+lyra.chrysalis	261	LFO 2 point 24 y
+lyra.chrysalis	262	LFO 2 point 24 bend
+lyra.chrysalis	263	LFO 2 point 25 x
+lyra.chrysalis	264	LFO 2 point 25 y
+lyra.chrysalis	265	LFO 2 point 25 bend
+lyra.chrysalis	266	LFO 2 point 26 x
+lyra.chrysalis	267	LFO 2 point 26 y
+lyra.chrysalis	268	LFO 2 point 26 bend
+lyra.chrysalis	269	LFO 2 point 27 x
+lyra.chrysalis	270	LFO 2 point 27 y
+lyra.chrysalis	271	LFO 2 point 27 bend
+lyra.chrysalis	272	LFO 2 point 28 x
+lyra.chrysalis	273	LFO 2 point 28 y
+lyra.chrysalis	274	LFO 2 point 28 bend
+lyra.chrysalis	275	LFO 2 point 29 x
+lyra.chrysalis	276	LFO 2 point 29 y
+lyra.chrysalis	277	LFO 2 point 29 bend
+lyra.chrysalis	278	LFO 2 point 30 x
+lyra.chrysalis	279	LFO 2 point 30 y
+lyra.chrysalis	280	LFO 2 point 30 bend
+lyra.chrysalis	281	LFO 2 point 31 x
+lyra.chrysalis	282	LFO 2 point 31 y
+lyra.chrysalis	283	LFO 2 point 31 bend
+lyra.chrysalis	284	LFO 2 point 32 x
+lyra.chrysalis	285	LFO 2 point 32 y
+lyra.chrysalis	286	LFO 2 point 32 bend
+lyra.chrysalis	287	LFO 3 rate
+lyra.chrysalis	288	LFO 3 sync
+lyra.chrysalis	289	LFO 3 mode
+lyra.chrysalis	290	LFO 3 points
+lyra.chrysalis	291	LFO 3 point 1 x
+lyra.chrysalis	292	LFO 3 point 1 y
+lyra.chrysalis	293	LFO 3 point 1 bend
+lyra.chrysalis	294	LFO 3 point 2 x
+lyra.chrysalis	295	LFO 3 point 2 y
+lyra.chrysalis	296	LFO 3 point 2 bend
+lyra.chrysalis	297	LFO 3 point 3 x
+lyra.chrysalis	298	LFO 3 point 3 y
+lyra.chrysalis	299	LFO 3 point 3 bend
+lyra.chrysalis	300	LFO 3 point 4 x
+lyra.chrysalis	301	LFO 3 point 4 y
+lyra.chrysalis	302	LFO 3 point 4 bend
+lyra.chrysalis	303	LFO 3 point 5 x
+lyra.chrysalis	304	LFO 3 point 5 y
+lyra.chrysalis	305	LFO 3 point 5 bend
+lyra.chrysalis	306	LFO 3 point 6 x
+lyra.chrysalis	307	LFO 3 point 6 y
+lyra.chrysalis	308	LFO 3 point 6 bend
+lyra.chrysalis	309	LFO 3 point 7 x
+lyra.chrysalis	310	LFO 3 point 7 y
+lyra.chrysalis	311	LFO 3 point 7 bend
+lyra.chrysalis	312	LFO 3 point 8 x
+lyra.chrysalis	313	LFO 3 point 8 y
+lyra.chrysalis	314	LFO 3 point 8 bend
+lyra.chrysalis	315	LFO 3 point 9 x
+lyra.chrysalis	316	LFO 3 point 9 y
+lyra.chrysalis	317	LFO 3 point 9 bend
+lyra.chrysalis	318	LFO 3 point 10 x
+lyra.chrysalis	319	LFO 3 point 10 y
+lyra.chrysalis	320	LFO 3 point 10 bend
+lyra.chrysalis	321	LFO 3 point 11 x
+lyra.chrysalis	322	LFO 3 point 11 y
+lyra.chrysalis	323	LFO 3 point 11 bend
+lyra.chrysalis	324	LFO 3 point 12 x
+lyra.chrysalis	325	LFO 3 point 12 y
+lyra.chrysalis	326	LFO 3 point 12 bend
+lyra.chrysalis	327	LFO 3 point 13 x
+lyra.chrysalis	328	LFO 3 point 13 y
+lyra.chrysalis	329	LFO 3 point 13 bend
+lyra.chrysalis	330	LFO 3 point 14 x
+lyra.chrysalis	331	LFO 3 point 14 y
+lyra.chrysalis	332	LFO 3 point 14 bend
+lyra.chrysalis	333	LFO 3 point 15 x
+lyra.chrysalis	334	LFO 3 point 15 y
+lyra.chrysalis	335	LFO 3 point 15 bend
+lyra.chrysalis	336	LFO 3 point 16 x
+lyra.chrysalis	337	LFO 3 point 16 y
+lyra.chrysalis	338	LFO 3 point 16 bend
+lyra.chrysalis	339	LFO 3 point 17 x
+lyra.chrysalis	340	LFO 3 point 17 y
+lyra.chrysalis	341	LFO 3 point 17 bend
+lyra.chrysalis	342	LFO 3 point 18 x
+lyra.chrysalis	343	LFO 3 point 18 y
+lyra.chrysalis	344	LFO 3 point 18 bend
+lyra.chrysalis	345	LFO 3 point 19 x
+lyra.chrysalis	346	LFO 3 point 19 y
+lyra.chrysalis	347	LFO 3 point 19 bend
+lyra.chrysalis	348	LFO 3 point 20 x
+lyra.chrysalis	349	LFO 3 point 20 y
+lyra.chrysalis	350	LFO 3 point 20 bend
+lyra.chrysalis	351	LFO 3 point 21 x
+lyra.chrysalis	352	LFO 3 point 21 y
+lyra.chrysalis	353	LFO 3 point 21 bend
+lyra.chrysalis	354	LFO 3 point 22 x
+lyra.chrysalis	355	LFO 3 point 22 y
+lyra.chrysalis	356	LFO 3 point 22 bend
+lyra.chrysalis	357	LFO 3 point 23 x
+lyra.chrysalis	358	LFO 3 point 23 y
+lyra.chrysalis	359	LFO 3 point 23 bend
+lyra.chrysalis	360	LFO 3 point 24 x
+lyra.chrysalis	361	LFO 3 point 24 y
+lyra.chrysalis	362	LFO 3 point 24 bend
+lyra.chrysalis	363	LFO 3 point 25 x
+lyra.chrysalis	364	LFO 3 point 25 y
+lyra.chrysalis	365	LFO 3 point 25 bend
+lyra.chrysalis	366	LFO 3 point 26 x
+lyra.chrysalis	367	LFO 3 point 26 y
+lyra.chrysalis	368	LFO 3 point 26 bend
+lyra.chrysalis	369	LFO 3 point 27 x
+lyra.chrysalis	370	LFO 3 point 27 y
+lyra.chrysalis	371	LFO 3 point 27 bend
+lyra.chrysalis	372	LFO 3 point 28 x
+lyra.chrysalis	373	LFO 3 point 28 y
+lyra.chrysalis	374	LFO 3 point 28 bend
+lyra.chrysalis	375	LFO 3 point 29 x
+lyra.chrysalis	376	LFO 3 point 29 y
+lyra.chrysalis	377	LFO 3 point 29 bend
+lyra.chrysalis	378	LFO 3 point 30 x
+lyra.chrysalis	379	LFO 3 point 30 y
+lyra.chrysalis	380	LFO 3 point 30 bend
+lyra.chrysalis	381	LFO 3 point 31 x
+lyra.chrysalis	382	LFO 3 point 31 y
+lyra.chrysalis	383	LFO 3 point 31 bend
+lyra.chrysalis	384	LFO 3 point 32 x
+lyra.chrysalis	385	LFO 3 point 32 y
+lyra.chrysalis	386	LFO 3 point 32 bend
+lyra.chrysalis	387	LFO 4 rate
+lyra.chrysalis	388	LFO 4 sync
+lyra.chrysalis	389	LFO 4 mode
+lyra.chrysalis	390	LFO 4 points
+lyra.chrysalis	391	LFO 4 point 1 x
+lyra.chrysalis	392	LFO 4 point 1 y
+lyra.chrysalis	393	LFO 4 point 1 bend
+lyra.chrysalis	394	LFO 4 point 2 x
+lyra.chrysalis	395	LFO 4 point 2 y
+lyra.chrysalis	396	LFO 4 point 2 bend
+lyra.chrysalis	397	LFO 4 point 3 x
+lyra.chrysalis	398	LFO 4 point 3 y
+lyra.chrysalis	399	LFO 4 point 3 bend
+lyra.chrysalis	400	LFO 4 point 4 x
+lyra.chrysalis	401	LFO 4 point 4 y
+lyra.chrysalis	402	LFO 4 point 4 bend
+lyra.chrysalis	403	LFO 4 point 5 x
+lyra.chrysalis	404	LFO 4 point 5 y
+lyra.chrysalis	405	LFO 4 point 5 bend
+lyra.chrysalis	406	LFO 4 point 6 x
+lyra.chrysalis	407	LFO 4 point 6 y
+lyra.chrysalis	408	LFO 4 point 6 bend
+lyra.chrysalis	409	LFO 4 point 7 x
+lyra.chrysalis	410	LFO 4 point 7 y
+lyra.chrysalis	411	LFO 4 point 7 bend
+lyra.chrysalis	412	LFO 4 point 8 x
+lyra.chrysalis	413	LFO 4 point 8 y
+lyra.chrysalis	414	LFO 4 point 8 bend
+lyra.chrysalis	415	LFO 4 point 9 x
+lyra.chrysalis	416	LFO 4 point 9 y
+lyra.chrysalis	417	LFO 4 point 9 bend
+lyra.chrysalis	418	LFO 4 point 10 x
+lyra.chrysalis	419	LFO 4 point 10 y
+lyra.chrysalis	420	LFO 4 point 10 bend
+lyra.chrysalis	421	LFO 4 point 11 x
+lyra.chrysalis	422	LFO 4 point 11 y
+lyra.chrysalis	423	LFO 4 point 11 bend
+lyra.chrysalis	424	LFO 4 point 12 x
+lyra.chrysalis	425	LFO 4 point 12 y
+lyra.chrysalis	426	LFO 4 point 12 bend
+lyra.chrysalis	427	LFO 4 point 13 x
+lyra.chrysalis	428	LFO 4 point 13 y
+lyra.chrysalis	429	LFO 4 point 13 bend
+lyra.chrysalis	430	LFO 4 point 14 x
+lyra.chrysalis	431	LFO 4 point 14 y
+lyra.chrysalis	432	LFO 4 point 14 bend
+lyra.chrysalis	433	LFO 4 point 15 x
+lyra.chrysalis	434	LFO 4 point 15 y
+lyra.chrysalis	435	LFO 4 point 15 bend
+lyra.chrysalis	436	LFO 4 point 16 x
+lyra.chrysalis	437	LFO 4 point 16 y
+lyra.chrysalis	438	LFO 4 point 16 bend
+lyra.chrysalis	439	LFO 4 point 17 x
+lyra.chrysalis	440	LFO 4 point 17 y
+lyra.chrysalis	441	LFO 4 point 17 bend
+lyra.chrysalis	442	LFO 4 point 18 x
+lyra.chrysalis	443	LFO 4 point 18 y
+lyra.chrysalis	444	LFO 4 point 18 bend
+lyra.chrysalis	445	LFO 4 point 19 x
+lyra.chrysalis	446	LFO 4 point 19 y
+lyra.chrysalis	447	LFO 4 point 19 bend
+lyra.chrysalis	448	LFO 4 point 20 x
+lyra.chrysalis	449	LFO 4 point 20 y
+lyra.chrysalis	450	LFO 4 point 20 bend
+lyra.chrysalis	451	LFO 4 point 21 x
+lyra.chrysalis	452	LFO 4 point 21 y
+lyra.chrysalis	453	LFO 4 point 21 bend
+lyra.chrysalis	454	LFO 4 point 22 x
+lyra.chrysalis	455	LFO 4 point 22 y
+lyra.chrysalis	456	LFO 4 point 22 bend
+lyra.chrysalis	457	LFO 4 point 23 x
+lyra.chrysalis	458	LFO 4 point 23 y
+lyra.chrysalis	459	LFO 4 point 23 bend
+lyra.chrysalis	460	LFO 4 point 24 x
+lyra.chrysalis	461	LFO 4 point 24 y
+lyra.chrysalis	462	LFO 4 point 24 bend
+lyra.chrysalis	463	LFO 4 point 25 x
+lyra.chrysalis	464	LFO 4 point 25 y
+lyra.chrysalis	465	LFO 4 point 25 bend
+lyra.chrysalis	466	LFO 4 point 26 x
+lyra.chrysalis	467	LFO 4 point 26 y
+lyra.chrysalis	468	LFO 4 point 26 bend
+lyra.chrysalis	469	LFO 4 point 27 x
+lyra.chrysalis	470	LFO 4 point 27 y
+lyra.chrysalis	471	LFO 4 point 27 bend
+lyra.chrysalis	472	LFO 4 point 28 x
+lyra.chrysalis	473	LFO 4 point 28 y
+lyra.chrysalis	474	LFO 4 point 28 bend
+lyra.chrysalis	475	LFO 4 point 29 x
+lyra.chrysalis	476	LFO 4 point 29 y
+lyra.chrysalis	477	LFO 4 point 29 bend
+lyra.chrysalis	478	LFO 4 point 30 x
+lyra.chrysalis	479	LFO 4 point 30 y
+lyra.chrysalis	480	LFO 4 point 30 bend
+lyra.chrysalis	481	LFO 4 point 31 x
+lyra.chrysalis	482	LFO 4 point 31 y
+lyra.chrysalis	483	LFO 4 point 31 bend
+lyra.chrysalis	484	LFO 4 point 32 x
+lyra.chrysalis	485	LFO 4 point 32 y
+lyra.chrysalis	486	LFO 4 point 32 bend
+lyra.chrysalis	487	Mod 1 source
+lyra.chrysalis	488	Mod 1 destination
+lyra.chrysalis	489	Mod 1 amount
+lyra.chrysalis	490	Mod 1 via
+lyra.chrysalis	491	Mod 1 polarity
+lyra.chrysalis	492	Mod 2 source
+lyra.chrysalis	493	Mod 2 destination
+lyra.chrysalis	494	Mod 2 amount
+lyra.chrysalis	495	Mod 2 via
+lyra.chrysalis	496	Mod 2 polarity
+lyra.chrysalis	497	Mod 3 source
+lyra.chrysalis	498	Mod 3 destination
+lyra.chrysalis	499	Mod 3 amount
+lyra.chrysalis	500	Mod 3 via
+lyra.chrysalis	501	Mod 3 polarity
+lyra.chrysalis	502	Mod 4 source
+lyra.chrysalis	503	Mod 4 destination
+lyra.chrysalis	504	Mod 4 amount
+lyra.chrysalis	505	Mod 4 via
+lyra.chrysalis	506	Mod 4 polarity
+lyra.chrysalis	507	Mod 5 source
+lyra.chrysalis	508	Mod 5 destination
+lyra.chrysalis	509	Mod 5 amount
+lyra.chrysalis	510	Mod 5 via
+lyra.chrysalis	511	Mod 5 polarity
+lyra.chrysalis	512	Mod 6 source
+lyra.chrysalis	513	Mod 6 destination
+lyra.chrysalis	514	Mod 6 amount
+lyra.chrysalis	515	Mod 6 via
+lyra.chrysalis	516	Mod 6 polarity
+lyra.chrysalis	517	Mod 7 source
+lyra.chrysalis	518	Mod 7 destination
+lyra.chrysalis	519	Mod 7 amount
+lyra.chrysalis	520	Mod 7 via
+lyra.chrysalis	521	Mod 7 polarity
+lyra.chrysalis	522	Mod 8 source
+lyra.chrysalis	523	Mod 8 destination
+lyra.chrysalis	524	Mod 8 amount
+lyra.chrysalis	525	Mod 8 via
+lyra.chrysalis	526	Mod 8 polarity
+lyra.chrysalis	527	Mod 9 source
+lyra.chrysalis	528	Mod 9 destination
+lyra.chrysalis	529	Mod 9 amount
+lyra.chrysalis	530	Mod 9 via
+lyra.chrysalis	531	Mod 9 polarity
+lyra.chrysalis	532	Mod 10 source
+lyra.chrysalis	533	Mod 10 destination
+lyra.chrysalis	534	Mod 10 amount
+lyra.chrysalis	535	Mod 10 via
+lyra.chrysalis	536	Mod 10 polarity
+lyra.chrysalis	537	Mod 11 source
+lyra.chrysalis	538	Mod 11 destination
+lyra.chrysalis	539	Mod 11 amount
+lyra.chrysalis	540	Mod 11 via
+lyra.chrysalis	541	Mod 11 polarity
+lyra.chrysalis	542	Mod 12 source
+lyra.chrysalis	543	Mod 12 destination
+lyra.chrysalis	544	Mod 12 amount
+lyra.chrysalis	545	Mod 12 via
+lyra.chrysalis	546	Mod 12 polarity
+lyra.chrysalis	547	Mod 13 source
+lyra.chrysalis	548	Mod 13 destination
+lyra.chrysalis	549	Mod 13 amount
+lyra.chrysalis	550	Mod 13 via
+lyra.chrysalis	551	Mod 13 polarity
+lyra.chrysalis	552	Mod 14 source
+lyra.chrysalis	553	Mod 14 destination
+lyra.chrysalis	554	Mod 14 amount
+lyra.chrysalis	555	Mod 14 via
+lyra.chrysalis	556	Mod 14 polarity
+lyra.chrysalis	557	Mod 15 source
+lyra.chrysalis	558	Mod 15 destination
+lyra.chrysalis	559	Mod 15 amount
+lyra.chrysalis	560	Mod 15 via
+lyra.chrysalis	561	Mod 15 polarity
+lyra.chrysalis	562	Mod 16 source
+lyra.chrysalis	563	Mod 16 destination
+lyra.chrysalis	564	Mod 16 amount
+lyra.chrysalis	565	Mod 16 via
+lyra.chrysalis	566	Mod 16 polarity
+lyra.chrysalis	567	Macro 1
+lyra.chrysalis	568	Macro 2
+lyra.chrysalis	569	Macro 3
+lyra.chrysalis	570	Macro 4
+lyra.chrysalis	571	Volume
+lyra.chrysalis	572	Velocity
+lyra.chrysalis	573	Mode
+lyra.chrysalis	574	Glide
+lyra.chrysalis	575	Glide when

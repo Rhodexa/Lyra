@@ -13,6 +13,7 @@ lyra-dsp    = { path = "crates/lyra-dsp" }
 lyra-catalog = { path = "crates/lyra-catalog" }
 # One crate per built-in plugin family (see crates/plugins).
 lyra-fluttersine = { path = "crates/plugins/fluttersine" }
+lyra-chrysalis   = { path = "crates/plugins/chrysalis" }
 lyra-drums       = { path = "crates/plugins/drums" }
 lyra-synth       = { path = "crates/plugins/synth" }
 lyra-sampler     = { path = "crates/plugins/sampler" }

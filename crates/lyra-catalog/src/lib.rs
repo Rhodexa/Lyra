@@ -20,6 +20,7 @@ pub fn instruments() -> &'static [&'static PluginInfo] {
             .iter()
             .chain(lyra_synth::PLUGINS)
             .chain(lyra_fluttersine::PLUGINS)
+            .chain(lyra_chrysalis::PLUGINS.iter())
             .chain(lyra_sampler::PLUGINS)
             .collect()
     })
@@ -149,6 +150,7 @@ mod tests {
         }
         assert!(!groups("lyra.fluttersine").is_empty() && groups("lyra.kick").is_empty());
         assert!(presets_for("lyra.synth").len() > 3 && presets_for("lyra.fluttersine").len() > 3);
+        assert!(presets_for("lyra.chrysalis").len() >= 7 && !groups("lyra.chrysalis").is_empty());
     }
 
     /// Saved projects find their plugins by id string and store knob values

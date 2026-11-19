@@ -237,14 +237,17 @@ impl Textures {
 
 // ── The Fluttersine logo ─────────────────────────────────────────────────────
 //
-// `assets/fluttersine_logo.png` is the user's wordmark. It is built into the
-// app, and while Lyra runs from the source tree it also watches that file:
-// export over it (from Krita, say) and the FM editor shows the new logo within
-// a second, no restart. Transparent margins are trimmed, so draw freely.
+// Plugin artwork by the user: `assets/fluttersine_logo.png` (the wordmark)
+// and `assets/chrysalis_emblem.png`. Both are built into the app, and while
+// Lyra runs from the source tree it also watches the files: export over one
+// (from Krita, say) and the editor shows it within a second, no restart.
+// Transparent margins are trimmed, so draw freely.
 
 const FLUTTERSINE_LOGO_PNG: &[u8] = include_bytes!("../assets/fluttersine_logo.png");
 const FLUTTERSINE_LOGO_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fluttersine_logo.png");
-/// The logo is scaled down to at most this tall (about twice what the editor shows).
+const CHRYSALIS_EMBLEM_PNG: &[u8] = include_bytes!("../assets/chrysalis_emblem.png");
+const CHRYSALIS_EMBLEM_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/chrysalis_emblem.png");
+/// Artwork is scaled down to at most this tall (about twice what the editors show).
 const LOGO_MAX_H: usize = 220;
 
 #[derive(Clone)]
@@ -257,7 +260,17 @@ struct LogoCache {
 
 /// The Fluttersine logo texture and its pixel size (for the aspect ratio).
 pub fn fluttersine_logo(ctx: &Context) -> (egui::TextureId, [usize; 2]) {
-    let id = egui::Id::new("fluttersine-logo");
+    live_logo(ctx, "fluttersine-logo", FLUTTERSINE_LOGO_PNG, FLUTTERSINE_LOGO_FILE)
+}
+
+/// The Chrysalis emblem texture and its pixel size.
+pub fn chrysalis_emblem(ctx: &Context) -> (egui::TextureId, [usize; 2]) {
+    live_logo(ctx, "chrysalis-emblem", CHRYSALIS_EMBLEM_PNG, CHRYSALIS_EMBLEM_FILE)
+}
+
+/// A piece of artwork: `file` if it is there (re-read when it changes), else `built_in`.
+fn live_logo(ctx: &Context, name: &str, built_in: &[u8], file: &str) -> (egui::TextureId, [usize; 2]) {
+    let id = egui::Id::new(name);
     // Copy the cache out first: egui's context lock is not re-entrant.
     let cached = ctx.data(|d| d.get_temp::<LogoCache>(id));
     let now = std::time::Instant::now();
@@ -267,23 +280,22 @@ pub fn fluttersine_logo(ctx: &Context) -> (egui::TextureId, [usize; 2]) {
         }
     }
     ctx.request_repaint_after(std::time::Duration::from_secs(1));
-    let modified = std::fs::metadata(FLUTTERSINE_LOGO_FILE).and_then(|m| m.modified()).ok();
+    let modified = std::fs::metadata(file).and_then(|m| m.modified()).ok();
     if let Some(c) = cached.clone().filter(|c| c.modified == modified) {
         ctx.data_mut(|d| d.insert_temp(id, LogoCache { checked: now, ..c.clone() }));
         return (c.handle.id(), c.size);
     }
     // New or changed: decode the file if it's there (and readable), else the built-in copy.
-    let from_file = modified.and_then(|_| std::fs::read(FLUTTERSINE_LOGO_FILE).ok()).and_then(|b| decode_logo(&b));
-    let image = from_file
-        .or_else(|| decode_logo(FLUTTERSINE_LOGO_PNG))
-        .unwrap_or_else(|| ColorImage::new([1, 1], Color32::TRANSPARENT));
+    let from_file = modified.and_then(|_| std::fs::read(file).ok()).and_then(|b| decode_logo(&b));
+    let image =
+        from_file.or_else(|| decode_logo(built_in)).unwrap_or_else(|| ColorImage::new([1, 1], Color32::TRANSPARENT));
     let size = image.size;
     let handle = match cached {
         Some(mut c) => {
             c.handle.set(image, egui::TextureOptions::LINEAR);
             c.handle
         }
-        None => ctx.load_texture("fluttersine-logo", image, egui::TextureOptions::LINEAR),
+        None => ctx.load_texture(name, image, egui::TextureOptions::LINEAR),
     };
     ctx.data_mut(|d| d.insert_temp(id, LogoCache { handle: handle.clone(), size, modified, checked: now }));
     (handle.id(), size)

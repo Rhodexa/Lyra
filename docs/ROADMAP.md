@@ -29,6 +29,7 @@ built before the line it depends on.
 - [x] WAV export (the same bridge and engine, offline): project menu → Export WAV / Export stems (Ctrl+E / Ctrl+Shift+E), and `lyra --render song.lyra [out.wav] [--stems dir]`
 - [ ] Sends / sidechain from a real kick
 - [x] Fluttersine (FM synth, id `lyra.fluttersine`; port of the original: 6 operators, 6×6 matrix, filters, LFO, 18 presets) with a tabbed editor
+- [x] Chrysalis (wavetable synth, id `lyra.chrysalis`): 2 table oscillators (9 built-in tables + WAV import, morphing position, 7 warps, unison ×16), sub, noise, per-voice drive, 2 filters (SVF / formant / comb), 4 envelopes with curves, 4 drawn LFOs, a 16-slot matrix with "via", 4 macros, 7 presets, a hand-made editor; demo song `examples/chrysalis.rs`
 - [x] Fluttersine, beyond the port: tempo-synced LFOs (locked to the song while it plays), a second LFO, two mod envelopes, six mod slots (source → pitch, cutoff, volume, FM depth, or any operator's level / FM in / pitch / warp); the MOD page. Stereo (a PAN per operator, supersaw Width), and velocity sets loudness
 - [ ] Library folder for samples/plugins + "collect into project" (with M4)
 - Mixer inserts with effect slots; per-channel meters
@@ -53,7 +54,6 @@ built before the line it depends on.
 
 ## Later
 - Chip synth (Pipsqueak or Button Mash, name pending): tracker-style macros (volume / arp / pitch / duty), LFSR noise, chord-arp mode. Spec: [specs/chip-synth.md](specs/chip-synth.md)
-- Chrysalis (`lyra.chrysalis`), the wavetable synth: morphing tables, drawable LFOs, formant/comb filters, per-voice drive. Spec: [specs/chrysalis.md](specs/chrysalis.md)
 - VST3 / LV2, MIDI hardware input, JACK
 - Video / image-sequence lane synced to the timeline (for animation timing)
 - Theme packs from hand-made assets

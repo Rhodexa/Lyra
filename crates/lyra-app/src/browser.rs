@@ -213,7 +213,7 @@ pub struct AudioDrag(pub lyra_model::AudioId);
 
 /// Our own double-click test (egui's doesn't fire on rows that can also be
 /// dragged): true on a second click on the same `item` within 0.35 s.
-fn double_click<T: Clone + PartialEq + Send + Sync + 'static>(ui: &Ui, key: &str, item: T) -> bool {
+pub(crate) fn double_click<T: Clone + PartialEq + Send + Sync + 'static>(ui: &Ui, key: &str, item: T) -> bool {
     let now = ui.input(|i| i.time);
     let key = egui::Id::new(key);
     let last: Option<(T, f64)> = ui.data(|d| d.get_temp(key));

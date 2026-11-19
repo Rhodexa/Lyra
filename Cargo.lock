@@ -1419,6 +1419,7 @@ dependencies = [
  "egui",
  "hound",
  "lyra-catalog",
+ "lyra-chrysalis",
  "lyra-engine",
  "lyra-fluttersine",
  "lyra-model",
@@ -1433,12 +1434,21 @@ dependencies = [
 name = "lyra-catalog"
 version = "0.1.0"
 dependencies = [
+ "lyra-chrysalis",
  "lyra-drums",
  "lyra-effects",
  "lyra-fluttersine",
  "lyra-plugin",
  "lyra-sampler",
  "lyra-synth",
+]
+
+[[package]]
+name = "lyra-chrysalis"
+version = "0.1.0"
+dependencies = [
+ "lyra-dsp",
+ "lyra-plugin",
 ]
 
 [[package]]

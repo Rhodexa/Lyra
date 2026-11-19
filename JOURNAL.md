@@ -39,6 +39,14 @@ no marks would default to not urgent or 'coding teams judges'
 
 - [ ] *(deferred, 2026-11-19)* The ↕ gain grip sits in the middle of a clip (or of its frame in the audio-clip editor), so on a clip wider than the view it can be off screen. Fix: keep it in the middle of the clip's *visible* part.
 - [ ] *(from writing "Lyra Ascendant", 2026-11-19)* No automation yet. Risers had to be faked (an 8-second attack plus a 10-second filter-envelope attack on noise, and a supersaw gliding between overlapping notes). Synced LFOs now cover the wobble speeds; automation (M5, after CLAP) is still the real fix for risers and swells.
+- [ ] *Chrysalis, first version (2026-11-19): what's left out or rough, on purpose:*
+  - One imported WAV per channel: both oscillators can play it, but they can't each have their own. (A second file needs a real plugin-state blob; see ARCHITECTURE "Plugin parameters".)
+  - "LFO n rate" in the matrix only moves Retrig and One-shot LFOs. A Free LFO is shared by every voice, so one voice can't speed it up.
+  - If both oscillators FM each other, oscillator 2 hears oscillator 1 one block (≤ 32 samples) late.
+  - The drive and the Sync / Mirror / Quantize warps alias a little (no oversampling), like the Drive effect. The tables themselves don't.
+  - While a note glides, the band-limited copy changes every half octave with no crossfade: in theory a faint step in brightness at the very top.
+  - The built-in tables take ~37 MB of memory, shared by every Chrysalis.
+  - Macros have numbers, not names (names aren't numbers, so they'd need that same state blob).
 - [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
 
 - [ ] KDE shows a generic "W" icon for Lyra (title bar and taskbar): Wayland takes the icon from a `.desktop` file, which Lyra doesn't have yet. Needs a `lyra.desktop` + icon install (app id `lyra`).
@@ -55,6 +63,11 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Chrysalis, the wavetable synth (2026-11-19)**
+- [x] *(spec)* `docs/specs/chrysalis.md`
+  *→ built. Two wavetable oscillators (nine built-in tables, or load your own WAV), each with position, seven warps and up to 16 unison voices; a sub and a noise; per-voice drive; two filters (low/high/band/notch, a formant filter that sings A-E-I-O-U, combs); four envelopes with bendable curves; four LFOs you draw yourself; 16 mod slots (any source → anything, scaled "via" a second source); four macros. Seven presets: Growl, Talking bass, Reese, Pluck, Supersaw lead, Evolving pad, and Init. Its editor has the table as a stack of frames (drag it to move through it), and your emblem lives in the corner. Demo: `cargo run --release -p lyra-app --example chrysalis -- <dir>`, then `lyra --render "<dir>/Metamorphosis.lyra"`.*
+  *Please listen: the presets and the demo were levelled by measurement, not by ear.*
 
 **Fluttersine in stereo, and velocity you can hear (2026-11-19)**
 - [x] *(chat)* "Shouldn't it just generate stereo? The OUT column should have left/right knobs"

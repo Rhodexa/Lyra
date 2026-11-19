@@ -8,6 +8,7 @@ description = "Which plugins Lyra knows: every built-in, by id."
 [dependencies]
 lyra-plugin.workspace = true
 lyra-fluttersine.workspace = true
+lyra-chrysalis.workspace = true
 lyra-drums.workspace = true
 lyra-synth.workspace = true
 lyra-sampler.workspace = true

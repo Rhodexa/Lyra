@@ -21,9 +21,9 @@
 //! * 16 voices, stolen like `synth.rs` (free, else quietest released, else oldest),
 //!   plus a mono mode with a note stack, legato and glide.
 
-use lyra_dsp::Rng;
+use lyra_dsp::{poly_blep, sin_turns, svf, svf_coeffs, svf_coeffs_g, wrap, Rng};
 use lyra_plugin::{Curve, Event, ParamGroup, ParamInfo, Plugin, PluginInfo, ProcessContext, Transport};
-use std::f32::consts::{FRAC_PI_4, PI, SQRT_2, TAU};
+use std::f32::consts::{FRAC_PI_4, PI, SQRT_2};
 
 const MAX_VOICES: usize = 16;
 const OPS: usize = p::OPS;
@@ -171,11 +171,7 @@ pub mod p {
     pub const COUNT: usize = AMP_VEL + 1;
 }
 
-/// LFO sync choices, as labels; `SYNC_BEATS` gives each one's length in quarter notes.
-pub const SYNC_LABELS: [&str; 13] =
-    ["Free", "4 bars", "2 bars", "1 bar", "1/2", "1/4", "1/4 T", "1/8", "1/8 D", "1/8 T", "1/16", "1/16 T", "1/32"];
-pub const SYNC_BEATS: [f32; 13] =
-    [0.0, 16.0, 8.0, 4.0, 2.0, 1.0, 2.0 / 3.0, 0.5, 0.75, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125];
+pub use lyra_dsp::{SYNC_BEATS, SYNC_LABELS};
 
 /// What a mod slot listens to. LFOs are bipolar (-1..1), envelopes and
 /// velocity 0..1, key -1..1 around C4, random -1..1 (new on every note).
@@ -748,56 +744,6 @@ pub const FM_PRESETS: &[(&str, &[(usize, f32)])] = {
 
 // ---------------------------------------------------------------- DSP helpers
 
-#[inline]
-fn poly_blep(t: f32, dt: f32) -> f32 {
-    if t < dt {
-        let x = t / dt;
-        x + x - x * x - 1.0
-    } else if t > 1.0 - dt {
-        let x = (t - 1.0) / dt;
-        x * x + x + x + 1.0
-    } else {
-        0.0
-    }
-}
-
-/// 1.5 × 2^23: adding and subtracting it rounds an f32 to the nearest integer.
-const ROUND_MAGIC: f32 = 12_582_912.0;
-
-/// Nearest integer, without a libm call (baseline x86-64 has no `roundss`). |x| < 2^22.
-#[inline]
-fn round_fast(x: f32) -> f32 {
-    (x + ROUND_MAGIC) - ROUND_MAGIC
-}
-
-/// `x - floor(x)`: wraps a modulated phase back into `0..=1`, branch-free.
-#[inline]
-fn wrap(x: f32) -> f32 {
-    x - round_fast(x - 0.5)
-}
-
-/// `sin(2π·x)` for any phase `x` (in turns), as an odd Taylor polynomial evaluated in
-/// Estrin form (error < 1e-7). Much cheaper than `f32::sin`, and it sits on the critical
-/// path of every FM chain.
-#[inline]
-fn sin_turns(x: f32) -> f32 {
-    const C: [f32; 6] = [
-        TAU,
-        -41.341_7,   // -(2π)^3 / 3!
-        81.605_25,   //  (2π)^5 / 5!
-        -76.705_86,  // -(2π)^7 / 7!
-        42.058_693,  //  (2π)^9 / 9!
-        -15.094_643, // -(2π)^11 / 11!
-    ];
-    // Reduce to -0.5..0.5, then fold into -0.25..0.25 using sin(π - θ) = sin θ. Arithmetic, not branches:
-    // the branches would mispredict on every quarter cycle.
-    let x = x - round_fast(x);
-    let x = (0.25 - (x.abs() - 0.25).abs()).copysign(x);
-    let z = x * x;
-    let z2 = z * z;
-    x * ((C[0] + C[1] * z) + z2 * ((C[2] + C[3] * z) + z2 * (C[4] + C[5] * z)))
-}
-
 /// Phase warp: the first half of the cycle is squeezed into `0..pw`, the second half into
 /// `pw..1`. On a pulse this is classic PWM; on the other shapes it is "PWM on anything".
 /// `lo`/`hi` are the slopes of the two halves; the map is piecewise linear and
@@ -874,30 +820,6 @@ fn shape(w: u8, p: f32) -> f32 {
         }
         _ => 0.0,
     }
-}
-
-/// Coefficients of a TPT state-variable filter (`k` = 1/Q damping).
-#[inline]
-fn svf_coeffs(fc: f32, sr: f32, k: f32) -> (f32, f32, f32) {
-    svf_coeffs_g((PI * fc / sr).tan(), k)
-}
-
-#[inline]
-fn svf_coeffs_g(g: f32, k: f32) -> (f32, f32, f32) {
-    let a1 = 1.0 / (1.0 + g * (g + k));
-    let a2 = g * a1;
-    (a1, a2, g * a2)
-}
-
-/// One TPT SVF step; returns (band, low).
-#[inline]
-fn svf(s: &mut (f32, f32), x: f32, (a1, a2, a3): (f32, f32, f32)) -> (f32, f32) {
-    let v3 = x - s.1;
-    let v1 = a1 * s.0 + a2 * v3;
-    let v2 = s.1 + a2 * s.0 + a3 * v3;
-    s.0 = 2.0 * v1 - s.0;
-    s.1 = 2.0 * v2 - s.1;
-    (v1, v2)
 }
 
 // ---------------------------------------------------------------- derived patch
@@ -1996,6 +1918,7 @@ impl Plugin for Fm {
 mod tests {
     use super::*;
     use lyra_plugin::TimedEvent;
+    use std::f32::consts::TAU;
 
     const SR: f32 = 48_000.0;
 
