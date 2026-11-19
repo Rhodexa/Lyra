@@ -8,7 +8,7 @@
 mod songkit;
 use lyra_fluttersine::p::{self as fm, op};
 use lyra_model::{Clip, EffectSlot, Note, Project, TICKS_PER_BAR, TICKS_PER_STEP};
-use songkit::{parse, D_MAJOR};
+use songkit::{fm_volume, parse, D_MAJOR};
 
 const STEP: u32 = TICKS_PER_STEP;
 
@@ -145,25 +145,25 @@ fn build() -> Project {
     };
     let mut lead = vec![(op(0, fm::OP_WAVE), PULSE), (op(0, fm::OP_PW), 0.25), (op(0, fm::OP_VEL), 0.5)];
     lead.extend(env(0, 0.002, 0.3, 0.55, 0.07));
-    lead.extend([(fm::VIBRATO, 14.0), (fm::LFO_RATE, 5.5), (fm::VOLUME, 0.85)]);
+    lead.extend([(fm::VIBRATO, 14.0), (fm::LFO_RATE, 5.5), (fm::VOLUME, fm_volume(0.85))]);
     let mut harm = vec![(op(0, fm::OP_WAVE), PULSE), (op(0, fm::OP_PW), 0.125), (op(0, fm::OP_VEL), 0.5)];
     harm.extend(env(0, 0.002, 0.3, 0.5, 0.07));
-    harm.push((fm::VOLUME, 0.6));
+    harm.push((fm::VOLUME, fm_volume(0.6)));
     let mut arp_p = vec![(op(0, fm::OP_WAVE), PULSE), (op(0, fm::OP_PW), 0.5)];
     arp_p.extend(env(0, 0.001, 0.05, 0.6, 0.01));
-    arp_p.push((fm::VOLUME, 0.45));
+    arp_p.push((fm::VOLUME, fm_volume(0.45)));
     let mut bass_p = vec![(op(0, fm::OP_WAVE), TRI), (op(0, fm::OP_VEL), 0.3)];
     bass_p.extend(env(0, 0.001, 0.2, 0.9, 0.03));
-    bass_p.push((fm::VOLUME, 0.82));
+    bass_p.push((fm::VOLUME, fm_volume(0.82)));
     let mut drone = vec![(op(0, fm::OP_WAVE), SAW), (fm::LP_ON, 1.0), (fm::CUTOFF, 1100.0)];
     drone.extend(env(0, 0.5, 1.0, 1.0, 0.6));
-    drone.push((fm::VOLUME, 0.33));
+    drone.push((fm::VOLUME, fm_volume(0.33)));
     let mut snare = vec![(op(0, fm::OP_WAVE), NOISE), (fm::LP_ON, 1.0), (fm::CUTOFF, 7000.0)];
     snare.extend(env(0, 0.001, 0.12, 0.0, 0.08));
-    snare.push((fm::VOLUME, 1.0));
+    snare.push((fm::VOLUME, fm_volume(1.0)));
     let mut hat = vec![(op(0, fm::OP_WAVE), NOISE), (fm::HP_ON, 1.0), (fm::HP_CUTOFF, 7000.0)];
     hat.extend(env(0, 0.001, 0.03, 0.0, 0.02));
-    hat.push((fm::VOLUME, 0.7));
+    hat.push((fm::VOLUME, fm_volume(0.7)));
 
     let fs = "lyra.fluttersine";
     let ch_lead = p.add_channel("Lead 25%", fs, fm_patch(&lead));

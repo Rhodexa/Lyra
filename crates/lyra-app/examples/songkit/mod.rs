@@ -69,6 +69,13 @@ pub fn parse(s: &str, sig: &[(char, i32)]) -> Vec<Tok> {
     out
 }
 
+/// The gain Fluttersine's Volume gave at knob position `knob` when it was
+/// still a squared 0..1 knob (`knob² × 0.6`). The songs were mixed with that
+/// knob; this keeps them sounding the same now that Volume is a plain gain.
+pub fn fm_volume(knob: f32) -> f32 {
+    knob * knob * 0.6
+}
+
 /// Fluttersine with its Init defaults plus `set`.
 pub fn fm(set: &[(usize, f32)]) -> Vec<f32> {
     tweak(lyra_catalog::default_params("lyra.fluttersine"), set)

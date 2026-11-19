@@ -1,4 +1,7 @@
-# Spec: chip synth (working title, the director names it)
+# Spec: the chip synth (Pipsqueak or Button Mash: the director picks)
+
+**Settle the name before building:** the plugin id (`lyra.pipsqueak` or
+`lyra.buttonmash`) is saved in projects and never changes after.
 
 A built-in instrument for chiptune: NES / Game Boy / C64 *flavour*, not
 chip emulation. Fluttersine can imitate a pulse lead, but chiptune isn't

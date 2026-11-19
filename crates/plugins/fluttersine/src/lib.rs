@@ -278,7 +278,9 @@ const fn build_params() -> [ParamInfo; p::COUNT] {
         set!(out(o), new OUT_NAMES[o], 0.0, 1.0, if o == 0 { 1.0 } else { 0.0 }, "%", Lin);
         o += 1;
     }
-    set!(VOLUME, new "Volume", 0.0, 1.0, 0.7, "%", Lin);
+    // A linear gain. The port had a 0..1 knob squared × 0.6 behind a "%" label
+    // (100 % was −4.4 dB); the default is the same gain it gave at 0.7.
+    set!(VOLUME, new "Volume", 0.0, 1.0, 0.7 * 0.7 * 0.6, "gain", Curve::Fader);
     set!(MODE, choice "Mode", &["Poly", "Mono"], 0);
     set!(GLIDE, new "Glide", 0.0, 2.0, 0.08, "s", Lin);
     set!(GLIDE_MODE, choice "Glide when", &["Legato", "Always"], 0);
@@ -1111,8 +1113,7 @@ impl Prep {
             }
         }
 
-        let v = p[VOLUME].max(0.0);
-        q.volume = v * v * 0.6;
+        q.volume = p[VOLUME].max(0.0);
         q.mono = p[MODE] >= 0.5;
         q.glide_on = p[GLIDE] > 0.0;
         q.glide_k = if q.glide_on { 1.0 - (-3.0 / (p[GLIDE] * csr)).exp() } else { 1.0 };

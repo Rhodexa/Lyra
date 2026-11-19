@@ -15,7 +15,8 @@ use lyra_model::{EffectSlot, History, Project};
 use lyra_plugin::{Curve, ParamInfo};
 
 static PAN: ParamInfo = ParamInfo::new(0, "Pan", -1.0, 1.0, 0.0, "pan", Curve::Linear);
-const FADER_MAX: f32 = 1.25;
+/// +6 dB at the top; the travel follows `lyra_plugin::fader_gain` (unity near 79 %).
+const FADER_MAX: f32 = 2.0;
 
 /// Strip geometry, from the single-channel-strip study at about 60 % of its
 /// size, with a little more air on the right (the meter side) and a taller
@@ -221,15 +222,21 @@ fn fader(ui: &mut Ui, id: egui::Id, rect: Rect, value: &mut f32, fill: Color32) 
     let before = *value;
     let (y0, y1) = (rect.top() + 10.0, rect.bottom() - 9.0);
     let span = (y1 - y0).max(10.0);
+    // Work in travel (where the cap is), not gain, so the feel matches the drawing.
+    let mut travel = lyra_plugin::fader_travel(*value, FADER_MAX);
+    let moved_from = travel;
     if resp.dragged() {
         let fine = ui.input(|i| i.modifiers.shift);
-        *value -= resp.drag_delta().y / span * FADER_MAX * if fine { 0.2 } else { 1.0 };
+        travel -= resp.drag_delta().y / span * if fine { 0.2 } else { 1.0 };
     }
     if resp.hovered() {
         let wheel = ui.input(|i| i.raw_scroll_delta.y);
         if wheel != 0.0 {
-            *value += wheel.signum() * 0.02;
+            travel += wheel.signum() * 0.015; // about half a dB near unity
         }
+    }
+    if travel != moved_from {
+        *value = lyra_plugin::fader_gain(travel, FADER_MAX);
     }
     if resp.double_clicked() {
         *value = 0.8;
@@ -251,7 +258,7 @@ fn fader(ui: &mut Ui, id: egui::Id, rect: Rect, value: &mut f32, fill: Color32) 
     p.rect_filled(outer, cr(4), hex(0x161616));
     let inner = outer.shrink2(vec2(2.0, 2.0));
     p.rect_filled(inner, cr(2), hex(0x2b2b2b));
-    let y = y1 - *value / FADER_MAX * span;
+    let y = y1 - lyra_plugin::fader_travel(*value, FADER_MAX) * span;
     if inner.bottom() - y > 0.5 {
         p.rect_filled(Rect::from_min_max(pos2(inner.left(), y.max(inner.top())), inner.max), cr(2), fill);
     }

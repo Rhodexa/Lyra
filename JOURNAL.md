@@ -38,7 +38,6 @@ no marks would default to not urgent or 'coding teams judges'
 - [ ] Wheel-over-note changes velocity only while *hovering* a note. With a selection but no hover, the wheel still scrolls, otherwise you couldn't scroll while anything is selected. Tell me if you want it the other way.
 
 - [ ] *(deferred, 2026-11-19)* The ↕ gain grip sits in the middle of a clip (or of its frame in the audio-clip editor), so on a clip wider than the view it can be off screen. Fix: keep it in the middle of the clip's *visible* part.
-- [ ] *(same)* Fluttersine's Volume knob is squared (`v² × 0.6`), so 0.45 reads as "almost half" but is about −18 dB. My first mix had the snare 20 dB too quiet because of it. Show it in dB, or make it linear.
 - [ ] *(from writing "Lyra Ascendant", 2026-11-19)* No automation yet. Risers had to be faked (an 8-second attack plus a 10-second filter-envelope attack on noise, and a supersaw gliding between overlapping notes). Synced LFOs now cover the wobble speeds; automation (M5, after CLAP) is still the real fix for risers and swells.
 - [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
 
@@ -56,6 +55,10 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Faders that feel like faders (2026-11-19)**
+- [x] *(chat)* "The mixer doesn't behave too well", and Fluttersine's Volume said "100%" for −4.4 dB
+  *→ it wasn't you: the mixer faders, the rack's volume knobs and the master knob moved linearly in gain, so everything you mix with (−20 to 0 dB) was squeezed into the top third. Now all of them use one console-style taper (`Curve::Fader`): unity at about 79 % of the travel, +6 dB at the top, and they read in dB. Fluttersine's Volume is a plain gain now, shown in dB (same sound: the reel renders bit-identical).*
 
 **After writing two test songs in Lyra (2026-11-19) → `18381f6`, `5fdf189`, `13fc580`**
 - [x] *(Noticed by Claude)* Lyra couldn't export audio; my song scripts copied the bridge to get a WAV

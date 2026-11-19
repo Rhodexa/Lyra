@@ -28,7 +28,7 @@ use lyra_plugin::{Curve, ParamInfo};
 const STEP_GAP: f32 = 2.0;
 const BEAT_GAP: f32 = 6.0;
 
-pub static VOLUME: ParamInfo = ParamInfo::new(0, "Volume", 0.0, 1.25, 0.8, "%", Curve::Linear);
+pub static VOLUME: ParamInfo = ParamInfo::new(0, "Volume", 0.0, 2.0, 0.8, "gain", Curve::Fader);
 pub static PAN: ParamInfo = ParamInfo::new(1, "Pan", -1.0, 1.0, 0.0, "pan", Curve::Linear);
 
 fn step_x(s: u32) -> f32 {

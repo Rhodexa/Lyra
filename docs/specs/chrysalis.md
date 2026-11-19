@@ -1,4 +1,4 @@
-# Spec: wavetable synth (working title, the director names it)
+# Spec: Chrysalis, the wavetable synth (id `lyra.chrysalis`)
 
 A built-in instrument for modern electronic sound design: growls, talking
 basses, evolving pads, big supersaw-plus leads. Serum and Vital territory,

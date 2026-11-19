@@ -350,7 +350,7 @@ fn build() -> Project {
             (fm::F_ATTACK, 0.001),
             (fm::F_DECAY, 1.5),
             (fm::F_SUSTAIN, 0.0),
-            (fm::VOLUME, 0.75),
+            (fm::VOLUME, fm_volume(0.75)),
         ]),
     );
     let riser = p.add_channel(
@@ -366,7 +366,7 @@ fn build() -> Project {
             (fm::F_ENV, 6.0),
             (fm::F_ATTACK, 10.0),
             (fm::F_SUSTAIN, 1.0),
-            (fm::VOLUME, 0.6),
+            (fm::VOLUME, fm_volume(0.6)),
         ]),
     );
     let lift = p.add_channel(
@@ -379,14 +379,14 @@ fn build() -> Project {
                 (fm::GLIDE, 1.6),
                 (op(0, fm::OP_ATTACK), 2.0),
                 (op(1, fm::OP_ATTACK), 2.0),
-                (fm::VOLUME, 0.4),
+                (fm::VOLUME, fm_volume(0.4)),
             ],
         ),
     );
 
     // Bass: a sine sub under everything, and FM growls above it (high-passed
     // so they never fight the sub). Each growl's LFO is locked to the tempo.
-    let sub = p.add_channel("Sub", fs, fm_preset("Sub Bass", &[(fm::VOLUME, 0.8)]));
+    let sub = p.add_channel("Sub", fs, fm_preset("Sub Bass", &[(fm::VOLUME, fm_volume(0.8))]));
     let growl8 = p.add_channel(
         "Growl 1/8",
         fs,
@@ -412,7 +412,7 @@ fn build() -> Project {
                 (fm::HP_CUTOFF, 110.0),
                 (out(0), 1.0),
                 (out(1), 0.85),
-                (fm::VOLUME, 0.85),
+                (fm::VOLUME, fm_volume(0.85)),
             ],
         ),
     );
@@ -442,7 +442,7 @@ fn build() -> Project {
                 (fm::HP_CUTOFF, 110.0),
                 (out(0), 1.0),
                 (out(1), 0.85),
-                (fm::VOLUME, 0.8),
+                (fm::VOLUME, fm_volume(0.8)),
             ],
         ),
     );
@@ -467,14 +467,14 @@ fn build() -> Project {
                 (fm::HP_CUTOFF, 110.0),
                 (out(0), 1.0),
                 (out(1), 0.85),
-                (fm::VOLUME, 0.75),
+                (fm::VOLUME, fm_volume(0.75)),
             ],
         ),
     );
     let reese = p.add_channel(
         "Reese",
         fs,
-        fm_preset("Reese Bass", &[(fm::F_LFO, 1.2), (fm::LFO_RATE, 0.4), (fm::VOLUME, 0.75)]),
+        fm_preset("Reese Bass", &[(fm::F_LFO, 1.2), (fm::LFO_RATE, 0.4), (fm::VOLUME, fm_volume(0.75))]),
     );
     // The verse's FM pluck bass: the modulator dies fast, so each note starts
     // bright and closes to a sine.
@@ -493,14 +493,14 @@ fn build() -> Project {
             (op(1, fm::OP_VEL), 0.9),
             (matrix(1, 0), 0.6),
             (matrix(1, 1), 0.3),
-            (fm::VOLUME, 0.8),
+            (fm::VOLUME, fm_volume(0.8)),
         ]),
     );
 
     // Harmony and melody.
-    let pad = p.add_channel("Strings", fs, fm_preset("PWM Strings", &[(fm::VOLUME, 0.5)]));
-    let keys = p.add_channel("E-piano", fs, fm_preset("FM E-Piano", &[(fm::VOLUME, 0.6)]));
-    let bell = p.add_channel("Bells", fs, fm_preset("FM Bell", &[(fm::VOLUME, 0.45)]));
+    let pad = p.add_channel("Strings", fs, fm_preset("PWM Strings", &[(fm::VOLUME, fm_volume(0.5))]));
+    let keys = p.add_channel("E-piano", fs, fm_preset("FM E-Piano", &[(fm::VOLUME, fm_volume(0.6))]));
+    let bell = p.add_channel("Bells", fs, fm_preset("FM Bell", &[(fm::VOLUME, fm_volume(0.45))]));
     let brass = p.add_channel(
         "FM brass",
         fs,
@@ -521,7 +521,7 @@ fn build() -> Project {
                 (out(2), 0.8),
                 (fm::VIBRATO, 14.0),
                 (fm::LFO_RATE, 5.0),
-                (fm::VOLUME, 0.6),
+                (fm::VOLUME, fm_volume(0.6)),
             ],
         ),
     );
@@ -538,7 +538,7 @@ fn build() -> Project {
                 (fm::CUTOFF, 3500.0),
                 (fm::VIBRATO, 10.0),
                 (fm::LFO_RATE, 5.5),
-                (fm::VOLUME, 0.55),
+                (fm::VOLUME, fm_volume(0.55)),
             ],
         ),
     );
@@ -554,19 +554,19 @@ fn build() -> Project {
                 (op(1, fm::OP_SUSTAIN), 0.25),
                 (op(0, fm::OP_RELEASE), 0.15),
                 (op(1, fm::OP_RELEASE), 0.15),
-                (fm::VOLUME, 0.5),
+                (fm::VOLUME, fm_volume(0.5)),
             ],
         ),
     );
     let chip = p.add_channel(
         "Chip lead",
         fs,
-        fm_preset("Chip Lead 25% (Mono Glide)", &[(fm::GLIDE, 0.02), (fm::VOLUME, 0.55)]),
+        fm_preset("Chip Lead 25% (Mono Glide)", &[(fm::GLIDE, 0.02), (fm::VOLUME, fm_volume(0.55))]),
     );
     let chiparp = p.add_channel(
         "Chip arp",
         fs,
-        fm_preset("Chip Pulse 12.5%", &[(fm::VOLUME, 0.4), (fm::MODE, 1.0), (fm::GLIDE, 0.0)]),
+        fm_preset("Chip Pulse 12.5%", &[(fm::VOLUME, fm_volume(0.4)), (fm::MODE, 1.0), (fm::GLIDE, 0.0)]),
     );
 
     // ── mixer ──
@@ -965,11 +965,11 @@ fn build() -> Project {
         let c = p.channel_mut(id).unwrap();
         let mut db: f32 = db;
         if c.instrument == "lyra.fluttersine" {
-            // Fluttersine's Volume is squared: it takes the trim at half rate.
+            // Fluttersine's Volume is a gain up to 0 dB; what it can't give goes to the channel.
             let v = &mut c.params[fm::VOLUME];
-            let want = *v * 10f32.powf(db / 40.0);
+            let want = *v * 10f32.powf(db / 20.0);
             let got = want.min(1.0);
-            db = 40.0 * (want / got).log10(); // what the knob couldn't give
+            db = 20.0 * (want / got).log10();
             *v = got;
         }
         c.volume = (c.volume * 10f32.powf(db / 20.0)).min(1.25);

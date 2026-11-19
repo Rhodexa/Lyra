@@ -77,6 +77,21 @@ pub enum Curve {
     Linear,
     /// For frequencies and times: equal knob travel = equal *ratio*. `min` must be > 0.
     Exponential,
+    /// For volumes (a linear gain, `min` 0): a console fader's feel,
+    /// `gain = max × travel³`. Most of the travel is the range you mix in;
+    /// with `max` = 2 (+6 dB), unity sits at 79 % and −20 dB near 37 %.
+    Fader,
+}
+
+/// A fader's travel (0..1) to a linear gain, for [`Curve::Fader`].
+pub fn fader_gain(travel: f32, max: f32) -> f32 {
+    let t = travel.clamp(0.0, 1.0);
+    max * t * t * t
+}
+
+/// A linear gain to a fader's travel (0..1), for [`Curve::Fader`].
+pub fn fader_travel(gain: f32, max: f32) -> f32 {
+    (gain.max(0.0) / max).cbrt().min(1.0)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -86,7 +101,7 @@ pub struct ParamInfo {
     pub min: f32,
     pub max: f32,
     pub default: f32,
-    /// "Hz", "s", "%", "pan", "st" (semitones) or "" — used for display only.
+    /// "Hz", "s", "%", "pan", "st" (semitones), "gain" (linear, shown in dB) or "" — display only.
     pub unit: &'static str,
     pub curve: Curve,
     /// Non-empty = a choice parameter: the value is an index into these labels.
@@ -130,6 +145,7 @@ impl ParamInfo {
         match self.curve {
             Curve::Linear => (v - self.min) / (self.max - self.min),
             Curve::Exponential => (v / self.min).ln() / (self.max / self.min).ln(),
+            Curve::Fader => fader_travel(v, self.max),
         }
     }
 
@@ -139,6 +155,7 @@ impl ParamInfo {
         let v = match self.curve {
             Curve::Linear => self.min + n * (self.max - self.min),
             Curve::Exponential => self.min * (self.max / self.min).powf(n),
+            Curve::Fader => fader_gain(n, self.max),
         };
         if self.is_choice() {
             v.round()
@@ -168,6 +185,9 @@ impl ParamInfo {
             "ct" => format!("{v:+.0} ct"),
             "oct" => format!("{v:+.2} oct"),
             "dB" => format!("{v:+.1} dB"),
+            // A linear gain, shown as what it does.
+            "gain" if v <= 1e-5 => "−inf dB".to_string(),
+            "gain" => format!("{:+.1} dB", gain_to_db(v)),
             "pan" if v.abs() < 0.01 => "Centre".to_string(),
             "pan" if v < 0.0 => format!("L {:.0}", -v * 100.0),
             "pan" => format!("R {:.0}", v * 100.0),
@@ -257,4 +277,25 @@ pub trait Plugin: Send {
 /// Default values of a parameter list, in id order.
 pub fn default_params(params: &[ParamInfo]) -> Vec<f32> {
     params.iter().map(|p| p.default).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_fader_taper_round_trips_and_puts_unity_high() {
+        for k in 0..=100 {
+            let t = k as f32 / 100.0;
+            assert!((fader_travel(fader_gain(t, 2.0), 2.0) - t).abs() < 1e-5, "travel {t}");
+        }
+        // With +6 dB at the top: unity at ~79 %, −20 dB at ~37 %, silence at 0.
+        assert!((fader_travel(1.0, 2.0) - 0.7937).abs() < 1e-3);
+        assert!((fader_travel(db_to_gain(-20.0), 2.0) - 0.3684).abs() < 1e-3);
+        assert_eq!(fader_gain(0.0, 2.0), 0.0);
+        let p = ParamInfo::new(0, "Volume", 0.0, 2.0, 1.0, "gain", Curve::Fader);
+        assert_eq!(p.format(1.0), "+0.0 dB");
+        assert_eq!(p.format(0.0), "−inf dB");
+        assert_eq!(p.from_normalized(1.0), 2.0);
+    }
 }
