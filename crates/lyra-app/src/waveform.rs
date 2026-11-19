@@ -102,11 +102,16 @@ pub fn paint_fade(
     pos2(mx, y_of(mx))
 }
 
+/// How big handles are drawn: 1 on the arrangement's clips, bigger in the
+/// audio-clip editor (where there's room).
+pub const SMALL: f32 = 1.0;
+pub const LARGE: f32 = 2.0;
+
 /// A fade handle: a dot at a fade's end (drag sideways: length), in the
 /// clip's own colour.
-pub fn paint_handle(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
-    halo(painter, at, 11.0);
-    painter.circle_filled(at, if hot { 8.5 } else { 7.0 }, color);
+pub fn paint_handle(painter: &Painter, at: Pos2, color: Color32, hot: bool, size: f32) {
+    halo(painter, at, 6.0 * size);
+    painter.circle_filled(at, if hot { 4.5 } else { 3.5 } * size, color);
 }
 
 /// A soft dark disc behind a handle, so it reads on top of the waveform.
@@ -115,14 +120,14 @@ fn halo(painter: &Painter, at: Pos2, r: f32) {
 }
 
 /// A tension handle: a ring on a fade's curve (drag up/down: bend it).
-pub fn paint_tension(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
-    halo(painter, at, 11.5);
-    painter.circle_stroke(at, if hot { 8.5 } else { 7.0 }, stroke(2.0, color));
+pub fn paint_tension(painter: &Painter, at: Pos2, color: Color32, hot: bool, size: f32) {
+    halo(painter, at, 6.5 * size);
+    painter.circle_stroke(at, if hot { 4.5 } else { 3.5 } * size, stroke(1.5 * size.sqrt(), color));
 }
 
 /// The gain grip: a small up/down arrow (drag up/down: louder/quieter).
-pub fn paint_gain(painter: &Painter, at: Pos2, color: Color32, hot: bool) {
-    let s = if hot { 2.4 } else { 2.0 };
+pub fn paint_gain(painter: &Painter, at: Pos2, color: Color32, hot: bool, size: f32) {
+    let s = if hot { 1.2 } else { 1.0 } * size;
     halo(painter, at, 8.0 * s);
     let tri = |dir: f32| {
         let tip = at + egui::vec2(0.0, -6.0 * dir * s);

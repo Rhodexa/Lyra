@@ -211,11 +211,16 @@ struct Handle {
     grip: Grip,
 }
 
-const HANDLE_R: f32 = 10.0;
+const HANDLE_R: f32 = 6.0;
 /// Fades narrower than this show no curve ring (too fiddly).
-const CURVE_MIN_W: f32 = 28.0;
-/// Clips shorter than this show no handles at all: just the waveform.
-const HANDLES_MIN_H: f32 = 40.0;
+const CURVE_MIN_W: f32 = 16.0;
+
+/// Clips smaller than this on screen show no handles at all (just the
+/// waveform), so a short or narrow clip is never all handles: it can always
+/// be grabbed and moved.
+fn shows_handles(r: Rect) -> bool {
+    r.height() >= 40.0 && r.width() >= 64.0
+}
 
 fn curve_mid(g: &FadeGeo, end: End, tension: f32) -> Option<Pos2> {
     let (f0, f1) = if end == End::In { (g.x0, g.x_in) } else { (g.x_out, g.x_end) };
@@ -233,7 +238,7 @@ fn handle_hit(v: &View, p: &Project, pos: Pos2) -> Option<Handle> {
     let i = hit(v, &p.clips, pos)?;
     let c = &p.clips[i];
     c.audio()?;
-    if v.clip_rect(c).height() < HANDLES_MIN_H {
+    if !shows_handles(v.clip_rect(c)) {
         return None;
     }
     let g = fade_geo(v, p, c);
@@ -1211,21 +1216,21 @@ fn paint_audio(
         }
     }
     let Some(hot) = hot else { return };
-    if v.clip_rect(c).height() < HANDLES_MIN_H {
-        return; // too short to grab anything: just the waveform
+    if !shows_handles(v.clip_rect(c)) {
+        return; // too small to grab anything: just the waveform
     }
     let on_grid = painter.with_clip_rect(v.grid);
     for (k, end) in [End::In, End::Out].into_iter().enumerate() {
         if let Some(mid) = mids[k] {
-            waveform::paint_tension(&clipped, mid, light.hi, hot == Some(Grip::Curve(end)));
+            waveform::paint_tension(&clipped, mid, light.hi, hot == Some(Grip::Curve(end)), waveform::SMALL);
         }
         let x = if end == End::In { g.x_in } else { g.x_out };
-        waveform::paint_handle(&on_grid, pos2(x, g.handles_y), light.hi, hot == Some(Grip::Fade(end)));
+        waveform::paint_handle(&on_grid, pos2(x, g.handles_y), light.hi, hot == Some(Grip::Fade(end)), waveform::SMALL);
     }
     // The gain grip, with the clip's gain beside it while it's under the mouse.
     let at = gain_pos(&g);
     let gain_hot = hot == Some(Grip::Gain);
-    waveform::paint_gain(&clipped, at, light.hi, gain_hot);
+    waveform::paint_gain(&clipped, at, light.hi, gain_hot, waveform::SMALL);
     if gain_hot {
         let text = format!("{:+.1} dB", c.gain);
         clipped.text(at + vec2(9.0, 0.0), Align2::LEFT_CENTER, text, FontId::monospace(m.text_small), light.hi);

@@ -547,13 +547,19 @@ impl AudioEditor {
                     waveform::paint_fade(&painter, f.rect, end, f0, f1, fade.tension, ink, false);
                 }
                 if let Some(mid) = f.curve_mid(end, fade.tension) {
-                    waveform::paint_tension(&painter, mid, light.hi, hv == Some(Hover::Curve(end)));
+                    waveform::paint_tension(&painter, mid, light.hi, hv == Some(Hover::Curve(end)), waveform::LARGE);
                 }
                 let x = if end == End::In { f.x_in } else { f.x_out };
-                waveform::paint_handle(&painter, pos2(x, f.handles_y), light.hi, hv == Some(Hover::Fade(end)));
+                waveform::paint_handle(
+                    &painter,
+                    pos2(x, f.handles_y),
+                    light.hi,
+                    hv == Some(Hover::Fade(end)),
+                    waveform::LARGE,
+                );
             }
             let gain_hot = hv == Some(Hover::Gain);
-            waveform::paint_gain(&painter, f.rect.center(), light.hi, gain_hot);
+            waveform::paint_gain(&painter, f.rect.center(), light.hi, gain_hot, waveform::LARGE);
             if gain_hot || c.gain != 0.0 {
                 let text = format!("{:+.1} dB", c.gain);
                 painter.text(
