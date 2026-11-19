@@ -28,6 +28,7 @@
 //! for an imported table). The pictures call `lyra_chrysalis` itself, so
 //! they show exactly what plays.
 
+use crate::flex::{self, Grow, Px};
 use crate::fm_editor::wheel_step;
 use crate::rack::tracked;
 use crate::theme::{self, cr, stroke};
@@ -124,54 +125,736 @@ impl Ed<'_> {
 }
 
 // ───────────────────────────────────────────────────────────── layout
+//
+// Everything is placed with `flex` (fixed parts and growing parts in rows
+// and columns), so pieces line up and fill their panels instead of being
+// positioned by hand.
 
 const W: f32 = 1100.0;
-const HEADER_H: f32 = 80.0;
-const OSC_H: f32 = 330.0;
+const HEADER_H: f32 = 76.0;
+const OSC_H: f32 = 316.0;
 const FX_H: f32 = 206.0;
-const MOD_H: f32 = 250.0;
+const MOD_H: f32 = 256.0;
 const GAP: f32 = 6.0;
 const PAD: f32 = 10.0;
 const TITLE_H: f32 = 20.0;
 const KEY_H: f32 = 24.0;
-const KNOB: f32 = 34.0;
-const CELL: Vec2 = vec2(64.0, 64.0);
+/// The one line of text under a knob.
+const LABEL_H: f32 = 15.0;
 
 pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     let mut ed = Ed { p, h, ch };
     let total = vec2(W, HEADER_H + OSC_H + FX_H + MOD_H + 3.0 * GAP);
     let (all, _) = ui.allocate_exact_size(total, Sense::hover());
     backdrop(ui, all);
-    let mut y = all.top();
-    let row = |y: &mut f32, h: f32| {
-        let r = Rect::from_min_size(pos2(all.left(), *y), vec2(W, h));
-        *y += h + GAP;
-        r
-    };
-    let header = row(&mut y, HEADER_H);
-    let oscs = row(&mut y, OSC_H);
-    let fx = row(&mut y, FX_H);
-    let mods = row(&mut y, MOD_H);
-
+    let [header, oscs, fx, mods] = flex::col(all, [Px(HEADER_H), Px(OSC_H), Px(FX_H), Px(MOD_H)], GAP);
     header_bar(ui, &mut ed, header);
-    let half = (W - GAP) / 2.0;
-    for o in 0..2 {
-        let r = Rect::from_min_size(pos2(oscs.left() + o as f32 * (half + GAP), oscs.top()), vec2(half, OSC_H));
-        osc_panel(ui, &mut ed, o, r);
-    }
-    let (sub_w, drive_w) = (212.0, 236.0);
-    let sub_r = Rect::from_min_size(fx.min, vec2(sub_w, FX_H));
-    let drive_r = Rect::from_min_size(pos2(sub_r.right() + GAP, fx.top()), vec2(drive_w, FX_H));
-    let filter_r = Rect::from_min_max(pos2(drive_r.right() + GAP, fx.top()), fx.max);
-    sub_panel(ui, &mut ed, sub_r);
-    drive_panel(ui, &mut ed, drive_r);
-    filter_panel(ui, &mut ed, filter_r);
-    let macros_w = 252.0;
-    let mod_r = Rect::from_min_size(mods.min, vec2(W - macros_w - GAP, MOD_H));
-    let mac_r = Rect::from_min_max(pos2(mod_r.right() + GAP, mods.top()), mods.max);
-    mod_panel(ui, &mut ed, mod_r);
-    macros_panel(ui, &mut ed, mac_r);
+    let [a, b] = flex::row(oscs, [Grow(1.0), Grow(1.0)], GAP);
+    osc_panel(ui, &mut ed, 0, a);
+    osc_panel(ui, &mut ed, 1, b);
+    let [sub, drive, filters] = flex::row(fx, [Px(246.0), Px(222.0), Grow(1.0)], GAP);
+    sub_panel(ui, &mut ed, sub);
+    drive_panel(ui, &mut ed, drive);
+    filter_panel(ui, &mut ed, filters);
+    let [modulation, macros] = flex::row(mods, [Grow(1.0), Px(180.0)], GAP);
+    mod_panel(ui, &mut ed, modulation);
+    macros_panel(ui, &mut ed, macros);
 }
+
+/// A child Ui filling `r` exactly (top-down, centred), greyed out unless `enabled`.
+fn place<R>(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash, enabled: bool, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let mut child = ui.new_child(UiBuilder::new().id_salt(salt).max_rect(r).layout(Layout::top_down(Align::Center)));
+    child.spacing_mut().item_spacing = vec2(0.0, 0.0);
+    child.add_enabled_ui(enabled, add).inner
+}
+
+// ───────────────────────────────────────────────────────────── the readout
+
+/// What the mouse is on: a control's full name and value, shown in the
+/// header (so the knobs themselves carry only their names).
+#[derive(Clone)]
+struct Readout {
+    name: &'static str,
+    value: String,
+    color: Color32,
+}
+
+fn readout_id() -> Id {
+    Id::new("chrys-readout")
+}
+
+fn readout(ui: &Ui, name: &'static str, value: String, color: Color32) {
+    ui.ctx().data_mut(|d| d.insert_temp(readout_id(), Readout { name, value, color }));
+}
+
+fn readout_display(ui: &Ui, r: Rect) {
+    let p = ui.painter();
+    screen(p, r);
+    let shown = ui.ctx().data(|d| d.get_temp::<Readout>(readout_id()));
+    let inner = r.shrink2(vec2(10.0, 6.0));
+    if let Some(ro) = shown {
+        // The editor calls the oscillators A and B; the saved names say 1 and 2.
+        let name = ro.name.replace("Osc 1", "Osc A").replace("Osc 2", "Osc B");
+        caps(p, inner.left_top() + vec2(0.0, 6.0), &name, TEXT_DIM, Align2::LEFT_CENTER);
+        p.text(inner.left_bottom(), Align2::LEFT_BOTTOM, ro.value, FontId::proportional(16.0), ro.color);
+    }
+}
+
+// ───────────────────────────────────────────────────────────── controls
+
+/// A knob filling the cell `r`: as big as fits (up to `max_d`), its name
+/// under it. Hovered or turned, the name becomes the value and the header's
+/// readout shows both.
+#[allow(clippy::too_many_arguments)]
+fn knob_in(ui: &mut Ui, ed: &mut Ed, r: Rect, id: usize, label: &str, color: Color32, enabled: bool, max_d: f32) {
+    let info = &PARAMS[id];
+    let d = (r.height() - LABEL_H - 2.0).min(r.width() - 4.0).min(max_d).max(16.0);
+    let top = r.top() + (r.height() - d - LABEL_H - 2.0) * 0.5;
+    let kr = Rect::from_min_size(pos2(r.center().x - d * 0.5, top), vec2(d, d));
+    let lr = Rect::from_min_size(pos2(r.left(), kr.bottom() + 2.0), vec2(r.width(), LABEL_H));
+    place(ui, kr.union(lr), ("chrys-knob", id), enabled, |ui| {
+        let mut v = ed.v(id);
+        let resp = crate::widgets::knob_painted(ui, &mut v, info, d, |p, rect, v, hot| {
+            paint_knob(p, rect, info, v, color, hot)
+        });
+        if enabled {
+            ed.track(&resp, id, v);
+        }
+        let hot = resp.hovered() || resp.dragged();
+        let value = format_value(id, ed.v(id));
+        if hot {
+            readout(ui, info.name, value.clone(), color);
+        }
+        let (text, ink) = if hot { (value, color) } else { (label.to_string(), TEXT_DIM) };
+        ui.painter().text(lr.center(), Align2::CENTER_CENTER, text, FontId::proportional(10.5), ink);
+    });
+}
+
+/// Segmented switch filling `size`: one dark recess; the chosen segment is
+/// solid colour with dark lettering. Returns the click.
+fn seg(ui: &mut Ui, labels: &[&str], chosen: usize, color: Color32, size: Vec2, hint: &str) -> Option<usize> {
+    let seg_w = size.x / labels.len() as f32;
+    let (r, resp) = ui.allocate_exact_size(size, Sense::click());
+    let p = ui.painter();
+    p.rect_filled(r, cr(3), SCREEN);
+    let hover = resp.hover_pos().map(|pos| (((pos.x - r.left()) / seg_w) as usize).min(labels.len() - 1));
+    for (i, l) in labels.iter().enumerate() {
+        let s = Rect::from_min_size(pos2(r.left() + i as f32 * seg_w, r.top()), vec2(seg_w, size.y)).shrink(2.0);
+        if i == chosen {
+            p.rect_filled(s, cr(2), color);
+            caps_style(p, s.center(), l, INK_ON, Align2::CENTER_CENTER, 0.8, true);
+        } else {
+            if hover == Some(i) {
+                p.rect_filled(s, cr(2), HOVER);
+            }
+            let ink = if hover == Some(i) { TEXT } else { TEXT_DIM };
+            caps_spaced(p, s.center(), l, ink, Align2::CENTER_CENTER, 0.8);
+        }
+    }
+    let clicked = resp.clicked().then_some(()).and(hover);
+    resp.on_hover_text(hint);
+    clicked
+}
+
+/// A key with a word on it, filling `size`: solid colour with dark lettering
+/// when lit, a dark recess otherwise.
+fn key(ui: &mut Ui, text: &str, size: Vec2, lit: bool, color: Color32, hint: &str) -> Response {
+    let (r, resp) = ui.allocate_exact_size(size, Sense::click());
+    paint_key(ui.painter(), r, text, lit, resp.hovered(), color, TEXT_DIM);
+    resp.on_hover_text(hint)
+}
+
+fn paint_key(p: &egui::Painter, r: Rect, text: &str, lit: bool, hot: bool, color: Color32, ink: Color32) {
+    if lit {
+        p.rect_filled(r, cr(3), if hot { theme::shade(color, 1.08) } else { color });
+        caps_style(p, r.center(), text, INK_ON, Align2::CENTER_CENTER, 1.0, true);
+    } else {
+        p.rect_filled(r, cr(3), if hot { HOVER } else { SCREEN });
+        caps_spaced(p, r.center(), text, if hot { TEXT } else { ink }, Align2::CENTER_CENTER, 1.0);
+    }
+}
+
+/// An on/off parameter as a key with its name on it.
+fn toggle(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, size: Vec2, hint: &str) {
+    let on = ed.on(id);
+    if key(ui, label, size, on, color, hint).clicked() {
+        ed.toggle(id);
+    }
+}
+
+/// A dropdown for a choice parameter filling `size`: click for the list,
+/// scroll to step. A dark field; no border.
+fn well(ui: &mut Ui, ed: &mut Ed, id: usize, size: Vec2, color: Color32, hint: &str) {
+    let info = &PARAMS[id];
+    let n = info.labels.len();
+    let at = ed.choice(id).min(n - 1);
+    let (r, resp) = ui.allocate_exact_size(size, Sense::click());
+    let p = ui.painter();
+    p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
+    let ink = if at == 0 { TEXT_DIM } else { TEXT };
+    p.text(r.left_center() + vec2(8.0, 0.0), Align2::LEFT_CENTER, info.labels[at], FontId::proportional(12.0), ink);
+    chevron(p, r.right_center() - vec2(10.0, 1.0), 3.0, alpha(color, 0.7));
+    if resp.hovered() {
+        readout(ui, info.name, info.labels[at].to_string(), color);
+    }
+    if let Some(step) = wheel_step(ui, r) {
+        ed.set(id, (at as i32 + step).clamp(0, n as i32 - 1) as f32);
+    }
+    let popup = ui.make_persistent_id(("chrys-well", ed.ch, id));
+    if resp.clicked() {
+        ui.memory_mut(|m| m.toggle_popup(popup));
+    }
+    let resp = resp.on_hover_text(hint);
+    let mut pick = None;
+    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
+        ui.set_min_width(size.x);
+        egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+            for (k, label) in info.labels.iter().enumerate() {
+                if ui.selectable_label(k == at, *label).clicked() {
+                    pick = Some(k);
+                }
+            }
+        });
+    });
+    if let Some(k) = pick {
+        ed.set(id, k as f32);
+    }
+}
+
+// ───────────────────────────────────────────────────────────── header
+
+fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
+    panel(ui, r, "", GREEN);
+    let p = ui.painter();
+    // The nameplate: the emblem lights the bar around it, and its glow runs
+    // out along the bar like the wings' trails.
+    let c = r.center();
+    let glow = [(0.0, alpha(GREEN, 0.16)), (0.5, alpha(CYAN, 0.05)), (1.0, Color32::TRANSPARENT)];
+    theme::radial_circle(p, c, 190.0, c, &glow);
+    for side in [-1.0f32, 1.0] {
+        let n = 24;
+        for k in 0..n {
+            let (t0, t1) = (k as f32 / n as f32, (k + 1) as f32 / n as f32);
+            let x = |t: f32| c.x + side * (60.0 + t * 230.0);
+            let y = |t: f32| c.y + 14.0 - 10.0 * (t * PI).sin() * (1.0 - t);
+            let a = (1.0 - t0).powi(2);
+            p.line_segment([pos2(x(t0), y(t0)), pos2(x(t1), y(t1))], stroke(1.2, alpha(CYAN, 0.5 * a)));
+        }
+    }
+    let (tex, [w, h]) = theme::chrysalis_emblem(ui.ctx());
+    // A badge: a little taller than the bar, so it breaks out of it.
+    let eh = r.height() + 18.0;
+    let img = Rect::from_center_size(c, vec2(eh * w as f32 / h as f32, eh));
+    p.image(tex, img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+    ui.interact(img, Id::new("chrys-emblem"), Sense::hover()).on_hover_text("Chrysalis · wavetable synthesizer");
+
+    let [left, _, right] = flex::row(r.shrink2(vec2(PAD + 4.0, 0.0)), [Grow(1.0), Px(190.0), Grow(1.0)], 0.0);
+    // Left: the preset, and the readout of whatever the mouse is on.
+    let [preset, read] = flex::row(left, [Grow(1.0), Px(150.0)], 10.0);
+    let block = flex::center(preset, vec2(preset.width(), 12.0 + 4.0 + 30.0));
+    let [cap, field] = flex::col(block, [Px(12.0), Px(30.0)], 4.0);
+    caps(ui.painter(), cap.left_center() + vec2(2.0, 0.0), "preset", TEXT_FAINT, Align2::LEFT_CENTER);
+    preset_row(ui, ed, field);
+    readout_display(ui, flex::center(read, vec2(read.width(), 46.0)));
+    // Right: the voice.
+    let [_, knobs, switches] = flex::row(right, [Grow(1.0), Px(3.0 * 62.0), Px(140.0)], 10.0);
+    let cells = flex::even_row(flex::center(knobs, vec2(knobs.width(), 60.0)), 3, 0.0);
+    knob_in(ui, ed, cells[0], p::VOLUME, "Volume", GREEN, true, 40.0);
+    knob_in(ui, ed, cells[1], p::AMP_VEL, "Velocity", GREEN, true, 40.0);
+    knob_in(ui, ed, cells[2], p::GLIDE, "Glide", GREEN, true, 40.0);
+    let [m1, m2] =
+        flex::col(flex::center(switches, vec2(switches.width(), 2.0 * KEY_H + 6.0)), [Px(KEY_H), Px(KEY_H)], 6.0);
+    let mut set = None;
+    place(ui, m1, "chrys-mode", true, |ui| {
+        let hint = "Mono: one note at a time, with legato and glide";
+        if let Some(k) = seg(ui, &["poly", "mono"], ed.choice(p::MODE), GREEN, m1.size(), hint) {
+            set = Some((p::MODE, k));
+        }
+    });
+    let glides = ed.v(p::GLIDE) > 0.0;
+    place(ui, m2, "chrys-glide-mode", glides, |ui| {
+        let hint = "Glide only between overlapping notes (legato), or on every note";
+        if let Some(k) = seg(ui, &["legato", "always"], ed.choice(p::GLIDE_MODE), GREEN, m2.size(), hint) {
+            set = Some((p::GLIDE_MODE, k));
+        }
+    });
+    if let Some((id, k)) = set {
+        ed.set(id, k as f32);
+    }
+}
+
+/// `‹ name ›` in `r`: click the name for the list, scroll over it to step.
+fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
+    let n = PRESETS.len();
+    let current = current_preset(&ed.p.channels[ed.ch].params);
+    let last_id = Id::new(("chrys-last-preset", ed.ch));
+    let last = ui.ctx().data(|d| d.get_temp::<usize>(last_id));
+    let at = current.or(last).unwrap_or(0);
+    let (name, edited) = match (current, last) {
+        (Some(k), _) => (PRESETS[k].0, false),
+        (None, Some(k)) => (PRESETS[k].0, true),
+        (None, None) => ("Custom", false),
+    };
+    let [prev, field, next] = flex::row(r, [Px(r.height()), Grow(1.0), Px(r.height())], 4.0);
+    let mut pick = None;
+    for (rect, left) in [(prev, true), (next, false)] {
+        let resp = ui.interact(rect, Id::new(("chrys-preset-step", left)), Sense::click());
+        let p = ui.painter();
+        p.rect_filled(rect, cr(3), if resp.hovered() { HOVER } else { SCREEN });
+        let s = if left { -1.0 } else { 1.0 };
+        let c = rect.center();
+        let pts = vec![c + vec2(-2.5 * s, -5.0), c + vec2(2.5 * s, 0.0), c + vec2(-2.5 * s, 5.0)];
+        p.add(Shape::line(pts, stroke(1.6, GREEN)));
+        if resp.on_hover_text(if left { "Previous preset" } else { "Next preset" }).clicked() {
+            pick = Some(if left { (at + n - 1) % n } else { (at + 1) % n });
+        }
+    }
+    let resp = ui.interact(field, Id::new(("chrys-preset-field", ed.ch)), Sense::click());
+    let p = ui.painter();
+    p.rect_filled(field, cr(3), if resp.hovered() { HOVER } else { SCREEN });
+    let t = p.text(field.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(15.0), TEXT);
+    if edited {
+        p.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", FontId::proportional(10.5), TEXT_DIM);
+    }
+    chevron(p, field.right_center() - vec2(11.0, 1.0), 3.5, GREEN);
+    if let Some(step) = wheel_step(ui, field) {
+        pick = Some((at as i32 + step).rem_euclid(n as i32) as usize);
+    }
+    let popup = ui.make_persistent_id(("chrys-preset-list", ed.ch));
+    if resp.clicked() {
+        ui.memory_mut(|m| m.toggle_popup(popup));
+    }
+    let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list");
+    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
+        ui.set_min_width(field.width());
+        for (k, (name, _)) in PRESETS.iter().enumerate() {
+            if ui.selectable_label(current == Some(k), *name).clicked() {
+                pick = Some(k);
+            }
+        }
+    });
+    if let Some(k) = pick {
+        ed.h.checkpoint(ed.p);
+        ed.p.channels[ed.ch].params = preset_values(k);
+        ui.ctx().data_mut(|d| d.insert_temp(last_id, k));
+    }
+}
+
+// ───────────────────────────────────────────────────────────── oscillators
+
+fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
+    let color = OSC_COLORS[o];
+    let inner = panel(ui, r, "", color);
+    let at = |k: usize| p::osc(o, k);
+    let on = ed.on(at(p::OSC_ON));
+    let is_import = ed.choice(at(p::TABLE)) == IMPORTED;
+    let [bar, scope, k1, k2] = flex::col(inner, [Px(KEY_H), Grow(1.0), Px(52.0), Px(52.0)], 6.0);
+    let [tog, table, load, name, warp_cap, warp_r] =
+        flex::row(bar, [Px(72.0), Px(124.0), Px(54.0), Grow(1.0), Px(40.0), Px(108.0)], 6.0);
+    let label = if o == 0 { "osc a" } else { "osc b" };
+    place(ui, tog, ("chrys-osc-on", o), true, |ui| {
+        toggle(ui, ed, at(p::OSC_ON), label, color, tog.size(), "Oscillator on / off")
+    });
+    place(ui, table, ("chrys-osc-table", o), true, |ui| {
+        well(ui, ed, at(p::TABLE), table.size(), color, "Wavetable: scroll to flip through")
+    });
+    let has = ed.p.channels[ed.ch].sample.is_some();
+    let hint = "Import a WAV as a wavetable (cut into frames of 2048 samples). Both oscillators can play it.";
+    let clicked = place(ui, load, ("chrys-osc-load", o), true, |ui| {
+        key(ui, "load", load.size(), is_import && has, color, hint).clicked()
+    });
+    if clicked {
+        if let Some(path) = rfd::FileDialog::new().add_filter("Audio", &["wav", "flac"]).pick_file() {
+            ed.h.checkpoint(ed.p);
+            ed.p.channels[ed.ch].sample = Some(crate::samples::name_for(&path));
+            ed.put(at(p::TABLE), IMPORTED as f32);
+        }
+    }
+    if is_import {
+        let text = ed.p.channels[ed.ch].sample.as_deref().map_or("no WAV loaded".into(), crate::samples::display_name);
+        ui.painter().text(name.left_center(), Align2::LEFT_CENTER, text, FontId::proportional(11.0), TEXT_DIM);
+    }
+    caps(ui.painter(), warp_cap.right_center(), "warp", TEXT_FAINT, Align2::RIGHT_CENTER);
+    place(ui, warp_r, ("chrys-osc-warp", o), true, |ui| {
+        well(ui, ed, at(p::WARP_MODE), warp_r.size(), color, "Warp: how the phase is bent before the table is read")
+    });
+    place(ui, scope, ("chrys-scope", o), on, |ui| table_view(ui, ed, o, scope, color));
+    // Seven columns in both rows, so the knobs line up.
+    let warps = ed.choice(at(p::WARP_MODE)) != 0;
+    let voices = ed.choice(at(p::UNISON)) > 0;
+    let c1 = flex::even_row(k1, 7, 2.0);
+    let c2 = flex::even_row(k2, 7, 2.0);
+    let row1 =
+        [(p::POS, "Position", true), (p::WARP, "Warp", warps), (p::OCTAVE, "Octave", true), (p::SEMI, "Semi", true)];
+    let row1b = [(p::FINE, "Fine", true), (p::LEVEL, "Level", true), (p::PAN, "Pan", true)];
+    for (cell, (k, name, en)) in c1.iter().zip(row1.into_iter().chain(row1b)) {
+        knob_in(ui, ed, *cell, at(k), name, color, on && en, 36.0);
+    }
+    let row2 = [
+        (p::UNISON, "Unison", true),
+        (p::DETUNE, "Detune", voices),
+        (p::BLEND, "Blend", voices),
+        (p::SPREAD, "Spread", voices),
+        (p::PHASE, "Phase", true),
+        (p::RAND, "Random", true),
+    ];
+    for (cell, (k, name, en)) in c2.iter().zip(row2) {
+        knob_in(ui, ed, *cell, at(k), name, color, on && en, 36.0);
+    }
+}
+
+// ───────────────────────────────────────────────────────────── sub, noise, drive
+
+fn sub_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
+    let inner = panel(ui, r, "", GREEN);
+    let [a, b] = flex::row(inner, [Grow(1.0), Grow(1.0)], 8.0);
+    let [t, s1, s2, k] = flex::col(a, [Px(KEY_H), Px(KEY_H), Px(KEY_H), Grow(1.0)], 6.0);
+    let sub = ed.on(p::SUB_ON);
+    place(ui, t, "chrys-sub-on", true, |ui| {
+        toggle(ui, ed, p::SUB_ON, "sub", GREEN, t.size(), "Sub oscillator on / off")
+    });
+    let mut set = None;
+    place(ui, s1, "chrys-sub-shape", sub, |ui| {
+        if let Some(k) = seg(ui, &["sine", "square"], ed.choice(p::SUB_SHAPE), GREEN, s1.size(), "Sub shape") {
+            set = Some((p::SUB_SHAPE, k));
+        }
+    });
+    place(ui, s2, "chrys-sub-oct", sub, |ui| {
+        if let Some(k) = seg(ui, &["−1 oct", "−2 oct"], ed.choice(p::SUB_OCT), GREEN, s2.size(), "Below the note") {
+            set = Some((p::SUB_OCT, k));
+        }
+    });
+    knob_in(ui, ed, k, p::SUB_LEVEL, "Level", GREEN, sub, 40.0);
+    let [t2, ka, kb] = flex::col(b, [Px(KEY_H), Grow(1.0), Grow(1.0)], 6.0);
+    let noise = ed.on(p::NOISE_ON);
+    place(ui, t2, "chrys-noise-on", true, |ui| {
+        toggle(ui, ed, p::NOISE_ON, "noise", GREEN, t2.size(), "Noise on / off (a little different on each side)")
+    });
+    knob_in(ui, ed, ka, p::NOISE_COLOR, "Colour", GREEN, noise, 40.0);
+    knob_in(ui, ed, kb, p::NOISE_LEVEL, "Level", GREEN, noise, 40.0);
+    if let Some((id, k)) = set {
+        ed.set(id, k as f32);
+    }
+}
+
+fn drive_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
+    let inner = panel(ui, r, "drive", LIME);
+    let [s, scr, ks] = flex::col(inner, [Px(KEY_H), Grow(1.0), Px(52.0)], 6.0);
+    let mode = ed.choice(p::DIST_MODE);
+    let labels = ["off", "tanh", "hard", "fold", "crush"];
+    let pick = place(ui, s, "chrys-drive-mode", true, |ui| {
+        seg(ui, &labels, mode, LIME, s.size(), "Drive, per voice, before the filters")
+    });
+    if let Some(k) = pick {
+        ed.set(p::DIST_MODE, k as f32);
+    }
+    let resp = ui.interact(scr, Id::new(("chrys-drive-screen", ed.ch)), Sense::click_and_drag());
+    if mode != 0 {
+        drag_param(ui, ed, &resp, p::DIST_DRIVE, 200.0);
+        resp.on_hover_text("Drag up/down or scroll: drive");
+    }
+    drive_view(ui, ed, scr);
+    let cells = flex::even_row(ks, 2, 8.0);
+    knob_in(ui, ed, cells[0], p::DIST_DRIVE, "Drive", LIME, mode != 0, 36.0);
+    knob_in(ui, ed, cells[1], p::DIST_MIX, "Mix", LIME, mode != 0, 36.0);
+}
+
+// ───────────────────────────────────────────────────────────── filters
+
+fn filter_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
+    let inner = panel(ui, r, "", AQUA);
+    let [graph, ctl] = flex::row(inner, [Grow(1.0), Px(6.0 * 54.0)], 10.0);
+    place(ui, graph, "chrys-fgraph", true, |ui| filter_graph(ui, ed, graph));
+    let [route, h1, k1, h2, k2] = flex::col(ctl, [Px(KEY_H), Px(KEY_H), Grow(1.0), Px(KEY_H), Grow(1.0)], 4.0);
+    let hint = "Serial: filter 1 into filter 2. Parallel: both hear the voice, side by side.";
+    let pick = place(ui, route, "chrys-route", true, |ui| {
+        seg(ui, &["serial", "parallel"], ed.choice(p::ROUTING), AQUA, route.size(), hint)
+    });
+    if let Some(k) = pick {
+        ed.set(p::ROUTING, k as f32);
+    }
+    for (f, head, knobs) in [(0, h1, k1), (1, h2, k2)] {
+        let at = |k: usize| p::filter(f, k);
+        let on = ed.on(at(p::F_ON));
+        let kind = ed.choice(at(p::F_TYPE)) as u8;
+        let [t, w] = flex::row(head, [Px(88.0), Grow(1.0)], 6.0);
+        let label = if f == 0 { "filter 1" } else { "filter 2" };
+        place(ui, t, ("chrys-f-on", f), true, |ui| {
+            toggle(ui, ed, at(p::F_ON), label, AQUA, t.size(), "Filter on / off")
+        });
+        place(ui, w, ("chrys-f-type", f), true, |ui| well(ui, ed, at(p::F_TYPE), w.size(), AQUA, "Filter type"));
+        let comb = kind >= ft::COMB_PLUS;
+        let cut = match kind {
+            ft::FORMANT => "Shift",
+            _ if comb => "Pitch",
+            _ => "Cutoff",
+        };
+        let cells = flex::even_row(knobs, 6, 0.0);
+        let list = [
+            (p::F_CUTOFF, cut, on),
+            (p::F_RESO, if comb { "Feedback" } else { "Reso" }, on),
+            (p::F_DRIVE, "Drive", on),
+            (p::F_KEY, "Key", on),
+            (p::F_VOWEL, "Vowel", on && kind == ft::FORMANT),
+            (p::F_MIX, "Mix", on),
+        ];
+        for (cell, (k, name, en)) in cells.iter().zip(list) {
+            knob_in(ui, ed, *cell, at(k), name, AQUA, en, 30.0);
+        }
+    }
+}
+
+// ───────────────────────────────────────────────────────────── modulation
+
+fn mod_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
+    let inner = panel(ui, r, "", VIOLET);
+    let [tabs, content] = flex::col(inner, [Px(KEY_H), Grow(1.0)], 8.0);
+    // Tabs are keys: the open one solid violet, the rest dark recesses whose
+    // names are fainter when nothing uses that source. Gaps group them.
+    let view_id = Id::new(("chrys-mod-view", ed.ch));
+    let mut view = ModView::from_index(ui.ctx().data(|d| d.get_temp::<usize>(view_id)).unwrap_or(4));
+    let t = Px(64.0);
+    let slots = flex::row(tabs, [t, t, t, t, Px(10.0), t, t, t, t, Px(10.0), Px(84.0)], 3.0);
+    for (i, name) in MOD_TABS.iter().enumerate() {
+        let rect = slots[[0, 1, 2, 3, 5, 6, 7, 8, 10][i]];
+        let resp = ui.interact(rect, Id::new(("chrys-mod-tab", i)), Sense::click());
+        let ink = if mod_used(ed, i) { TEXT_DIM } else { TEXT_FAINT };
+        paint_key(ui.painter(), rect, name, view.index() == i, resp.hovered(), VIOLET, ink);
+        if resp.clicked() {
+            view = ModView::from_index(i);
+        }
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(view_id, view.index()));
+    match view {
+        ModView::Env(e) => env_view(ui, ed, e, content),
+        ModView::Lfo(l) => lfo_view(ui, ed, l, content),
+        ModView::Matrix => matrix_view(ui, ed, content),
+    }
+}
+
+fn env_view(ui: &mut Ui, ed: &mut Ed, e: usize, inner: Rect) {
+    let [graph, knobs] = flex::row(inner, [Grow(1.0), Px(4.0 * 62.0)], 12.0);
+    place(ui, graph, ("chrys-env-g", e), true, |ui| envelope(ui, ed, e, graph));
+    let [r1, r2] = flex::col(knobs, [Grow(1.0), Grow(1.0)], 4.0);
+    let at = |k: usize| p::env(e, k);
+    let c1 = flex::even_row(r1, 4, 2.0);
+    let c2 = flex::even_row(r2, 4, 2.0);
+    for (cell, (k, name)) in c1.iter().zip([
+        (p::E_ATTACK, "Attack"),
+        (p::E_DECAY, "Decay"),
+        (p::E_SUSTAIN, "Sustain"),
+        (p::E_RELEASE, "Release"),
+    ]) {
+        knob_in(ui, ed, *cell, at(k), name, VIOLET, true, 40.0);
+    }
+    for (cell, (k, name)) in
+        c2.iter().zip([(p::E_A_CURVE, "A curve"), (p::E_D_CURVE, "D curve"), (p::E_R_CURVE, "R curve")])
+    {
+        knob_in(ui, ed, *cell, at(k), name, VIOLET, true, 40.0);
+    }
+}
+
+fn lfo_view(ui: &mut Ui, ed: &mut Ed, l: usize, inner: Rect) {
+    let [graph, side] = flex::row(inner, [Grow(1.0), Px(272.0)], 12.0);
+    place(ui, graph, ("chrys-lfo-g", l), true, |ui| lfo_editor(ui, ed, l, graph));
+    let [mode_r, sh1, sh2, knobs] = flex::col(side, [Px(KEY_H), Px(36.0), Px(36.0), Grow(1.0)], 6.0);
+    let hint = "Free: one shared LFO (locked to the song when synced). Retrig: restarts on every note. \
+                One-shot: runs once per note and holds its end, like an envelope.";
+    let mode = ed.choice(p::lfo(l, p::L_MODE));
+    let pick = place(ui, mode_r, ("chrys-lfo-mode", l), true, |ui| {
+        seg(ui, &["free", "retrig", "1-shot"], mode, VIOLET, mode_r.size(), hint)
+    });
+    if let Some(k) = pick {
+        ed.set(p::lfo(l, p::L_MODE), k as f32);
+    }
+    // Shape presets: a picture each, four to a row.
+    let now = read_points(ed, l);
+    for (row, cells) in SHAPES.chunks(4).zip([flex::even_row(sh1, 4, 4.0), flex::even_row(sh2, 4, 4.0)]) {
+        for ((name, pts), cell) in row.iter().zip(cells) {
+            let shape: Vec<Point> = pts.iter().map(|&(x, y, bend)| Point { x, y, bend }).collect();
+            let resp = ui.interact(cell, Id::new(("chrys-shape", l, *name)), Sense::click());
+            paint_shape_key(ui.painter(), cell, &shape, now == shape, resp.hovered());
+            if resp.on_hover_text(*name).clicked() {
+                ed.h.checkpoint(ed.p);
+                write_points(ed, l, &shape);
+            }
+        }
+    }
+    let synced = ed.choice(p::lfo(l, p::L_SYNC)) != 0;
+    let cells = flex::even_row(knobs, 2, 8.0);
+    knob_in(ui, ed, cells[0], p::lfo(l, p::L_SYNC), "Sync", VIOLET, true, 40.0);
+    knob_in(ui, ed, cells[1], p::lfo(l, p::L_RATE), "Rate", VIOLET, !synced, 40.0);
+}
+
+/// The routes in use, one per row (the rest of the 16 slots stay out of the
+/// way), and "+ route" to start another. A long list scrolls.
+fn matrix_view(ui: &mut Ui, ed: &mut Ed, inner: Rect) {
+    const ROW: f32 = 28.0;
+    const SPACE: f32 = 3.0;
+    let used: Vec<usize> = (0..p::SLOT_COUNT)
+        .filter(|&k| ed.choice(p::slot(k, p::S_SRC)) != 0 || ed.choice(p::slot(k, p::S_DEST)) != 0)
+        .collect();
+    let free = (0..p::SLOT_COUNT).find(|k| !used.contains(k));
+    let rows = used.len() + free.is_some() as usize;
+    let fits = ((inner.height() + SPACE) / (ROW + SPACE)).floor() as usize;
+    let draw = |ui: &mut Ui, ed: &mut Ed, width: f32| {
+        for &k in &used {
+            let (r, _) = ui.allocate_exact_size(vec2(width, ROW), Sense::hover());
+            slot_row(ui, ed, k, r);
+        }
+        if let Some(free) = free {
+            let (r, _) = ui.allocate_exact_size(vec2(width, ROW), Sense::hover());
+            let [_, add, note] = flex::row(r, [Px(18.0), Px(124.0), Grow(1.0)], 4.0);
+            let hint = "A new route: pick what moves (an LFO, an envelope, velocity, a macro…) and where it goes";
+            if place(ui, add, "chrys-add-route", true, |ui| {
+                key(ui, "+ route", add.size(), false, VIOLET, hint).clicked()
+            }) {
+                ed.set(p::slot(free, p::S_SRC), 1.0);
+            }
+            if used.is_empty() {
+                let t = "Send the LFOs, envelopes and macros anywhere.";
+                ui.painter().text(
+                    note.left_center() + vec2(8.0, 0.0),
+                    Align2::LEFT_CENTER,
+                    t,
+                    FontId::proportional(11.5),
+                    TEXT_FAINT,
+                );
+            }
+        }
+    };
+    let mut child = ui.new_child(
+        UiBuilder::new().id_salt(("chrys-matrix", ed.ch)).max_rect(inner).layout(Layout::top_down(Align::Min)),
+    );
+    child.spacing_mut().item_spacing.y = SPACE;
+    if rows <= fits {
+        draw(&mut child, ed, inner.width());
+    } else {
+        egui::ScrollArea::vertical()
+            .id_salt(("chrys-matrix-scroll", ed.ch))
+            .max_height(inner.height())
+            .show(&mut child, |ui| draw(ui, ed, inner.width() - 18.0));
+    }
+}
+
+fn slot_row(ui: &mut Ui, ed: &mut Ed, k: usize, r: Rect) {
+    let at = |q: usize| p::slot(k, q);
+    let live = ed.choice(at(p::S_SRC)) != 0 && ed.choice(at(p::S_DEST)) != 0;
+    let [num, src, arrow, dest, bar, value, via_cap, via, bi, x] = flex::row(
+        r,
+        [Px(18.0), Px(124.0), Px(14.0), Grow(1.0), Grow(1.3), Px(44.0), Px(26.0), Px(104.0), Px(36.0), Px(r.height())],
+        4.0,
+    );
+    let p = ui.painter();
+    p.text(
+        num.center(),
+        Align2::CENTER_CENTER,
+        format!("{}", k + 1),
+        FontId::proportional(11.0),
+        if live { VIOLET } else { TEXT_FAINT },
+    );
+    let (y, x0, x1) = (arrow.center().y, arrow.left(), arrow.right());
+    let st = stroke(1.5, if live { VIOLET } else { TEXT_FAINT });
+    p.line_segment([pos2(x0, y), pos2(x1, y)], st);
+    p.add(Shape::line(vec![pos2(x1 - 4.0, y - 3.5), pos2(x1, y), pos2(x1 - 4.0, y + 3.5)], st));
+    let amount = PARAMS[at(p::S_AMT)].format(ed.v(at(p::S_AMT)));
+    p.text(
+        value.right_center(),
+        Align2::RIGHT_CENTER,
+        amount,
+        FontId::proportional(12.0),
+        if live { TEXT } else { TEXT_FAINT },
+    );
+    caps(p, via_cap.right_center(), "via", TEXT_FAINT, Align2::RIGHT_CENTER);
+    place(ui, src, ("chrys-src", k), true, |ui| {
+        well(ui, ed, at(p::S_SRC), src.size(), VIOLET, "Source: what moves this route")
+    });
+    place(ui, dest, ("chrys-dest", k), true, |ui| {
+        well(ui, ed, at(p::S_DEST), dest.size(), VIOLET, "Destination: what it moves")
+    });
+    amount_bar(ui, ed, at(p::S_AMT), bar, if live { VIOLET } else { TEXT_FAINT });
+    let hint = "Via: a second source that scales the amount (e.g. velocity)";
+    place(ui, via, ("chrys-via", k), true, |ui| well(ui, ed, at(p::S_VIA), via.size(), VIOLET, hint));
+    let hint = "Bi: centre the source (−1..1), so it swings both ways around the knob";
+    if place(ui, bi, ("chrys-bi", k), true, |ui| {
+        key(ui, "bi", bi.size(), ed.on(at(p::S_BIPOLAR)), VIOLET, hint).clicked()
+    }) {
+        ed.toggle(at(p::S_BIPOLAR));
+    }
+    // Remove: the route goes back to an empty slot.
+    let xresp = ui.interact(x, Id::new(("chrys-route-x", k)), Sense::click());
+    let hot = xresp.hovered();
+    let p = ui.painter();
+    p.rect_filled(x, cr(3), if hot { HOVER } else { SCREEN });
+    let c = x.center();
+    let xs = stroke(1.5, if hot { TEXT } else { TEXT_FAINT });
+    p.line_segment([c + vec2(-4.0, -4.0), c + vec2(4.0, 4.0)], xs);
+    p.line_segment([c + vec2(-4.0, 4.0), c + vec2(4.0, -4.0)], xs);
+    if xresp.on_hover_text("Remove this route").clicked() {
+        ed.h.checkpoint(ed.p);
+        for q in [p::S_SRC, p::S_DEST, p::S_AMT, p::S_VIA, p::S_BIPOLAR] {
+            ed.put(at(q), PARAMS[at(q)].default);
+        }
+    }
+}
+
+/// A route's amount as a wide bar from the middle (−100 % … +100 %): drag
+/// sideways (Shift = fine), scroll to nudge, double-click for 0.
+fn amount_bar(ui: &mut Ui, ed: &mut Ed, id: usize, r: Rect, color: Color32) {
+    let resp = ui.interact(r, Id::new(("chrys-amount", id)), Sense::click_and_drag());
+    let info = &PARAMS[id];
+    let reset = dbl(ui, &resp, ("amount", id));
+    if resp.drag_started() || reset {
+        ed.h.checkpoint(ed.p);
+    }
+    if reset {
+        ed.put(id, 0.0);
+    } else if resp.dragged() {
+        let fine = if ui.input(|i| i.modifiers.shift) { 0.2 } else { 1.0 };
+        ed.put(id, ed.v(id) + resp.drag_delta().x / r.width() * (info.max - info.min) * fine);
+    }
+    if let Some(step) = wheel_step(ui, r) {
+        ed.h.checkpoint(ed.p);
+        ed.put(id, ed.v(id) - step as f32 * 0.01);
+    }
+    let hot = resp.hovered() || resp.dragged();
+    if hot {
+        readout(ui, info.name, info.format(ed.v(id)), color);
+    }
+    let p = ui.painter();
+    p.rect_filled(r, cr(3), if hot { HOVER } else { SCREEN });
+    let track = r.shrink2(vec2(6.0, 7.0));
+    let mid = track.center().x;
+    let x = mid + ed.v(id) / info.max * track.width() * 0.5;
+    let fill = Rect::from_x_y_ranges(mid.min(x)..=mid.max(x), track.y_range());
+    if fill.width() > 0.5 {
+        p.rect_filled(fill.expand(3.0), cr(4), alpha(color, 0.14));
+        p.rect_filled(fill, cr(2), color);
+    }
+    p.line_segment([pos2(mid, r.top() + 4.0), pos2(mid, r.bottom() - 4.0)], stroke(1.0, TEXT_FAINT));
+    resp.on_hover_text("Drag sideways (Shift: fine); double-click: 0");
+}
+
+// ───────────────────────────────────────────────────────────── macros
+
+/// Four knobs; a macro is dim until a route listens to it.
+fn macros_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
+    let inner = panel(ui, r, "macros", VIOLET);
+    let rows = flex::even_col(inner, 2, 4.0);
+    for k in 0..4 {
+        let cell = flex::even_row(rows[k / 2], 2, 4.0)[k % 2];
+        let src = (lyra_chrysalis::params::src::MACRO + k) as f32;
+        let routed = (0..p::SLOT_COUNT).any(|s| {
+            ed.v(p::slot(s, p::S_DEST)) >= 0.5
+                && (ed.v(p::slot(s, p::S_SRC)) == src || ed.v(p::slot(s, p::S_VIA)) == src)
+        });
+        let color = if routed { VIOLET } else { alpha(VIOLET, 0.45) };
+        let name = ["Macro 1", "Macro 2", "Macro 3", "Macro 4"][k];
+        knob_in(ui, ed, cell, p::mac(k), name, color, true, 44.0);
+    }
+}
+
+// ───────────────────────────────────────────────────────────── drawing and editing pieces
 
 /// The whole editor's ground: teal-black, violet glowing in at two corners.
 fn backdrop(ui: &Ui, r: Rect) {
@@ -232,15 +915,6 @@ fn caps_style(
     rect
 }
 
-/// A child Ui laid out left to right inside `r`.
-fn row_ui(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash) -> Ui {
-    let mut child = ui.new_child(UiBuilder::new().id_salt(salt).max_rect(r).layout(Layout::left_to_right(Align::Min)));
-    child.spacing_mut().item_spacing = vec2(4.0, 4.0);
-    child
-}
-
-// ───────────────────────────────────────────────────────────── controls
-
 /// A neon knob: a dark cap, a dim track, the value as a glowing arc.
 fn paint_knob(p: &egui::Painter, r: Rect, info: &lyra_plugin::ParamInfo, v: f32, color: Color32, hot: bool) {
     let c = r.center();
@@ -287,126 +961,9 @@ fn paint_knob(p: &egui::Painter, r: Rect, info: &lyra_plugin::ParamInfo, v: f32,
     );
 }
 
-/// A knob with its name and value under it; disabled = faded and inert.
-fn knob(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, enabled: bool) {
-    knob_sized(ui, ed, id, label, color, enabled, KNOB, CELL);
-}
-
-#[allow(clippy::too_many_arguments)]
-fn knob_sized(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, enabled: bool, d: f32, cell: Vec2) {
-    let info = &PARAMS[id];
-    ui.allocate_ui_with_layout(cell, Layout::top_down(Align::Center), |ui| {
-        ui.add_enabled_ui(enabled, |ui| {
-            ui.spacing_mut().item_spacing.y = 1.0;
-            let mut v = ed.v(id);
-            let r = crate::widgets::knob_painted(ui, &mut v, info, d, |p, rect, v, hot| {
-                paint_knob(p, rect, info, v, color, hot)
-            });
-            if enabled {
-                ed.track(&r, id, v);
-            }
-            let (lr, _) = ui.allocate_exact_size(vec2(cell.x, 24.0), Sense::hover());
-            let painter = ui.painter();
-            painter.text(lr.center_top(), Align2::CENTER_TOP, label, FontId::proportional(10.5), TEXT_DIM);
-            painter.text(
-                lr.center_top() + vec2(0.0, 12.0),
-                Align2::CENTER_TOP,
-                format_value(id, ed.v(id)),
-                FontId::proportional(10.5),
-                TEXT,
-            );
-        });
-    });
-}
-
-/// Segmented switch: one dark recess; the chosen segment is solid colour with
-/// dark lettering. Returns the click.
-fn seg(ui: &mut Ui, labels: &[&str], chosen: usize, color: Color32, seg_w: f32, hint: &str) -> Option<usize> {
-    let size = vec2(seg_w * labels.len() as f32, KEY_H);
-    let (r, resp) = ui.allocate_exact_size(size, Sense::click());
-    let p = ui.painter();
-    p.rect_filled(r, cr(3), SCREEN);
-    let hover = resp.hover_pos().map(|pos| (((pos.x - r.left()) / seg_w) as usize).min(labels.len() - 1));
-    for (i, l) in labels.iter().enumerate() {
-        let s = Rect::from_min_size(pos2(r.left() + i as f32 * seg_w, r.top()), vec2(seg_w, KEY_H)).shrink(2.0);
-        if i == chosen {
-            p.rect_filled(s, cr(2), color);
-            caps_style(p, s.center(), l, INK_ON, Align2::CENTER_CENTER, 0.8, true);
-        } else {
-            if hover == Some(i) {
-                p.rect_filled(s, cr(2), HOVER);
-            }
-            let ink = if hover == Some(i) { TEXT } else { TEXT_DIM };
-            caps_spaced(p, s.center(), l, ink, Align2::CENTER_CENTER, 0.8);
-        }
-    }
-    let clicked = resp.clicked().then_some(()).and(hover);
-    resp.on_hover_text(hint);
-    clicked
-}
-
-/// An on/off parameter as a key with its name on it: solid in its colour when on.
-fn toggle(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, hint: &str) {
-    let on = ed.on(id);
-    if key(ui, label, 0.0, on, color, hint).clicked() {
-        ed.toggle(id);
-    }
-}
-
-/// A dropdown for a choice parameter: click for the list, scroll to step.
-fn well(ui: &mut Ui, ed: &mut Ed, id: usize, width: f32, color: Color32, hint: &str) {
-    let info = &PARAMS[id];
-    let n = info.labels.len();
-    let at = ed.choice(id).min(n - 1);
-    let (r, resp) = ui.allocate_exact_size(vec2(width, KEY_H), Sense::click());
-    let p = ui.painter();
-    p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
-    let ink = if at == 0 { TEXT_DIM } else { TEXT };
-    p.text(r.left_center() + vec2(8.0, 0.0), Align2::LEFT_CENTER, info.labels[at], FontId::proportional(12.0), ink);
-    chevron(p, r.right_center() - vec2(10.0, 1.0), 3.0, alpha(color, 0.7));
-    if let Some(step) = wheel_step(ui, r) {
-        ed.set(id, (at as i32 + step).clamp(0, n as i32 - 1) as f32);
-    }
-    let popup = ui.make_persistent_id(("chrys-well", ed.ch, id));
-    if resp.clicked() {
-        ui.memory_mut(|m| m.toggle_popup(popup));
-    }
-    let resp = resp.on_hover_text(hint);
-    let mut pick = None;
-    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
-        ui.set_min_width(width);
-        egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
-            for (k, label) in info.labels.iter().enumerate() {
-                if ui.selectable_label(k == at, *label).clicked() {
-                    pick = Some(k);
-                }
-            }
-        });
-    });
-    if let Some(k) = pick {
-        ed.set(id, k as f32);
-    }
-}
-
 fn chevron(p: &egui::Painter, c: Pos2, w: f32, color: Color32) {
     let pts = vec![c + vec2(-w, -w * 0.43), c + vec2(0.0, w * 0.57), c + vec2(w, -w * 0.43)];
     p.add(Shape::line(pts, stroke(1.4, color)));
-}
-
-/// A key with a word on it (`w` 0 = as wide as the word): solid colour with
-/// dark lettering when lit, a dark recess otherwise.
-fn key(ui: &mut Ui, text: &str, w: f32, lit: bool, color: Color32, hint: &str) -> Response {
-    let w = if w > 0.0 { w } else { text.chars().count() as f32 * 8.0 + 20.0 };
-    let (r, resp) = ui.allocate_exact_size(vec2(w, KEY_H), Sense::click());
-    let p = ui.painter();
-    if lit {
-        p.rect_filled(r, cr(3), if resp.hovered() { theme::shade(color, 1.08) } else { color });
-        caps_style(p, r.center(), text, INK_ON, Align2::CENTER_CENTER, 1.0, true);
-    } else {
-        p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
-        caps_spaced(p, r.center(), text, if resp.hovered() { TEXT } else { TEXT_DIM }, Align2::CENTER_CENTER, 1.0);
-    }
-    resp.on_hover_text(hint)
 }
 
 /// A dark screen (darker than its panel, no edge); what's drawn on it glows.
@@ -507,45 +1064,6 @@ fn format_value(id: usize, v: f32) -> String {
     }
 }
 
-// ───────────────────────────────────────────────────────────── header
-
-fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let p = ui.painter();
-    p.rect_filled(r, cr(5), PANEL);
-    p.rect_stroke(r, cr(5), stroke(1.0, PANEL_EDGE), egui::StrokeKind::Inside);
-    // The nameplate: the emblem lights the bar around it, and its glow runs
-    // out along the bar like the wings' trails.
-    let c = r.center();
-    let glow = [(0.0, alpha(GREEN, 0.16)), (0.5, alpha(CYAN, 0.05)), (1.0, Color32::TRANSPARENT)];
-    theme::radial_circle(p, c, 190.0, c, &glow);
-    for side in [-1.0f32, 1.0] {
-        let n = 24;
-        for k in 0..n {
-            let (t0, t1) = (k as f32 / n as f32, (k + 1) as f32 / n as f32);
-            let x = |t: f32| c.x + side * (60.0 + t * 230.0);
-            let y = |t: f32| c.y + 14.0 - 10.0 * (t * PI).sin() * (1.0 - t);
-            let a = (1.0 - t0).powi(2);
-            p.line_segment([pos2(x(t0), y(t0)), pos2(x(t1), y(t1))], stroke(1.2, alpha(CYAN, 0.5 * a)));
-        }
-    }
-    let (tex, [w, h]) = theme::chrysalis_emblem(ui.ctx());
-    // A badge: a little taller than the bar, so it breaks out of it.
-    let eh = r.height() + 18.0;
-    let ew = eh * w as f32 / h as f32;
-    let img = Rect::from_center_size(c, vec2(ew, eh));
-    p.image(tex, img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-    ui.interact(img, Id::new("chrys-emblem"), Sense::hover()).on_hover_text("Chrysalis · wavetable synthesizer");
-
-    // Preset on the left, the voice on the right.
-    let left = Rect::from_min_max(r.left_top() + vec2(PAD + 4.0, 0.0), pos2(c.x - 170.0, r.bottom()));
-    caps(ui.painter(), left.left_top() + vec2(2.0, 16.0), "preset", TEXT_FAINT, Align2::LEFT_CENTER);
-    let mut lu = row_ui(ui, Rect::from_min_max(left.left_top() + vec2(0.0, 28.0), left.max), "chrys-preset");
-    preset_row(&mut lu, ed, left.width());
-    let right = Rect::from_min_max(pos2(c.x + 150.0, c.y - 31.0), pos2(r.right() - PAD, r.bottom()));
-    let mut ru = row_ui(ui, right, "chrys-voice");
-    voice(&mut ru, ed);
-}
-
 fn preset_values(k: usize) -> Vec<f32> {
     let mut v = lyra_plugin::default_params(&PARAMS);
     for &(id, x) in PRESETS[k].1 {
@@ -558,95 +1076,6 @@ fn current_preset(params: &[f32]) -> Option<usize> {
     (0..PRESETS.len())
         .find(|&k| preset_values(k).iter().zip(params).all(|(a, b)| (a - b).abs() <= 1e-5 * a.abs().max(1.0)))
 }
-
-/// `‹ name ›`: click the name for the list, scroll over it to step.
-fn preset_row(ui: &mut Ui, ed: &mut Ed, width: f32) {
-    let n = PRESETS.len();
-    let current = current_preset(&ed.p.channels[ed.ch].params);
-    let last_id = Id::new(("chrys-last-preset", ed.ch));
-    let last = ui.ctx().data(|d| d.get_temp::<usize>(last_id));
-    let at = current.or(last).unwrap_or(0);
-    let (name, edited) = match (current, last) {
-        (Some(k), _) => (PRESETS[k].0, false),
-        (None, Some(k)) => (PRESETS[k].0, true),
-        (None, None) => ("Custom", false),
-    };
-    let mut pick = None;
-    let h = 28.0;
-    let arrow = |ui: &mut Ui, left: bool| {
-        let (r, resp) = ui.allocate_exact_size(vec2(h, h), Sense::click());
-        let p = ui.painter();
-        p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
-        let s = if left { -1.0 } else { 1.0 };
-        let c = r.center();
-        let pts = vec![c + vec2(-2.5 * s, -5.0), c + vec2(2.5 * s, 0.0), c + vec2(-2.5 * s, 5.0)];
-        p.add(Shape::line(pts, stroke(1.6, GREEN)));
-        resp.on_hover_text(if left { "Previous preset" } else { "Next preset" }).clicked()
-    };
-    if arrow(ui, true) {
-        pick = Some((at + n - 1) % n);
-    }
-    let (r, resp) = ui.allocate_exact_size(vec2(width - 2.0 * h - 8.0, h), Sense::click());
-    let p = ui.painter();
-    p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
-    let t = p.text(r.left_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(14.0), TEXT);
-    if edited {
-        p.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", FontId::proportional(10.5), TEXT_DIM);
-    }
-    chevron(p, r.right_center() - vec2(11.0, 1.0), 3.5, GREEN);
-    if let Some(step) = wheel_step(ui, r) {
-        pick = Some((at as i32 + step).rem_euclid(n as i32) as usize);
-    }
-    let popup = ui.make_persistent_id(("chrys-preset-list", ed.ch));
-    if resp.clicked() {
-        ui.memory_mut(|m| m.toggle_popup(popup));
-    }
-    let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list");
-    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
-        ui.set_min_width(r.width());
-        for (k, (name, _)) in PRESETS.iter().enumerate() {
-            if ui.selectable_label(current == Some(k), *name).clicked() {
-                pick = Some(k);
-            }
-        }
-    });
-    if arrow(ui, false) {
-        pick = Some((at + 1) % n);
-    }
-    if let Some(k) = pick {
-        ed.h.checkpoint(ed.p);
-        ed.p.channels[ed.ch].params = preset_values(k);
-        ui.ctx().data_mut(|d| d.insert_temp(last_id, k));
-    }
-}
-
-fn voice(ui: &mut Ui, ed: &mut Ed) {
-    let small = vec2(56.0, 64.0);
-    knob_sized(ui, ed, p::VOLUME, "Volume", GREEN, true, 30.0, small);
-    knob_sized(ui, ed, p::AMP_VEL, "Velocity", GREEN, true, 30.0, small);
-    knob_sized(ui, ed, p::GLIDE, "Glide", GREEN, true, 30.0, small);
-    ui.add_space(10.0);
-    let mut set = None;
-    ui.vertical(|ui| {
-        ui.add_space(4.0);
-        ui.spacing_mut().item_spacing.y = 6.0;
-        let hint = "Mono: one note at a time, with legato and glide";
-        if let Some(k) = seg(ui, &["poly", "mono"], ed.choice(p::MODE), GREEN, 66.0, hint) {
-            set = Some((p::MODE, k));
-        }
-        ui.add_enabled_ui(ed.v(p::GLIDE) > 0.0, |ui| {
-            let hint = "Glide only between overlapping notes (legato), or on every note";
-            if let Some(k) = seg(ui, &["legato", "always"], ed.choice(p::GLIDE_MODE), GREEN, 66.0, hint) {
-                set = Some((p::GLIDE_MODE, k));
-            }
-        });
-    });
-    if let Some((id, k)) = set {
-        ed.set(id, k as f32);
-    }
-}
-
-// ───────────────────────────────────────────────────────────── oscillators
 
 /// The table an oscillator plays, for its picture: a built-in, or the
 /// channel's import (decoded once and kept, like the engine's own copy).
@@ -688,71 +1117,6 @@ fn imported_table(ui: &Ui, ed: &Ed) -> Option<Arc<Table>> {
         .map(Arc::new);
     ui.ctx().data_mut(|d| d.insert_temp(id, t.clone()));
     t
-}
-
-fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
-    let color = OSC_COLORS[o];
-    let whole = panel(ui, r, "", color);
-    let inner = Rect::from_min_max(pos2(whole.left(), whole.top() + KEY_H + 8.0), whole.max);
-    let at = |k: usize| p::osc(o, k);
-    let on = ed.on(at(p::OSC_ON));
-    let is_import = ed.choice(at(p::TABLE)) == IMPORTED;
-    // Controls on the title line, right of the name.
-    let bar = Rect::from_min_size(whole.min, vec2(whole.width(), KEY_H));
-    let mut b = row_ui(ui, bar, ("chrys-osc-bar", o));
-    b.spacing_mut().item_spacing.x = 6.0;
-    toggle(&mut b, ed, at(p::OSC_ON), if o == 0 { "osc a" } else { "osc b" }, color, "Oscillator on / off");
-    well(&mut b, ed, at(p::TABLE), 112.0, color, "Wavetable: scroll to flip through");
-    let has = ed.p.channels[ed.ch].sample.is_some();
-    let hint = "Import a WAV as a wavetable (cut into frames of 2048 samples). Both oscillators can play it.";
-    if key(&mut b, "load", 46.0, is_import && has, color, hint).clicked() {
-        if let Some(path) = rfd::FileDialog::new().add_filter("Audio", &["wav", "flac"]).pick_file() {
-            ed.h.checkpoint(ed.p);
-            ed.p.channels[ed.ch].sample = Some(crate::samples::name_for(&path));
-            ed.put(at(p::TABLE), IMPORTED as f32);
-        }
-    }
-    if is_import {
-        let name = ed.p.channels[ed.ch].sample.as_deref().map_or("no WAV loaded".into(), crate::samples::display_name);
-        b.label(egui::RichText::new(name).size(10.5).color(TEXT_DIM));
-    }
-    b.with_layout(Layout::right_to_left(Align::Min), |ui| {
-        well(ui, ed, at(p::WARP_MODE), 100.0, color, "Warp: how the phase is bent before the table is read");
-        let (lr, _) = ui.allocate_exact_size(vec2(40.0, KEY_H), Sense::hover());
-        caps(ui.painter(), lr.right_center() - vec2(2.0, 0.0), "warp", TEXT_FAINT, Align2::RIGHT_CENTER);
-    });
-
-    let scope_r = Rect::from_min_size(inner.min, vec2(inner.width(), 148.0));
-    let mut su = ui.new_child(UiBuilder::new().id_salt(("chrys-scope", o)).max_rect(scope_r));
-    su.add_enabled_ui(on, |ui| table_view(ui, ed, o, scope_r, color));
-    let knobs_r = Rect::from_min_max(pos2(inner.left() + 4.0, scope_r.bottom() + 8.0), inner.max);
-    let mut k = ui.new_child(
-        UiBuilder::new().id_salt(("chrys-osc-knobs", o)).max_rect(knobs_r).layout(Layout::top_down(Align::Min)),
-    );
-    k.spacing_mut().item_spacing = vec2(0.0, 2.0);
-    let warps = ed.choice(at(p::WARP_MODE)) != 0;
-    let voices = ed.choice(at(p::UNISON)) > 0;
-    k.add_enabled_ui(on, |ui| {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            knob(ui, ed, at(p::POS), "Position", color, true);
-            knob(ui, ed, at(p::WARP), "Warp", color, warps);
-            knob(ui, ed, at(p::OCTAVE), "Octave", color, true);
-            knob(ui, ed, at(p::SEMI), "Semi", color, true);
-            knob(ui, ed, at(p::FINE), "Fine", color, true);
-            knob(ui, ed, at(p::LEVEL), "Level", color, true);
-            knob(ui, ed, at(p::PAN), "Pan", color, true);
-        });
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            knob(ui, ed, at(p::UNISON), "Unison", color, true);
-            knob(ui, ed, at(p::DETUNE), "Detune", color, voices);
-            knob(ui, ed, at(p::BLEND), "Blend", color, voices);
-            knob(ui, ed, at(p::SPREAD), "Spread", color, voices);
-            knob(ui, ed, at(p::PHASE), "Phase", color, true);
-            knob(ui, ed, at(p::RAND), "Random", color, true);
-        });
-    });
 }
 
 /// The table as stacked frames, back to front, dim; the one that plays glows.
@@ -809,65 +1173,6 @@ fn table_view(ui: &mut Ui, ed: &mut Ed, o: usize, rect: Rect, color: Color32) {
     caps(&painter, rect.right_bottom() - vec2(10.0, 9.0), &caption, TEXT_DIM, Align2::RIGHT_CENTER);
 }
 
-// ───────────────────────────────────────────────────────────── sub, noise, drive
-
-fn sub_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let inner = panel(ui, r, "", GREEN);
-    let half = inner.width() / 2.0;
-    let col = |k: f32| Rect::from_min_size(pos2(inner.left() + k * half, inner.top()), vec2(half, inner.height()));
-    let mut set = None;
-    let mut a =
-        ui.new_child(UiBuilder::new().id_salt("chrys-sub").max_rect(col(0.0)).layout(Layout::top_down(Align::Center)));
-    a.spacing_mut().item_spacing.y = 6.0;
-    toggle(&mut a, ed, p::SUB_ON, "sub", GREEN, "Sub oscillator on / off");
-    let sub = ed.on(p::SUB_ON);
-    a.add_enabled_ui(sub, |ui| {
-        if let Some(k) = seg(ui, &["sin", "sqr"], ed.choice(p::SUB_SHAPE), GREEN, 42.0, "Sub shape") {
-            set = Some((p::SUB_SHAPE, k));
-        }
-        if let Some(k) = seg(ui, &["−1", "−2"], ed.choice(p::SUB_OCT), GREEN, 42.0, "Octaves below the note") {
-            set = Some((p::SUB_OCT, k));
-        }
-        ui.add_space(2.0);
-        knob(ui, ed, p::SUB_LEVEL, "Level", GREEN, sub);
-    });
-    let mut b = ui
-        .new_child(UiBuilder::new().id_salt("chrys-noise").max_rect(col(1.0)).layout(Layout::top_down(Align::Center)));
-    b.spacing_mut().item_spacing.y = 6.0;
-    toggle(&mut b, ed, p::NOISE_ON, "noise", GREEN, "Noise on / off (a little different on each side)");
-    let noise = ed.on(p::NOISE_ON);
-    knob(&mut b, ed, p::NOISE_COLOR, "Colour", GREEN, noise);
-    knob(&mut b, ed, p::NOISE_LEVEL, "Level", GREEN, noise);
-    if let Some((id, k)) = set {
-        ed.set(id, k as f32);
-    }
-}
-
-fn drive_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let inner = panel(ui, r, "drive", LIME);
-    let mut u =
-        ui.new_child(UiBuilder::new().id_salt("chrys-drive").max_rect(inner).layout(Layout::top_down(Align::Min)));
-    u.spacing_mut().item_spacing = vec2(4.0, 6.0);
-    let mode = ed.choice(p::DIST_MODE);
-    let labels = ["off", "tanh", "hard", "fold", "crush"];
-    if let Some(k) = seg(&mut u, &labels, mode, LIME, inner.width() / 5.0, "Drive, per voice, before the filters") {
-        ed.set(p::DIST_MODE, k as f32);
-    }
-    let (sr, resp) = u.allocate_exact_size(vec2(inner.width(), 62.0), Sense::click_and_drag());
-    if mode != 0 {
-        drag_param(&u, ed, &resp, p::DIST_DRIVE, 200.0);
-        resp.on_hover_text("Drag up/down or scroll: drive");
-    }
-    drive_view(&u, ed, sr);
-    let on = mode != 0;
-    u.horizontal(|ui| {
-        ui.add_space((inner.width() - 2.0 * CELL.x - 12.0) / 2.0);
-        ui.spacing_mut().item_spacing.x = 12.0;
-        knob(ui, ed, p::DIST_DRIVE, "Drive", LIME, on);
-        knob(ui, ed, p::DIST_MIX, "Mix", LIME, on);
-    });
-}
-
 /// What the drive does to a sine, as the voices shape it.
 fn drive_view(ui: &Ui, ed: &Ed, r: Rect) {
     let painter = ui.painter_at(r);
@@ -886,52 +1191,6 @@ fn drive_view(ui: &Ui, ed: &Ed, r: Rect) {
         })
         .collect();
     glow_line(&painter, pts, if mode == 0 { TEXT_FAINT } else { LIME }, 1.5);
-}
-
-// ───────────────────────────────────────────────────────────── filters
-
-fn filter_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let inner = panel(ui, r, "filters", AQUA);
-    let bar = Rect::from_min_size(pos2(r.right() - PAD - 160.0, r.top() + PAD - 4.0), vec2(160.0, KEY_H));
-    let mut b = row_ui(ui, bar, "chrys-route");
-    let hint = "Serial: filter 1 into filter 2. Parallel: both hear the voice, side by side.";
-    if let Some(k) = seg(&mut b, &["serial", "parallel"], ed.choice(p::ROUTING), AQUA, 80.0, hint) {
-        ed.set(p::ROUTING, k as f32);
-    }
-    let cell = vec2(54.0, 60.0);
-    let knobs_w = 6.0 * cell.x + 5.0 * 2.0;
-    let graph_r = Rect::from_min_max(inner.min, pos2(inner.right() - knobs_w - 12.0, inner.bottom()));
-    let mut g = ui.new_child(UiBuilder::new().id_salt("chrys-fgraph").max_rect(graph_r));
-    filter_graph(&mut g, ed, graph_r);
-    let col = Rect::from_min_max(pos2(graph_r.right() + 12.0, inner.top() - 4.0), inner.max);
-    let mut u =
-        ui.new_child(UiBuilder::new().id_salt("chrys-filters").max_rect(col).layout(Layout::top_down(Align::Min)));
-    u.spacing_mut().item_spacing = vec2(2.0, 0.0);
-    for f in 0..2 {
-        let at = |k: usize| p::filter(f, k);
-        let on = ed.on(at(p::F_ON));
-        let kind = ed.choice(at(p::F_TYPE)) as u8;
-        u.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            toggle(ui, ed, at(p::F_ON), if f == 0 { "filter 1" } else { "filter 2" }, AQUA, "Filter on / off");
-            well(ui, ed, at(p::F_TYPE), 100.0, AQUA, "Filter type");
-        });
-        let comb = kind >= ft::COMB_PLUS;
-        let label = match kind {
-            ft::FORMANT => "Shift",
-            _ if comb => "Pitch",
-            _ => "Cutoff",
-        };
-        u.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            knob_sized(ui, ed, at(p::F_CUTOFF), label, AQUA, on, 30.0, cell);
-            knob_sized(ui, ed, at(p::F_RESO), if comb { "Feedback" } else { "Reso" }, AQUA, on, 30.0, cell);
-            knob_sized(ui, ed, at(p::F_DRIVE), "Drive", AQUA, on, 30.0, cell);
-            knob_sized(ui, ed, at(p::F_KEY), "Key", AQUA, on, 30.0, cell);
-            knob_sized(ui, ed, at(p::F_VOWEL), "Vowel", AQUA, on && kind == ft::FORMANT, 30.0, cell);
-            knob_sized(ui, ed, at(p::F_MIX), "Mix", AQUA, on, 30.0, cell);
-        });
-    }
 }
 
 /// One filter's response at `hz` (complex), as the voice computes it.
@@ -984,7 +1243,7 @@ fn mag(h: (f32, f32)) -> f32 {
 
 #[allow(clippy::needless_range_loop)] // two filters, indexed in params and in `hot`
 fn filter_graph(ui: &mut Ui, ed: &mut Ed, rect: Rect) {
-    let inner = rect.shrink2(vec2(12.0, 10.0));
+    let inner = rect.shrink2(vec2(6.0, 6.0));
     let (lo, hi) = (20f32.ln(), 20_000f32.ln());
     let fx = |hz: f32| inner.left() + (hz.ln() - lo) / (hi - lo) * inner.width();
     let hz_at = |x: f32| (lo + (x - inner.left()) / inner.width() * (hi - lo)).exp();
@@ -1075,8 +1334,6 @@ fn filter_graph(ui: &mut Ui, ed: &mut Ed, rect: Rect) {
     }
 }
 
-// ───────────────────────────────────────────────────────────── modulation
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ModView {
     Env(usize),
@@ -1103,53 +1360,6 @@ impl ModView {
 
 const MOD_TABS: [&str; 9] = ["amp", "env 2", "env 3", "env 4", "lfo 1", "lfo 2", "lfo 3", "lfo 4", "matrix"];
 
-fn mod_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    panel(ui, r, "", VIOLET);
-    // Tabs along the top: the open one is a solid violet key, the others
-    // just their names (fainter when nothing uses them). Gaps group them.
-    let view_id = Id::new(("chrys-mod-view", ed.ch));
-    let mut view = ModView::from_index(ui.ctx().data(|d| d.get_temp::<usize>(view_id)).unwrap_or(4));
-    let mut x = r.left() + PAD;
-    let y = r.top() + PAD;
-    for (i, name) in MOD_TABS.iter().enumerate() {
-        if i == 4 || i == 8 {
-            x += 16.0;
-        }
-        let w = if i == 8 { 76.0 } else { 62.0 };
-        let t = Rect::from_min_size(pos2(x, y), vec2(w - 4.0, KEY_H));
-        let resp = ui.interact(t, Id::new(("chrys-mod-tab", i)), Sense::click());
-        let open = view.index() == i;
-        let p = ui.painter();
-        if open {
-            p.rect_filled(t, cr(3), VIOLET);
-            caps_style(p, t.center(), name, INK_ON, Align2::CENTER_CENTER, 1.0, true);
-        } else {
-            if resp.hovered() {
-                p.rect_filled(t, cr(3), HOVER);
-            }
-            let ink = if resp.hovered() {
-                TEXT
-            } else if mod_used(ed, i) {
-                TEXT_DIM
-            } else {
-                TEXT_FAINT
-            };
-            caps_spaced(p, t.center(), name, ink, Align2::CENTER_CENTER, 1.0);
-        }
-        if resp.clicked() {
-            view = ModView::from_index(i);
-        }
-        x += w;
-    }
-    ui.ctx().data_mut(|d| d.insert_temp(view_id, view.index()));
-    let inner = Rect::from_min_max(r.left_top() + vec2(PAD, PAD + KEY_H + 10.0), r.right_bottom() - vec2(PAD, PAD));
-    match view {
-        ModView::Env(e) => env_view(ui, ed, e, inner),
-        ModView::Lfo(l) => lfo_view(ui, ed, l, inner),
-        ModView::Matrix => matrix_view(ui, ed, inner),
-    }
-}
-
 /// Is this mod tab's source used by any slot? (The amp envelope always is.)
 fn mod_used(ed: &Ed, tab: usize) -> bool {
     use lyra_chrysalis::params::src;
@@ -1162,31 +1372,6 @@ fn mod_used(ed: &Ed, tab: usize) -> bool {
     } as f32;
     (0..p::SLOT_COUNT)
         .any(|s| live(s) && (ed.v(p::slot(s, p::S_SRC)) == source || ed.v(p::slot(s, p::S_VIA)) == source))
-}
-
-fn env_view(ui: &mut Ui, ed: &mut Ed, e: usize, inner: Rect) {
-    let knobs_w = 4.0 * CELL.x + 3.0 * 8.0;
-    let graph = Rect::from_min_max(inner.min, pos2(inner.right() - knobs_w - 14.0, inner.bottom()));
-    let mut g = ui.new_child(UiBuilder::new().id_salt(("chrys-env-g", e)).max_rect(graph));
-    envelope(&mut g, ed, e, graph);
-    let col = Rect::from_min_max(pos2(graph.right() + 14.0, inner.top()), inner.max);
-    let mut u = ui
-        .new_child(UiBuilder::new().id_salt(("chrys-env-knobs", e)).max_rect(col).layout(Layout::top_down(Align::Min)));
-    u.spacing_mut().item_spacing = vec2(8.0, 8.0);
-    let at = |k: usize| p::env(e, k);
-    u.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        knob(ui, ed, at(p::E_ATTACK), "Attack", VIOLET, true);
-        knob(ui, ed, at(p::E_DECAY), "Decay", VIOLET, true);
-        knob(ui, ed, at(p::E_SUSTAIN), "Sustain", VIOLET, true);
-        knob(ui, ed, at(p::E_RELEASE), "Release", VIOLET, true);
-    });
-    u.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        knob(ui, ed, at(p::E_A_CURVE), "A curve", VIOLET, true);
-        knob(ui, ed, at(p::E_D_CURVE), "D curve", VIOLET, true);
-        knob(ui, ed, at(p::E_R_CURVE), "R curve", VIOLET, true);
-    });
 }
 
 /// An ADSR you can drag: dots for the times and the sustain, rings in the
@@ -1331,68 +1516,6 @@ fn write_points(ed: &mut Ed, l: usize, pts: &[Point]) {
     }
 }
 
-fn lfo_view(ui: &mut Ui, ed: &mut Ed, l: usize, inner: Rect) {
-    let side_w = 4.0 * CELL.x + 3.0 * 8.0;
-    let graph = Rect::from_min_max(inner.min, pos2(inner.right() - side_w - 14.0, inner.bottom()));
-    let mut g = ui.new_child(UiBuilder::new().id_salt(("chrys-lfo-g", l)).max_rect(graph));
-    lfo_editor(&mut g, ed, l, graph);
-    let col = Rect::from_min_max(pos2(graph.right() + 14.0, inner.top()), inner.max);
-    let mut u = ui
-        .new_child(UiBuilder::new().id_salt(("chrys-lfo-side", l)).max_rect(col).layout(Layout::top_down(Align::Min)));
-    u.spacing_mut().item_spacing = vec2(4.0, 8.0);
-    let hint = "Free: one shared LFO (locked to the song when synced). Retrig: restarts on every note. \
-                One-shot: runs once per note and holds its end, like an envelope.";
-    let mode = ed.choice(p::lfo(l, p::L_MODE));
-    if let Some(k) = seg(&mut u, &["free", "retrig", "1-shot"], mode, VIOLET, col.width() / 3.0, hint) {
-        ed.set(p::lfo(l, p::L_MODE), k as f32);
-    }
-    // Shape presets: a little picture each, four to a row.
-    let now = read_points(ed, l);
-    for row in SHAPES.chunks(4) {
-        u.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            for (name, pts) in row {
-                let shape: Vec<Point> = pts.iter().map(|&(x, y, bend)| Point { x, y, bend }).collect();
-                let w = (col.width() - 12.0) / 4.0;
-                if shape_key(ui, vec2(w, 34.0), &shape, now == shape).on_hover_text(*name).clicked() {
-                    ed.h.checkpoint(ed.p);
-                    write_points(ed, l, &shape);
-                }
-            }
-        });
-    }
-    let synced = ed.choice(p::lfo(l, p::L_SYNC)) != 0;
-    u.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        knob(ui, ed, p::lfo(l, p::L_SYNC), "Sync", VIOLET, true);
-        knob(ui, ed, p::lfo(l, p::L_RATE), "Rate", VIOLET, !synced);
-    });
-}
-
-/// A small key with an LFO shape drawn on it.
-fn shape_key(ui: &mut Ui, size: Vec2, shape: &[Point], lit: bool) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let p = ui.painter();
-    let fill = if lit {
-        VIOLET
-    } else if resp.hovered() {
-        HOVER
-    } else {
-        SCREEN
-    };
-    p.rect_filled(rect, cr(3), fill);
-    let face = rect.shrink2(vec2(9.0, 8.0));
-    let s = curve::Shape::new(shape);
-    let pts: Vec<Pos2> = (0..=40)
-        .map(|k| {
-            let t = k as f32 / 40.0;
-            pos2(face.left() + t * face.width(), face.bottom() - s.eval(t.min(0.9999)) * face.height())
-        })
-        .collect();
-    p.add(Shape::line(pts, stroke(if lit { 2.0 } else { 1.5 }, if lit { INK_ON } else { TEXT_DIM })));
-    resp
-}
-
 /// Draw the LFO: points, bends, adding and removing.
 fn lfo_editor(ui: &mut Ui, ed: &mut Ed, l: usize, rect: Rect) {
     let bg = ui.interact(rect, Id::new(("chrys-lfo-bg", ed.ch, l)), Sense::click());
@@ -1518,172 +1641,23 @@ fn lfo_editor(ui: &mut Ui, ed: &mut Ed, l: usize, rect: Rect) {
     }
 }
 
-/// The routes in use, one per row (the rest of the 16 slots stay out of the
-/// way), and "+ route" to start another.
-fn matrix_view(ui: &mut Ui, ed: &mut Ed, inner: Rect) {
-    let used: Vec<usize> = (0..p::SLOT_COUNT)
-        .filter(|&k| ed.choice(p::slot(k, p::S_SRC)) != 0 || ed.choice(p::slot(k, p::S_DEST)) != 0)
+/// A key with an LFO shape drawn on it: solid violet when it's the shape you have.
+fn paint_shape_key(p: &egui::Painter, rect: Rect, shape: &[Point], lit: bool, hot: bool) {
+    let fill = if lit {
+        VIOLET
+    } else if hot {
+        HOVER
+    } else {
+        SCREEN
+    };
+    p.rect_filled(rect, cr(3), fill);
+    let face = rect.shrink2(vec2(9.0, 8.0));
+    let s = curve::Shape::new(shape);
+    let pts: Vec<Pos2> = (0..=40)
+        .map(|k| {
+            let t = k as f32 / 40.0;
+            pos2(face.left() + t * face.width(), face.bottom() - s.eval(t.min(0.9999)) * face.height())
+        })
         .collect();
-    let mut child = ui.new_child(
-        UiBuilder::new().id_salt(("chrys-matrix", ed.ch)).max_rect(inner).layout(Layout::top_down(Align::Min)),
-    );
-    // A long list scrolls; its bar is dark violet, not the default light grey.
-    let v = child.visuals_mut();
-    v.extreme_bg_color = SCREEN;
-    for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active] {
-        w.bg_fill = hex(0x2a2152);
-        w.fg_stroke = stroke(1.0, hex(0x2a2152));
-    }
-    v.widgets.hovered.bg_fill = hex(0x3d3075);
-    v.widgets.active.bg_fill = VIOLET;
-    egui::ScrollArea::vertical().id_salt(("chrys-matrix-scroll", ed.ch)).max_height(inner.height()).show(
-        &mut child,
-        |ui| {
-            ui.spacing_mut().item_spacing.y = 3.0;
-            for &k in &used {
-                ui.allocate_ui_with_layout(
-                    vec2(inner.width() - 14.0, KEY_H + 4.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.spacing_mut().item_spacing.x = 6.0;
-                        slot_row(ui, ed, k);
-                    },
-                );
-            }
-            if let Some(free) = (0..p::SLOT_COUNT).find(|k| !used.contains(k)) {
-                ui.horizontal(|ui| {
-                    ui.add_space(22.0);
-                    let hint =
-                        "A new route: pick what moves (an LFO, an envelope, velocity, a macro…) and where it goes";
-                    if key(ui, "+ route", 0.0, false, VIOLET, hint).clicked() {
-                        ed.set(p::slot(free, p::S_SRC), 1.0);
-                    }
-                    if used.is_empty() {
-                        let t = "Send the LFOs, envelopes and macros anywhere.";
-                        ui.label(egui::RichText::new(t).size(11.5).color(TEXT_FAINT));
-                    }
-                });
-            }
-        },
-    );
-}
-
-fn slot_row(ui: &mut Ui, ed: &mut Ed, k: usize) {
-    let at = |q: usize| p::slot(k, q);
-    let live = ed.choice(at(p::S_SRC)) != 0 && ed.choice(at(p::S_DEST)) != 0;
-    let (nr, _) = ui.allocate_exact_size(vec2(16.0, KEY_H), Sense::hover());
-    let num_ink = if live { VIOLET } else { TEXT_FAINT };
-    ui.painter().text(nr.center(), Align2::CENTER_CENTER, format!("{}", k + 1), FontId::proportional(11.0), num_ink);
-    well(ui, ed, at(p::S_SRC), 116.0, VIOLET, "Source: what moves this route");
-    let (ar, _) = ui.allocate_exact_size(vec2(14.0, KEY_H), Sense::hover());
-    let (y, x0, x1) = (ar.center().y, ar.left(), ar.right());
-    let st = stroke(1.5, if live { VIOLET } else { TEXT_FAINT });
-    ui.painter().line_segment([pos2(x0, y), pos2(x1, y)], st);
-    ui.painter().add(Shape::line(vec![pos2(x1 - 4.0, y - 3.5), pos2(x1, y), pos2(x1 - 4.0, y + 3.5)], st));
-    well(ui, ed, at(p::S_DEST), 150.0, VIOLET, "Destination: what it moves");
-    amount_bar(ui, ed, at(p::S_AMT), 190.0, if live { VIOLET } else { TEXT_FAINT });
-    let (vr, _) = ui.allocate_exact_size(vec2(40.0, KEY_H), Sense::hover());
-    let ink = if live { TEXT } else { TEXT_FAINT };
-    let amount = PARAMS[at(p::S_AMT)].format(ed.v(at(p::S_AMT)));
-    ui.painter().text(vr.right_center(), Align2::RIGHT_CENTER, amount, FontId::proportional(11.5), ink);
-    ui.add_space(6.0);
-    let (lr, _) = ui.allocate_exact_size(vec2(24.0, KEY_H), Sense::hover());
-    caps(ui.painter(), lr.right_center(), "via", TEXT_FAINT, Align2::RIGHT_CENTER);
-    well(ui, ed, at(p::S_VIA), 96.0, VIOLET, "Via: a second source that scales the amount (e.g. velocity)");
-    let bi = ed.on(at(p::S_BIPOLAR));
-    let hint = "Bi: centre the source (−1..1), so it swings both ways around the knob";
-    if key(ui, "bi", 32.0, bi, VIOLET, hint).clicked() {
-        ed.toggle(at(p::S_BIPOLAR));
-    }
-    // Remove: the route goes back to an empty slot.
-    let (xr, xresp) = ui.allocate_exact_size(vec2(KEY_H, KEY_H), Sense::click());
-    let hot = xresp.hovered();
-    if hot {
-        ui.painter().rect_filled(xr, cr(3), HOVER);
-    }
-    let c = xr.center();
-    let xs = stroke(1.4, if hot { TEXT } else { TEXT_FAINT });
-    ui.painter().line_segment([c + vec2(-4.0, -4.0), c + vec2(4.0, 4.0)], xs);
-    ui.painter().line_segment([c + vec2(-4.0, 4.0), c + vec2(4.0, -4.0)], xs);
-    if xresp.on_hover_text("Remove this route").clicked() {
-        ed.h.checkpoint(ed.p);
-        for q in [p::S_SRC, p::S_DEST, p::S_AMT, p::S_VIA, p::S_BIPOLAR] {
-            ed.put(at(q), PARAMS[at(q)].default);
-        }
-    }
-}
-
-/// A route's amount as a wide bar from the middle (−100 % … +100 %): drag
-/// sideways (Shift = fine), scroll to nudge, double-click for 0.
-fn amount_bar(ui: &mut Ui, ed: &mut Ed, id: usize, width: f32, color: Color32) {
-    let (r, resp) = ui.allocate_exact_size(vec2(width, KEY_H), Sense::click_and_drag());
-    let info = &PARAMS[id];
-    let reset = dbl(ui, &resp, ("amount", id));
-    if resp.drag_started() || reset {
-        ed.h.checkpoint(ed.p);
-    }
-    if reset {
-        ed.put(id, 0.0);
-    } else if resp.dragged() {
-        let fine = if ui.input(|i| i.modifiers.shift) { 0.2 } else { 1.0 };
-        ed.put(id, ed.v(id) + resp.drag_delta().x / width * (info.max - info.min) * fine);
-    }
-    if let Some(step) = wheel_step(ui, r) {
-        ed.h.checkpoint(ed.p);
-        ed.put(id, ed.v(id) - step as f32 * 0.01);
-    }
-    let p = ui.painter();
-    let track = r.shrink2(vec2(0.0, 7.0));
-    p.rect_filled(track, cr(2), if resp.hovered() || resp.dragged() { HOVER } else { SCREEN });
-    let mid = track.center().x;
-    let x = mid + ed.v(id) / info.max * track.width() * 0.5;
-    let bar = Rect::from_x_y_ranges(mid.min(x)..=mid.max(x), track.y_range());
-    if bar.width() > 0.5 {
-        p.rect_filled(bar.expand2(vec2(0.0, 3.0)), cr(2), alpha(color, 0.12));
-        p.rect_filled(bar, cr(2), color);
-    }
-    p.line_segment([pos2(mid, r.top() + 4.0), pos2(mid, r.bottom() - 4.0)], stroke(1.0, TEXT_FAINT));
-    resp.on_hover_text(format!("{}: {} (drag sideways; double-click: 0)", info.name, info.format(ed.v(id))));
-}
-
-// ───────────────────────────────────────────────────────────── macros
-
-/// Four big knobs; a macro is dim until a slot listens to it.
-fn macros_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let inner = panel(ui, r, "macros", VIOLET);
-    let cell = vec2(inner.width() / 2.0, inner.height() / 2.0);
-    for k in 0..4 {
-        let src = (lyra_chrysalis::params::src::MACRO + k) as f32;
-        let routes = (0..p::SLOT_COUNT)
-            .filter(|&s| {
-                ed.v(p::slot(s, p::S_DEST)) >= 0.5
-                    && (ed.v(p::slot(s, p::S_SRC)) == src || ed.v(p::slot(s, p::S_VIA)) == src)
-            })
-            .count();
-        let c = Rect::from_min_size(inner.min + vec2((k % 2) as f32 * cell.x, (k / 2) as f32 * cell.y), cell);
-        let mut u = ui.new_child(
-            UiBuilder::new().id_salt(("chrys-macro", k)).max_rect(c).layout(Layout::top_down(Align::Center)),
-        );
-        u.spacing_mut().item_spacing.y = 1.0;
-        let id = p::mac(k);
-        let info = &PARAMS[id];
-        let color = if routes > 0 { VIOLET } else { alpha(VIOLET, 0.45) };
-        let mut v = ed.v(id);
-        let resp = crate::widgets::knob_painted(&mut u, &mut v, info, 50.0, |p, rect, v, hot| {
-            paint_knob(p, rect, info, v, color, hot)
-        });
-        ed.track(&resp, id, v);
-        let tip = if routes == 0 {
-            format!("Macro {}: send it somewhere in the MATRIX (source \"Macro {}\")", k + 1, k + 1)
-        } else {
-            format!("Macro {}: drives {routes} slot{}", k + 1, if routes == 1 { "" } else { "s" })
-        };
-        resp.on_hover_text(tip);
-        let (lr, _) = u.allocate_exact_size(vec2(cell.x, 26.0), Sense::hover());
-        let painter = u.painter();
-        let ink = if routes > 0 { TEXT_DIM } else { TEXT_FAINT };
-        caps(painter, lr.center_top() + vec2(0.0, 6.0), &format!("macro {}", k + 1), ink, Align2::CENTER_CENTER);
-        let value = info.format(ed.v(id));
-        painter.text(lr.center_top() + vec2(0.0, 13.0), Align2::CENTER_TOP, value, FontId::proportional(10.5), TEXT);
-    }
+    p.add(Shape::line(pts, stroke(if lit { 2.0 } else { 1.5 }, if lit { INK_ON } else { TEXT_DIM })));
 }

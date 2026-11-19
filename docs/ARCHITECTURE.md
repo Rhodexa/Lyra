@@ -256,5 +256,13 @@ the key first.
   `ctx.input(|i| …)` (or `memory`, `data`…) closure. egui's context lock is not
   re-entrant, so the nested call deadlocks the UI thread. Copy the values out
   first, then call. (This froze the app on the first click in v0.1.)
+* **Layout by arithmetic:** `lyra-app/src/flex.rs` splits a rectangle into
+  rows or columns of fixed (`Px`) and growing (`Grow`) parts with gaps, like a
+  tiny flexbox. Hand-made panels use it so pieces line up and fill their
+  space instead of being placed with pixel numbers (Chrysalis's editor is
+  built on it).
+* Scroll bars everywhere are Lyra's (set once in `theme::apply`): solid,
+  always visible, one width, well and thumb colours; egui's default thin
+  floating bars are gone.
 * Theme tokens and textures live only in `lyra-app/src/theme.rs`. Generated
   textures are placeholders for hand-made art.

@@ -171,6 +171,21 @@ pub fn apply(ctx: &Context) {
     // zone now reaches their content (padding is 8 pt): aiming at the split
     // line can't land in the arranger and place a clip by accident.
     style.interaction.resize_grab_radius_side = 9.0;
+    // Scroll bars: Lyra's own (a recessed well, a flat thumb), always there
+    // and always the same size; egui's default ones hide, shrink and flash.
+    style.spacing.scroll = egui::style::ScrollStyle {
+        bar_width: 12.0,
+        handle_min_length: 28.0,
+        bar_inner_margin: 3.0,
+        bar_outer_margin: 2.0,
+        dormant_background_opacity: 1.0,
+        active_background_opacity: 1.0,
+        interact_background_opacity: 1.0,
+        dormant_handle_opacity: 1.0,
+        active_handle_opacity: 1.0,
+        interact_handle_opacity: 1.0,
+        ..egui::style::ScrollStyle::solid()
+    };
 
     let v = &mut style.visuals;
     *v = egui::Visuals::dark();

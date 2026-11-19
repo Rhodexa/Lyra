@@ -12,6 +12,7 @@ mod design;
 mod devtools;
 mod editor;
 mod files;
+mod flex;
 mod fm_editor;
 mod keys;
 mod mixer;

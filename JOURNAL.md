@@ -64,6 +64,12 @@ no marks would default to not urgent or 'coding teams judges'
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Chrysalis, third pass: layout that fits (2026-11-19)**
+- [x] *(chat)* Overlap in the filters, too much text under the knobs, tiny header knobs too high, empty space in SUB·NOISE, mod tabs that look like text, thin bars, too much space between routes, and "is there a flexbox?"
+  *→ there wasn't: now `flex.rs` lays out a panel by arithmetic (fixed and growing parts), and every Chrysalis panel uses it. Knobs show only their names; hovered or turned, the name becomes the value, and a readout beside the preset shows the full name and value. SUB and NOISE split their panel in half with full-width keys, the filter rows can't overlap, the macros are smaller, the mod tabs are keys, the matrix rows are taller with thick amount bars and tight gaps.*
+- [x] *(chat)* "That scroll bar is awful, too thin, changes size, a different colour"
+  *→ egui's default style everywhere in Lyra: replaced once, app-wide, by solid always-visible bars in Lyra's well-and-thumb colours.*
+
 **Chrysalis, second pass on its face (2026-11-19)**
 - [x] *(chat)* Too many light, Android/Qt-style borders; the matrix crowded and tiny; toggles as dots; empty space in SUB·NOISE and the LFO side; header knobs off-centre
   *→ no light outlines anywhere: edges are darker than what they edge (ink, not black). Anything chosen or on is solid colour with darker, bolder letters (tabs, switches, keys). The panels' names are their on/off keys (OSC A, SUB, NOISE, FILTER 1/2). Dropdowns are dark fields with no border. The matrix lists only the routes in use, in bigger rows with a wide glowing amount bar (drag sideways, double-click for 0), an × to remove, and "+ route" to add.*
