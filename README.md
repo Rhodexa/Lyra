@@ -11,7 +11,7 @@ cargo run --release
 
 On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 
-![screenshot](/home/rhode/Desktop/Rhodexa/Lyra/screenshots/2026-11-19-edm-arrangement.png)
+![screenshot](/screenshots/2026-11-19-edm-arrangement.png)
 
 ## Play
 
