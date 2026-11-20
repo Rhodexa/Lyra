@@ -2,7 +2,7 @@
 //! modulation, and the plugin that runs 16 of those voices.
 
 use crate::curve::{bend_coeff, bend_k, Point, Shape, MAX_POINTS};
-use crate::params::{dest, ft, p, src, warp, PARAMS};
+use crate::params::{dest, ft, lfo_mode, p, src, warp, PARAMS};
 use crate::table::{builtin, Table, GUARD, IMPORTED};
 use crate::telemetry::{Report, Telemetry};
 use lyra_dsp::{poly_blep, round_fast, sin_turns, svf, svf_coeffs, tanh_fast, wrap, Rng, SYNC_BEATS};
@@ -68,8 +68,10 @@ struct EnvPrep {
 #[derive(Clone, Copy, Default)]
 struct LfoPrep {
     shape: Shape,
-    /// 0 free, 1 retrig, 2 one-shot.
+    /// See `params::lfo_mode`.
     mode: u8,
+    /// 0 drawn, 1 random steps, 2 smooth random.
+    style: u8,
     hz: f32,
     /// Synced length in quarter notes (0 = free rate).
     beats: f32,
@@ -186,7 +188,8 @@ impl Prep {
             }
             q.lfo[l] = LfoPrep {
                 shape: Shape::new(&pts[..n]),
-                mode: choice(v[lfo(l, L_MODE)]).min(2) as u8,
+                mode: choice(v[lfo(l, L_MODE)]).min(3) as u8,
+                style: choice(v[lfo_style(l)]).min(2) as u8,
                 hz: v[lfo(l, L_RATE)],
                 beats: SYNC_BEATS[choice(v[lfo(l, L_SYNC)]).min(SYNC_BEATS.len() - 1)],
             };
@@ -227,6 +230,27 @@ impl Prep {
             [0, 1]
         }
     }
+}
+
+impl LfoPrep {
+    /// The LFO's value (0..1) at phase `ph`; `(a, b)` are the random values
+    /// of the previous and this cycle (the random styles use them).
+    #[inline]
+    fn value(&self, ph: f32, (a, b): (f32, f32)) -> f32 {
+        match self.style {
+            1 => b,
+            // A cosine glide from the last random value to this one.
+            2 => a + (b - a) * (0.5 - 0.5 * sin_turns(0.5 * ph + 0.25)),
+            _ => self.shape.eval(ph),
+        }
+    }
+}
+
+/// A new phase for an LFO, and whether it wrapped into a new cycle (a jump
+/// back of more than half a cycle: song-locking nudges it a little either way).
+#[inline]
+fn wrapped(old: f32, new: f32) -> bool {
+    old - new > 0.5
 }
 
 // ───────────────────────────── envelopes ─────────────────────────────
@@ -512,6 +536,8 @@ struct Voice {
     env: [Env; 4],
     lfo_ph: [f32; 4],
     lfo: [f32; 4],
+    /// Each per-note LFO's random values: the previous cycle's and this one's.
+    lfo_r: [(f32, f32); 4],
     /// The mod matrix's sums, per destination (last control tick).
     m: [f32; dest::COUNT],
     /// Velocity's share of the loudness.
@@ -566,6 +592,7 @@ impl Voice {
             env: [Env::default(); 4],
             lfo_ph: [0.0; 4],
             lfo: [0.0; 4],
+            lfo_r: [(0.5, 0.5); 4],
             m: [0.0; dest::COUNT],
             amp: 1.0,
             out_l: 0.0,
@@ -604,12 +631,13 @@ impl Voice {
         // LFOs: shared ones come from the plugin; per-note ones run here.
         for l in 0..4 {
             let lp = &q.lfo[l];
-            if lp.mode == 0 {
+            if lfo_mode::shared(lp.mode) {
                 self.lfo[l] = global[l];
                 continue;
             }
             // A one-shot holds the end of its curve.
-            self.lfo[l] = lp.shape.eval(if lp.mode == 2 { self.lfo_ph[l].min(0.999_999) } else { self.lfo_ph[l] });
+            let ph = if lp.mode == lfo_mode::ONE_SHOT { self.lfo_ph[l].min(0.999_999) } else { self.lfo_ph[l] };
+            self.lfo[l] = lp.value(ph, self.lfo_r[l]);
         }
         // Mod envelopes (2–4) at control rate; the amp envelope runs per sample.
         for e in 1..4 {
@@ -759,11 +787,15 @@ impl Voice {
     fn lfo_tick(&mut self, q: &Prep, inc: [f32; 4]) {
         for l in 0..4 {
             let lp = &q.lfo[l];
-            if lp.mode == 0 {
+            if lfo_mode::shared(lp.mode) {
                 continue;
             }
             let ph = self.lfo_ph[l] + inc[l] * (4.0 * self.m[dest::LFO_RATE + l]).exp2();
-            self.lfo_ph[l] = if lp.mode == 2 { ph.min(1.0) } else { ph - ph.floor() };
+            let new = if lp.mode == lfo_mode::ONE_SHOT { ph.min(1.0) } else { ph - ph.floor() };
+            if wrapped(self.lfo_ph[l], new) {
+                self.lfo_r[l] = (self.lfo_r[l].1, self.rng.bipolar() * 0.5 + 0.5);
+            }
+            self.lfo_ph[l] = new;
         }
     }
 
@@ -1089,6 +1121,8 @@ pub struct Chrysalis {
     lfo: [f32; 4],
     /// Phase per control tick, this block.
     lfo_inc: [f32; 4],
+    /// The shared LFOs' random values: the previous cycle's and this one's.
+    lfo_r: [(f32, f32); 4],
     transport: Transport,
     ctrl_left: usize,
     dc: [(f32, f32); 2],
@@ -1123,6 +1157,7 @@ impl Chrysalis {
             lfo_ph: [0.0; 4],
             lfo: [0.0; 4],
             lfo_inc: [0.0; 4],
+            lfo_r: [(0.5, 0.5); 4],
             transport: Transport { tempo: 120.0, playing: false, position: 0.0 },
             ctrl_left: 0,
             dc: [(0.0, 0.0); 2],
@@ -1176,8 +1211,9 @@ impl Chrysalis {
             }
             v.sub_ph = 0.0;
             for l in 0..4 {
-                if q.lfo[l].mode != 0 {
+                if !lfo_mode::shared(q.lfo[l].mode) {
                     v.lfo_ph[l] = 0.0;
+                    v.lfo_r[l] = (self.rng.bipolar() * 0.5 + 0.5, self.rng.bipolar() * 0.5 + 0.5);
                 }
             }
             v.velocity = velocity;
@@ -1189,6 +1225,15 @@ impl Chrysalis {
     }
 
     fn note_on(&mut self, key: u8, velocity: f32) {
+        // A phrase LFO starts over on the first note after silence.
+        if !self.voices.iter().any(|v| v.gate) {
+            for l in 0..4 {
+                if self.q.lfo[l].mode == lfo_mode::PHRASE {
+                    self.lfo_ph[l] = 0.0;
+                    self.lfo_r[l] = (self.lfo_r[l].1, self.rng.bipolar() * 0.5 + 0.5);
+                }
+            }
+        }
         if self.q.mono {
             for v in self.voices[1..].iter_mut().filter(|v| v.gate) {
                 v.release();
@@ -1267,17 +1312,30 @@ impl Chrysalis {
             self.lfo_inc[l] = hz * per_tick;
             if lp.beats > 0.0 && lp.mode == 0 && t.playing {
                 let cycle = 96.0 * lp.beats as f64;
-                self.lfo_ph[l] = (t.position / cycle).fract() as f32;
+                self.set_lfo_phase(l, (t.position / cycle).fract() as f32);
             }
         }
     }
 
     fn lfo_tick(&mut self) {
+        let sounding = self.voices.iter().any(|v| v.active);
         for l in 0..4 {
-            let ph = self.lfo_ph[l] + self.lfo_inc[l];
-            self.lfo_ph[l] = ph - ph.floor();
-            self.lfo[l] = self.q.lfo[l].shape.eval(self.lfo_ph[l]);
+            let lp = self.q.lfo[l];
+            // A phrase LFO only moves while notes sound.
+            if !(lp.mode == lfo_mode::PHRASE && !sounding) {
+                let ph = self.lfo_ph[l] + self.lfo_inc[l];
+                self.set_lfo_phase(l, ph - ph.floor());
+            }
+            self.lfo[l] = lp.value(self.lfo_ph[l], self.lfo_r[l]);
         }
+    }
+
+    /// Move a shared LFO to `ph`, drawing a new random value when it wraps.
+    fn set_lfo_phase(&mut self, l: usize, ph: f32) {
+        if wrapped(self.lfo_ph[l], ph) {
+            self.lfo_r[l] = (self.lfo_r[l].1, self.rng.bipolar() * 0.5 + 0.5);
+        }
+        self.lfo_ph[l] = ph;
     }
 
     /// Whether an imported WAV table arrived (through `set_sample`).
@@ -1293,6 +1351,10 @@ impl Chrysalis {
     #[cfg(test)]
     pub(crate) fn lfo_phase(&self, l: usize) -> f32 {
         self.lfo_ph[l]
+    }
+    #[cfg(test)]
+    pub(crate) fn lfo_value(&self, l: usize) -> f32 {
+        self.lfo[l]
     }
     #[cfg(test)]
     pub(crate) fn voice_lfo(&self, v: usize, l: usize) -> f32 {
@@ -1441,7 +1503,7 @@ impl Chrysalis {
                 r.pos[o] = (v.osc[o].fpos / last).clamp(0.0, 1.0);
             }
             for l in 0..4 {
-                if q.lfo[l].mode != 0 {
+                if !lfo_mode::shared(q.lfo[l].mode) {
                     r.lfo_phase[l] = v.lfo_ph[l];
                     r.lfo_value[l] = v.lfo[l];
                 }

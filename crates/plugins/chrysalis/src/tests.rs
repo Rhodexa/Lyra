@@ -476,3 +476,50 @@ fn telemetry_follows_the_newest_voice() {
     render(&mut c, &[off(60)], 1.5);
     assert_eq!(live.snapshot().voices, 0);
 }
+
+#[test]
+fn a_phrase_lfo_waits_for_notes_and_restarts_after_silence() {
+    use crate::params::lfo_mode::PHRASE;
+    let mut c =
+        with(&[(p::lfo(0, p::L_MODE), PHRASE as f32), (p::lfo(0, p::L_SYNC), 0.0), (p::lfo(0, p::L_RATE), 1.0)]);
+    render(&mut c, &[], 0.3);
+    assert_eq!(c.lfo_phase(0), 0.0, "no notes, no movement");
+    render(&mut c, &[on(60)], 0.25);
+    let a = c.lfo_phase(0);
+    assert!((a - 0.25).abs() < 0.02, "runs with a note: {a}");
+    render(&mut c, &[on(64)], 0.1); // overlapping: keeps going
+    assert!(c.lfo_phase(0) > a);
+    render(&mut c, &[off(60), off(64)], 2.0); // silence (the voices finish)
+    let rest = c.lfo_phase(0);
+    render(&mut c, &[], 0.3);
+    assert_eq!(c.lfo_phase(0), rest, "stands still in the silence");
+    render(&mut c, &[on(62)], 0.01);
+    assert!(c.lfo_phase(0) < 0.02, "restarts on the next phrase: {}", c.lfo_phase(0));
+}
+
+#[test]
+fn random_styles_step_and_glide() {
+    // LFO 1 at 8 Hz on volume would be hard to read; read the LFO itself.
+    for (style, name) in [(1.0, "steps"), (2.0, "smooth")] {
+        let mut c = with(&[(p::lfo(0, p::L_SYNC), 0.0), (p::lfo(0, p::L_RATE), 8.0), (p::lfo_style(0), style)]);
+        let mut values = Vec::new();
+        for _ in 0..1500 {
+            // 1500 blocks of 64 = 2 s.
+            c.process(ProcessContext { sample_rate: SR, events: &[], out_l: &mut [0.0; 64], out_r: &mut [0.0; 64] });
+            values.push(c.lfo_value(0));
+        }
+        assert!(values.iter().all(|v| (0.0..=1.0).contains(v)), "{name}: in range");
+        let distinct = {
+            let mut v: Vec<u32> = values.iter().map(|x| (x * 1e4) as u32).collect();
+            v.dedup();
+            v.len()
+        };
+        let biggest_jump = values.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
+        if style == 1.0 {
+            // ~2 s at 8 Hz: about 16 steps, each held.
+            assert!((8..40).contains(&distinct), "steps: {distinct} distinct values");
+        } else {
+            assert!(distinct > 100 && biggest_jump < 0.2, "smooth: {distinct} values, jump {biggest_jump}");
+        }
+    }
+}

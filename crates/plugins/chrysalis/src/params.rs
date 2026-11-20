@@ -96,7 +96,8 @@ pub mod p {
     pub const L_RATE: usize = 0;
     /// A `SYNC_LABELS` index: 0 = free (use the rate).
     pub const L_SYNC: usize = 1;
-    /// Free (shared, song-locked when synced) / Retrig (per note) / One-shot.
+    /// Free (shared, song-locked when synced) / Retrig (per note) / One-shot /
+    /// Phrase (shared, runs while notes sound, restarts after silence).
     pub const L_MODE: usize = 2;
     /// How many of the points are in use (1..32).
     pub const L_POINTS: usize = 3;
@@ -145,7 +146,14 @@ pub mod p {
     /// 0 = glide between overlapping notes only, 1 = always.
     pub const GLIDE_MODE: usize = VOLUME + 4;
 
-    pub const COUNT: usize = GLIDE_MODE + 1;
+    // ── Added after the first release (ids continue at the end) ──
+    /// Each LFO's style: its drawn shape, random steps, or smooth random.
+    pub const LFO_STYLE: usize = GLIDE_MODE + 1;
+    pub const fn lfo_style(l: usize) -> usize {
+        LFO_STYLE + l
+    }
+
+    pub const COUNT: usize = LFO_STYLE + LFO_COUNT;
 }
 
 pub const OFF_ON: [&str; 2] = ["Off", "On"];
@@ -180,7 +188,19 @@ pub mod ft {
     pub const COMB_MINUS: u8 = 7;
 }
 pub const ROUTINGS: [&str; 2] = ["Serial", "Parallel"];
-pub const LFO_MODES: [&str; 3] = ["Free", "Retrig", "One-shot"];
+pub const LFO_MODES: [&str; 4] = ["Free", "Retrig", "One-shot", "Phrase"];
+/// LFO modes by name, for the engine.
+pub mod lfo_mode {
+    pub const FREE: u8 = 0;
+    pub const RETRIG: u8 = 1;
+    pub const ONE_SHOT: u8 = 2;
+    pub const PHRASE: u8 = 3;
+    /// One LFO for every voice (free and phrase), rather than one per note.
+    pub const fn shared(mode: u8) -> bool {
+        mode == FREE || mode == PHRASE
+    }
+}
+pub const LFO_STYLES: [&str; 3] = ["Drawn", "Steps", "Smooth"];
 pub const POLARITIES: [&str; 2] = ["Uni", "Bi"];
 pub const VOICE_MODES: [&str; 2] = ["Poly", "Mono"];
 pub const GLIDE_MODES: [&str; 2] = ["Legato", "Always"];
@@ -370,6 +390,9 @@ fn build() -> Vec<ParamInfo> {
     }
     choice(MODE, "Mode", &VOICE_MODES, 0);
     choice(GLIDE_MODE, "Glide when", &GLIDE_MODES, 0);
+    for l in 0..LFO_COUNT {
+        choice(lfo_style(l), name(format!("LFO {} style", l + 1)), &LFO_STYLES, 0);
+    }
 
     a.into_iter().enumerate().map(|(i, x)| x.unwrap_or_else(|| panic!("parameter {i} has no description"))).collect()
 }
@@ -394,6 +417,7 @@ pub static GROUPS: LazyLock<Vec<ParamGroup>> = LazyLock::new(|| {
     }
     v.push(g("Mod matrix", SLOTS, MACROS));
     v.push(g("Macros", MACROS, VOLUME));
-    v.push(g("Voice", VOLUME, COUNT));
+    v.push(g("Voice", VOLUME, LFO_STYLE));
+    v.push(g("LFO styles", LFO_STYLE, COUNT));
     v
 });

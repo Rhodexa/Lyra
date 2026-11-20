@@ -52,21 +52,21 @@ const fn hex(v: u32) -> Color32 {
 }
 
 /// Behind everything: teal-black, with violet glowing in at the corners.
-const VOID: Color32 = hex(0x050c0e);
+const VOID: Color32 = hex(0x08110f);
 const VIOLET_GLOW: Color32 = Color32::from_rgba_premultiplied(0x22, 0x14, 0x48, 0x60);
-const PANEL: Color32 = hex(0x0a1618);
+const PANEL: Color32 = hex(0x0e1b1c);
 /// Edges are darker than what they edge, never lighter.
-const PANEL_EDGE: Color32 = hex(0x040b0c);
+const PANEL_EDGE: Color32 = hex(0x070f10);
 /// Screens and recesses: darker than the panels.
-const SCREEN: Color32 = hex(0x030809);
+const SCREEN: Color32 = hex(0x060d0e);
 /// A control or segment under the mouse.
-const HOVER: Color32 = hex(0x112224);
+const HOVER: Color32 = hex(0x16292b);
 /// Lettering on a solid, lit colour.
 const INK_ON: Color32 = hex(0x041012);
 const GRID: Color32 = Color32::from_rgba_premultiplied(0x10, 0x2a, 0x2a, 0x80);
 const TEXT: Color32 = hex(0xcde8df);
-const TEXT_DIM: Color32 = hex(0x6a8a84);
-const TEXT_FAINT: Color32 = hex(0x3a5450);
+const TEXT_DIM: Color32 = hex(0x76968f);
+const TEXT_FAINT: Color32 = hex(0x445e5a);
 
 const GREEN: Color32 = hex(0x8cff7a);
 const CYAN: Color32 = hex(0x45e6da);
@@ -270,7 +270,8 @@ fn readout(ui: &Ui, name: &'static str, value: String, color: Color32) {
 }
 
 fn readout_display(ui: &Ui, r: Rect) {
-    let p = ui.painter();
+    // Clipped to its box: a long name never runs into what's beside it.
+    let p = &ui.painter_at(r.shrink(2.0));
     screen(p, r);
     let shown = ui.ctx().data(|d| d.get_temp::<Readout>(readout_id()));
     let inner = r.shrink2(vec2(10.0, 6.0));
@@ -493,9 +494,13 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     let p = ui.painter();
     p.rect_filled(field, cr(3), if resp.hovered() { HOVER } else { SCREEN });
     let cap = caps(p, field.left_center() + vec2(10.0, 0.0), "preset", TEXT_FAINT, Align2::LEFT_CENTER);
-    let t = p.text(cap.right_center() + vec2(10.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(15.0), TEXT);
+    // The name stays clear of the chevron (clipped, never overlapping it).
+    let text_area =
+        Rect::from_min_max(pos2(cap.right() + 10.0, field.top()), pos2(field.right() - 24.0, field.bottom()));
+    let tp = ui.painter_at(text_area);
+    let t = tp.text(text_area.left_center(), Align2::LEFT_CENTER, name, FontId::proportional(15.0), TEXT);
     if edited {
-        p.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", FontId::proportional(10.5), TEXT_DIM);
+        tp.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", FontId::proportional(10.5), TEXT_DIM);
     }
     chevron(p, field.right_center() - vec2(11.0, 1.0), 3.5, GREEN);
     if let Some(step) = wheel_step(ui, field) {
@@ -759,26 +764,48 @@ fn env_view(ui: &mut Ui, ed: &mut Ed, e: usize, inner: Rect) {
 }
 
 fn lfo_view(ui: &mut Ui, ed: &mut Ed, l: usize, inner: Rect) {
+    use lyra_chrysalis::params::lfo_mode;
     let [graph, side] = flex::row(inner, [Grow(1.0), Px(272.0)], 12.0);
-    place(ui, graph, ("chrys-lfo-g", l), true, |ui| lfo_editor(ui, ed, l, graph));
-    let [mode_r, sh1, sh2, knobs] = flex::col(side, [Px(KEY_H), Px(36.0), Px(36.0), Grow(1.0)], 6.0);
-    let hint = "Free: one shared LFO (locked to the song when synced). Retrig: restarts on every note. \
-                One-shot: runs once per note and holds its end, like an envelope.";
-    let mode = ed.choice(p::lfo(l, p::L_MODE));
+    let style = ed.choice(p::lfo_style(l));
+    if style == 0 {
+        place(ui, graph, ("chrys-lfo-g", l), true, |ui| lfo_editor(ui, ed, l, graph));
+    } else {
+        lfo_trace(ui, ed, l, graph);
+    }
+    let [mode_r, style_r, sh1, sh2, knobs] =
+        flex::col(side, [Px(KEY_H), Px(KEY_H), Px(32.0), Px(32.0), Grow(1.0)], 6.0);
+    // Modes in the order you think of them; saved by their index.
+    const ORDER: [u8; 4] = [lfo_mode::FREE, lfo_mode::PHRASE, lfo_mode::RETRIG, lfo_mode::ONE_SHOT];
+    let hint = "Free: one LFO for all notes, always running (locked to the song when synced). \
+                Phrase: one for all notes, running only while notes sound, restarting after silence. \
+                Retrig: each note has its own, from the start. One-shot: each note's runs once and holds its end.";
+    let mode = ed.choice(p::lfo(l, p::L_MODE)) as u8;
+    let shown = ORDER.iter().position(|&m| m == mode).unwrap_or(0);
     let pick = place(ui, mode_r, ("chrys-lfo-mode", l), true, |ui| {
-        seg(ui, &["free", "retrig", "1-shot"], mode, VIOLET, mode_r.size(), hint)
+        seg(ui, &["free", "phrase", "retrig", "1-shot"], shown, VIOLET, mode_r.size(), hint)
     });
     if let Some(k) = pick {
-        ed.set(p::lfo(l, p::L_MODE), k as f32);
+        ed.set(p::lfo(l, p::L_MODE), ORDER[k] as f32);
     }
-    // Shape presets: a picture each, four to a row.
+    let hint =
+        "Drawn: the shape you draw. Steps: a new random value every cycle. Smooth: random values, glided between.";
+    let pick = place(ui, style_r, ("chrys-lfo-style", l), true, |ui| {
+        seg(ui, &["drawn", "steps", "smooth"], style, VIOLET, style_r.size(), hint)
+    });
+    if let Some(k) = pick {
+        ed.set(p::lfo_style(l), k as f32);
+    }
+    // Shape presets: a picture each, four to a row (for drawn LFOs).
     let now = read_points(ed, l);
     for (row, cells) in SHAPES.chunks(4).zip([flex::even_row(sh1, 4, 4.0), flex::even_row(sh2, 4, 4.0)]) {
         for ((name, pts), cell) in row.iter().zip(cells) {
             let shape: Vec<Point> = pts.iter().map(|&(x, y, bend)| Point { x, y, bend }).collect();
-            let resp = ui.interact(cell, Id::new(("chrys-shape", l, *name)), Sense::click());
-            paint_shape_key(ui.painter(), cell, &shape, now == shape, resp.hovered());
-            if resp.on_hover_text(*name).clicked() {
+            let picked = place(ui, cell, ("chrys-shape", l, *name), style == 0, |ui| {
+                let (r, resp) = ui.allocate_exact_size(cell.size(), Sense::click());
+                paint_shape_key(ui.painter(), r, &shape, now == shape, resp.hovered());
+                resp.on_hover_text(*name).clicked()
+            });
+            if picked {
                 ed.h.checkpoint(ed.p);
                 write_points(ed, l, &shape);
             }
@@ -788,6 +815,45 @@ fn lfo_view(ui: &mut Ui, ed: &mut Ed, l: usize, inner: Rect) {
     let cells = flex::even_row(knobs, 2, 8.0);
     knob_in(ui, ed, cells[0], p::lfo(l, p::L_SYNC), "Sync", VIOLET, true, 40.0);
     knob_in(ui, ed, cells[1], p::lfo(l, p::L_RATE), "Rate", VIOLET, !synced, 40.0);
+}
+
+/// A random LFO has no shape to draw: its screen shows what it has been
+/// doing, the newest value at the right edge.
+fn lfo_trace(ui: &mut Ui, ed: &Ed, l: usize, rect: Rect) {
+    const N: usize = 240;
+    let id = Id::new(("chrys-lfo-trace", ed.ch, l));
+    let mut trace: Vec<f32> = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
+    if let Some(live) = ed.live {
+        trace.push(live.lfo_value[l].clamp(0.0, 1.0));
+        if trace.len() > N {
+            trace.drain(..trace.len() - N);
+        }
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(id, trace.clone()));
+    let painter = ui.painter_at(rect);
+    screen(&painter, rect);
+    let inner = rect.shrink2(vec2(14.0, 12.0));
+    for k in 1..4 {
+        let y = inner.bottom() - k as f32 / 4.0 * inner.height();
+        painter.line_segment([pos2(inner.left(), y), pos2(inner.right(), y)], stroke(1.0, alpha(GRID, 0.45)));
+    }
+    let step = inner.width() / (N - 1) as f32;
+    let x0 = inner.right() - (trace.len().saturating_sub(1)) as f32 * step;
+    let pts: Vec<Pos2> = trace
+        .iter()
+        .enumerate()
+        .map(|(i, v)| pos2(x0 + i as f32 * step, inner.bottom() - v * inner.height()))
+        .collect();
+    if let Some(&last) = pts.last() {
+        glow_fill(&painter, &pts, inner.bottom(), VIOLET);
+        glow_line(&painter, pts, VIOLET, 1.6);
+        let bright = theme::mix(VIOLET, Color32::WHITE, 0.6);
+        painter.circle_filled(last, 9.0, alpha(VIOLET, 0.25));
+        painter.circle_filled(last, 4.0, bright);
+    } else {
+        caps(&painter, inner.center(), "random: play to see it move", TEXT_FAINT, Align2::CENTER_CENTER);
+    }
+    breathe(&painter, rect, VIOLET, ed.glow);
 }
 
 /// The routes in use, one per row (the rest of the 16 slots stay out of the
@@ -1261,13 +1327,35 @@ fn table_view(ui: &mut Ui, ed: &mut Ed, o: usize, rect: Rect, color: Color32) {
     let base0 = inner.bottom() - (inner.height() + depth.y) * 0.5;
     let level = PICTURE_LEVEL.min(table::LEVELS - 1);
     let place = |d: f32| (inner.left() + d * depth.x, base0 + d * depth.y);
+    let mode = ed.choice(p::osc(o, p::WARP_MODE)) as u8;
+    // The warp as the matrix has it right now (it moves when modulated).
+    let w = modulated(ed, p::osc(o, p::WARP)).unwrap_or_else(|| ed.v(p::osc(o, p::WARP)));
+    let warp_shown = if mode == warp::FM { 0 } else { mode };
+    // FM: the other oscillator's wave (at its pitch) bends the phase, as in the voice.
+    let other = 1 - o;
+    let fm = (mode == warp::FM && ed.on(p::osc(other, p::OSC_ON))).then(|| {
+        let semis = |q: usize| {
+            (ed.choice(p::osc(q, p::OCTAVE)) as f32 - 3.0) * 12.0
+                + ed.v(p::osc(q, p::SEMI)).round()
+                + ed.v(p::osc(q, p::FINE)) / 100.0
+        };
+        let ratio = ((semis(other) - semis(o)) / 12.0).exp2();
+        let mod_pos = sounding(ed).map_or(ed.v(p::osc(other, p::POS)), |l| l.pos[other]);
+        (table_of(ui, ed, other), ratio, mod_pos)
+    });
     let n_pts = 120;
     let curve = |fpos: f32, d: f32, warp_mode: u8, w: f32| -> Vec<Pos2> {
         let (x0, y) = place(d);
         (0..=n_pts)
             .map(|k| {
                 let ph = k as f32 / n_pts as f32;
-                let read = lyra_chrysalis::warp_preview(warp_mode, w, ph.min(0.999_99));
+                let read = match &fm {
+                    Some((t2, ratio, mpos)) => {
+                        let m = t2.sample(level, mpos * (t2.frames() - 1) as f32, (ph * ratio).fract());
+                        (ph + 1.5 * w * m).rem_euclid(1.0)
+                    }
+                    None => lyra_chrysalis::warp_preview(warp_mode, w, ph.min(0.999_99)),
+                };
                 let v = t.sample(level, fpos, read).clamp(-1.2, 1.2);
                 pos2(x0 + ph * wave_w, y - v * amp)
             })
@@ -1283,9 +1371,6 @@ fn table_view(ui: &mut Ui, ed: &mut Ed, o: usize, rect: Rect, color: Color32) {
         let ink = alpha(color, 0.07 + 0.1 * (1.0 - d) + 0.25 * near);
         painter.add(Shape::line(curve(f as f32, d, 0, 0.0), stroke(1.0, ink)));
     }
-    let mode = ed.choice(p::osc(o, p::WARP_MODE)) as u8;
-    let w = ed.v(p::osc(o, p::WARP));
-    let warp_shown = if mode == warp::FM { 0 } else { mode };
     // While notes sound, the bold curve is the frame that plays (modulation
     // included) and the setting stays as a faint line.
     let playing = sounding(ed).filter(|_| enabled && ed.on(p::osc(o, p::OSC_ON))).map(|l| l.pos[o]);
@@ -1800,7 +1885,7 @@ fn lfo_editor(ui: &mut Ui, ed: &mut Ed, l: usize, rect: Rect) {
     }
     // The playhead: a free LFO always runs (it's shared); a per-note one
     // shows the newest note's.
-    let free = ed.choice(p::lfo(l, p::L_MODE)) == 0;
+    let free = ed.choice(p::lfo(l, p::L_MODE)) == 0; // (a phrase LFO only moves with notes)
     if let Some(live) = ed.live.filter(|lv| free || lv.voices > 0) {
         let (ph, val) = (live.lfo_phase[l].clamp(0.0, 1.0), live.lfo_value[l].clamp(0.0, 1.0));
         let x = sx(ph);

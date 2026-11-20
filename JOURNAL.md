@@ -64,6 +64,16 @@ no marks would default to not urgent or 'coding teams judges'
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Chrysalis: random LFOs, phrase mode, warp you can see (2026-11-19)**
+- [x] *(chat)* "A free mode for the LFO that only runs when triggered", and "random/stepped noise on the LFO"
+  *→ a new LFO mode, PHRASE: one LFO for all notes that only runs while notes sound and starts over on the first note after silence. And a style for every LFO: DRAWN (your shape), STEPS (a new random value each cycle) or SMOOTH (random values glided between); the random ones show a scrolling trace of what they're doing.*
+- [x] *(chat)* "The warp doesn't have animations"
+  *→ the table view bends with the warp as the matrix moves it, and FM finally has a picture: oscillator A's wave bent by B's (at B's pitch).*
+- [x] *(chat)* An overlap at the preset label
+  *→ the readout's text is clipped to its box (a long name ran into the preset's ‹ button) and the preset name stops before its chevron. Tell me if it was somewhere else.*
+- [x] *(chat)* The screenshots look lighter and softer than the real window, and that's nicer
+  *→ Chrysalis's darkest tones lifted a touch. (A screenshot is Lyra's raw image; your screen shows it through its colour handling, so the real window can look a bit darker.)*
+
 **Chrysalis comes alive (2026-11-19)**
 - [x] *(chat)* "It's only missing animations": the playing frame, LFO playheads, envelope dots, modulation on the knobs, screens that breathe
   *→ all of them. A plugin can now share what it's doing with its editor (`Plugin::telemetry`: atomics the audio thread writes at the end of each block; the bridge hands it to the editor). While notes sound, the table view's bold curve is the frame that really plays (your setting stays as a faint line), each LFO has a glowing playhead and a dot on its curve, a dot rides the envelope, modulated knobs show a lighter arc and dot where the matrix has them right now (the pointer stays where you set it), and the screens' backlight rises with the output. The editor only redraws continuously while something moves.*
