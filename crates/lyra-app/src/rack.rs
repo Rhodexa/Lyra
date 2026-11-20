@@ -43,6 +43,57 @@ fn step_at(x: f32, len: u32) -> Option<u32> {
 
 /// Undo bookkeeping for a continuous control: one checkpoint per gesture.
 /// Returns true when the value changed this frame.
+/// A rack row's name key: a raised plate with a tab of the row's colour that
+/// lights up with `flash` (0..1: a hit, a clip starting), brighter when
+/// `selected`, outlined white while something is dropped on it. Shared by
+/// the plugin rack and the Audio rack.
+#[allow(clippy::too_many_arguments)]
+pub fn name_key(
+    ui: &Ui,
+    rect: Rect,
+    hovered: bool,
+    name: &str,
+    color: Color32,
+    selected: bool,
+    flash: f32,
+    drop_here: bool,
+) {
+    let m = theme::m();
+    let painter = ui.painter();
+    let bg = if selected {
+        theme::mix(theme::RAISED, color, 0.16)
+    } else if hovered {
+        theme::mix(theme::PANEL_HI, color, 0.07)
+    } else {
+        theme::PANEL_HI
+    };
+    painter.rect_filled(rect, cr(3), bg);
+    if flash > 0.01 {
+        painter.rect_filled(rect, cr(3), color.gamma_multiply(0.12 * flash));
+    }
+    let tab = Rect::from_min_size(rect.min, vec2(3.0, rect.height()));
+    painter.rect_filled(tab, cr(1), theme::mix(theme::mix(theme::PANEL_HI, color, 0.5), color, flash));
+    painter.rect_stroke(
+        rect,
+        cr(3),
+        if drop_here {
+            stroke(1.5, theme::TEXT)
+        } else if selected {
+            stroke(1.0, color.gamma_multiply(0.6))
+        } else {
+            stroke(1.0, theme::LINE)
+        },
+        StrokeKind::Inside,
+    );
+    painter.with_clip_rect(rect.shrink(1.0)).text(
+        rect.left_center() + vec2(9.0, 0.0),
+        Align2::LEFT_CENTER,
+        name,
+        FontId::proportional(m.text),
+        if selected { theme::TEXT } else { theme::TEXT_DIM },
+    );
+}
+
 pub fn tracked(r: &Response, h: &mut History, p: &Project) -> bool {
     if r.drag_started() || (r.changed() && !r.dragged()) {
         h.checkpoint(p);
@@ -259,39 +310,8 @@ fn row(
         }
         let selected = st.selected == ci;
         let flash = st.flash.get(ci).copied().unwrap_or(0.0);
+        name_key(ui, rect, r.hovered(), &p.channels[ci].name, color, selected, flash, drop_here);
         let painter = ui.painter().clone();
-        let bg = if selected {
-            theme::mix(theme::RAISED, color, 0.16)
-        } else if r.hovered() {
-            theme::mix(theme::PANEL_HI, color, 0.07)
-        } else {
-            theme::PANEL_HI
-        };
-        painter.rect_filled(rect, cr(3), bg);
-        if flash > 0.01 {
-            painter.rect_filled(rect, cr(3), color.gamma_multiply(0.12 * flash));
-        }
-        let tab = Rect::from_min_size(rect.min, vec2(3.0, rect.height()));
-        painter.rect_filled(tab, cr(1), theme::mix(theme::mix(theme::PANEL_HI, color, 0.5), color, flash));
-        painter.rect_stroke(
-            rect,
-            cr(3),
-            if drop_here {
-                stroke(1.5, theme::TEXT)
-            } else if selected {
-                stroke(1.0, color.gamma_multiply(0.6))
-            } else {
-                stroke(1.0, theme::LINE)
-            },
-            StrokeKind::Inside,
-        );
-        painter.text(
-            rect.left_center() + vec2(9.0, 0.0),
-            Align2::LEFT_CENTER,
-            &p.channels[ci].name,
-            FontId::proportional(m.text),
-            if selected { theme::TEXT } else { theme::TEXT_DIM },
-        );
         if r.clicked() {
             st.selected = ci;
         }

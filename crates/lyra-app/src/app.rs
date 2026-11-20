@@ -195,7 +195,8 @@ pub struct LyraApp {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RightTab {
     Plugins,
-    Clips,
+    Patterns,
+    Audio,
     Automation,
 }
 
@@ -999,6 +1000,9 @@ impl LyraApp {
     fn docked(&mut self, ctx: &egui::Context, playing: bool, playhead: f64, actions: &mut Vec<Action>) {
         let m = theme::m();
         let panel = egui::Frame::default().fill(theme::PANEL).inner_margin(Margin::same(8));
+        // Side panels: the header runs edge to edge, the content keeps a margin.
+        let side = egui::Frame::default().fill(theme::PANEL);
+        let inside = egui::Frame::default().inner_margin(Margin { left: 8, right: 8, top: 6, bottom: 8 });
 
         // ── Browser ──
         if self.ui.show_browser {
@@ -1007,17 +1011,14 @@ impl LyraApp {
                 .resizable(true)
                 .default_width(230.0)
                 .width_range(160.0..=480.0)
-                .frame(panel)
+                .frame(side)
                 .show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("BROWSER").size(m.text_small).color(theme::TEXT_DIM));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("<").on_hover_text("Fold the browser away  (F4)").clicked() {
-                                self.ui.show_browser = false;
-                            }
-                        });
-                    });
-                    crate::browser::show(ui, &mut self.project, &mut self.history, &mut self.ui);
+                    let (_, fold) =
+                        crate::widgets::panel_header(ui, &["Browser"], 0, false, "Fold the browser away  (F4)");
+                    if fold {
+                        self.ui.show_browser = false;
+                    }
+                    inside.show(ui, |ui| crate::browser::show(ui, &mut self.project, &mut self.history, &mut self.ui));
                 });
         } else {
             folded_strip(ctx, "browser-folded", true, "Unfold the browser  (F4)", &mut self.ui.show_browser);
@@ -1029,48 +1030,49 @@ impl LyraApp {
                 .resizable(true)
                 .default_width(300.0)
                 .width_range(220.0..=520.0)
-                .frame(panel)
+                .frame(side)
                 .show(ctx, |ui| {
                     // Tabs: the project's racks. (The browser on the left is the library.)
-                    ui.horizontal(|ui| {
-                        let tabs = [RightTab::Plugins, RightTab::Clips, RightTab::Automation];
-                        use crate::widgets::Legend::Text;
-                        let options = [
-                            (Text("Plugins"), theme::L_MINT),
-                            (Text("Clips"), theme::L_MINT),
-                            (Text("Automation"), theme::L_MINT),
-                        ];
-                        let chosen = tabs.iter().position(|&t| t == self.ui.right_tab).unwrap_or(0);
-                        let w = ((ui.available_width() - 28.0) / 3.0).floor();
-                        let hint = "The project's racks: instruments, clips, automation";
-                        if let Some(i) =
-                            crate::widgets::radio_keys(ui, egui::vec2(w, m.control_h), &options, chosen, hint)
-                        {
-                            self.ui.right_tab = tabs[i];
-                        }
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button(">").on_hover_text("Fold this panel away  (F6)").clicked() {
-                                self.ui.show_plugins = false;
-                            }
-                        });
-                    });
-                    match self.ui.right_tab {
+                    let tabs = [RightTab::Plugins, RightTab::Patterns, RightTab::Audio, RightTab::Automation];
+                    let chosen = tabs.iter().position(|&t| t == self.ui.right_tab).unwrap_or(0);
+                    let (tab, fold) = crate::widgets::panel_header(
+                        ui,
+                        &["Plugins", "Patterns", "Audio", "Automation"],
+                        chosen,
+                        true,
+                        "Fold this panel away  (F6)",
+                    );
+                    if let Some(i) = tab {
+                        self.ui.right_tab = tabs[i];
+                    }
+                    if fold {
+                        self.ui.show_plugins = false;
+                    }
+                    let song_playhead = (playing && self.ui.song_mode).then_some(playhead);
+                    inside.show(ui, |ui| match self.ui.right_tab {
                         RightTab::Plugins => rack::plugins(ui, &mut self.project, &mut self.history, &mut self.ui),
-                        RightTab::Clips => {
-                            egui::ScrollArea::vertical()
-                                .id_salt("pool-clips")
-                                .show(ui, |ui| {
-                                    crate::pool::clips(ui, &mut self.project, &mut self.history, &mut self.ui)
-                                })
-                                .inner
+                        RightTab::Patterns => {
+                            egui::ScrollArea::vertical().id_salt("pool-patterns").show(ui, |ui| {
+                                crate::pool::patterns(ui, &mut self.project, &mut self.history, &mut self.ui)
+                            });
+                        }
+                        RightTab::Audio => {
+                            egui::ScrollArea::vertical().id_salt("pool-audio").show(ui, |ui| {
+                                crate::pool::audio(
+                                    ui,
+                                    &mut self.project,
+                                    &mut self.history,
+                                    &mut self.ui,
+                                    song_playhead,
+                                )
+                            });
                         }
                         RightTab::Automation => {
                             egui::ScrollArea::vertical()
                                 .id_salt("pool-auto")
-                                .show(ui, |ui| crate::pool::automations(ui, &mut self.project, &mut self.ui))
-                                .inner
+                                .show(ui, |ui| crate::pool::automations(ui, &mut self.project, &mut self.ui));
                         }
-                    }
+                    });
                     // A sample dropped anywhere else on the plugin rack: a new sampler for it.
                     let released = ui.input(|i| i.pointer.any_released());
                     if self.ui.right_tab == RightTab::Plugins && released && ui.rect_contains_pointer(ui.max_rect()) {

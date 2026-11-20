@@ -51,7 +51,8 @@ mod tests {
         let id = p.patterns[0].id;
         p.clips.push(Clip::of_pattern(id, 2, TICKS_PER_BAR, 4 * TICKS_PER_BAR));
         let a = p.add_audio("Hello", "/tmp/hello.wav", 1.5);
-        p.audio[a].gain = -2.0;
+        p.audio[a].volume = 0.7;
+        p.audio[a].pan = -0.3;
         let mut cl = Clip::of_audio(p.audio[a].id, 3, 0, 100);
         cl.offset = 12;
         cl.gain = -3.5;

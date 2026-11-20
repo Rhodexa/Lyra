@@ -247,7 +247,7 @@ pub fn compile_audio(p: &Project, samples: &mut Samples) -> AudioLane {
         if track.mute {
             continue;
         }
-        let Some(a) = clip.audio().and_then(|id| p.audio(id)) else { continue };
+        let Some(a) = clip.audio().and_then(|id| p.audio(id)).filter(|a| !a.mute) else { continue };
         let Ok(data) = samples.get(&a.sample) else { continue };
         let fade = |f: lyra_model::Fade| (f.len, f.tension);
         regions.push(AudioRegion {
@@ -256,7 +256,9 @@ pub fn compile_audio(p: &Project, samples: &mut Samples) -> AudioLane {
             from: a.start + clip.offset as f64 * spt,
             trim: (a.start, a.end.min(data.seconds() as f64)),
             // The source's gain and the clip's own, together.
-            gain: lyra_plugin::db_to_gain(a.gain + clip.gain),
+            // The audio clip's volume (its rack fader) and the placed clip's own gain.
+            gain: a.volume * lyra_plugin::db_to_gain(clip.gain),
+            pan: a.pan,
             fade_in: fade(clip.fade_in),
             fade_out: fade(clip.fade_out),
             track: a.mixer,
@@ -309,7 +311,7 @@ mod tests {
         p.bpm = 120.0; // a tick = 1/192 s
         let kick = "bundled:Starter Kit/Kicks/bd_haus.flac";
         let a = p.add_audio("kick", kick, 0.3);
-        p.audio[a].gain = -6.0;
+        p.audio[a].volume = 0.5;
         let id = p.audio[a].id;
         let mut c = Clip::of_audio(id, 2, TICKS_PER_BAR, 48);
         c.offset = 19; // a tenth of a second in
@@ -323,7 +325,7 @@ mod tests {
         let r = &lane.regions[0];
         assert_eq!((r.start, r.end, r.track), (TICKS_PER_BAR as f64, (TICKS_PER_BAR + 48) as f64, 5));
         assert!((r.from - 19.0 / 192.0).abs() < 1e-9);
-        assert!((r.gain - 0.251).abs() < 0.01, "-6 dB twice, got {}", r.gain);
+        assert!((r.gain - 0.251).abs() < 0.01, "half, then -6 dB, got {}", r.gain);
         assert!(r.trim.1 <= 0.3);
         assert_eq!(r.fade_in, (0.005, 0.0), "new clips fade 5 ms at each end");
     }

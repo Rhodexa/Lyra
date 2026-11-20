@@ -42,7 +42,8 @@ const CURVE_OUT: ParamInfo = ParamInfo::new(4, "Curve", -1.0, 1.0, 0.0, "", Curv
 /// This clip's knobs: gain, then each fade's length and curve.
 const CLIP_KNOBS: [(&ParamInfo, (usize, usize)); 5] =
     [(&GAIN, (0, 0)), (&FADE_IN, (0, 1)), (&CURVE_IN, (1, 1)), (&FADE_OUT, (0, 2)), (&CURVE_OUT, (1, 2))];
-const SOURCE_KNOBS: [(&ParamInfo, (usize, usize)); 1] = [(&GAIN, (0, 0))];
+/// Every copy's volume: the same fader as its row in the Audio rack.
+const SOURCE_KNOBS: [(&ParamInfo, (usize, usize)); 1] = [(&crate::rack::VOLUME, (0, 0))];
 
 /// The plates of knobs (this clip's is two knobs wide, every copy's one).
 const PLATE_W: f32 = 150.0;
@@ -349,12 +350,12 @@ impl AudioEditor {
             x += PLATE_W + theme::SEAM;
         }
         let plate = Rect::from_min_max(pos2(x, rect.top()), pos2(x + SOURCE_W, rect.bottom()));
-        let k = knob_plate(ui, plate, "EVERY COPY", "source-knob", &SOURCE_KNOBS, &[p.audio[ai].gain], color);
+        let k = knob_plate(ui, plate, "EVERY COPY", "source-knob", &SOURCE_KNOBS, &[p.audio[ai].volume], color);
         if k.checkpoint {
             h.checkpoint(p);
         }
         if let Some((_, v)) = k.change {
-            p.audio[ai].gain = v;
+            p.audio[ai].volume = v;
         }
 
         // ── The waveform ──
@@ -538,7 +539,7 @@ impl AudioEditor {
         painter.rect_filled(trim, cr(0), theme::mix(theme::PANEL, light.low, 0.24));
         painter.hline(wave.x_range(), wave.center().y, stroke(1.0, Color32::from_black_alpha(80)));
         let sr = peaks.sample_rate() as f64;
-        let source_gain = lyra_plugin::db_to_gain(a.gain);
+        let source_gain = a.volume;
         let column = |x: f32| (v.secs(x) * sr, v.secs(x + 1.0) * sr);
         // The whole file dim; the trimmed part brighter; this clip's window
         // brightest, shaped by its own gain and fades.

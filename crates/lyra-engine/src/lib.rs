@@ -84,6 +84,8 @@ pub struct AudioRegion {
     pub trim: (f64, f64),
     /// Linear gain (the source's and the clip's together).
     pub gain: f32,
+    /// -1 (left) .. 1 (right), constant power, unity in the middle.
+    pub pan: f32,
     /// (seconds, tension) at each end of the region (the clip's own fades);
     /// see [`fade_curve`].
     pub fade_in: (f32, f32),
@@ -99,6 +101,7 @@ impl PartialEq for AudioRegion {
         Arc::ptr_eq(&self.data, &o.data)
             && (self.start, self.end, self.from, self.trim) == (o.start, o.end, o.from, o.trim)
             && (self.gain, self.fade_in, self.fade_out, self.track) == (o.gain, o.fade_in, o.fade_out, o.track)
+            && self.pan == o.pan
             && self.reverse == o.reverse
     }
 }
@@ -220,6 +223,9 @@ impl AudioRegion {
         // the audio runs out first.
         let dur = ((self.end - self.start) * seconds_per_tick).min(self.trim.1 - self.from);
         let (fi, fo) = (self.fade_in.0 as f64, self.fade_out.0 as f64);
+        // Constant-power pan, scaled so the middle is unity (like the mixer).
+        let angle = (self.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+        let (pl, pr) = (angle.cos() * std::f32::consts::SQRT_2, angle.sin() * std::f32::consts::SQRT_2);
         for s in 0..n {
             let mut t = pos + s as f64 * ticks_per_sample;
             if t >= len {
@@ -250,8 +256,8 @@ impl AudioRegion {
                 continue;
             }
             let f = (at - i as f64) as f32;
-            out_l[s] += (data.left[i] + (data.left[i + 1] - data.left[i]) * f) * g;
-            out_r[s] += (data.right[i] + (data.right[i + 1] - data.right[i]) * f) * g;
+            out_l[s] += (data.left[i] + (data.left[i + 1] - data.left[i]) * f) * g * pl;
+            out_r[s] += (data.right[i] + (data.right[i + 1] - data.right[i]) * f) * g * pr;
         }
     }
 }
@@ -1119,6 +1125,7 @@ mod tests {
             from: 0.0,
             trim: (0.0, 1.0),
             gain: 1.0,
+            pan: 0.0,
             fade_in: (0.0, 0.0),
             fade_out: (0.0, 0.0),
             track: 0,

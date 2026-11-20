@@ -160,6 +160,10 @@ pub struct Track {
     pub mute: bool,
 }
 
+fn unity() -> f32 {
+    1.0
+}
+
 fn is_zero<T: Default + PartialEq>(v: &T) -> bool {
     *v == T::default()
 }
@@ -185,9 +189,14 @@ pub struct Audio {
     pub name: String,
     /// "bundled:<path>" for Lyra's own library, otherwise a path on disk.
     pub sample: String,
-    /// Gain in dB.
+    /// Volume (a linear gain, the plugin rack's fader law), pan and mute:
+    /// it sits in the Audio rack like an instrument.
+    #[serde(default = "unity")]
+    pub volume: f32,
     #[serde(default)]
-    pub gain: f32,
+    pub pan: f32,
+    #[serde(default)]
+    pub mute: bool,
     /// The part of the file that plays, in seconds from its start.
     pub start: f64,
     pub end: f64,
@@ -749,7 +758,9 @@ impl Project {
             id,
             name: name.to_string(),
             sample: sample.to_string(),
-            gain: 0.0,
+            volume: 1.0,
+            pan: 0.0,
+            mute: false,
             start: 0.0,
             end: seconds.max(0.0),
             color,

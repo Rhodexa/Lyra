@@ -771,6 +771,64 @@ pub fn sweep(ui: &Ui, rect: Rect, group: &str, on: bool) -> Option<Sweep> {
     }
 }
 
+/// A docked panel's header: its tabs edge to edge, the current one in the
+/// panel's own colour (so it joins the panel below, like a tab), the others
+/// darker; and a fold key (a chevron) on the panel's inner side. Returns the
+/// tab clicked, and whether the fold key was.
+pub fn panel_header(
+    ui: &mut Ui,
+    tabs: &[&str],
+    chosen: usize,
+    fold_on_left: bool,
+    fold_hint: &str,
+) -> (Option<usize>, bool) {
+    let m = theme::m();
+    let h = m.control_h + 4.0;
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
+    ui.painter().rect_filled(r, cr(0), theme::BG);
+    let (fold, rest) = if fold_on_left {
+        (Rect::from_min_size(r.min, vec2(h, h)), Rect::from_min_max(pos2(r.left() + h + theme::SEAM, r.top()), r.max))
+    } else {
+        (
+            Rect::from_min_size(pos2(r.right() - h, r.top()), vec2(h, h)),
+            Rect::from_min_max(r.min, pos2(r.right() - h - theme::SEAM, r.bottom())),
+        )
+    };
+    let id = ui.id().with(("panel-header", tabs.first().copied().unwrap_or("")));
+    let off = theme::mix(theme::BG, theme::PANEL, 0.55);
+    let mut clicked = None;
+    for (i, cell) in crate::flex::even_row(rest, tabs.len(), theme::SEAM).into_iter().enumerate() {
+        let resp = ui.interact(cell, id.with(i), Sense::click());
+        let on = i == chosen;
+        let fill = if on {
+            theme::PANEL
+        } else if resp.hovered() {
+            theme::mix(off, theme::PANEL, 0.5)
+        } else {
+            off
+        };
+        ui.painter().rect_filled(cell, cr(0), fill);
+        let ink = if on || resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+        ui.painter().with_clip_rect(cell).text(
+            cell.center(),
+            egui::Align2::CENTER_CENTER,
+            tabs[i],
+            egui::FontId::proportional(m.text_small + 1.0),
+            ink,
+        );
+        if resp.clicked() {
+            clicked = Some(i);
+        }
+    }
+    let resp = ui.interact(fold, id.with("fold"), Sense::click());
+    ui.painter().rect_filled(fold, cr(0), if resp.hovered() { theme::mix(off, theme::PANEL, 0.5) } else { off });
+    let icon = if fold_on_left { Icon::Next } else { Icon::Prev };
+    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+    paint_icon(ui.painter(), fold.shrink(h * 0.22), icon, ink, off);
+    let folded = resp.on_hover_text(fold_hint).clicked();
+    (clicked, folded)
+}
+
 /// How a mixer insert is written in a number well: M for the master.
 pub fn insert_label(n: usize) -> String {
     if n == 0 {

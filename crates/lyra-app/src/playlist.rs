@@ -35,7 +35,7 @@
 use crate::app::UiState;
 use crate::browser::SampleDrag;
 use crate::keys::Action;
-use crate::pool::{AudioDrag, AutomationDrag};
+use crate::pool::{AudioDrag, AutomationDrag, PatternDrag};
 use crate::samples::{self, Samples};
 use crate::theme::{self, cr, stroke};
 use crate::timeline::{self, Input, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag, Wheel};
@@ -497,7 +497,8 @@ impl Playlist {
         let drop_at = pos.filter(|p| hovering && grid.contains(*p));
         let dropping = egui::DragAndDrop::has_payload_of_type::<SampleDrag>(ui.ctx())
             || egui::DragAndDrop::has_payload_of_type::<AudioDrag>(ui.ctx())
-            || egui::DragAndDrop::has_payload_of_type::<AutomationDrag>(ui.ctx());
+            || egui::DragAndDrop::has_payload_of_type::<AutomationDrag>(ui.ctx())
+            || egui::DragAndDrop::has_payload_of_type::<PatternDrag>(ui.ctx());
         let mut ghost = None;
         if let (Some(at), true) = (drop_at, dropping) {
             let snap = if mods.alt { 1 } else { self.snap };
@@ -510,8 +511,13 @@ impl Playlist {
             } else {
                 egui::DragAndDrop::payload::<AudioDrag>(ui.ctx()).and_then(|d| p.audio(d.0)).map_or(0.0, |a| a.length())
             };
-            // An automation is one loop of its curve long.
-            let len = automation.map_or(((secs / spt).ceil() as u32).max(1), |a| a.length.max(1));
+            // An automation is one loop of its curve long; a pattern, its length.
+            let pattern = egui::DragAndDrop::payload::<PatternDrag>(ui.ctx()).and_then(|d| p.pattern(d.0));
+            let len = match (automation, pattern) {
+                (Some(a), _) => a.length.max(1),
+                (None, Some(pat)) => pat.play_length() * TICKS_PER_STEP,
+                (None, None) => ((secs / spt).ceil() as u32).max(1),
+            };
             if let Ok(track) = usize::try_from(track).map(|t| t.min(p.tracks.len().saturating_sub(1))) {
                 ghost = Some(Clip::of_audio(0, track, start, len));
                 if ui.input(|i| i.pointer.any_released()) {
@@ -523,6 +529,13 @@ impl Playlist {
                         h.checkpoint(p);
                         Some(d.0)
                     } else {
+                        if let Some(d) = egui::DragAndDrop::take_payload::<PatternDrag>(ui.ctx()) {
+                            h.checkpoint(p);
+                            let i = p.add_clip(Clip::of_pattern(d.0, track, start, len));
+                            self.selection = vec![i];
+                            st.clip = Some(p.clips[i].id);
+                            ghost = None;
+                        }
                         if let Some(d) = egui::DragAndDrop::take_payload::<AutomationDrag>(ui.ctx()) {
                             h.checkpoint(p);
                             let i = p.add_clip(Clip::of_automation(d.0, track, start, len));
@@ -1358,7 +1371,7 @@ fn paint_audio(
     };
     let spt = p.seconds_per_tick();
     let sr = peaks.sample_rate() as f64;
-    let gain = lyra_plugin::db_to_gain(a.gain + c.gain);
+    let gain = a.volume * lyra_plugin::db_to_gain(c.gain);
     let wave = g.body.shrink2(vec2(0.0, 2.0));
     waveform::paint(&clipped, wave, &peaks, light.hi, 1.0, |x| {
         if x < g.x0 || x >= g.x_end {
