@@ -186,7 +186,6 @@ impl Keyboard {
                         Key::E if modifiers.shift => out.push(Action::ExportStems),
                         Key::E => out.push(Action::ExportWav),
                         Key::O => out.push(Action::OpenProject),
-                        Key::N => out.push(Action::NewProject),
                         Key::Q => out.push(Action::Quantize),
                         Key::ArrowUp => out.push(Action::Arrow { dx: 0, dy: 1, big: true }),
                         Key::ArrowDown => out.push(Action::Arrow { dx: 0, dy: -1, big: true }),

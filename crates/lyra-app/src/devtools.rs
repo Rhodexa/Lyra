@@ -34,6 +34,9 @@ pub struct DevTools {
     requested: bool,
     pub autoplay: bool,
     pub open: Vec<String>,
+    /// The screenshot is taken and the window asked to close: the app lets
+    /// it, without asking about unsaved changes.
+    pub closing: bool,
 }
 
 fn flag(name: &str) -> bool {
@@ -57,6 +60,7 @@ impl DevTools {
             open: std::env::var("LYRA_OPEN")
                 .map(|v| v.split(',').map(|s| s.trim().to_lowercase()).collect())
                 .unwrap_or_default(),
+            closing: false,
         }
     }
 
@@ -161,6 +165,7 @@ impl DevTools {
                 Ok(()) => eprintln!("lyra: screenshot saved to {}", path.display()),
                 Err(e) => eprintln!("lyra: screenshot failed: {e}"),
             }
+            self.closing = true;
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
     }

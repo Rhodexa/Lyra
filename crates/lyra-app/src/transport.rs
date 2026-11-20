@@ -43,7 +43,7 @@ pub fn show(
             let button = egui::Button::image(egui::Image::new((logo, vec2(big, big)))).frame(false);
             egui::menu::menu_custom_button(ui, button, |ui| {
                 for (label, keys, action) in [
-                    ("New", "Ctrl+N", Action::NewProject),
+                    ("New", "", Action::NewProject),
                     ("Open…", "Ctrl+O", Action::OpenProject),
                     ("Save", "Ctrl+S", Action::Save),
                     ("Save as…", "Ctrl+Shift+S", Action::SaveAs),

@@ -169,6 +169,19 @@ pub struct LyraApp {
     toast: Option<(String, bool, std::time::Instant)>,
     /// A WAV export running on its own thread.
     export: Option<Export>,
+    /// Leaving this project (new, open, quit) is waiting on "save changes?".
+    leaving: Option<Leave>,
+    /// The window may close now (the question was answered).
+    may_close: bool,
+}
+
+/// Ways to leave the current project. With unsaved changes, each one asks first.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Leave {
+    New,
+    Open,
+    OpenBackup,
+    Quit,
 }
 
 /// An export in progress: the render runs on a thread (it takes seconds),
@@ -246,6 +259,8 @@ impl LyraApp {
             title: String::new(),
             toast,
             export: None,
+            leaving: None,
+            may_close: false,
         }
     }
 
@@ -283,6 +298,92 @@ impl LyraApp {
             a.framed = None;
         }
         self.pending_seek = Some(0.0);
+    }
+
+    fn dirty(&self) -> bool {
+        self.project != self.saved
+    }
+
+    /// Leave this project: right away if everything is saved, else after
+    /// asking (see `ask_to_save`).
+    fn leave(&mut self, ctx: &egui::Context, how: Leave) {
+        if self.dirty() {
+            self.leaving = Some(how);
+        } else {
+            self.left(ctx, how);
+        }
+    }
+
+    /// Actually leave (the question, if any, was answered). The project is
+    /// backed up first either way: nothing is ever lost.
+    fn left(&mut self, ctx: &egui::Context, how: Leave) {
+        match how {
+            Leave::New => {
+                files::backup(&self.project);
+                let mut p = Project::default();
+                p.add_channel("Kick", "lyra.kick", lyra_catalog::default_params("lyra.kick"));
+                self.replace_project(p, None);
+                self.notify("New project", false);
+            }
+            Leave::Open => {
+                if let Some(path) = files::pick_open() {
+                    self.open(path);
+                }
+            }
+            Leave::OpenBackup => match files::load(&files::backup_path()) {
+                Ok(p) => {
+                    self.replace_project(p, None);
+                    self.notify("Opened the backup · Save as… to keep it", false);
+                }
+                Err(e) => self.notify(&e, true),
+            },
+            Leave::Quit => {
+                self.may_close = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+    }
+
+    /// "Save changes?" while leaving a project that has unsaved changes.
+    fn ask_to_save(&mut self, ctx: &egui::Context) {
+        let Some(how) = self.leaving else { return };
+        let name = files::display_name(self.path.as_deref());
+        let mut answer = None;
+        let modal = egui::Modal::new(Id::new("save-changes")).show(ctx, |ui| {
+            ui.set_width(340.0);
+            ui.label(RichText::new(format!("Save the changes to “{name}”?")).strong());
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new("If you don't, they're still in Open backup, until the next backup replaces them.")
+                    .small()
+                    .color(theme::TEXT_DIM),
+            );
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                if ui.button("Save").clicked() {
+                    answer = Some(true);
+                }
+                if ui.button("Don't save").clicked() {
+                    answer = Some(false);
+                }
+                if ui.button("Cancel").clicked() {
+                    self.leaving = None;
+                }
+            });
+        });
+        if modal.should_close() {
+            self.leaving = None; // Esc or a click outside: stay
+        }
+        if let Some(save) = answer {
+            self.leaving = None;
+            if save {
+                self.save(false);
+                if self.dirty() {
+                    return; // the save dialog was cancelled (or failed): stay
+                }
+            }
+            self.left(ctx, how);
+        }
     }
 
     fn open(&mut self, path: std::path::PathBuf) {
@@ -623,28 +724,9 @@ impl LyraApp {
             Action::TogglePlaylist => self.toggle_bottom(Editor::Arrangement),
             Action::ToggleSongMode => self.ui.song_mode ^= true,
             Action::SongMode(on) => self.ui.song_mode = on,
-            Action::NewProject => {
-                files::backup(&self.project); // nothing is ever lost, so no "are you sure?"
-                let mut p = Project::default();
-                p.add_channel("Kick", "lyra.kick", lyra_catalog::default_params("lyra.kick"));
-                self.replace_project(p, None);
-                self.notify("New project · the previous one is in Open backup", false);
-            }
-            Action::OpenProject => {
-                if let Some(path) = files::pick_open() {
-                    self.open(path);
-                }
-            }
-            Action::OpenBackup => {
-                let path = files::backup_path();
-                match files::load(&path) {
-                    Ok(p) => {
-                        self.replace_project(p, None);
-                        self.notify("Opened the backup · Save as… to keep it", false);
-                    }
-                    Err(e) => self.notify(&e, true),
-                }
-            }
+            Action::NewProject => self.leave(ctx, Leave::New),
+            Action::OpenProject => self.leave(ctx, Leave::Open),
+            Action::OpenBackup => self.leave(ctx, Leave::OpenBackup),
             Action::Save => self.save(false),
             Action::SaveAs => self.save(true),
             Action::ExportWav | Action::ExportStems => self.export(a == Action::ExportStems),
@@ -728,6 +810,13 @@ impl eframe::App for LyraApp {
         let (playing, playhead) =
             self.engine.as_ref().map_or((false, 0.0), |e| (e.shared().is_playing(), e.shared().playhead()));
         self.playhead = playhead;
+        // Closing the window with unsaved changes asks first, like New and Open.
+        let closing = ctx.input(|i| i.viewport().close_requested());
+        if closing && !self.may_close && !self.dev.closing && self.dirty() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.leaving = Some(Leave::Quit);
+        }
+        self.ask_to_save(ctx);
         let mut actions = self.keyboard.poll(ctx);
         self.dev.frame(ctx);
         if std::mem::take(&mut self.dev.autoplay) && !playing {

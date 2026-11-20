@@ -16,7 +16,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Do | How |
 |---|---|
 | Play / stop | `Space` · Stop while stopped goes back to the start |
-| Project | click the logo, or `Ctrl+N` new · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as |
+| Project | click the logo (New is only there: no shortcut, so it can't happen by accident) · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as. New, Open and closing the window ask first when there are unsaved changes |
 | Layout | Browser on the left (`F4`), plugin rack on the right (`F6`); both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Audio clip, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
