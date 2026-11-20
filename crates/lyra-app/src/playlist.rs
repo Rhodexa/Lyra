@@ -33,8 +33,9 @@
 //! after), Ctrl+U (the selected audio clips get their own copy, to change apart), ←→ move by snap (Ctrl = 4 bars), ↑↓ move to the track above/below, Esc.
 
 use crate::app::UiState;
-use crate::browser::{AudioDrag, SampleDrag};
+use crate::browser::SampleDrag;
 use crate::keys::Action;
+use crate::pool::{AudioDrag, AutomationDrag};
 use crate::samples::{self, Samples};
 use crate::theme::{self, cr, stroke};
 use crate::timeline::{self, Input, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag, Wheel};
@@ -474,14 +475,10 @@ impl Playlist {
         self.scroll_y = self.scroll_y.clamp(0.0, (p.tracks.len() as f32 - rows).max(0.0));
         let view = self.view(grid);
 
-        // Track headers mute like every row of lights: press one, sweep over the
-        // others. (Not over the insert well at the right end.)
+        // Track headers mute like every row of lights: press one, sweep over the others.
         for t in 0..p.tracks.len() {
             let y = view.y(t);
-            let mut row = Rect::from_min_max(pos2(headers.left(), y), pos2(headers.right(), y + self.track_h));
-            if let Some(well) = route_well(&view, headers, t) {
-                row.max.x = well.left() - 2.0;
-            }
+            let row = Rect::from_min_max(pos2(headers.left(), y), pos2(headers.right(), y + self.track_h));
             if !row.intersects(headers) || !hovering {
                 continue;
             }
@@ -499,19 +496,22 @@ impl Playlist {
         //    clip a new copy of it. ──
         let drop_at = pos.filter(|p| hovering && grid.contains(*p));
         let dropping = egui::DragAndDrop::has_payload_of_type::<SampleDrag>(ui.ctx())
-            || egui::DragAndDrop::has_payload_of_type::<AudioDrag>(ui.ctx());
+            || egui::DragAndDrop::has_payload_of_type::<AudioDrag>(ui.ctx())
+            || egui::DragAndDrop::has_payload_of_type::<AutomationDrag>(ui.ctx());
         let mut ghost = None;
         if let (Some(at), true) = (drop_at, dropping) {
             let snap = if mods.alt { 1 } else { self.snap };
             let start = (view.tick(at.x).max(0.0) as u32 / snap) * snap;
             let track = view.track(at.y);
             let spt = p.seconds_per_tick();
+            let automation = egui::DragAndDrop::payload::<AutomationDrag>(ui.ctx()).and_then(|d| p.automation(d.0));
             let secs = if let Some(d) = egui::DragAndDrop::payload::<SampleDrag>(ui.ctx()) {
                 samples.get(&d.0).map(|s| s.seconds() as f64).unwrap_or(0.0)
             } else {
                 egui::DragAndDrop::payload::<AudioDrag>(ui.ctx()).and_then(|d| p.audio(d.0)).map_or(0.0, |a| a.length())
             };
-            let len = ((secs / spt).ceil() as u32).max(1);
+            // An automation is one loop of its curve long.
+            let len = automation.map_or(((secs / spt).ceil() as u32).max(1), |a| a.length.max(1));
             if let Ok(track) = usize::try_from(track).map(|t| t.min(p.tracks.len().saturating_sub(1))) {
                 ghost = Some(Clip::of_audio(0, track, start, len));
                 if ui.input(|i| i.pointer.any_released()) {
@@ -523,6 +523,14 @@ impl Playlist {
                         h.checkpoint(p);
                         Some(d.0)
                     } else {
+                        if let Some(d) = egui::DragAndDrop::take_payload::<AutomationDrag>(ui.ctx()) {
+                            h.checkpoint(p);
+                            let i = p.add_clip(Clip::of_automation(d.0, track, start, len));
+                            self.selection = vec![i];
+                            st.automation = Some(d.0);
+                            st.clip = Some(p.clips[i].id);
+                            ghost = None;
+                        }
                         None
                     };
                     if let Some(id) = id {
@@ -670,19 +678,6 @@ impl Playlist {
             timeline::paint_rubber_band(&painter, *from, pos);
         }
         self.paint_headers(&painter, &view, headers, p);
-        // Each track's insert for its audio clips, at the right end of its header.
-        for t in 0..p.tracks.len() {
-            let Some(well) = route_well(&view, headers, t) else { continue };
-            let mut insert = p.tracks[t].mixer;
-            let inserts = p.mixer.len().saturating_sub(1);
-            let r = ui.put(well, |ui: &mut Ui| {
-                widgets::number_well(ui, &mut insert, 0..=inserts, 0, well.size(), widgets::insert_label)
-            });
-            let r = r.on_hover_text("Mixer insert for this track's audio clips (M = master)");
-            if crate::rack::tracked(&r, h, p) {
-                p.tracks[t].mixer = insert;
-            }
-        }
         overview.paint(&painter, &self.time, matches!(self.drag, Drag::Overview(_)));
         vbar.paint(&painter, &self.rows(grid, p.tracks.len()), matches!(self.drag, Drag::VBar(_)));
         for c in &p.clips {
@@ -734,7 +729,12 @@ impl Playlist {
             });
             ui.add_space(10.0);
             let placing = if st.place_audio { st.audio.and_then(|id| p.audio(id)) } else { None };
-            if let Some(a) = placing {
+            let automation = st.automation.filter(|_| st.place_automation).and_then(|id| p.automation(id));
+            if let Some(a) = automation {
+                let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
+                ui.painter().circle_filled(r.center(), 4.0, theme::channel_color(a.color));
+                ui.label(egui::RichText::new(format!("click places: {}", a.name)).color(theme::TEXT_DIM));
+            } else if let Some(a) = placing {
                 let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                 ui.painter().circle_filled(r.center(), 4.0, theme::channel_color(a.color));
                 ui.label(egui::RichText::new(format!("click places: {}", a.name)).color(theme::TEXT_DIM))
@@ -889,9 +889,12 @@ impl Playlist {
             // length, and keep dragging it.
             let start = (anchor_tick.max(0.0) as u32 / snap) * snap;
             let placing = st.audio.filter(|_| st.place_audio).filter(|&id| p.audio(id).is_some());
+            let automation = st.automation.filter(|_| st.place_automation).and_then(|id| p.automation(id));
             let template = st.clip.and_then(|id| p.clip_index(id)).map(|i| p.clips[i].clone());
             let clip = if let Some(t) = template {
                 Clip { track, start, ..t }
+            } else if let Some(a) = automation {
+                Clip::of_automation(a.id, track, start, a.length.max(1))
             } else if let Some(id) = placing {
                 let probe = Clip::of_audio(id, track, start, 1);
                 Clip::of_audio(id, track, start, audio_room(p, &probe).unwrap_or(TICKS_PER_BAR))
@@ -1297,19 +1300,6 @@ fn paint_curve(
         clipped.rect_filled(r, cr(0), fill);
     }
     clipped.add(egui::Shape::line(line, stroke(1.5, light.hi)));
-}
-
-/// The insert well at the right end of a track's header (None when the row
-/// is too short or not fully on screen).
-fn route_well(v: &View, headers: Rect, track: usize) -> Option<Rect> {
-    let y = v.y(track);
-    let size = vec2(24.0, 18.0f32.min(v.track_h - 8.0));
-    if size.y < 12.0 {
-        return None;
-    }
-    let center = pos2(headers.right() - theme::SEAM - 6.0 - size.x * 0.5, y + (v.track_h - theme::SEAM) * 0.5);
-    let r = Rect::from_center_size(center, size);
-    (r.top() >= headers.top() && r.bottom() <= headers.bottom()).then_some(r)
 }
 
 /// A pattern clip's body: note silhouettes of every channel, repeated across the clip.

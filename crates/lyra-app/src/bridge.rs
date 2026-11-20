@@ -259,7 +259,7 @@ pub fn compile_audio(p: &Project, samples: &mut Samples) -> AudioLane {
             gain: lyra_plugin::db_to_gain(a.gain + clip.gain),
             fade_in: fade(clip.fade_in),
             fade_out: fade(clip.fade_out),
-            track: track.mixer,
+            track: a.mixer,
             reverse: clip.reverse,
             data,
         });
@@ -316,7 +316,7 @@ mod tests {
         c.gain = -6.0; // the clip's own gain adds to the source's
         p.clips.push(c);
         p.clips.push(Clip::of_audio(id, 3, 0, 48));
-        p.tracks[2].mixer = 5;
+        p.audio[a].mixer = 5;
         p.tracks[3].mute = true;
         let lane = compile_audio(&p, &mut Samples::default());
         assert_eq!(lane.regions.len(), 1, "the muted track's clip is skipped");

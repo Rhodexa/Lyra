@@ -3,12 +3,12 @@
 //! * **Samples** — Lyra's Starter Kit and your library folder. Click a sample
 //!   to hear it; double-click (or drag it onto the plugin rack) to make a
 //!   sampler that plays it; drag it onto a rack row to swap that sample in
-//! * **Patterns** — click to edit (and place) that pattern
-//! * **Audio clips** — the project's audio clips: click to place it,
-//!   double-click to open it, drag one onto a track for another copy
 //! * **Instruments** — click to add one to the instrument rack; open the
 //!   arrow for its presets
 //! * **Effects** — click to plug one into the selected mixer track
+//!
+//! What the *project* holds (patterns, audio clips, automation) is in the
+//! right panel instead: see `pool.rs`. Left is the library, right the project.
 //!
 //! The library is scanned when Lyra starts; the ↻ on the Samples header
 //! scans again (after you add files to your library folder).
@@ -50,50 +50,6 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
             });
         }
         st.library = library;
-
-        // ── Patterns ──
-        if section(ui, "Patterns", p.patterns.len()) {
-            for i in 0..p.patterns.len() {
-                let light = theme::channel_light(i);
-                let r = row(ui, &p.patterns[i].name, Some(light), st.pattern == i, 0.0);
-                let r = r.on_hover_text("Click: make it the current pattern · double-click: open it in the piano roll");
-                if r.double_clicked() {
-                    st.open_pattern = Some(i);
-                } else if r.clicked() {
-                    st.pattern = i;
-                    st.place_audio = false;
-                }
-            }
-        }
-
-        // ── Audio clips ──
-        if section(ui, "Audio clips", p.audio.len()) {
-            for i in 0..p.audio.len() {
-                let a = &p.audio[i];
-                let (id, light) = (a.id, theme::channel_light(a.color));
-                let m = theme::m();
-                let (r, resp) =
-                    ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click_and_drag());
-                let chosen = st.place_audio && st.audio == Some(id);
-                paint_row(ui, r, &resp, &a.name, Some(light), chosen, 0.0);
-                if resp.drag_started() {
-                    egui::DragAndDrop::set_payload(ui.ctx(), AudioDrag(id));
-                }
-                let resp =
-                    resp.on_hover_text("Click: place it with a click · double-click: open it · drag: onto a track");
-                if resp.clicked() {
-                    st.audio = Some(id);
-                    st.clip = None; // the source alone, not one clip of it
-                    st.place_audio = true;
-                    if double_click(ui, "browser-last-audio-click", id) {
-                        st.open_audio = Some(id);
-                    }
-                }
-            }
-            if p.audio.is_empty() {
-                ui.label(egui::RichText::new("Drop a sample on a track.").small().color(theme::TEXT_DIM));
-            }
-        }
 
         // ── Instruments ──
         if section(ui, "Instruments", lyra_catalog::instruments().len()) {
@@ -203,13 +159,9 @@ fn folder(ui: &mut Ui, f: &Folder, depth: usize, p: &mut Project, h: &mut Histor
 #[derive(Clone, Debug)]
 pub struct SampleDrag(pub String);
 
-/// An audio clip being dragged out of the browser.
-#[derive(Clone, Debug)]
-pub struct AudioDrag(pub lyra_model::AudioId);
-
 /// Our own double-click test (egui's doesn't fire on rows that can also be
 /// dragged): true on a second click on the same `item` within 0.35 s.
-pub(crate) fn double_click<T: Clone + PartialEq + Send + Sync + 'static>(ui: &Ui, key: &str, item: T) -> bool {
+pub fn double_click<T: Clone + PartialEq + Send + Sync + 'static>(ui: &Ui, key: &str, item: T) -> bool {
     let now = ui.input(|i| i.time);
     let key = egui::Id::new(key);
     let last: Option<(T, f64)> = ui.data(|d| d.get_temp(key));

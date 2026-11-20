@@ -158,10 +158,6 @@ impl Pattern {
 pub struct Track {
     pub name: String,
     pub mute: bool,
-    /// Mixer track the *audio clips* on this row play into (0 = master).
-    /// Patterns keep playing through their channels' own inserts.
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub mixer: usize,
 }
 
 fn is_zero<T: Default + PartialEq>(v: &T) -> bool {
@@ -198,6 +194,9 @@ pub struct Audio {
     /// Index into the theme's palette.
     #[serde(default)]
     pub color: usize,
+    /// Mixer track it plays into (0 = master), like a channel's.
+    #[serde(default)]
+    pub mixer: usize,
 }
 
 impl Audio {
@@ -555,7 +554,7 @@ impl Default for Project {
             scale: Scale::Minor,
             channels: Vec::new(),
             patterns: vec![Pattern::new(1, "Pattern 1")],
-            tracks: (1..=DEFAULT_TRACKS).map(|i| Track { name: format!("Track {i}"), mute: false, mixer: 0 }).collect(),
+            tracks: (1..=DEFAULT_TRACKS).map(|i| Track { name: format!("Track {i}"), mute: false }).collect(),
             clips: Vec::new(),
             audio: Vec::new(),
             automations: Vec::new(),
@@ -754,6 +753,7 @@ impl Project {
             start: 0.0,
             end: seconds.max(0.0),
             color,
+            mixer: 0,
         });
         self.audio.len() - 1
     }

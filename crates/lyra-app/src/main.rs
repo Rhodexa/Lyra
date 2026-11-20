@@ -20,6 +20,7 @@ mod keys;
 mod mixer;
 mod piano_roll;
 mod playlist;
+mod pool;
 mod rack;
 mod render;
 mod samples;

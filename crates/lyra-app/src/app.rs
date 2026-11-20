@@ -87,6 +87,11 @@ pub struct UiState {
     /// this one" (a double-click on its clip).
     pub automation: Option<lyra_model::AutomationId>,
     pub open_automation: Option<lyra_model::AutomationId>,
+    /// A click on empty arrangement places the current automation (picked in
+    /// the Automation tab).
+    pub place_automation: bool,
+    /// Which rack the right panel shows.
+    pub right_tab: RightTab,
     /// The control changed last, anywhere: what "Automate" automates.
     pub last_tweaked: Option<lyra_model::Target>,
     /// The pattern last frame: picking another one goes back to placing patterns.
@@ -126,6 +131,8 @@ impl Default for UiState {
             open_audio: None,
             automation: None,
             open_automation: None,
+            place_automation: false,
+            right_tab: RightTab::Plugins,
             last_tweaked: None,
             last_pattern: 0,
         }
@@ -182,6 +189,14 @@ pub struct LyraApp {
     leaving: Option<Leave>,
     /// The window may close now (the question was answered).
     may_close: bool,
+}
+
+/// The right panel's racks: what's in the project.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RightTab {
+    Plugins,
+    Clips,
+    Automation,
 }
 
 /// Ways to leave the current project. With unsaved changes, each one asks first.
@@ -1016,18 +1031,49 @@ impl LyraApp {
                 .width_range(220.0..=520.0)
                 .frame(panel)
                 .show(ctx, |ui| {
+                    // Tabs: the project's racks. (The browser on the left is the library.)
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("PLUGINS").size(m.text_small).color(theme::TEXT_DIM));
+                        let tabs = [RightTab::Plugins, RightTab::Clips, RightTab::Automation];
+                        use crate::widgets::Legend::Text;
+                        let options = [
+                            (Text("Plugins"), theme::L_MINT),
+                            (Text("Clips"), theme::L_MINT),
+                            (Text("Automation"), theme::L_MINT),
+                        ];
+                        let chosen = tabs.iter().position(|&t| t == self.ui.right_tab).unwrap_or(0);
+                        let w = ((ui.available_width() - 28.0) / 3.0).floor();
+                        let hint = "The project's racks: instruments, clips, automation";
+                        if let Some(i) =
+                            crate::widgets::radio_keys(ui, egui::vec2(w, m.control_h), &options, chosen, hint)
+                        {
+                            self.ui.right_tab = tabs[i];
+                        }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button(">").on_hover_text("Fold the plugin rack away  (F6)").clicked() {
+                            if ui.small_button(">").on_hover_text("Fold this panel away  (F6)").clicked() {
                                 self.ui.show_plugins = false;
                             }
                         });
                     });
-                    rack::plugins(ui, &mut self.project, &mut self.history, &mut self.ui);
-                    // A sample dropped anywhere else on the panel: a new sampler for it.
+                    match self.ui.right_tab {
+                        RightTab::Plugins => rack::plugins(ui, &mut self.project, &mut self.history, &mut self.ui),
+                        RightTab::Clips => {
+                            egui::ScrollArea::vertical()
+                                .id_salt("pool-clips")
+                                .show(ui, |ui| {
+                                    crate::pool::clips(ui, &mut self.project, &mut self.history, &mut self.ui)
+                                })
+                                .inner
+                        }
+                        RightTab::Automation => {
+                            egui::ScrollArea::vertical()
+                                .id_salt("pool-auto")
+                                .show(ui, |ui| crate::pool::automations(ui, &mut self.project, &mut self.ui))
+                                .inner
+                        }
+                    }
+                    // A sample dropped anywhere else on the plugin rack: a new sampler for it.
                     let released = ui.input(|i| i.pointer.any_released());
-                    if released && ui.rect_contains_pointer(ui.max_rect()) {
+                    if self.ui.right_tab == RightTab::Plugins && released && ui.rect_contains_pointer(ui.max_rect()) {
                         if let Some(drag) = egui::DragAndDrop::take_payload::<crate::browser::SampleDrag>(ui.ctx()) {
                             crate::browser::add_sampler(&mut self.project, &mut self.history, &mut self.ui, &drag.0);
                         }
@@ -1042,6 +1088,7 @@ impl LyraApp {
         // already shows it, otherwise the bottom area opens on it.
         if self.ui.pattern != self.ui.last_pattern {
             self.ui.place_audio = false;
+            self.ui.place_automation = false;
             // Picked another pattern (top bar, browser, [ ]): the next click
             // places that one, not a copy of the last clip.
             if self.ui.clip.and_then(|id| self.project.clip_index(id)).is_some_and(|i| {

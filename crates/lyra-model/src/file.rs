@@ -57,7 +57,7 @@ mod tests {
         cl.gain = -3.5;
         cl.fade_in = crate::Fade { len: 0.1, tension: 0.3 };
         p.clips.push(cl);
-        p.tracks[3].mixer = 4;
+        p.audio[a].mixer = 4;
         p.tracks[2].mute = true;
         p.bpm = 128.5;
         p.number_clips(); // clip ids aren't saved: reading numbers them like this

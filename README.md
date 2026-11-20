@@ -17,7 +17,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 |---|---|
 | Play / stop | `Space` · Stop while stopped goes back to the start |
 | Project | click the logo (New is only there: no shortcut, so it can't happen by accident) · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as. New, Open and closing the window ask first when there are unsaved changes |
-| Layout | Browser on the left (`F4`), plugin rack on the right (`F6`); both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Audio clip, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
+| Layout | Left: the browser (`F4`), the library, things you can add. Right (`F6`): the project's racks, in tabs: **Plugins** (instruments), **Clips** (patterns and audio clips) and **Automation**. Both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Audio clip, Automation, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
 | Patterns | `[` / `]` or the picker in the top bar (new, clone) |
@@ -40,7 +40,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Trim a clip | drag either end: a clip is a window onto its pattern or audio |
 | A clip's own fades and gain | hover it: the dots on the title strip are the fades (drag sideways), the ring on a curve bends it (up/down), the ↕ in the middle is gain (up/down, Shift = fine, double-click = 0 dB). Each clip has its own |
 | The *Audio clip* editor | double-click a clip. Its frame is the clip's window: drag it sideways to play another part of the audio (the clip stays put). On the frame: the clip's fade dots, curve rings and ↕ gain, like on the arrangement. **Reverse** plays the clip's window backwards. The white trim lines and the *every copy* gain are shared by all copies; `Ctrl+U` gives the selected clips their own source |
-| Where a track's audio plays | the number at the right of its header: mixer insert (M = master) |
+| Where an audio clip plays | its row in the right panel's **Clips** tab: the number is its mixer insert (M = master), like an instrument's |
 | Play from here | click the ruler (switches to song mode) |
 | Mute a track | click its light |
 | Scroll / zoom / pan | wheel (up/down), Ctrl+wheel (sideways) · Shift+wheel or wheel over the ruler (time, around the mouse), wheel over a scrollbar (that axis), Alt+wheel (track height) · middle-drag |
