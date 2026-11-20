@@ -1,10 +1,11 @@
 //! The playlist: arrange patterns into a song.
 //!
 //! Mouse grammar (the same as the piano roll, so hands only learn it once):
-//! * **click empty** — place the current pattern (the one in the top bar);
-//!   keep holding to drag it into place
-//! * **drag a clip** — move (also to another track) · **drag its right end** —
-//!   resize (longer than the pattern = the pattern repeats) · **Shift+drag** — duplicate
+//! * **click empty** — place a copy of the clip last clicked (or the top
+//!   bar's pattern); keep holding to drag it into place
+//! * **drag a clip** — move (also to another track) · **drag either end** —
+//!   resize; the left end trims the start (a clip is a window onto its
+//!   pattern or audio; longer than the pattern = it repeats) · **Shift+drag** — duplicate
 //! * **click a clip** — makes its pattern the current one · **double-click** — open it in the piano roll
 //!   (an audio clip: in the audio-clip editor)
 //! * **audio clips** — drop a sample from the browser onto a track · drag
@@ -23,6 +24,11 @@
 //! * overview bar — drag the thumb to pan, its ends to zoom · ruler — click to
 //!   play the song from there · track lights — mute a track
 //!
+//! Tools (the keys in the header): **Edit** (all of the above) · **Cut** —
+//! click a clip to split it there (the selected clips too, if it's one of
+//! them) · **Slide** — drag a clip to move what plays inside it (a pattern
+//! wraps around; audio stops at its ends); the clip stays put.
+//!
 //! Keys (when this window was clicked last): Delete, Ctrl+A, Ctrl+D/B (duplicate
 //! after), Ctrl+U (the selected audio clips get their own copy, to change apart), ←→ move by snap (Ctrl = 4 bars), ↑↓ move to the track above/below, Esc.
 
@@ -39,6 +45,15 @@ use lyra_model::{Audio, Clip, History, Project, Source, TICKS_PER_BAR, TICKS_PER
 
 const HEADER_W: f32 = 150.0;
 const BEAT: u32 = TICKS_PER_STEP * 4;
+
+/// What a left press on a clip does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Tool {
+    #[default]
+    Edit,
+    Cut,
+    Slide,
+}
 
 pub const SNAPS: [(&str, u32); 4] = [("Free", 1), ("Step", TICKS_PER_STEP), ("Beat", BEAT), ("Bar", TICKS_PER_BAR)];
 
@@ -86,6 +101,12 @@ enum Drag {
         orig: f32,
         anchor_y: f32,
     },
+    /// The Slide tool: what plays inside the clips moves, the clips don't.
+    Slide {
+        anchor_tick: f32,
+        originals: Vec<(usize, Clip)>,
+        free: bool,
+    },
     Select {
         from: Pos2,
         base: Vec<usize>,
@@ -109,6 +130,7 @@ pub struct Playlist {
     selection: Vec<usize>,
     drag: Drag,
     clicks: timeline::Clicks,
+    pub tool: Tool,
 }
 
 impl Default for Playlist {
@@ -121,6 +143,7 @@ impl Default for Playlist {
             selection: Vec::new(),
             drag: Drag::None,
             clicks: timeline::Clicks::default(),
+            tool: Tool::default(),
         }
     }
 }
@@ -264,10 +287,7 @@ fn left_edge_hit(v: &View, clips: &[Clip], pos: Pos2) -> Option<usize> {
     (0..clips.len()).rev().find(|&i| {
         let r = v.clip_rect(&clips[i]);
         let grab = m.edge_grab.min(r.width() * 0.3);
-        clips[i].audio().is_some()
-            && r.y_range().contains(pos.y)
-            && pos.x >= r.left() - m.edge_reach
-            && pos.x <= r.left() + grab
+        r.y_range().contains(pos.y) && pos.x >= r.left() - m.edge_reach && pos.x <= r.left() + grab
     })
 }
 
@@ -575,9 +595,16 @@ impl Playlist {
         }
 
         // Cursor feedback
-        if let (true, Some(pos), Drag::None) = (hovering, pos, &self.drag) {
+        let on_clip = pos.filter(|p| hovering && grid.contains(*p)).and_then(|pos| hit(&view, &p.clips, pos));
+        if let (Tool::Cut | Tool::Slide, Some(_), Drag::None | Drag::Slide { .. }) = (self.tool, on_clip, &self.drag) {
+            ui.ctx().set_cursor_icon(if self.tool == Tool::Cut {
+                CursorIcon::Crosshair
+            } else {
+                CursorIcon::ResizeHorizontal
+            });
+        } else if let (true, Some(pos), Drag::None) = (hovering, pos, &self.drag) {
             if grid.contains(pos) {
-                if let Some(hd) = handle_hit(&view, p, pos) {
+                if let Some(hd) = handle_hit(&view, p, pos).filter(|_| self.tool == Tool::Edit) {
                     ui.ctx().set_cursor_icon(if matches!(hd.grip, Grip::Fade(_)) {
                         CursorIcon::ResizeHorizontal
                     } else {
@@ -618,12 +645,22 @@ impl Playlist {
             Drag::Fade { clip, end, .. } => Some((clip, Some(Grip::Fade(end)))),
             Drag::Tension { clip, end, .. } => Some((clip, Some(Grip::Curve(end)))),
             Drag::Gain { clip, .. } => Some((clip, Some(Grip::Gain))),
-            Drag::None => pos
+            Drag::None if self.tool == Tool::Edit => pos
                 .filter(|p| hovering && grid.contains(*p))
                 .and_then(|pos| hit(&view, &p.clips, pos).map(|i| (i, handle_hit(&view, p, pos).map(|hd| hd.grip)))),
             _ => None,
         };
         self.paint_clips(&painter, &view, p, st, playing.then_some(playhead), samples, hot);
+        // The Cut tool shows where it would cut.
+        if let (Tool::Cut, Some(i), Some(pos), Drag::None) = (self.tool, on_clip, pos, &self.drag) {
+            let snap = if mods.alt { 1 } else { self.snap };
+            let at = timeline::snap(view.tick(pos.x), snap);
+            let c = &p.clips[i];
+            if at > c.start as f32 && at < c.end() as f32 {
+                let r = view.clip_rect(c);
+                painter.vline(view.x(at), r.y_range(), stroke(1.5, theme::TEXT));
+            }
+        }
         if let Some(g) = &ghost {
             let r = view.clip_rect(g);
             painter.rect_filled(r, cr(4), theme::TEXT.gamma_multiply(0.12));
@@ -665,6 +702,20 @@ impl Playlist {
     /// The arrangement's controls; the area draws them on its header row.
     pub fn toolbar(&mut self, ui: &mut Ui, p: &Project, st: &UiState) {
         ui.horizontal(|ui| {
+            let h = theme::m().control_h;
+            let tools = [Tool::Edit, Tool::Cut, Tool::Slide];
+            let options = [
+                (widgets::Legend::Icon(widgets::Icon::Pointer), theme::L_MINT),
+                (widgets::Legend::Icon(widgets::Icon::Cut), theme::L_MINT),
+                (widgets::Legend::Icon(widgets::Icon::Slide), theme::L_MINT),
+            ];
+            let chosen = tools.iter().position(|&t| t == self.tool).unwrap_or(0);
+            let hint =
+                "Edit: place, move, resize · Cut: click a clip to split it · Slide: drag what plays inside a clip";
+            if let Some(i) = widgets::radio_keys(ui, vec2(h * 1.2, h), &options, chosen, hint) {
+                self.tool = tools[i];
+            }
+            ui.add_space(10.0);
             ui.label(egui::RichText::new("snap").small().color(theme::TEXT_DIM));
             let name = SNAPS.iter().find(|s| s.1 == self.snap).map_or("?", |s| s.0);
             egui::ComboBox::from_id_salt("pl-snap").width(64.0).selected_text(name).show_ui(ui, |ui| {
@@ -719,6 +770,25 @@ impl Playlist {
         if mods.command {
             let base = if mods.shift { self.selection.clone() } else { Vec::new() };
             self.drag = Drag::Select { from: pos, base };
+            return;
+        }
+        // The Cut and Slide tools take over presses on clips (and do nothing
+        // on empty space).
+        if self.tool != Tool::Edit {
+            let Some(i) = hit(v, &p.clips, pos) else { return };
+            // The selected clips too, if this is one of them.
+            let targets = if self.selection.contains(&i) { self.selection.clone() } else { vec![i] };
+            h.checkpoint(p);
+            if self.tool == Tool::Cut {
+                let at = timeline::snap(anchor_tick, snap).max(0.0) as u32;
+                for j in targets {
+                    cut(p, j, at);
+                }
+                self.drag = Drag::None;
+            } else {
+                let originals = targets.iter().map(|&j| (j, p.clips[j].clone())).collect();
+                self.drag = Drag::Slide { anchor_tick, originals, free };
+            }
             return;
         }
         // An audio clip's handles: its own fades and gain.
@@ -881,13 +951,12 @@ impl Playlist {
                 let start = lead_clip.start as f32;
                 let to = timeline::drag_to_grid(start, *anchor_tick, v.tick(pos.x), v.time.ppt, snap);
                 let mut d = to.map_or(0, |t| t as i64 - lead_clip.start as i64);
-                // Every audio clip in the selection moves its start the same
-                // amount: not before its audio's start, not past its own end.
-                let audio: Vec<&(usize, Clip)> = originals.iter().filter(|(_, c)| c.audio().is_some()).collect();
-                for (_, c) in &audio {
+                // Every clip in the selection moves its start the same amount:
+                // not before the start of its pattern / audio, not past its own end.
+                for (_, c) in originals.iter() {
                     d = d.max(-(c.offset as i64)).max(-(c.start as i64)).min(c.len as i64 - 1);
                 }
-                for (i, c) in audio {
+                for (i, c) in originals.iter() {
                     if let Some(clip) = p.clips.get_mut(*i) {
                         clip.start = (c.start as i64 + d) as u32;
                         clip.offset = (c.offset as i64 + d) as u32;
@@ -913,6 +982,32 @@ impl Playlist {
                     match end {
                         End::In => c.fade_in.tension = t,
                         End::Out => c.fade_out.tension = t,
+                    }
+                }
+            }
+            Drag::Slide { anchor_tick, originals, free } => {
+                *free |= mods.alt;
+                let snap = if *free { 1 } else { self.snap };
+                // Content follows the mouse: dragging right shows earlier material.
+                let d =
+                    timeline::drag_to_grid(0.0, *anchor_tick, v.tick(pos.x), v.time.ppt, snap).unwrap_or(0.0) as i64;
+                let spt = p.seconds_per_tick();
+                for (i, c) in originals.iter() {
+                    let wanted = c.offset as i64 - d;
+                    let offset = match c.source {
+                        Source::Audio(id) => {
+                            // Audio stops at its ends.
+                            let total = p.audio(id).map_or(0, |a| (a.length() / spt).floor() as i64);
+                            wanted.clamp(0, (total - c.len as i64).max(0))
+                        }
+                        Source::Pattern(id) => {
+                            // A pattern repeats forever: wrap around it.
+                            let loop_len = p.pattern(id).map_or(1, |pat| (pat.play_length() * TICKS_PER_STEP).max(1));
+                            wanted.rem_euclid(loop_len as i64)
+                        }
+                    };
+                    if let Some(clip) = p.clips.get_mut(*i) {
+                        clip.offset = offset as u32;
                     }
                 }
             }
@@ -1107,6 +1202,31 @@ impl Playlist {
     }
 }
 
+/// Split clip `i` at song tick `at` (if `at` is inside it): it keeps the part
+/// before, a new clip plays the rest, from the same point in its pattern or
+/// audio. Audio halves get a short fade where they were cut (no click).
+fn cut(p: &mut Project, i: usize, at: u32) {
+    let c = p.clips[i].clone();
+    if at <= c.start || at >= c.end() {
+        return;
+    }
+    let before = at - c.start;
+    let audio = c.audio().is_some();
+    let rest = Clip {
+        start: at,
+        len: c.end() - at,
+        offset: c.offset + before,
+        fade_in: if audio { lyra_model::EDGE_FADE } else { c.fade_in },
+        ..c
+    };
+    let first = &mut p.clips[i];
+    first.len = before;
+    if audio {
+        first.fade_out = lyra_model::EDGE_FADE;
+    }
+    p.add_clip(rest);
+}
+
 /// Clips are lit by what they play, so the same pattern (or audio clip)
 /// looks the same everywhere.
 pub fn clip_light(p: &Project, c: &Clip) -> theme::Light {
@@ -1132,24 +1252,21 @@ fn route_well(v: &View, headers: Rect, track: usize) -> Option<Rect> {
 /// A pattern clip's body: note silhouettes of every channel, repeated across the clip.
 fn paint_notes(painter: &egui::Painter, v: &View, p: &Project, c: &Clip, pat: &lyra_model::Pattern, body: Rect) {
     let body_r = body.shrink2(vec2(2.0, 2.0));
-    let loop_len = (pat.play_length() * TICKS_PER_STEP).max(1);
     let (lo, hi) = pat.notes.values().flatten().fold((127u8, 0u8), |(lo, hi), n| (lo.min(n.key), hi.max(n.key)));
     let span = (hi.saturating_sub(lo) as f32).max(12.0);
     let clipped = painter.with_clip_rect(body_r.intersect(v.grid));
-    for (ch_i, ch) in p.channels.iter().enumerate() {
+    // Where the pattern starts over.
+    for t in c.pattern_restarts(pat) {
+        let x = v.x((c.start + t) as f32);
+        clipped.vline(x, body_r.y_range(), stroke(1.0, Color32::from_black_alpha(90)));
+    }
+    for ch in &p.channels {
         let ink = theme::channel_light(ch.color).mid;
-        for rep in (0..c.len).step_by(loop_len as usize) {
-            if rep > 0 && ch_i == 0 {
-                // Where the pattern repeats.
-                let x = v.x((c.start + rep) as f32);
-                clipped.vline(x, body_r.y_range(), stroke(1.0, Color32::from_black_alpha(90)));
-            }
-            for n in pat.notes(ch.id).iter().filter(|n| rep + n.start < c.len) {
-                let x0 = v.x((c.start + rep + n.start) as f32);
-                let x1 = v.x((c.start + rep + (n.start + n.len).min(c.len - rep)) as f32);
-                let y = body_r.bottom() - (n.key - lo) as f32 / span * (body_r.height() - 2.0);
-                clipped.rect_filled(Rect::from_min_max(pos2(x0, y - 1.5), pos2(x1.max(x0 + 1.5), y)), cr(0), ink);
-            }
+        for (at, len, n) in c.pattern_notes(pat, ch.id) {
+            let x0 = v.x((c.start + at) as f32);
+            let x1 = v.x((c.start + at + len) as f32);
+            let y = body_r.bottom() - (n.key - lo) as f32 / span * (body_r.height() - 2.0);
+            clipped.rect_filled(Rect::from_min_max(pos2(x0, y - 1.5), pos2(x1.max(x0 + 1.5), y)), cr(0), ink);
         }
     }
 }
@@ -1194,7 +1311,18 @@ fn paint_audio(
         if x < g.x0 || x >= g.x_end {
             return None;
         }
-        let secs = |x: f32| a.start + (c.offset as f64 + (v.tick(x) - c.start as f32) as f64) * spt;
+        // Seconds into the file at screen-x: through the window forwards, or
+        // backwards from its end when the clip is reversed.
+        let from = a.start + c.offset as f64 * spt;
+        let span = (g.x_end - g.x0) as f64 / v.time.ppt as f64 * spt;
+        let secs = |x: f32| {
+            let el = (v.tick(x) - c.start as f32) as f64 * spt;
+            if c.reverse {
+                from + span - el
+            } else {
+                from + el
+            }
+        };
         let mut gain = gain;
         if x < g.x_in {
             gain *= waveform::fade_gain(End::In, x, g.x0, g.x_in, c.fade_in.tension);
@@ -1202,7 +1330,8 @@ fn paint_audio(
         if x > g.x_out {
             gain *= waveform::fade_gain(End::Out, x, g.x_out, g.x_end, c.fade_out.tension);
         }
-        Some((secs(x) * sr, secs(x + 1.0) * sr, gain))
+        let (s0, s1) = (secs(x), secs(x + 1.0));
+        Some((s0.min(s1) * sr, s0.max(s1) * sr, gain))
     });
     // The fades' curves: thin, in the clip's light, so they never hide the waveform.
     let ink = light.hi.gamma_multiply(if hot.is_some() { 0.9 } else { 0.5 });

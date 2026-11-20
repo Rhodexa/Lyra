@@ -270,6 +270,10 @@ pub enum Icon {
     Mixer,
     Browser,
     Wave,
+    /// Arrangement tools.
+    Pointer,
+    Cut,
+    Slide,
 }
 
 /// Draw an icon centred in `r` (a key's face). Hand-drawn vectors until the
@@ -350,6 +354,27 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, bg: Colo
                 let y = frame.top() + (2.8 + k as f32 * 2.7) * u;
                 p.hline(split + 2.0 * u..=frame.right() - 2.0 * u, y, stroke(u.max(1.0), ink));
             }
+        }
+        Icon::Pointer => {
+            // An arrow cursor.
+            let pts = [(-3.5, -6.0), (4.5, 2.0), (0.8, 2.2), (2.8, 6.0), (1.0, 6.8), (-1.0, 3.0), (-3.5, 5.5)];
+            let poly: Vec<Pos2> = pts.iter().map(|&(x, y)| c + vec2(x, y) * u).collect();
+            p.add(Shape::closed_line(poly, line));
+        }
+        Icon::Cut => {
+            // A blade coming down through a clip.
+            let clip = Rect::from_center_size(c + vec2(0.0, 2.5) * u, vec2(13.0, 6.0) * u);
+            p.rect_stroke(clip, cr((1.5 * u) as u8), line, egui::StrokeKind::Middle);
+            p.line_segment([c + vec2(0.0, -7.0) * u, c + vec2(0.0, 7.5) * u], stroke(line.width * 1.2, ink));
+            p.add(tri([c + vec2(-2.2, -7.0) * u, c + vec2(2.2, -7.0) * u, c + vec2(0.0, -3.5) * u]));
+        }
+        Icon::Slide => {
+            // A clip frame with what's inside moving sideways.
+            let clip = Rect::from_center_size(c, vec2(14.0, 9.0) * u);
+            p.rect_stroke(clip, cr((1.5 * u) as u8), line, egui::StrokeKind::Middle);
+            p.line_segment([c + vec2(-4.0, 0.0) * u, c + vec2(4.0, 0.0) * u], line);
+            p.add(tri([c + vec2(-5.5, 0.0) * u, c + vec2(-3.0, -2.2) * u, c + vec2(-3.0, 2.2) * u]));
+            p.add(tri([c + vec2(5.5, 0.0) * u, c + vec2(3.0, -2.2) * u, c + vec2(3.0, 2.2) * u]));
         }
         Icon::Wave => {
             // A short waveform: bars of different heights around a centre line.

@@ -12,7 +12,9 @@
 //!   the ↕ in the middle is its gain (up/down, Shift = fine, double-click = 0 dB)
 //! * **the white lines** — trim, for every copy: where in the file the audio
 //!   starts and ends (drag them; outside them the file is drawn dim)
-//! * **knobs** — the same, as numbers: this clip's, and every copy's gain
+//! * **knobs** — the same, as numbers: this clip's, and every copy's gain ·
+//!   **Reverse** — this clip plays its window backwards (its fade-in then
+//!   sits at the frame's right end, where it starts)
 //! * **ruler** — click to play the song from there (in this clip)
 //! * **Shift+wheel** (or the wheel over the ruler) — zoom at the mouse ·
 //!   **Ctrl+wheel** — sideways · **Alt+wheel** — waveform height ·
@@ -177,9 +179,12 @@ struct Frame {
     from: f64,
     to: f64,
     rect: Rect,
+    /// Where the fade-in ends and the fade-out starts, on screen. A reversed
+    /// clip plays from the frame's right end, so there they swap sides.
     x_in: f32,
     x_out: f32,
     handles_y: f32,
+    reverse: bool,
 }
 
 impl Frame {
@@ -190,20 +195,29 @@ impl Frame {
         let room = crate::playlist::audio_room(p, c).unwrap_or(c.len);
         let to = from + c.len.min(room) as f64 * spt;
         let rect = Rect::from_min_max(pos2(v.x(from), v.wave.top() + 1.0), pos2(v.x(to), v.wave.bottom() - 1.0));
-        Frame {
-            clip,
-            from,
-            to,
-            rect,
-            x_in: v.x(from + c.fade_in.len as f64).min(rect.right()),
-            x_out: v.x(to - c.fade_out.len as f64).max(rect.left()),
-            handles_y: rect.top() + 12.0,
+        let (fi, fo) = (c.fade_in.len as f64, c.fade_out.len as f64);
+        let (x_in, x_out) = if c.reverse {
+            (v.x(to - fi).max(rect.left()), v.x(from + fo).min(rect.right()))
+        } else {
+            (v.x(from + fi).min(rect.right()), v.x(to - fo).max(rect.left()))
+        };
+        Frame { clip, from, to, rect, x_in, x_out, handles_y: rect.top() + 12.0, reverse: c.reverse }
+    }
+
+    /// A fade's stretch on screen and the shape it has there: (from x, to x,
+    /// drawn as a rise (In) or a fall (Out)). Mirrored for a reversed clip.
+    fn span(&self, end: End) -> (f32, f32, End) {
+        match (end, self.reverse) {
+            (End::In, false) => (self.rect.left(), self.x_in, End::In),
+            (End::Out, false) => (self.x_out, self.rect.right(), End::Out),
+            (End::In, true) => (self.x_in, self.rect.right(), End::Out),
+            (End::Out, true) => (self.rect.left(), self.x_out, End::In),
         }
     }
 
     /// Where a fade's curve ring sits (None when the fade is too narrow).
     fn curve_mid(&self, end: End, tension: f32) -> Option<Pos2> {
-        let (f0, f1) = if end == End::In { (self.rect.left(), self.x_in) } else { (self.x_out, self.rect.right()) };
+        let (f0, f1, _) = self.span(end);
         (f1 - f0 >= CURVE_MIN_W).then(|| {
             pos2((f0 + f1) * 0.5, self.rect.bottom() - lyra_engine::fade_curve(0.5, tension) * self.rect.height())
         })
@@ -310,6 +324,27 @@ impl AudioEditor {
             }
             if let Some((i, v)) = k.change {
                 set_level(&mut p.clips[ci], i, v);
+            }
+            // Under the knobs: play this clip's window backwards.
+            let cell_h = m.knob_large + 2.0 * m.text_small + 12.0;
+            let at = pos2(plate.left() + 8.0, plate.top() + 18.0 + m.text_small + 3.0 * cell_h);
+            let key = Rect::from_min_size(at, vec2(PLATE_W - 16.0, m.control_h));
+            if key.bottom() <= plate.bottom() {
+                let on = p.clips[ci].reverse;
+                let r = ui.put(key, |ui: &mut Ui| {
+                    widgets::key(
+                        ui,
+                        key.size(),
+                        widgets::Legend::Text("Reverse"),
+                        on,
+                        theme::L_MINT,
+                        "Play this clip's window backwards",
+                    )
+                });
+                if r.clicked() {
+                    h.checkpoint(p);
+                    p.clips[ci].reverse = !on;
+                }
             }
             x += PLATE_W + theme::SEAM;
         }
@@ -424,7 +459,9 @@ impl AudioEditor {
                     Drag::Fade { clip, end, orig, anchor_x } => {
                         let span = frame.as_ref().map_or(0.0, |f| f.to - f.from);
                         let dx = (pos.x - *anchor_x) as f64 / self.pps;
-                        let d = if *end == End::In { dx } else { -dx };
+                        // A fade on the left grows rightwards, on the right leftwards.
+                        let left_side = frame.as_ref().is_none_or(|f| f.span(*end).2 == End::In);
+                        let d = if left_side { dx } else { -dx };
                         let len = (*orig as f64 + d).clamp(0.0, span) as f32;
                         let c = &mut p.clips[*clip];
                         match end {
@@ -524,11 +561,11 @@ impl AudioEditor {
             paint_wave(&inside, wave, &peaks, light.hi, self.vzoom, |x| {
                 let (f0, f1) = column(x);
                 let mut g = gain;
-                if x < f.x_in {
-                    g *= waveform::fade_gain(End::In, x, f.rect.left(), f.x_in, c.fade_in.tension);
-                }
-                if x > f.x_out {
-                    g *= waveform::fade_gain(End::Out, x, f.x_out, f.rect.right(), c.fade_out.tension);
+                for (end, fade) in [(End::In, c.fade_in), (End::Out, c.fade_out)] {
+                    let (s0, s1, shape) = f.span(end);
+                    if x >= s0 && x <= s1 {
+                        g *= waveform::fade_gain(shape, x, s0, s1, fade.tension);
+                    }
                 }
                 Some((f0, f1, g))
             });
@@ -540,11 +577,10 @@ impl AudioEditor {
             );
             // This clip's fades and gain, on its frame.
             let ink = light.hi.gamma_multiply(0.8);
-            for (end, f0, f1, fade) in
-                [(End::In, f.rect.left(), f.x_in, c.fade_in), (End::Out, f.x_out, f.rect.right(), c.fade_out)]
-            {
+            for (end, fade) in [(End::In, c.fade_in), (End::Out, c.fade_out)] {
+                let (f0, f1, shape) = f.span(end);
                 if f1 - f0 >= 3.0 {
-                    waveform::paint_fade(&painter, f.rect, end, f0, f1, fade.tension, ink, false);
+                    waveform::paint_fade(&painter, f.rect, shape, f0, f1, fade.tension, ink, false);
                 }
                 if let Some(mid) = f.curve_mid(end, fade.tension) {
                     waveform::paint_tension(&painter, mid, light.hi, hv == Some(Hover::Curve(end)), waveform::LARGE);

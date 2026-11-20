@@ -204,22 +204,15 @@ pub fn compile_song(p: &Project) -> Sequence {
             continue;
         }
         let Some(pat) = clip.pattern().and_then(|id| p.pattern(id)) else { continue };
-        let loop_len = pat.play_length() * TICKS_PER_STEP;
         for (index, ch) in p.channels.iter().enumerate() {
-            for rep in (0..clip.len).step_by(loop_len.max(1) as usize) {
-                for n in pat.notes(ch.id) {
-                    let at = rep + n.start;
-                    if at >= clip.len || n.start >= loop_len {
-                        continue;
-                    }
-                    notes.push(SeqNote {
-                        start: clip.start + at,
-                        len: n.len.min(clip.len - at),
-                        channel: index as u16,
-                        key: n.key,
-                        velocity: n.velocity,
-                    });
-                }
+            for (at, len, n) in clip.pattern_notes(pat, ch.id) {
+                notes.push(SeqNote {
+                    start: clip.start + at,
+                    len,
+                    channel: index as u16,
+                    key: n.key,
+                    velocity: n.velocity,
+                });
             }
         }
     }
@@ -250,6 +243,7 @@ pub fn compile_audio(p: &Project, samples: &mut Samples) -> AudioLane {
             fade_in: fade(clip.fade_in),
             fade_out: fade(clip.fade_out),
             track: track.mixer,
+            reverse: clip.reverse,
             data,
         });
     }

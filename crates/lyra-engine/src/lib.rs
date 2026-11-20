@@ -90,6 +90,8 @@ pub struct AudioRegion {
     pub fade_out: (f32, f32),
     /// Mixer track it plays into.
     pub track: usize,
+    /// Read the window backwards: from its end in the file towards `from`.
+    pub reverse: bool,
 }
 
 impl PartialEq for AudioRegion {
@@ -97,6 +99,7 @@ impl PartialEq for AudioRegion {
         Arc::ptr_eq(&self.data, &o.data)
             && (self.start, self.end, self.from, self.trim) == (o.start, o.end, o.from, o.trim)
             && (self.gain, self.fade_in, self.fade_out, self.track) == (o.gain, o.fade_in, o.fade_out, o.track)
+            && self.reverse == o.reverse
     }
 }
 
@@ -178,7 +181,7 @@ impl AudioRegion {
             if left < fo {
                 g *= fade_curve((left / fo) as f32, self.fade_out.1);
             }
-            let file = self.from + el;
+            let file = if self.reverse { self.from + dur - el } else { self.from + el };
             if file < self.trim.0 {
                 continue;
             }
@@ -995,6 +998,7 @@ mod tests {
             fade_in: (0.0, 0.0),
             fade_out: (0.0, 0.0),
             track: 0,
+            reverse: false,
         }
     }
 
@@ -1044,6 +1048,29 @@ mod tests {
         for t in [-0.8, -0.3, 0.0, 0.4, 0.9] {
             assert!((tension_through(fade_curve(0.5, t)) - t).abs() < 1e-3, "inverse at {t}");
         }
+    }
+
+    #[test]
+    fn a_reversed_region_reads_its_window_backwards() {
+        let (mut eng, mut h, _) = setup();
+        // A rising ramp, 0 → 1 over one second; a half-second region of it.
+        let ramp: Vec<f32> = (0..48_000).map(|i| i as f32 / 48_000.0).collect();
+        let mut r = region(0.0, 96.0);
+        r.data = Arc::new(SampleData { sample_rate: 48_000.0, left: ramp.clone(), right: ramp });
+        r.reverse = true;
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] })));
+        h.send(Command::SetAudio(Box::new(AudioLane { regions: vec![r] })));
+        h.send(Command::SetMasterVolume(1.0));
+        h.send(Command::Play);
+        let out = capture(&mut eng, 24_000);
+        // Backwards from 0.5 s: loud first, falling.
+        assert!(
+            out[2_000] > out[12_000] && out[12_000] > out[22_000],
+            "{} {} {}",
+            out[2_000],
+            out[12_000],
+            out[22_000]
+        );
     }
 
     #[test]

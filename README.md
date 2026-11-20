@@ -31,14 +31,15 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Do | How |
 |---|---|
 | Place a clip | click an empty spot: a copy of the clip you last clicked (its length, window, fades, gain), or the top bar's pattern if you picked one there |
-| Move / resize / duplicate | drag a clip / drag its right end (longer = the pattern repeats) / Shift+drag |
+| Move / resize / duplicate | drag a clip / drag either end (the left end trims the start, what plays stays put; longer = the pattern repeats) / Shift+drag |
+| Tools (keys in the header) | **Edit**: all of this · **Cut**: click a clip to split it there (the selected ones too) · **Slide**: drag what plays inside a clip (a pattern wraps around, audio stops at its ends); the clip stays put |
 | Pick a clip's pattern / open it | click a clip / double-click it |
 | Delete | right-click or right-drag, or `Delete` |
 | Select | Ctrl+drag, `Ctrl+A` · duplicate after: `Ctrl+D` / `Ctrl+B` |
 | Audio clip | drop a sample from the browser on a track (or an audio clip from the browser for another copy) |
-| Trim a clip | drag either end: a clip is a window onto its audio |
+| Trim a clip | drag either end: a clip is a window onto its pattern or audio |
 | A clip's own fades and gain | hover it: the dots on the title strip are the fades (drag sideways), the ring on a curve bends it (up/down), the ↕ in the middle is gain (up/down, Shift = fine, double-click = 0 dB). Each clip has its own |
-| The *Audio clip* editor | double-click a clip. Its frame is the clip's window: drag it sideways to play another part of the audio (the clip stays put). On the frame: the clip's fade dots, curve rings and ↕ gain, like on the arrangement. The white trim lines and the *every copy* gain are shared by all copies; `Ctrl+U` gives the selected clips their own source |
+| The *Audio clip* editor | double-click a clip. Its frame is the clip's window: drag it sideways to play another part of the audio (the clip stays put). On the frame: the clip's fade dots, curve rings and ↕ gain, like on the arrangement. **Reverse** plays the clip's window backwards. The white trim lines and the *every copy* gain are shared by all copies; `Ctrl+U` gives the selected clips their own source |
 | Where a track's audio plays | the number at the right of its header: mixer insert (M = master) |
 | Play from here | click the ruler (switches to song mode) |
 | Mute a track | click its light |

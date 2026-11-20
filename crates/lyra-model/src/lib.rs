@@ -211,8 +211,10 @@ pub enum Source {
 
 /// Something placed on the playlist.
 ///
-/// * A **pattern** clip longer than its pattern repeats the pattern inside it
-///   (stretch a 2-bar beat across 16 bars).
+/// * A **pattern** clip is a window onto its pattern repeated forever: it
+///   plays from `offset` ticks in (so a clip can start mid-pattern), and a
+///   clip longer than the pattern repeats it (stretch a 2-bar beat across
+///   16 bars). See [`Clip::pattern_notes`].
 /// * An **audio** clip is a window onto its audio: it plays from `offset`
 ///   ticks in, for `len` ticks. Dragging its left edge moves both `start` and
 ///   `offset`, so the sound stays in place. Its gain and fades are its own.
@@ -233,6 +235,9 @@ pub struct Clip {
     pub gain: f32,
     pub fade_in: Fade,
     pub fade_out: Fade,
+    /// Play the window backwards (audio clips). The fades stay where the
+    /// clip starts and ends on the playlist.
+    pub reverse: bool,
 }
 
 /// New audio clips fade 5 ms at each end: no clicks where the sound is cut.
@@ -250,6 +255,7 @@ impl Clip {
             gain: 0.0,
             fade_in: Fade::default(),
             fade_out: Fade::default(),
+            reverse: false,
         }
     }
 
@@ -264,6 +270,36 @@ impl Clip {
 
     pub fn end(&self) -> u32 {
         self.start + self.len
+    }
+
+    /// Where this (pattern) clip plays `pat`'s notes for channel `ch`:
+    /// (ticks from the clip's start, length cut at the clip's end, the note).
+    /// A note that starts before the clip's window doesn't sound.
+    pub fn pattern_notes<'a>(
+        &self,
+        pat: &'a Pattern,
+        ch: ChannelId,
+    ) -> impl Iterator<Item = (u32, u32, &'a Note)> + 'a {
+        let loop_len = (pat.play_length() * TICKS_PER_STEP).max(1) as i64;
+        let (offset, len) = ((self.offset as i64) % loop_len, self.len as i64);
+        let reps = (offset + len + loop_len - 1) / loop_len;
+        (0..reps).flat_map(move |k| {
+            let base = k * loop_len - offset;
+            pat.notes(ch).iter().filter_map(move |n| {
+                let at = base + n.start as i64;
+                ((n.start as i64) < loop_len && at >= 0 && at < len)
+                    .then(|| (at as u32, (n.len as i64).min(len - at) as u32, n))
+            })
+        })
+    }
+
+    /// Where this (pattern) clip's pattern starts over, in ticks from the
+    /// clip's start (not counting 0).
+    pub fn pattern_restarts(&self, pat: &Pattern) -> impl Iterator<Item = u32> {
+        let loop_len = (pat.play_length() * TICKS_PER_STEP).max(1);
+        let first = (loop_len - self.offset % loop_len) % loop_len;
+        let len = self.len;
+        (0..).map(move |k| first + k * loop_len).filter(|&t| t > 0).take_while(move |&t| t < len)
     }
 
     pub fn pattern(&self) -> Option<PatternId> {
@@ -300,6 +336,8 @@ struct ClipFile {
     fade_in: Fade,
     #[serde(default, skip_serializing_if = "is_zero")]
     fade_out: Fade,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    reverse: bool,
 }
 
 impl From<ClipFile> for Clip {
@@ -318,6 +356,7 @@ impl From<ClipFile> for Clip {
             gain: f.gain,
             fade_in: f.fade_in,
             fade_out: f.fade_out,
+            reverse: f.reverse,
         }
     }
 }
@@ -334,6 +373,7 @@ impl From<Clip> for ClipFile {
             gain: c.gain,
             fade_in: c.fade_in,
             fade_out: c.fade_out,
+            reverse: c.reverse,
         }
     }
 }
@@ -682,6 +722,21 @@ mod tests {
         assert!(h.redo(&mut proj));
         h.checkpoint(&proj); // a no-op after redo keeps nothing broken
         assert_eq!(proj.bpm, 128.0);
+    }
+
+    #[test]
+    fn a_pattern_clip_is_a_window_onto_its_pattern_repeated() {
+        let mut pat = Pattern::new(1, "p"); // one bar: notes on beats 1 and 3
+        pat.notes_mut(9).push(Note { start: 0, len: 24, key: 60, velocity: 1.0 });
+        pat.notes_mut(9).push(Note { start: 2 * 96, len: 24, key: 62, velocity: 1.0 });
+        let mut c = Clip::of_pattern(1, 0, 0, 2 * TICKS_PER_BAR);
+        let at = |c: &Clip| c.pattern_notes(&pat, 9).map(|(t, _, n)| (t, n.key)).collect::<Vec<_>>();
+        assert_eq!(at(&c), vec![(0, 60), (192, 62), (384, 60), (576, 62)], "repeats");
+        c.offset = 96; // start on beat 2: beat 3's note comes first
+        assert_eq!(at(&c), vec![(96, 62), (288, 60), (480, 62), (672, 60)]);
+        assert_eq!(c.pattern_restarts(&pat).collect::<Vec<_>>(), vec![288, 672]);
+        c.offset = 100 + TICKS_PER_BAR; // offsets wrap around the pattern
+        assert_eq!(at(&c)[0], (92, 62));
     }
 
     #[test]
