@@ -64,6 +64,16 @@ no marks would default to not urgent or 'coding teams judges'
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Arrangement tools → `8821c56`**
+- [x] Slide pattern clip window
+  *→ the Slide tool (a key in the arrangement header): drag what plays inside a clip, it stays put. Patterns wrap around; audio stops at its ends. Works on several selected clips at once.*
+- [x] Trim pattern start per clip
+  *→ drag a pattern clip's left end, like audio clips: what plays stays where it is.*
+- [x] Cutter/Slide tool, Cut pattern at cursor possition.
+  *→ the Cut tool: click a clip to split it at the mouse (snapped; Alt = free), with a preview line. Patterns or audio; the selected clips too if you click one of them.*
+- [x] Per audio clip reversal toggle (Audio clip editor) Reverses the window playback
+  *→ Reverse, under the clip's knobs in the audio-clip editor. The fades stay at the clip's edges on the arrangement (so in the editor the fade-in sits at the frame's right end, where reversed playback starts).*
+
 **Chrysalis: random LFOs, phrase mode, warp you can see (2026-11-19)**
 - [x] *(chat)* "A free mode for the LFO that only runs when triggered", and "random/stepped noise on the LFO"
   *→ a new LFO mode, PHRASE: one LFO for all notes that only runs while notes sound and starts over on the first note after silence. And a style for every LFO: DRAWN (your shape), STEPS (a new random value each cycle) or SMOOTH (random values glided between); the random ones show a scrolling trace of what they're doing.*
