@@ -2,7 +2,9 @@
 //! presets. The songs only build projects; Lyra renders them (`--render`).
 #![allow(dead_code)]
 
-use lyra_model::{EffectSlot, Project, TICKS_PER_BAR, TICKS_PER_STEP};
+use lyra_model::{
+    AutomationId, ChannelId, Clip, EffectSlot, Link, Point, Project, Target, TICKS_PER_BAR, TICKS_PER_STEP,
+};
 use std::path::Path;
 
 pub const STEP: u32 = TICKS_PER_STEP;
@@ -105,6 +107,50 @@ pub fn tweak(mut v: Vec<f32>, set: &[(usize, f32)]) -> Vec<f32> {
 
 pub fn fx(id: &str, set: &[(usize, f32)]) -> EffectSlot {
     EffectSlot::new(id, tweak(lyra_catalog::effects::default_params(id), set))
+}
+
+/// Knob travel (0..1, what automation moves) for `value` in a channel's
+/// instrument parameter, in the parameter's own units (Hz, st, …).
+pub fn param_travel(p: &Project, channel: ChannelId, param: usize, value: f32) -> f32 {
+    let ch = p.channels.iter().find(|c| c.id == channel).expect("channel");
+    lyra_catalog::params(&ch.instrument)[param].to_normalized(value)
+}
+
+/// Knob travel for `value` in parameter `param` of effect `id`.
+pub fn fx_travel(id: &str, param: usize, value: f32) -> f32 {
+    lyra_catalog::effects::params(id)[param].to_normalized(value)
+}
+
+/// Knob travel of a channel or mixer volume for a linear gain (1 = 0 dB).
+pub fn volume_travel(gain: f32) -> f32 {
+    lyra_plugin::fader_travel(gain, 2.0)
+}
+
+/// `p`'s parameter `param` on `channel`, moved from `from` to `to` (real units).
+pub fn param_link(p: &Project, channel: ChannelId, param: usize, from: f32, to: f32) -> Link {
+    Link {
+        target: Target::Param { channel, param: param as u32 },
+        from: param_travel(p, channel, param, from),
+        to: param_travel(p, channel, param, to),
+    }
+}
+
+/// An automation: a curve of (tick, value 0..1, tension to the next point)
+/// moving every link. Place it with [`place`].
+pub fn automate(p: &mut Project, name: &str, length: u32, points: &[(u32, f32, f32)], links: &[Link]) -> AutomationId {
+    let i = p.add_automation(name, links[0].target, 0.0, length);
+    let a = &mut p.automations[i];
+    a.points = points.iter().map(|&(tick, value, tension)| Point { tick, value, tension }).collect();
+    a.links = links.to_vec();
+    a.id
+}
+
+/// A clip of automation `id` on `track`, from bar `at` for `bars` bars,
+/// starting `offset` ticks into the curve.
+pub fn place(p: &mut Project, id: AutomationId, track: usize, at: u32, bars: u32, offset: u32) {
+    let mut clip = Clip::of_automation(id, track, at * BAR, bars * BAR);
+    clip.offset = offset;
+    p.add_clip(clip);
 }
 
 /// Save the song as `<dir>/<title>.lyra` and say how to hear it. Rendering is
