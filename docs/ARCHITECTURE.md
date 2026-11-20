@@ -124,6 +124,28 @@ exactly like a pattern. Song mode added no real-time code at all. The bridge
 compiles the target (pattern or song) on every project change and re-sends it
 only when the result differs. Switching mode seeks to the top.
 
+## Automation
+
+`lyra_model::Automation` is a shared curve (points of knob *travel* 0..1,
+each with the tension of the line to the next, and a `length` it repeats
+at) plus `links`: the controls it moves, each over its own travel range.
+`Clip::of_automation` places it, like any clip. Targets
+(`lyra_model::Target`) name controls by stable ids: channel ids, parameter
+ids, and `EffectId`s (effect slots carry their own id now, so reordering a
+chain doesn't retarget anything).
+
+`automation::compile` (app) turns the clips into one `AutoLane` per control
+for the engine: the curve along the whole song (window, offset and repeats
+applied, cut lines sampled), holding between clips, plus the control's
+`ParamInfo` (its knob law) and its own value (`rest`). The engine evaluates
+each lane at the song position every 64 samples while playing (chasing is
+free: the value only depends on the position), sets the control directly,
+and on Stop puts every control back at `rest`. Song mode only.
+
+"Automate" automates the control changed last: the bridge compares the
+project with what it sent last frame (`Project::changed_control`), so any
+editor, and later any plugin window, feeds it.
+
 ## Mixer
 
 Channels play into a **mixer track** (`Channel.mixer`; 0 = master, 1–16 =

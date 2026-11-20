@@ -274,6 +274,8 @@ pub enum Icon {
     Pointer,
     Cut,
     Slide,
+    /// An automation curve.
+    Curve,
 }
 
 /// Draw an icon centred in `r` (a key's face). Hand-drawn vectors until the
@@ -353,6 +355,19 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, bg: Colo
             for k in 0..3 {
                 let y = frame.top() + (2.8 + k as f32 * 2.7) * u;
                 p.hline(split + 2.0 * u..=frame.right() - 2.0 * u, y, stroke(u.max(1.0), ink));
+            }
+        }
+        Icon::Curve => {
+            // A curve rising through three points.
+            let pts: Vec<Pos2> = (0..=12)
+                .map(|i| {
+                    let x = i as f32 / 12.0;
+                    c + vec2(-6.0 + 12.0 * x, 5.0 - 10.0 * x * x * (3.0 - 2.0 * x)) * u
+                })
+                .collect();
+            p.add(Shape::line(pts, line));
+            for (x, y) in [(-6.0, 5.0), (0.0, 0.0), (6.0, -5.0)] {
+                p.circle_filled(c + vec2(x, y) * u, 1.8 * u, ink);
             }
         }
         Icon::Pointer => {

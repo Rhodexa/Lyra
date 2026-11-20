@@ -33,6 +33,7 @@ pub fn from_json(text: &str) -> Result<Project, String> {
     }
     let mut project = file.project;
     project.number_clips();
+    project.number_effects();
     Ok(project)
 }
 

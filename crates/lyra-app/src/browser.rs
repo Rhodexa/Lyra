@@ -131,11 +131,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
                 };
                 if row(ui, e.name, None, false, 0.0).on_hover_text(hint).clicked() && !full {
                     h.checkpoint(p);
-                    p.mixer[t].effects.push(EffectSlot {
-                        effect: e.id.into(),
-                        params: lyra_catalog::effects::default_params(e.id),
-                        bypass: false,
-                    });
+                    p.mixer[t].effects.push(EffectSlot::new(e.id, lyra_catalog::effects::default_params(e.id)));
                     st.effect = Some((t, p.mixer[t].effects.len() - 1));
                     st.raise = Some(Focus::Effect);
                 }

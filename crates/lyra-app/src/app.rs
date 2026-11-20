@@ -83,6 +83,12 @@ pub struct UiState {
     pub clip: Option<lyra_model::ClipId>,
     /// "Open this audio clip in the audio-clip editor" (a double-click).
     pub open_audio: Option<lyra_model::AudioId>,
+    /// The current automation (the automation editor shows it), and "open
+    /// this one" (a double-click on its clip).
+    pub automation: Option<lyra_model::AutomationId>,
+    pub open_automation: Option<lyra_model::AutomationId>,
+    /// The control changed last, anywhere: what "Automate" automates.
+    pub last_tweaked: Option<lyra_model::Target>,
     /// The pattern last frame: picking another one goes back to placing patterns.
     last_pattern: usize,
 }
@@ -118,6 +124,9 @@ impl Default for UiState {
             place_audio: false,
             clip: None,
             open_audio: None,
+            automation: None,
+            open_automation: None,
+            last_tweaked: None,
             last_pattern: 0,
         }
     }
@@ -298,6 +307,57 @@ impl LyraApp {
             a.framed = None;
         }
         self.pending_seek = Some(0.0);
+    }
+
+    /// "Automate": an automation for the control changed last, 4 bars, flat
+    /// at its value, on a free track where the song is; the editor opens on it.
+    fn automate(&mut self) {
+        let Some(target) = self.ui.last_tweaked else {
+            self.notify("Move a knob first: Automate makes a curve for the last control you changed", false);
+            return;
+        };
+        let Some((info, value, name)) = crate::automation::control(&self.project, target) else { return };
+        let len = 4 * lyra_model::TICKS_PER_BAR;
+        let start = if self.ui.song_mode {
+            (self.playhead as u32 / lyra_model::TICKS_PER_BAR) * lyra_model::TICKS_PER_BAR
+        } else {
+            0
+        };
+        let p = &mut self.project;
+        // An empty track first (automation reads best on its own row), else
+        // any track free for those bars.
+        let empty = |t: usize| !p.clips.iter().any(|c| c.track == t);
+        let free = |t: usize| !p.clips.iter().any(|c| c.track == t && c.start < start + len && c.end() > start);
+        let tracks = 0..p.tracks.len();
+        let Some(track) = tracks.clone().find(|&t| empty(t)).or_else(|| tracks.clone().find(|&t| free(t))) else {
+            self.notify("No free track there for the automation", true);
+            return;
+        };
+        self.history.checkpoint(p);
+        let i = p.add_automation(&name, target, info.to_normalized(value), len);
+        let id = p.automations[i].id;
+        let c = p.add_clip(lyra_model::Clip::of_automation(id, track, start, len));
+        self.ui.clip = Some(p.clips[c].id);
+        self.ui.automation = Some(id);
+        self.ui.open_automation = Some(id);
+        self.notify(&format!("Automating {name}"), false);
+    }
+
+    /// "Link": the current automation moves the control changed last too.
+    fn link_tweaked(&mut self) {
+        let (Some(target), Some(i)) =
+            (self.ui.last_tweaked, self.ui.automation.and_then(|id| self.project.automation_index(id)))
+        else {
+            return;
+        };
+        let name = crate::automation::control(&self.project, target).map_or_else(String::new, |c| c.2);
+        if self.project.automations[i].links.iter().any(|l| l.target == target) {
+            self.notify(&format!("{name} is already on this curve"), false);
+            return;
+        }
+        self.history.checkpoint(&self.project);
+        self.project.automations[i].links.push(lyra_model::Link::full(target));
+        self.notify(&format!("This curve moves {name} too"), false);
     }
 
     fn dirty(&self) -> bool {
@@ -724,6 +784,8 @@ impl LyraApp {
             Action::TogglePlaylist => self.toggle_bottom(Editor::Arrangement),
             Action::ToggleSongMode => self.ui.song_mode ^= true,
             Action::SongMode(on) => self.ui.song_mode = on,
+            Action::Automate => self.automate(),
+            Action::LinkTweaked => self.link_tweaked(),
             Action::NewProject => self.leave(ctx, Leave::New),
             Action::OpenProject => self.leave(ctx, Leave::Open),
             Action::OpenBackup => self.leave(ctx, Leave::OpenBackup),
@@ -892,10 +954,17 @@ impl eframe::App for LyraApp {
             self.apply(ctx, a, playing, target);
         }
 
+        // New effects get their ids (automation finds them by it).
+        if self.project.mixer.iter().any(|t| t.effects.iter().any(|e| e.id == 0)) {
+            self.project.number_effects();
+        }
         // ── Push changes to the engine ──
         if let Some(e) = &mut self.engine {
             let target = if self.ui.song_mode { Playing::Song } else { Playing::Pattern(self.ui.pattern) };
             self.bridge.sync(&self.project, target, e, &mut self.samples);
+            if let Some(t) = self.bridge.tweaked.take() {
+                self.ui.last_tweaked = Some(t);
+            }
             if let Some(tick) = self.pending_seek.take() {
                 e.send(Command::Seek(tick));
             }
@@ -982,6 +1051,11 @@ impl LyraApp {
             }
             self.ui.last_pattern = self.ui.pattern;
         }
+        // Double-clicked an automation clip (or just made one): its editor.
+        if let Some(id) = self.ui.open_automation.take() {
+            self.ui.automation = Some(id);
+            self.ui.show = Some(Editor::Automation);
+        }
         // Double-clicked an audio clip: show it in the audio-clip editor.
         if let Some(id) = self.ui.open_audio.take() {
             self.ui.audio = Some(id);
@@ -1017,7 +1091,7 @@ impl LyraApp {
         let editor = self.areas[1].editor;
         let default_h = match editor {
             Editor::Mixer => crate::mixer::STRIP_H + m.control_h + 4.0 + 2.0 * 8.0 + 4.0,
-            Editor::Audio => avail * 0.36,
+            Editor::Audio | Editor::Automation => avail * 0.36,
             _ => avail * 0.5,
         };
         let r = egui::TopBottomPanel::bottom(bottom_panel_id(editor))
@@ -1050,8 +1124,9 @@ impl LyraApp {
                 areas::picker(ui, area);
                 ui.add_space(6.0);
                 match area.editor {
-                    Editor::Arrangement => area.playlist.toolbar(ui, p, st),
+                    Editor::Arrangement => area.playlist.toolbar(ui, p, st, actions),
                     Editor::Audio => area.audio.toolbar(ui, p, h, st),
+                    Editor::Automation => area.automation.toolbar(ui, p, h, st, actions),
                     Editor::PianoRoll if has_channel => {
                         let color = theme::channel_color(p.channels[ch].color);
                         area.piano.toolbar(ui, p, h, color, ch);
@@ -1069,6 +1144,10 @@ impl LyraApp {
                 Editor::Audio => {
                     let song_playhead = st.song_mode.then_some(playhead);
                     area.audio.show(ui, p, h, st, samples, song_playhead, actions);
+                }
+                Editor::Automation => {
+                    let song_playhead = st.song_mode.then_some(playhead);
+                    area.automation.show(ui, p, h, st, song_playhead);
                 }
                 Editor::PianoRoll if has_channel => {
                     let ch_id = p.channels[ch].id;

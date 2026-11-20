@@ -14,6 +14,7 @@
 //! area shows it yet).
 
 use crate::audio_editor::AudioEditor;
+use crate::automation_editor::AutomationEditor;
 use crate::piano_roll::PianoRoll;
 use crate::playlist::Playlist;
 use crate::theme::{self, cr};
@@ -31,10 +32,13 @@ pub enum Editor {
     Steps,
     /// One audio clip, big: trim, gain, fades.
     Audio,
+    /// One automation's curve.
+    Automation,
 }
 
 impl Editor {
-    pub const ALL: [Editor; 5] = [Editor::Arrangement, Editor::PianoRoll, Editor::Audio, Editor::Mixer, Editor::Steps];
+    pub const ALL: [Editor; 6] =
+        [Editor::Arrangement, Editor::PianoRoll, Editor::Audio, Editor::Automation, Editor::Mixer, Editor::Steps];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -43,6 +47,7 @@ impl Editor {
             Editor::Mixer => "Mixer",
             Editor::Steps => "Step sequencer",
             Editor::Audio => "Audio clip",
+            Editor::Automation => "Automation",
         }
     }
 
@@ -53,6 +58,7 @@ impl Editor {
             Editor::Mixer => Icon::Mixer,
             Editor::Steps => Icon::Rack,
             Editor::Audio => Icon::Wave,
+            Editor::Automation => Icon::Curve,
         }
     }
 
@@ -61,7 +67,7 @@ impl Editor {
             Editor::Arrangement => "F5",
             Editor::PianoRoll => "F7",
             Editor::Mixer => "F9",
-            Editor::Steps | Editor::Audio => "",
+            Editor::Steps | Editor::Audio | Editor::Automation => "",
         }
     }
 }
@@ -74,6 +80,7 @@ pub struct Area {
     pub playlist: Playlist,
     pub piano: PianoRoll,
     pub audio: AudioEditor,
+    pub automation: AutomationEditor,
     /// (pattern, channel id) this area's piano roll last framed its view on.
     pub framed: Option<(usize, u32)>,
 }
@@ -86,6 +93,7 @@ impl Area {
             playlist: Playlist::default(),
             piano: PianoRoll::default(),
             audio: AudioEditor::default(),
+            automation: AutomationEditor::default(),
             framed: None,
         }
     }

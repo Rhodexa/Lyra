@@ -4,6 +4,8 @@ mod app;
 mod areas;
 mod audio;
 mod audio_editor;
+mod automation;
+mod automation_editor;
 mod bridge;
 mod browser;
 mod chrysalis_editor;

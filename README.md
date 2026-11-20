@@ -45,6 +45,15 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Mute a track | click its light |
 | Scroll / zoom / pan | wheel (up/down), Ctrl+wheel (sideways) · Shift+wheel or wheel over the ruler (time, around the mouse), wheel over a scrollbar (that axis), Alt+wheel (track height) · middle-drag |
 
+**Automation** (song mode)
+
+| Do | How |
+|---|---|
+| Automate a control | move it (any knob, fader, plugin window), then the curve key in the arrangement's header: a 4-bar automation clip on a free track, and its editor opens |
+| Edit the curve | *Automation* editor: click to add a point, drag to move, right-click to remove; the ring between two points bends the line; drag the line at the end for the length |
+| One curve, more controls | move another control, then **Link** in the editor's header (× takes one off) |
+| How it plays | clips work like the others (copies, trim, slide, cut; longer than the curve = it repeats). A control holds its last value between clips, and starting the song anywhere puts every control where the song has it |
+
 **Mixer** (`F9`)
 
 | Do | How |

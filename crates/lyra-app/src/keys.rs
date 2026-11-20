@@ -45,6 +45,10 @@ pub enum Action {
     /// Ctrl+U: the selected audio clips get their own copy of their audio
     /// clip, so changing them no longer changes the others.
     MakeUnique,
+    /// Make an automation for the control changed last, on the arrangement.
+    Automate,
+    /// Add the control changed last to the current automation's targets.
+    LinkTweaked,
     Quantize,
     /// Move the playhead / start marker to a tick (from clicking a timeline).
     Seek(f64),

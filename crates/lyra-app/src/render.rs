@@ -242,11 +242,7 @@ mod tests {
         let id = p.patterns[0].id;
         p.add_clip(Clip::of_pattern(id, 0, 0, 2 * TICKS_PER_BAR));
         let _ = hat; // a channel with no notes: no stem for it
-        p.mixer[1].effects = vec![lyra_model::EffectSlot {
-            effect: "lyra.reverb".into(),
-            params: vec![0.95, 0.2, 1.0, 0.6],
-            bypass: false,
-        }];
+        p.mixer[1].effects = vec![lyra_model::EffectSlot::new("lyra.reverb", vec![0.95, 0.2, 1.0, 0.6])];
         p
     }
 

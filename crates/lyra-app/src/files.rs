@@ -151,11 +151,7 @@ mod tests {
         let mut old = full[..154].to_vec(); // Fluttersine as first ported
         old[0] = 8.0; // a saved value
         p.add_channel("Lead", "lyra.fluttersine", old);
-        p.mixer[1].effects.push(lyra_model::EffectSlot {
-            effect: "lyra.delay".into(),
-            params: vec![1.0],
-            bypass: false,
-        });
+        p.mixer[1].effects.push(lyra_model::EffectSlot::new("lyra.delay", vec![1.0]));
         fill_new_params(&mut p);
         let params = &p.channels[0].params;
         assert_eq!(params.len(), full.len());

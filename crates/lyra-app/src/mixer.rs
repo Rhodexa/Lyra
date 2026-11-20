@@ -492,8 +492,7 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
         Some(SlotAction::Put(i, id)) => {
             h.checkpoint(p);
             let fx = &mut p.mixer[t].effects;
-            let slot =
-                EffectSlot { effect: id.into(), params: lyra_catalog::effects::default_params(id), bypass: false };
+            let slot = EffectSlot::new(id, lyra_catalog::effects::default_params(id));
             if i < fx.len() {
                 fx[i] = slot;
             } else {

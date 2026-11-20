@@ -700,7 +700,7 @@ impl Playlist {
     }
 
     /// The arrangement's controls; the area draws them on its header row.
-    pub fn toolbar(&mut self, ui: &mut Ui, p: &Project, st: &UiState) {
+    pub fn toolbar(&mut self, ui: &mut Ui, p: &Project, st: &UiState, out: &mut Vec<Action>) {
         ui.horizontal(|ui| {
             let h = theme::m().control_h;
             let tools = [Tool::Edit, Tool::Cut, Tool::Slide];
@@ -714,6 +714,15 @@ impl Playlist {
                 "Edit: place, move, resize · Cut: click a clip to split it · Slide: drag what plays inside a clip";
             if let Some(i) = widgets::radio_keys(ui, vec2(h * 1.2, h), &options, chosen, hint) {
                 self.tool = tools[i];
+            }
+            ui.add_space(6.0);
+            let hint = match st.last_tweaked.and_then(|t| crate::automation::control(p, t)) {
+                Some((_, _, name)) => format!("Automate {name} (the control you changed last)"),
+                None => "Automate the control you change next: move a knob first".to_string(),
+            };
+            let key = widgets::Legend::Icon(widgets::Icon::Curve);
+            if widgets::key(ui, vec2(h * 1.2, h), key, false, theme::L_MINT, &hint).clicked() {
+                out.push(Action::Automate);
             }
             ui.add_space(10.0);
             ui.label(egui::RichText::new("snap").small().color(theme::TEXT_DIM));
@@ -834,13 +843,15 @@ impl Playlist {
                     st.audio = Some(id);
                     st.place_audio = true;
                 }
+                Source::Automation(id) => st.automation = Some(id),
             }
             if double {
-                // Double-click a clip: edit its pattern in the piano roll, or its
-                // audio in the audio-clip editor.
+                // Double-click a clip: edit its pattern in the piano roll, its
+                // audio in the audio-clip editor, its curve in the automation editor.
                 match p.clips[i].source {
                     Source::Pattern(id) => st.open_pattern = p.pattern_index(id),
                     Source::Audio(id) => st.open_audio = Some(id),
+                    Source::Automation(id) => st.open_automation = Some(id),
                 }
                 self.drag = Drag::None;
                 return;
@@ -1005,6 +1016,10 @@ impl Playlist {
                             let loop_len = p.pattern(id).map_or(1, |pat| (pat.play_length() * TICKS_PER_STEP).max(1));
                             wanted.rem_euclid(loop_len as i64)
                         }
+                        // So does an automation's curve.
+                        Source::Automation(id) => {
+                            wanted.rem_euclid(p.automation(id).map_or(1, |a| a.length.max(1)) as i64)
+                        }
                     };
                     if let Some(clip) = p.clips.get_mut(*i) {
                         clip.offset = offset as u32;
@@ -1124,6 +1139,10 @@ impl Playlist {
                     Some(a) => (a.name.as_str(), st.place_audio && st.audio == Some(id)),
                     None => continue,
                 },
+                Source::Automation(id) => match p.automation(id) {
+                    Some(a) => (a.name.as_str(), false),
+                    None => continue,
+                },
             };
             let current = template.map_or(current, |t| t == c.id);
             let light = clip_light(p, c);
@@ -1164,6 +1183,11 @@ impl Playlist {
                     if let Some(a) = p.audio(id) {
                         let hot = hot.filter(|h| h.0 == i).map(|h| h.1);
                         paint_audio(painter, v, p, c, a, light, samples, hot);
+                    }
+                }
+                Source::Automation(id) => {
+                    if let Some(a) = p.automation(id) {
+                        paint_curve(painter, v, c, a, light, body);
                     }
                 }
             }
@@ -1233,7 +1257,46 @@ pub fn clip_light(p: &Project, c: &Clip) -> theme::Light {
     match c.source {
         Source::Pattern(id) => theme::channel_light(p.pattern_index(id).unwrap_or(0)),
         Source::Audio(id) => theme::channel_light(p.audio(id).map_or(0, |a| a.color)),
+        Source::Automation(id) => theme::channel_light(p.automation(id).map_or(0, |a| a.color)),
     }
+}
+
+/// An automation clip's body: its curve over the clip's window, a line with
+/// a faint fill under it.
+fn paint_curve(
+    painter: &egui::Painter,
+    v: &View,
+    c: &Clip,
+    a: &lyra_model::Automation,
+    light: theme::Light,
+    body: Rect,
+) {
+    let area = body.shrink2(vec2(1.0, 3.0));
+    let clipped = painter.with_clip_rect(body.intersect(v.grid));
+    let pts = crate::automation::window(a, c.offset, c.len);
+    let (x0, x1) = (v.x(c.start as f32).max(v.grid.left() - 2.0), v.x(c.end() as f32).min(v.grid.right() + 2.0));
+    if x1 <= x0 {
+        return;
+    }
+    let y = |val: f32| area.bottom() - val.clamp(0.0, 1.0) * area.height();
+    let mut line = Vec::new();
+    let mut x = x0;
+    while x <= x1 {
+        let t = (v.tick(x) - c.start as f32) as f64;
+        if let Some(val) = lyra_engine::curve_at(&pts, t) {
+            line.push(pos2(x, y(val)));
+        }
+        x += 2.0;
+    }
+    if line.len() < 2 {
+        return;
+    }
+    let fill = light.mid.gamma_multiply(0.18);
+    for w in line.windows(2) {
+        let r = Rect::from_min_max(pos2(w[0].x, w[0].y.min(w[1].y)), pos2(w[1].x, area.bottom()));
+        clipped.rect_filled(r, cr(0), fill);
+    }
+    clipped.add(egui::Shape::line(line, stroke(1.5, light.hi)));
 }
 
 /// The insert well at the right end of a track's header (None when the row

@@ -196,7 +196,7 @@ fn build() -> Project {
         for &(i, x) in set {
             params[i] = x;
         }
-        EffectSlot { effect: id.into(), params, bypass: false }
+        EffectSlot::new(id, params)
     };
     for (t, name) in [(1, "Lead"), (2, "Backing"), (3, "Bass"), (4, "Drums")] {
         p.mixer[t].name = name.into();

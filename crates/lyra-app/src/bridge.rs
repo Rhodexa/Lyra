@@ -24,6 +24,10 @@ pub struct Bridge {
     /// only re-sent when it actually differs.
     last_seq: Option<Sequence>,
     last_audio: Option<AudioLane>,
+    last_automation: Option<lyra_engine::Automation>,
+    /// The control the last change moved (any editor, any plugin window):
+    /// what "Automate" automates. The app takes it after each sync.
+    pub tweaked: Option<lyra_model::Target>,
     /// Each channel's live state for its editor (see `Plugin::telemetry`),
     /// taken when the bridge makes the plugin.
     live: std::collections::HashMap<lyra_model::ChannelId, Live>,
@@ -43,6 +47,9 @@ impl Bridge {
             return; // nothing changed — the common case
         }
         let last = self.last.take();
+        if let Some(t) = last.as_ref().and_then(|l| p.changed_control(l)) {
+            self.tweaked = Some(t);
+        }
 
         // Channels added/removed/reordered or instrument swapped → rebuild them all.
         // (Simple and correct; fine-grained insert/remove can come later.)
@@ -173,6 +180,16 @@ impl Bridge {
         if self.last_audio.as_ref() != Some(&lane) {
             eng.send(Command::SetAudio(Box::new(lane.clone())));
             self.last_audio = Some(lane);
+        }
+        // Automation too: song mode only. (Rebuilt channels lost their
+        // automated values, so a rebuild re-sends it.)
+        let set = match target {
+            Playing::Song => crate::automation::compile(p),
+            Playing::Pattern(_) => lyra_engine::Automation::default(),
+        };
+        if rebuild || self.last_automation.as_ref() != Some(&set) {
+            eng.send(Command::SetAutomation(Box::new(set.clone())));
+            self.last_automation = Some(set);
         }
         if switched {
             eng.send(Command::Seek(0.0));

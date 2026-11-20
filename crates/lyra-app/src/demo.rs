@@ -115,7 +115,7 @@ pub fn project() -> Project {
         for &(i, v) in tweaks {
             params[i] = v;
         }
-        EffectSlot { effect: id.into(), params, bypass: false }
+        EffectSlot::new(id, params)
     };
     p.mixer[2].effects = vec![fx("lyra.reverb", &[(0, 0.4), (3, 0.12)])];
     p.mixer[3].effects = vec![fx("lyra.eq", &[(0, 300.0)])];

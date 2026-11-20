@@ -25,7 +25,7 @@
 //!
 //! That's the whole threading model: two threads, three one-way pipes.
 
-use lyra_plugin::{Event, Plugin, ProcessContext, SampleData, TimedEvent, Transport};
+use lyra_plugin::{Event, ParamInfo, Plugin, ProcessContext, SampleData, TimedEvent, Transport};
 use rtrb::{Consumer, Producer, RingBuffer};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::sync::Arc;
@@ -108,6 +108,65 @@ impl PartialEq for AudioRegion {
 pub struct AudioLane {
     pub regions: Vec<AudioRegion>,
 }
+
+/// Where an automated value goes, in the engine's own terms (channel and
+/// slot *indexes*, which the bridge works out from the project's ids).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Addr {
+    Param { channel: usize, id: u32 },
+    Volume(usize),
+    Pan(usize),
+    MixerVolume(usize),
+    MixerPan(usize),
+    Effect { track: usize, slot: usize, id: u32 },
+    Master,
+}
+
+/// One automated control: its curve along the song, as knob travel (0..1),
+/// and how travel becomes a value (`info`, the control's own knob law).
+#[derive(Clone, Debug, PartialEq)]
+pub struct AutoLane {
+    pub addr: Addr,
+    pub info: ParamInfo,
+    /// (song tick, travel, tension of the line to the next point), sorted.
+    /// Two points on the same tick are a jump.
+    pub points: Vec<(f64, f32, f32)>,
+    /// Where the knob itself is: the value before the first point (and after Stop).
+    pub rest: f32,
+}
+
+impl AutoLane {
+    /// Travel at song tick `t`: the knob's own before the curve starts, the
+    /// last value after it ends (automation holds).
+    pub fn travel_at(&self, t: f64) -> f32 {
+        curve_at(&self.points, t).unwrap_or(self.rest)
+    }
+}
+
+/// A curve of (tick, value, tension-to-next) points at tick `t`: None before
+/// the first point, the last value after the last. Lines bend like fades.
+pub fn curve_at(points: &[(f64, f32, f32)], t: f64) -> Option<f32> {
+    let first = points.first()?;
+    if t < first.0 {
+        return None;
+    }
+    // The last point at or before t (a jump: the later of two on one tick).
+    let i = points.partition_point(|p| p.0 <= t) - 1;
+    let a = points[i];
+    let Some(&b) = points.get(i + 1) else { return Some(a.1) };
+    let x = if b.0 > a.0 { ((t - a.0) / (b.0 - a.0)) as f32 } else { 1.0 };
+    Some(a.1 + (b.1 - a.1) * fade_curve(x, a.2))
+}
+
+/// Every automated control in the song (empty when a pattern loops alone).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Automation {
+    pub lanes: Vec<AutoLane>,
+}
+
+/// While automation runs, the engine works in slices this small, so values
+/// move every ~1 ms instead of every block.
+const AUTOMATION_SLICE: usize = 64;
 
 /// How far tension ±1 bends a fade (the exponent at full tension).
 pub const FADE_BEND: f32 = 6.0;
@@ -349,10 +408,13 @@ pub enum Command {
     StopPreview,
     /// Replace the audio clips the song plays.
     SetAudio(Box<AudioLane>),
+    /// Replace the automation the song plays.
+    SetAutomation(Box<Automation>),
 }
 
 enum Trash {
     Audio(#[allow(dead_code)] Box<AudioLane>),
+    Automation(#[allow(dead_code)] Box<Automation>),
     Sequence(#[allow(dead_code)] Box<Sequence>),
     Channel(#[allow(dead_code)] Box<ChannelSlot>),
     Chain(#[allow(dead_code)] Box<FxChain>),
@@ -460,6 +522,7 @@ pub struct Engine {
     channels: Vec<Box<ChannelSlot>>,
     seq: Box<Sequence>,
     audio: Box<AudioLane>,
+    automation: Box<Automation>,
 
     playing: bool,
     /// Position inside the loop, in ticks.
@@ -494,6 +557,7 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
         channels: Vec::with_capacity(MAX_CHANNELS),
         seq: Box::default(),
         audio: Box::default(),
+        automation: Box::default(),
         playing: false,
         pos: 0.0,
         start_marker: 0.0,
@@ -528,8 +592,9 @@ impl Engine {
         self.drain_commands();
         let frames = out.len() / channels.max(1);
         let mut done = 0;
+        let slice = if self.playing && !self.automation.lanes.is_empty() { AUTOMATION_SLICE } else { BLOCK };
         while done < frames {
-            let n = (frames - done).min(BLOCK);
+            let n = (frames - done).min(slice);
             self.render_block(n);
             for i in 0..n {
                 let o = (done + i) * channels;
@@ -567,6 +632,12 @@ impl Engine {
                 Command::Stop => {
                     self.playing = false;
                     self.pos = self.start_marker;
+                    // Stopped, every knob is where its owner set it.
+                    for i in 0..self.automation.lanes.len() {
+                        let lane = &self.automation.lanes[i];
+                        let (addr, value) = (lane.addr, lane.info.from_normalized(lane.rest));
+                        self.apply(addr, value);
+                    }
                     for ch in &mut self.channels {
                         ch.held.clear();
                         if ch.pending.len() < ch.pending.capacity() {
@@ -647,6 +718,16 @@ impl Engine {
                     let old = std::mem::replace(&mut self.audio, lane);
                     self.discard(Trash::Audio(old));
                 }
+                Command::SetAutomation(set) => {
+                    let old = std::mem::replace(&mut self.automation, set);
+                    // A control no longer automated goes back to its own value.
+                    for lane in &old.lanes {
+                        if !self.automation.lanes.iter().any(|l| l.addr == lane.addr) {
+                            self.apply(lane.addr, lane.info.from_normalized(lane.rest));
+                        }
+                    }
+                    self.discard(Trash::Automation(old));
+                }
                 Command::StopPreview => {
                     if let Some(p) = &mut self.preview {
                         if p.pending.len() < p.pending.capacity() {
@@ -680,6 +761,12 @@ impl Engine {
         }
         let block_pos = self.pos;
         if self.playing && self.seq.length > 0 {
+            // Automation first: this slice plays with the values the song has here.
+            for i in 0..self.automation.lanes.len() {
+                let lane = &self.automation.lanes[i];
+                let (addr, value) = (lane.addr, lane.info.from_normalized(lane.travel_at(block_pos)));
+                self.apply(addr, value);
+            }
             self.schedule(n);
         }
         self.apply_chokes();
@@ -890,6 +977,43 @@ impl Engine {
         self.pos = end % len;
     }
 
+    /// Set an automated control. REAL-TIME (plain stores and `set_param`).
+    fn apply(&mut self, addr: Addr, value: f32) {
+        match addr {
+            Addr::Param { channel, id } => {
+                if let Some(ch) = self.channels.get_mut(channel) {
+                    ch.plugin.set_param(id, value);
+                }
+            }
+            Addr::Volume(c) => {
+                if let Some(ch) = self.channels.get_mut(c) {
+                    ch.volume = value;
+                }
+            }
+            Addr::Pan(c) => {
+                if let Some(ch) = self.channels.get_mut(c) {
+                    ch.pan = value;
+                }
+            }
+            Addr::MixerVolume(t) => {
+                if let Some(m) = self.mixer.get_mut(t) {
+                    m.volume = value;
+                }
+            }
+            Addr::MixerPan(t) => {
+                if let Some(m) = self.mixer.get_mut(t) {
+                    m.pan = value;
+                }
+            }
+            Addr::Effect { track, slot, id } => {
+                if let Some(p) = self.mixer.get_mut(track).and_then(|t| t.fx.plugins.get_mut(slot)) {
+                    p.set_param(id, value);
+                }
+            }
+            Addr::Master => self.master = value.max(0.0),
+        }
+    }
+
     fn apply_chokes(&mut self) {
         for &(offset, group, source) in &self.chokes {
             for (i, ch) in self.channels.iter_mut().enumerate() {
@@ -1048,6 +1172,57 @@ mod tests {
         for t in [-0.8, -0.3, 0.0, 0.4, 0.9] {
             assert!((tension_through(fade_curve(0.5, t)) - t).abs() < 1e-3, "inverse at {t}");
         }
+    }
+
+    /// Remembers the last value each parameter was set to.
+    struct Knobs(Arc<Mutex<Vec<f32>>>);
+
+    static LEVEL: [ParamInfo; 1] = [ParamInfo::new(0, "Level", 0.0, 100.0, 0.0, "", lyra_plugin::Curve::Linear)];
+
+    impl Plugin for Knobs {
+        fn name(&self) -> &'static str {
+            "knobs"
+        }
+        fn params(&self) -> &'static [ParamInfo] {
+            &LEVEL
+        }
+        fn set_param(&mut self, _: u32, v: f32) {
+            self.0.lock().unwrap().push(v); // a Mutex is fine in a *test* plugin
+        }
+        fn activate(&mut self, _: f32) {}
+        fn process(&mut self, ctx: ProcessContext<'_>) {
+            ctx.out_l.fill(0.0);
+            ctx.out_r.fill(0.0);
+        }
+    }
+
+    #[test]
+    fn automation_moves_a_parameter_chases_and_rests_on_stop() {
+        let (mut eng, mut h) = create(48_000.0);
+        let set = Arc::new(Mutex::new(Vec::new()));
+        h.send(Command::AddChannel(ChannelSlot::new(Box::new(Knobs(set.clone())), 48_000.0)));
+        h.send(Command::SetTempo(120.0)); // a bar = 384 ticks = 2 s = 96 000 samples
+        h.send(Command::SetSequence(Box::new(Sequence { length: 768, notes: vec![] })));
+        // A ramp from 0 to 1 over the first bar; the knob itself rests at 0.2.
+        let lane = AutoLane {
+            addr: Addr::Param { channel: 0, id: 0 },
+            info: LEVEL[0],
+            points: vec![(0.0, 0.0, 0.0), (384.0, 1.0, 0.0)],
+            rest: 0.2,
+        };
+        h.send(Command::SetAutomation(Box::new(Automation { lanes: vec![lane] })));
+        h.send(Command::Play);
+        run(&mut eng, 48_000); // half a bar
+        let last = |s: &Arc<Mutex<Vec<f32>>>| *s.lock().unwrap().last().unwrap();
+        assert!((last(&set) - 50.0).abs() < 1.0, "halfway up the ramp, got {}", last(&set));
+        // Seek into the second bar: the ramp has ended, its value holds.
+        h.send(Command::Seek(500.0));
+        run(&mut eng, 128);
+        assert!((last(&set) - 100.0).abs() < 1e-3, "holds after the curve, got {}", last(&set));
+        h.send(Command::Stop);
+        run(&mut eng, 128);
+        assert!((last(&set) - 20.0).abs() < 1e-3, "back to the knob on Stop, got {}", last(&set));
+        assert_eq!(curve_at(&[(0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (10.0, 1.0, 0.0)], 10.0), Some(1.0), "a jump");
     }
 
     #[test]

@@ -104,7 +104,7 @@ pub fn tweak(mut v: Vec<f32>, set: &[(usize, f32)]) -> Vec<f32> {
 }
 
 pub fn fx(id: &str, set: &[(usize, f32)]) -> EffectSlot {
-    EffectSlot { effect: id.into(), params: tweak(lyra_catalog::effects::default_params(id), set), bypass: false }
+    EffectSlot::new(id, tweak(lyra_catalog::effects::default_params(id), set))
 }
 
 /// Save the song as `<dir>/<title>.lyra` and say how to hear it. Rendering is

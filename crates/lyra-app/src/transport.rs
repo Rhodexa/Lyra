@@ -16,7 +16,7 @@ use lyra_model::{History, Project, STEPS_PER_BAR, TICKS_PER_STEP};
 use lyra_plugin::{Curve, ParamInfo};
 
 static SWING: ParamInfo = ParamInfo::new(0, "Swing", 0.0, 1.0, 0.0, "%", Curve::Linear);
-static MASTER: ParamInfo = ParamInfo::new(0, "Master", 0.0, 2.0, 0.8, "gain", Curve::Fader);
+pub static MASTER: ParamInfo = ParamInfo::new(0, "Master", 0.0, 2.0, 0.8, "gain", Curve::Fader);
 
 #[allow(clippy::too_many_arguments)] // it's a view: it touches many things by design
 pub fn show(

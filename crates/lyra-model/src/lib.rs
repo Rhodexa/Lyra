@@ -27,6 +27,11 @@ pub type ChannelId = u32;
 pub type PatternId = u32;
 /// Stable identity of an audio clip (the shared thing clips point at).
 pub type AudioId = u32;
+/// Stable identity of an automation (the shared curve automation clips play).
+pub type AutomationId = u32;
+/// Stable identity of an effect in a mixer track's chain (automation finds
+/// it by this, wherever its slot moves).
+pub type EffectId = u32;
 /// Identity of one clip on the playlist, while Lyra runs (so the UI can
 /// say "this clip" even as others are added and deleted). Not saved: clips
 /// are numbered afresh when a project is opened.
@@ -207,6 +212,80 @@ impl Audio {
 pub enum Source {
     Pattern(PatternId),
     Audio(AudioId),
+    Automation(AutomationId),
+}
+
+/// A control automation can move.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Target {
+    /// An instrument's parameter.
+    Param {
+        channel: ChannelId,
+        param: u32,
+    },
+    /// A channel's volume / pan (in the plugin rack).
+    Volume(ChannelId),
+    Pan(ChannelId),
+    /// A mixer track's volume / pan (0 = master).
+    MixerVolume(usize),
+    MixerPan(usize),
+    /// An effect's parameter, wherever its slot is.
+    Effect {
+        effect: EffectId,
+        param: u32,
+    },
+    /// The master knob in the top bar.
+    MasterVolume,
+}
+
+/// One control an automation moves, and how far: the curve's 0..1 maps to
+/// the control's travel from `from` to `to` (also 0..1, as the knob turns;
+/// `from` > `to` turns it the other way).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Link {
+    pub target: Target,
+    pub from: f32,
+    pub to: f32,
+}
+
+impl Link {
+    pub fn full(target: Target) -> Self {
+        Link { target, from: 0.0, to: 1.0 }
+    }
+
+    /// Knob travel for curve value `v` (0..1).
+    pub fn travel(&self, v: f32) -> f32 {
+        self.from + (self.to - self.from) * v.clamp(0.0, 1.0)
+    }
+}
+
+/// A point of an automation curve.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Point {
+    /// Ticks from the automation's start.
+    pub tick: u32,
+    /// 0..1.
+    pub value: f32,
+    /// The bend of the line *to the next point* (-1..1, as a fade's tension).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tension: f32,
+}
+
+/// An automation: a curve, and the controls it moves. Shared like a pattern:
+/// every clip that plays it plays the same curve; a clip longer than
+/// `length` repeats it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Automation {
+    pub id: AutomationId,
+    pub name: String,
+    /// Sorted by tick, at least one.
+    pub points: Vec<Point>,
+    /// Ticks the curve lasts before it starts over.
+    pub length: u32,
+    /// What it moves: one curve can drive several controls.
+    pub links: Vec<Link>,
+    #[serde(default)]
+    pub color: usize,
 }
 
 /// Something placed on the playlist.
@@ -305,15 +384,26 @@ impl Clip {
     pub fn pattern(&self) -> Option<PatternId> {
         match self.source {
             Source::Pattern(id) => Some(id),
-            Source::Audio(_) => None,
+            _ => None,
         }
     }
 
     pub fn audio(&self) -> Option<AudioId> {
         match self.source {
             Source::Audio(id) => Some(id),
-            Source::Pattern(_) => None,
+            _ => None,
         }
+    }
+
+    pub fn automation(&self) -> Option<AutomationId> {
+        match self.source {
+            Source::Automation(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    pub fn of_automation(automation: AutomationId, track: usize, start: u32, len: u32) -> Self {
+        Self { source: Source::Automation(automation), ..Self::of_pattern(0, track, start, len) }
     }
 }
 
@@ -325,6 +415,8 @@ struct ClipFile {
     pattern: Option<PatternId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     audio: Option<AudioId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    automation: Option<AutomationId>,
     track: usize,
     start: u32,
     len: u32,
@@ -342,9 +434,10 @@ struct ClipFile {
 
 impl From<ClipFile> for Clip {
     fn from(f: ClipFile) -> Self {
-        let source = match (f.audio, f.pattern) {
-            (Some(a), _) => Source::Audio(a),
-            (None, p) => Source::Pattern(p.unwrap_or(0)),
+        let source = match (f.automation, f.audio, f.pattern) {
+            (Some(a), _, _) => Source::Automation(a),
+            (None, Some(a), _) => Source::Audio(a),
+            (None, None, p) => Source::Pattern(p.unwrap_or(0)),
         };
         Clip {
             id: 0, // numbered by the project once it's read
@@ -366,6 +459,7 @@ impl From<Clip> for ClipFile {
         ClipFile {
             pattern: c.pattern(),
             audio: c.audio(),
+            automation: c.automation(),
             track: c.track,
             start: c.start,
             len: c.len,
@@ -385,11 +479,22 @@ pub const MIXER_TRACKS: usize = 17;
 /// One effect in a mixer track's chain.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EffectSlot {
+    /// This slot's identity in the project (see [`EffectId`]); given by
+    /// [`Project::number_effects`]. Not to be confused with `effect`.
+    #[serde(default)]
+    pub id: EffectId,
     /// Effect id, e.g. "lyra.reverb".
     pub effect: String,
     pub params: Vec<f32>,
     #[serde(default)]
     pub bypass: bool,
+}
+
+impl EffectSlot {
+    /// A new slot (its id is given when the project numbers its effects).
+    pub fn new(effect: &str, params: Vec<f32>) -> Self {
+        EffectSlot { id: 0, effect: effect.to_string(), params, bypass: false }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -428,10 +533,14 @@ pub struct Project {
     pub clips: Vec<Clip>,
     /// Audio clips (shared, like patterns).
     pub audio: Vec<Audio>,
+    /// Automations (shared, like patterns).
+    pub automations: Vec<Automation>,
     pub mixer: Vec<MixerTrack>,
     next_id: ChannelId,
     next_pattern_id: PatternId,
     next_audio_id: AudioId,
+    next_automation_id: AutomationId,
+    next_effect_id: EffectId,
     #[serde(skip)]
     next_clip_id: ClipId,
 }
@@ -449,10 +558,13 @@ impl Default for Project {
             tracks: (1..=DEFAULT_TRACKS).map(|i| Track { name: format!("Track {i}"), mute: false, mixer: 0 }).collect(),
             clips: Vec::new(),
             audio: Vec::new(),
+            automations: Vec::new(),
             mixer: default_mixer(),
             next_id: 1,
             next_pattern_id: 2,
             next_audio_id: 1,
+            next_automation_id: 1,
+            next_effect_id: 1,
             next_clip_id: 1,
         }
     }
@@ -532,6 +644,93 @@ impl Project {
 
     pub fn clip_index(&self, id: ClipId) -> Option<usize> {
         self.clips.iter().position(|c| c.id == id)
+    }
+
+    /// Give every effect slot without an id one (new slots, and files from
+    /// before effects had ids). Call after adding effects.
+    pub fn number_effects(&mut self) {
+        let mut next = self
+            .mixer
+            .iter()
+            .flat_map(|t| &t.effects)
+            .map(|e| e.id)
+            .max()
+            .unwrap_or(0)
+            .max(self.next_effect_id.saturating_sub(1))
+            + 1;
+        for e in self.mixer.iter_mut().flat_map(|t| &mut t.effects) {
+            if e.id == 0 {
+                e.id = next;
+                next += 1;
+            }
+        }
+        self.next_effect_id = next;
+    }
+
+    /// Where effect `id` is: (mixer track, slot).
+    pub fn effect_slot(&self, id: EffectId) -> Option<(usize, usize)> {
+        self.mixer
+            .iter()
+            .enumerate()
+            .find_map(|(t, track)| track.effects.iter().position(|e| e.id == id).map(|s| (t, s)))
+    }
+
+    /// Adds an automation moving `target`, flat at `travel` (0..1), `length`
+    /// ticks long; returns its index.
+    pub fn add_automation(&mut self, name: &str, target: Target, travel: f32, length: u32) -> usize {
+        let id = self.next_automation_id;
+        self.next_automation_id += 1;
+        let v = travel.clamp(0.0, 1.0);
+        self.automations.push(Automation {
+            id,
+            name: name.to_string(),
+            points: vec![Point { tick: 0, value: v, tension: 0.0 }, Point { tick: length, value: v, tension: 0.0 }],
+            length: length.max(1),
+            links: vec![Link::full(target)],
+            color: self.patterns.len() + self.audio.len() + self.automations.len(),
+        });
+        self.automations.len() - 1
+    }
+
+    pub fn automation(&self, id: AutomationId) -> Option<&Automation> {
+        self.automations.iter().find(|a| a.id == id)
+    }
+
+    pub fn automation_index(&self, id: AutomationId) -> Option<usize> {
+        self.automations.iter().position(|a| a.id == id)
+    }
+
+    /// The first control whose value differs from `before`: what was just
+    /// tweaked (by any editor, any plugin window), for "automate it".
+    pub fn changed_control(&self, before: &Project) -> Option<Target> {
+        for ch in &self.channels {
+            let Some(old) = before.channels.iter().find(|c| c.id == ch.id) else { continue };
+            if let Some(i) = (0..ch.params.len()).find(|&i| old.params.get(i) != Some(&ch.params[i])) {
+                return Some(Target::Param { channel: ch.id, param: i as u32 });
+            }
+            if old.volume != ch.volume {
+                return Some(Target::Volume(ch.id));
+            }
+            if old.pan != ch.pan {
+                return Some(Target::Pan(ch.id));
+            }
+        }
+        for (t, track) in self.mixer.iter().enumerate() {
+            let Some(old) = before.mixer.get(t) else { continue };
+            if old.volume != track.volume {
+                return Some(Target::MixerVolume(t));
+            }
+            if old.pan != track.pan {
+                return Some(Target::MixerPan(t));
+            }
+            for e in &track.effects {
+                let Some(o) = old.effects.iter().find(|o| o.id == e.id) else { continue };
+                if let Some(i) = (0..e.params.len()).find(|&i| o.params.get(i) != Some(&e.params[i])) {
+                    return Some(Target::Effect { effect: e.id, param: i as u32 });
+                }
+            }
+        }
+        (self.master_volume != before.master_volume).then_some(Target::MasterVolume)
     }
 
     /// Give every clip a fresh id (after reading a project file).
@@ -737,6 +936,30 @@ mod tests {
         assert_eq!(c.pattern_restarts(&pat).collect::<Vec<_>>(), vec![288, 672]);
         c.offset = 100 + TICKS_PER_BAR; // offsets wrap around the pattern
         assert_eq!(at(&c)[0], (92, 62));
+    }
+
+    #[test]
+    fn the_last_tweaked_control_is_found_by_comparing() {
+        let mut p = Project::default();
+        let ch = p.add_channel("Bass", "lyra.synth", vec![0.0, 1.0, 0.5]);
+        p.mixer[2].effects.push(EffectSlot::new("lyra.delay", vec![0.3, 0.5]));
+        p.number_effects();
+        let fx = p.mixer[2].effects[0].id;
+        assert_ne!(fx, 0, "effects get ids");
+        let before = p.clone();
+        assert_eq!(p.changed_control(&before), None);
+        p.channels[0].params[2] = 0.7;
+        assert_eq!(p.changed_control(&before), Some(Target::Param { channel: ch, param: 2 }));
+        let before = p.clone();
+        p.mixer[2].effects[0].params[1] = 0.9;
+        assert_eq!(p.changed_control(&before), Some(Target::Effect { effect: fx, param: 1 }));
+        // Moving the effect to another slot keeps its id.
+        p.mixer[2].effects.insert(0, EffectSlot::new("lyra.eq", vec![]));
+        p.number_effects();
+        assert_eq!(p.effect_slot(fx), Some((2, 1)));
+        let i = p.add_automation("Cutoff", Target::Param { channel: ch, param: 2 }, 0.4, TICKS_PER_BAR);
+        assert_eq!(p.automations[i].points.len(), 2);
+        assert_eq!(p.automations[i].links[0].travel(0.5), 0.5);
     }
 
     #[test]

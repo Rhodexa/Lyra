@@ -94,7 +94,7 @@ pub fn fader_travel(gain: f32, max: f32) -> f32 {
     (gain.max(0.0) / max).cbrt().min(1.0)
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ParamInfo {
     pub id: u32,
     pub name: &'static str,
