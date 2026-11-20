@@ -10,6 +10,7 @@ pub const BAR: u32 = TICKS_PER_BAR;
 
 pub const D_MAJOR: &[(char, i32)] = &[('F', 1), ('C', 1)];
 pub const F_MINOR: &[(char, i32)] = &[('B', -1), ('E', -1), ('A', -1), ('D', -1)];
+pub const D_MINOR: &[(char, i32)] = &[('B', -1)];
 
 #[derive(Clone, Copy, Debug)]
 pub struct Tok {

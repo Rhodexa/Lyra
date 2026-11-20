@@ -1,7 +1,10 @@
-# Spec: the chip synth (Pipsqueak or Button Mash: the director picks)
+# Spec: Pipsqueak, the chip synth
 
-**Settle the name before building:** the plugin id (`lyra.pipsqueak` or
-`lyra.buttonmash`) is saved in projects and never changes after.
+**Name settled 2026-11-19:** Pipsqueak, id `lyra.pipsqueak` (saved in
+projects; never changes after). **Shelved for later** by the director:
+Fluttersine and Chrysalis already cover chip sounds well enough for now;
+what they lack is the tracker detail below. Build it when that detail is
+wanted, not before.
 
 A built-in instrument for chiptune: NES / Game Boy / C64 *flavour*, not
 chip emulation. Fluttersine can imitate a pulse lead, but chiptune isn't
@@ -76,7 +79,7 @@ repeat) · "Pew" (pitch macro down fast).
 
 ## Done when
 
-* Crate `crates/plugins/<name>` with its `PLUGINS` entry, gathered by
+* Crate `crates/plugins/pipsqueak` with its `PLUGINS` entry, gathered by
   `lyra-catalog`; `params.lock` updated by its test.
 * Tests: LFSR period (long mode repeats after 32767 steps, short after 127);
   a chord in chord mode makes one voice step through its keys with the

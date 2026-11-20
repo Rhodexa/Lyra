@@ -313,6 +313,31 @@ fn a_one_shot_lfo_holds_its_end() {
 }
 
 #[test]
+fn velocity_can_set_a_note_lfos_speed() {
+    // A one-shot ramp over 1/4 (0.5 s at 120), velocity (centred) → LFO 1 rate × 0.25:
+    // velocity ½ plays it as drawn, velocity 1 twice as fast ("Wingbeat"'s talking bass).
+    let mut v = vec![(p::lfo(0, p::L_SYNC), sync("1/4")), (p::lfo(0, p::L_MODE), 2.0), (p::lfo(0, p::L_POINTS), 2.0)];
+    v.extend([(p::point_x(0, 0), 0.0), (p::point_y(0, 0), 0.0), (p::point_x(0, 1), 1.0), (p::point_y(0, 1), 1.0)]);
+    let rate = DESTS.iter().position(|d| *d == "LFO 1 rate").unwrap() as f32;
+    v.extend([
+        (p::slot(0, p::S_SRC), crate::params::src::VELOCITY as f32),
+        (p::slot(0, p::S_DEST), rate),
+        (p::slot(0, p::S_AMT), 0.25),
+        (p::slot(0, p::S_BIPOLAR), 1.0),
+    ]);
+    let after = |velocity: f32| {
+        let mut c = with(&v);
+        c.transport(Transport { tempo: 120.0, playing: false, position: 0.0 });
+        let note = TimedEvent { offset: 0, event: Event::NoteOn { key: 48, velocity } };
+        render(&mut c, &[note], 0.125);
+        c.voice_lfo(0, 0)
+    };
+    let (half, full) = (after(0.5), after(1.0));
+    assert!((half - 0.25).abs() < 0.03, "velocity ½: {half}");
+    assert!((full - 0.5).abs() < 0.04, "velocity 1: {full}");
+}
+
+#[test]
 fn mono_legato_steps_pitch_without_restarting() {
     let mut c = with(&[(p::MODE, 1.0), (p::GLIDE, 0.0), (p::env(0, p::E_DECAY), 0.05), (p::env(0, p::E_SUSTAIN), 0.5)]);
     render(&mut c, &[on(60)], 0.3);
