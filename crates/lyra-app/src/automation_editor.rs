@@ -5,8 +5,12 @@
 //! * **the ring** between two points — bend that line (drag up and down)
 //! * **the line at the end** — the curve's length (clips longer than it
 //!   repeat it); drag it
-//! * header: the name, what the curve moves, **Link** (it moves the control
-//!   you changed last too), snap
+//! * **outputs** (the rack at the left) — what the curve moves, one plate
+//!   each: the control, its mapping (the curve's 0..1 to the control's
+//!   **from**..**to**, drag them up and down, double-click to reset; ⇅ turns
+//!   it around), × to stop moving it. **Link** at the bottom: the curve moves
+//!   the control you changed last too
+//! * header: the name, snap
 //! * **Shift+wheel** (or the wheel over the ruler) — zoom · **Ctrl+wheel** —
 //!   sideways · **middle-drag** — pan
 //!
@@ -14,6 +18,7 @@
 //! moves turns its own knob that far (the readout shows the first one's value).
 
 use crate::app::UiState;
+use crate::flex::{self, Grow, Px};
 use crate::keys::Action;
 use crate::playlist::SNAPS;
 use crate::theme::{self, cr, stroke};
@@ -24,6 +29,9 @@ use egui::{pos2, vec2, Align2, CursorIcon, FontId, Pos2, Rect, RichText, Sense, 
 use lyra_model::{AutomationId, History, Point, Project, Source, TICKS_PER_BAR, TICKS_PER_STEP};
 
 const HANDLE_R: f32 = 10.0;
+/// The outputs rack at the left.
+const RACK_W: f32 = 236.0;
+const PLATE_H: f32 = 58.0;
 /// Lines narrower than this show no ring.
 const RING_MIN_W: f32 = 24.0;
 
@@ -114,9 +122,143 @@ fn hover(v: &View, a: &lyra_model::Automation, pos: Pos2) -> Option<Hover> {
     ((pos.x - v.x(a.length as f32)).abs() <= 5.0).then_some(Hover::Length)
 }
 
+/// The outputs rack: one plate per control the curve moves, then Link.
+fn outputs_rack(
+    ui: &mut Ui,
+    r: Rect,
+    p: &mut Project,
+    h: &mut History,
+    st: &UiState,
+    ai: usize,
+    out: &mut Vec<Action>,
+) {
+    let m = theme::m();
+    ui.painter().rect_filled(r, cr(0), theme::BG);
+    let light = theme::channel_light(p.automations[ai].color);
+    let n = p.automations[ai].links.len();
+    let mut remove = None;
+    let mut y = r.top();
+    for k in 0..n {
+        let plate = Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), PLATE_H));
+        y += PLATE_H + theme::SEAM;
+        if plate.bottom() > r.bottom() {
+            break;
+        }
+        ui.painter().rect_filled(plate, cr(0), theme::PANEL);
+        let inner = plate.shrink2(vec2(8.0, 6.0));
+        let [title, map] = flex::col(inner, [Px(16.0), Grow(1.0)], 4.0);
+        let link = p.automations[ai].links[k];
+        let control = crate::automation::control(p, link.target);
+        // The control's name, and × (when there's more than one).
+        let [name_r, x_r] = flex::row(title, [Grow(1.0), Px(if n > 1 { 16.0 } else { 0.0 })], 4.0);
+        let name = control.as_ref().map_or("(gone)".to_string(), |c| c.2.clone());
+        ui.painter().with_clip_rect(name_r).text(
+            name_r.left_center(),
+            Align2::LEFT_CENTER,
+            name,
+            FontId::proportional(m.text_small),
+            theme::TEXT,
+        );
+        if n > 1 {
+            let resp = ui.interact(x_r, ui.id().with(("auto-out-x", k)), Sense::click());
+            let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+            ui.painter().text(x_r.center(), Align2::CENTER_CENTER, "×", FontId::proportional(m.text), ink);
+            if resp.on_hover_text("Stop moving this one").clicked() {
+                remove = Some(k);
+            }
+        }
+        // The mapping: a picture of curve → control, from, to, and turn around.
+        let [graph, from_r, to_r, flip_r] =
+            flex::row(map, [Px(map.height() * 1.4), Grow(1.0), Grow(1.0), Px(map.height())], 4.0);
+        theme::well(ui.painter(), graph);
+        let g = graph.shrink(4.0);
+        let gy = |t: f32| g.bottom() - t * g.height();
+        let (a, b) = (pos2(g.left(), gy(link.from)), pos2(g.right(), gy(link.to)));
+        ui.painter().line_segment([a, b], stroke(1.5, light.hi));
+        ui.painter().circle_filled(a, 2.0, light.hi);
+        ui.painter().circle_filled(b, 2.0, light.hi);
+        let fmt =
+            |t: f32| control.as_ref().map_or(format!("{:.0}%", t * 100.0), |c| c.0.format(c.0.from_normalized(t)));
+        let mut changed = None;
+        for (end, cell, value, reset) in [(0, from_r, link.from, 0.0), (1, to_r, link.to, 1.0)] {
+            let resp = ui.interact(cell, ui.id().with(("auto-out", k, end)), Sense::click_and_drag());
+            if resp.drag_started() || resp.double_clicked() {
+                h.checkpoint(p);
+            }
+            let mut v = value;
+            if resp.dragged() {
+                let fine = ui.input(|i| i.modifiers.shift);
+                v = (v - resp.drag_delta().y * if fine { 0.001 } else { 0.004 }).clamp(0.0, 1.0);
+            }
+            if resp.double_clicked() {
+                v = reset;
+            }
+            if v != value {
+                changed = Some((end, v));
+            }
+            theme::well(ui.painter(), cell);
+            let hot = resp.hovered() || resp.dragged();
+            ui.painter().with_clip_rect(cell).text(
+                cell.center(),
+                Align2::CENTER_CENTER,
+                fmt(v),
+                FontId::monospace(m.text_small),
+                if hot { theme::TEXT } else { theme::TEXT_DIM },
+            );
+            let hint =
+                if end == 0 { "Where the curve's bottom puts the control" } else { "Where the curve's top puts it" };
+            resp.on_hover_text(format!("{hint} · drag up/down (Shift: fine) · double-click: reset"));
+        }
+        if let Some((end, v)) = changed {
+            let l = &mut p.automations[ai].links[k];
+            if end == 0 {
+                l.from = v;
+            } else {
+                l.to = v;
+            }
+        }
+        let flip = ui.interact(flip_r, ui.id().with(("auto-out-flip", k)), Sense::click());
+        theme::well(ui.painter(), flip_r);
+        let ink = if flip.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+        // Two arrows, up and down: "turn it around".
+        let c = flip_r.center();
+        let s = flip_r.height() * 0.07;
+        for (dx, dir) in [(-3.0f32, -1.0f32), (3.0, 1.0)] {
+            let x = c.x + dx * s;
+            ui.painter().line_segment([pos2(x, c.y - 5.0 * s), pos2(x, c.y + 5.0 * s)], stroke(1.3, ink));
+            let tip = pos2(x, c.y + 6.0 * s * dir);
+            let tri = vec![tip, pos2(x - 2.4 * s, c.y + 2.5 * s * dir), pos2(x + 2.4 * s, c.y + 2.5 * s * dir)];
+            ui.painter().add(egui::Shape::convex_polygon(tri, ink, egui::Stroke::NONE));
+        }
+        if flip.on_hover_text("Turn it around (up on the curve = down on the control)").clicked() {
+            h.checkpoint(p);
+            let l = &mut p.automations[ai].links[k];
+            std::mem::swap(&mut l.from, &mut l.to);
+        }
+    }
+    if let Some(k) = remove {
+        h.checkpoint(p);
+        p.automations[ai].links.remove(k);
+    }
+    // Link: the curve moves the control changed last too.
+    let key = Rect::from_min_size(pos2(r.left() + 8.0, y + 4.0), vec2(r.width() - 16.0, m.control_h));
+    if key.bottom() <= r.bottom() {
+        let hint = match st.last_tweaked.and_then(|t| crate::automation::control(p, t)) {
+            Some((_, _, name)) => format!("This curve moves {name} too (the control you changed last)"),
+            None => "Change a control, then Link: this curve moves it too".to_string(),
+        };
+        let resp = ui.put(key, |ui: &mut Ui| {
+            widgets::key(ui, key.size(), widgets::Legend::Text("+ Link"), false, theme::L_MINT, &hint)
+        });
+        if resp.clicked() {
+            out.push(Action::LinkTweaked);
+        }
+    }
+}
+
 impl AutomationEditor {
-    /// The header: name, what the curve moves, Link, snap.
-    pub fn toolbar(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, out: &mut Vec<Action>) {
+    /// The header: name, snap.
+    pub fn toolbar(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
         let Some(i) = current(p, st) else { return };
         let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
         ui.painter().circle_filled(r.center(), 4.0, theme::channel_color(p.automations[i].color));
@@ -125,27 +267,6 @@ impl AutomationEditor {
                 h.checkpoint(p);
             }
             p.automations[i].name = r.text;
-        }
-        // What it moves; × takes one off.
-        let mut remove = None;
-        for (k, link) in p.automations[i].links.iter().enumerate() {
-            let name = crate::automation::control(p, link.target).map_or("(gone)".into(), |c| c.2);
-            ui.label(RichText::new(name).small().color(theme::TEXT_DIM));
-            if p.automations[i].links.len() > 1 && ui.small_button("×").on_hover_text("Stop moving this one").clicked()
-            {
-                remove = Some(k);
-            }
-        }
-        if let Some(k) = remove {
-            h.checkpoint(p);
-            p.automations[i].links.remove(k);
-        }
-        let link_hint = match st.last_tweaked.and_then(|t| crate::automation::control(p, t)) {
-            Some((_, _, name)) => format!("This curve moves {name} too (the control you changed last)"),
-            None => "Change a control, then Link: this curve moves it too".to_string(),
-        };
-        if ui.small_button("Link").on_hover_text(link_hint).clicked() {
-            out.push(Action::LinkTweaked);
         }
         ui.add_space(10.0);
         ui.label(RichText::new("snap").small().color(theme::TEXT_DIM));
@@ -157,7 +278,15 @@ impl AutomationEditor {
         });
     }
 
-    pub fn show(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, playhead: Option<f64>) {
+    pub fn show(
+        &mut self,
+        ui: &mut Ui,
+        p: &mut Project,
+        h: &mut History,
+        st: &mut UiState,
+        playhead: Option<f64>,
+        out: &mut Vec<Action>,
+    ) {
         let m = theme::m();
         let Some(ai) = current(p, st) else {
             ui.label(
@@ -167,7 +296,9 @@ impl AutomationEditor {
             return;
         };
         let size = ui.available_size().max(vec2(320.0, 140.0));
-        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+        let (all, _) = ui.allocate_exact_size(size, Sense::hover());
+        let [outputs, rect] = flex::row(all, [Px(RACK_W), Grow(1.0)], theme::SEAM);
+        outputs_rack(ui, outputs, p, h, st, ai, out);
         let ruler = Rect::from_min_max(rect.min, pos2(rect.right(), rect.top() + m.ruler_h));
         let grid = Rect::from_min_max(pos2(rect.left(), ruler.bottom()), rect.max);
         let id = p.automations[ai].id;

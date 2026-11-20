@@ -1126,7 +1126,7 @@ impl LyraApp {
                 match area.editor {
                     Editor::Arrangement => area.playlist.toolbar(ui, p, st, actions),
                     Editor::Audio => area.audio.toolbar(ui, p, h, st),
-                    Editor::Automation => area.automation.toolbar(ui, p, h, st, actions),
+                    Editor::Automation => area.automation.toolbar(ui, p, h, st),
                     Editor::PianoRoll if has_channel => {
                         let color = theme::channel_color(p.channels[ch].color);
                         area.piano.toolbar(ui, p, h, color, ch);
@@ -1147,7 +1147,7 @@ impl LyraApp {
                 }
                 Editor::Automation => {
                     let song_playhead = st.song_mode.then_some(playhead);
-                    area.automation.show(ui, p, h, st, song_playhead);
+                    area.automation.show(ui, p, h, st, song_playhead, actions);
                 }
                 Editor::PianoRoll if has_channel => {
                     let ch_id = p.channels[ch].id;

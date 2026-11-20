@@ -51,7 +51,8 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 |---|---|
 | Automate a control | move it (any knob, fader, plugin window), then the curve key in the arrangement's header: a 4-bar automation clip on a free track, and its editor opens |
 | Edit the curve | *Automation* editor: click to add a point, drag to move, right-click to remove; the ring between two points bends the line; drag the line at the end for the length |
-| One curve, more controls | move another control, then **Link** in the editor's header (× takes one off) |
+| One curve, more controls | the editor's **outputs** rack (left): one plate per control the curve moves. Move another control, then **+ Link** to add it; × takes one off |
+| Each control's range | on its plate: **from** (the curve's bottom) and **to** (its top), in the control's own units; drag up and down (Shift = fine), double-click to reset; the arrows turn it around |
 | How it plays | clips work like the others (copies, trim, slide, cut; longer than the curve = it repeats). A control holds its last value between clips, and starting the song anywhere puts every control where the song has it |
 
 **Mixer** (`F9`)
