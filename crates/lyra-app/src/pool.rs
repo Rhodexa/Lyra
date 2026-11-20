@@ -116,7 +116,7 @@ pub fn patterns(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState)
         st.pattern = p.clone_pattern(i);
     }
     ui.add_space(4.0);
-    if ui.small_button("+ New pattern").clicked() {
+    if widgets::wide_key(ui, "+ New pattern", "A new empty pattern").clicked() {
         h.checkpoint(p);
         st.pattern = p.add_pattern();
         st.place_audio = false;
@@ -174,7 +174,9 @@ pub fn audio(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pl
                 p.audio[i].volume = vol;
             }
             // The name key: flashes as a clip of it starts, glows while one plays.
-            let (rect, resp) = ui.allocate_exact_size(vec2(m.name_w, m.step_h), Sense::click_and_drag());
+            // The name key fills the row up to the insert well.
+            let name_w = (ui.available_width() - m.step_h - ui.spacing().item_spacing.x).max(m.name_w * 0.5);
+            let (rect, resp) = ui.allocate_exact_size(vec2(name_w, m.step_h), Sense::click_and_drag());
             let flash = playhead.map_or(0.0, |ph| {
                 p.clips
                     .iter()

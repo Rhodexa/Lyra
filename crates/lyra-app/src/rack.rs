@@ -119,16 +119,38 @@ fn instrument_menu(ui: &mut Ui) -> Option<(&'static str, &'static str, Vec<f32>)
     picked
 }
 
-fn add_channel_menu(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
-    if let Some((name, instrument, params)) = instrument_menu(ui) {
-        h.checkpoint(p);
-        p.add_channel(name, instrument, params);
-        st.selected = p.channels.len() - 1;
-        if lyra_catalog::info(instrument).is_some_and(|i| i.melodic) {
-            st.show = Some(Editor::PianoRoll);
-        }
-        ui.close_menu();
+/// The instrument list; a pick adds that instrument at `at` (a rack index),
+/// or at the end. Returns true when one was picked.
+fn add_channel_menu(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, at: Option<usize>) -> bool {
+    let Some((name, instrument, params)) = instrument_menu(ui) else { return false };
+    h.checkpoint(p);
+    p.add_channel(name, instrument, params);
+    let mut i = p.channels.len() - 1;
+    if let Some(at) = at.filter(|&a| a < i) {
+        let ch = p.channels.pop().expect("just added");
+        p.channels.insert(at, ch);
+        i = at;
     }
+    st.selected = i;
+    if lyra_catalog::info(instrument).is_some_and(|x| x.melodic) {
+        st.show = Some(Editor::PianoRoll);
+    }
+    true
+}
+
+/// A wide "+ Instrument" key; its list opens under it.
+fn add_instrument_key(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+    let resp = widgets::wide_key(ui, "+ Instrument", "Add an instrument at the end of the rack");
+    let popup = ui.make_persistent_id("add-instrument");
+    if resp.clicked() {
+        ui.memory_mut(|m| m.toggle_popup(popup));
+    }
+    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+        ui.set_min_width(180.0);
+        if add_channel_menu(ui, p, h, st, None) {
+            ui.memory_mut(|m| m.close_popup());
+        }
+    });
 }
 
 /// FL-style solo: mute everyone else. Soloing the channel that is already the
@@ -152,8 +174,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
     // ── Header ──
     ui.horizontal(|ui| {
         if !steps {
-            ui.menu_button("+ Instrument", |ui| add_channel_menu(ui, p, h, st));
-            return;
+            return; // the plugin rack's "+ Instrument" key sits under its rows
         }
         let len = p.patterns[pat].min_length;
         let mut new_len = len;
@@ -172,9 +193,15 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
             h.checkpoint(p);
             p.patterns[pat].min_length = new_len;
         }
-        ui.menu_button("+ Instrument", |ui| add_channel_menu(ui, p, h, st));
+        ui.menu_button("+ Instrument", |ui| {
+            if add_channel_menu(ui, p, h, st, None) {
+                ui.close_menu();
+            }
+        });
     });
-    ui.add_space(4.0);
+    if steps {
+        ui.add_space(4.0);
+    }
 
     let (pointer, primary, secondary, any_down, wheel, shift) = ui.input(|i| {
         let d = i.raw_scroll_delta;
@@ -215,6 +242,8 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
             for ci in 0..p.channels.len() {
                 row(ui, p, h, st, ci, pat, None, input, false, &mut delete);
             }
+            ui.add_space(4.0);
+            add_instrument_key(ui, p, h, st);
         });
     }
 
@@ -284,8 +313,15 @@ fn row(
             p.channels[ci].volume = vol;
         }
 
-        // Name button (flashes on every hit)
-        let (rect, r) = ui.allocate_exact_size(vec2(m.name_w, m.step_h), Sense::click());
+        // Name button (flashes on every hit). In the plugin rack it fills the
+        // row up to the insert well; in the step sequencer its width is fixed
+        // so the steps line up.
+        let name_w = if steps {
+            m.name_w
+        } else {
+            (ui.available_width() - m.step_h - ui.spacing().item_spacing.x).max(m.name_w * 0.5)
+        };
+        let (rect, r) = ui.allocate_exact_size(vec2(name_w, m.step_h), Sense::click());
         // A sample dropped on the name: this instrument becomes a sampler playing it.
         let dragging_sample = egui::DragAndDrop::has_payload_of_type::<crate::browser::SampleDrag>(ui.ctx());
         let drop_here = dragging_sample && ui.rect_contains_pointer(rect);
@@ -332,6 +368,11 @@ fn row(
                 st.raise = Some(Focus::Editor);
                 ui.close_menu();
             }
+            ui.menu_button("Insert instrument here", |ui| {
+                if add_channel_menu(ui, p, h, st, Some(ci + 1)) {
+                    ui.close_menu();
+                }
+            });
             ui.separator();
             if ui.button("Clone channel").on_hover_text("Same instrument and settings, no notes").clicked() {
                 h.checkpoint(p);

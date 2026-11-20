@@ -262,7 +262,6 @@ pub enum Icon {
     Next,
     Plus,
     Minus,
-    Clone,
     Rack,
     Piano,
     Knob,
@@ -280,7 +279,7 @@ pub enum Icon {
 
 /// Draw an icon centred in `r` (a key's face). Hand-drawn vectors until the
 /// user's own icon set lands; `bg` is the face colour (for cut-outs).
-pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, bg: Color32) {
+pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, _bg: Color32) {
     let c = r.center();
     let u = r.height().min(r.width()) / 19.0; // icons are drawn on a ±6-unit grid
     let line = stroke((1.7 * u).max(1.2), ink);
@@ -302,13 +301,6 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, bg: Colo
             if matches!(icon, Icon::Plus) {
                 p.line_segment([c - vec2(0.0, 5.0) * u, c + vec2(0.0, 5.0) * u], line);
             }
-        }
-        Icon::Clone => {
-            let a = Rect::from_center_size(c + vec2(-1.8, -1.8) * u, vec2(8.0, 8.0) * u);
-            let b = a.translate(vec2(3.6, 3.6) * u);
-            p.rect_stroke(a, cr(2), line, egui::StrokeKind::Middle);
-            p.rect_filled(b, cr(2), bg);
-            p.rect_stroke(b, cr(2), line, egui::StrokeKind::Middle);
         }
         Icon::Rack => {
             for row in 0..3 {
@@ -827,6 +819,12 @@ pub fn panel_header(
     paint_icon(ui.painter(), fold.shrink(h * 0.22), icon, ink, off);
     let folded = resp.on_hover_text(fold_hint).clicked();
     (clicked, folded)
+}
+
+/// A big key across the whole width (a rack's "+ New …"): easy to hit.
+pub fn wide_key(ui: &mut Ui, label: &str, hint: &str) -> Response {
+    let m = theme::m();
+    key(ui, vec2(ui.available_width(), (m.step_h * 1.4).round()), Legend::Text(label), false, theme::L_MINT, hint)
 }
 
 /// How a mixer insert is written in a number well: M for the master.

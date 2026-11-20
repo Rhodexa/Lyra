@@ -20,7 +20,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Layout | Left: the browser (`F4`), the library, things you can add. Right (`F6`): the project's racks, in tabs: **Plugins** (instruments), **Patterns** (each showing its notes; + New, right-click to clone), **Audio** (audio clips as rack rows: mute, pan, volume, insert) and **Automation**. Click one: the next click on the arrangement places it; double-click: open it; drag it onto a track. Both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Audio clip, Automation, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
-| Patterns | `[` / `]` or the picker in the top bar (new, clone) |
+| Patterns | the right panel's **Patterns** tab (+ New pattern, right-click to clone), or `[` / `]` |
 | Play notes | typing keyboard: `Z`–`M` and `Q`–`P` rows; `-` / `=` octave (shown in the top bar) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Knobs | drag (Shift = fine), wheel, double-click to reset |
@@ -82,7 +82,7 @@ Lyra ships a **Starter Kit** of 65 CC0 one-shots (see `assets/samples/Starter Ki
 | Paint steps (Step sequencer) | click & drag across the steps. Right-drag erases |
 | Velocity / pitch of a step | mouse wheel / Shift + wheel |
 | Select / edit a channel | click its name / double-click it |
-| Piano roll, clone, replace instrument, fill, delete | right-click a channel name |
+| Piano roll, insert an instrument below, clone, replace instrument, fill, delete | right-click a channel name |
 | Mute | click a light, or drag across several |
 | Solo | right-click a light (click dark ones to bring them back; right-click again for all) |
 | Pattern length | grows to fit your notes; the bars menu sets the minimum |

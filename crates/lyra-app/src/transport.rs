@@ -11,7 +11,7 @@ use crate::keys::Action;
 use crate::rack::tracked;
 use crate::theme;
 use crate::widgets::{self, module, Icon, Legend};
-use egui::{vec2, Align, Align2, FontId, Layout, Sense, Ui};
+use egui::{vec2, Align, Layout, Sense, Ui};
 use lyra_model::{History, Project, STEPS_PER_BAR, TICKS_PER_STEP};
 use lyra_plugin::{Curve, ParamInfo};
 
@@ -130,8 +130,6 @@ pub fn show(
             }
         });
 
-        module(ui, |ui| pattern_picker(ui, p, h, st, small, big));
-
         // Where the typing keyboard plays.
         module(ui, |ui| {
             ui.spacing_mut().item_spacing.x = gap;
@@ -192,60 +190,4 @@ pub fn show(
             ui.painter().rect_filled(r, theme::cr(0), theme::PANEL);
         });
     });
-}
-
-/// `◀ [Pattern] ▶  +  ⧉` — which pattern the rack and piano roll edit (and
-/// what plays). Scroll over the name to flip through patterns; click it for the list.
-fn pattern_picker(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, small: f32, big: f32) {
-    ui.spacing_mut().item_spacing.x = 4.0;
-    let n = p.patterns.len();
-    st.pattern = st.pattern.min(n - 1);
-    let key =
-        |ui: &mut Ui, icon, hint| widgets::key(ui, vec2(small, small), Legend::Icon(icon), false, theme::L_MINT, hint);
-    if key(ui, Icon::Prev, "Previous pattern  ( [ )").clicked() {
-        st.pattern = st.pattern.saturating_sub(1);
-    }
-    let (r, resp) = ui.allocate_exact_size(vec2(big * 3.6, small), Sense::click());
-    theme::well(ui.painter(), r);
-    let m = theme::m();
-    ui.painter().text(
-        r.left_center() + vec2(10.0, 0.0),
-        Align2::LEFT_CENTER,
-        &p.patterns[st.pattern].name,
-        FontId::proportional(m.text),
-        theme::TEXT,
-    );
-    // A small chevron, like the dropdown in the studies.
-    let c = r.right_center() - vec2(13.0, 1.5);
-    let chevron = vec![c + vec2(-3.5, -1.5), c + vec2(0.0, 2.0), c + vec2(3.5, -1.5)];
-    ui.painter().add(egui::Shape::line(chevron, theme::stroke(1.6, theme::TEXT_DIM)));
-    let wheel = if resp.hovered() { ui.input(|i| i.raw_scroll_delta.y) } else { 0.0 };
-    if wheel > 0.0 {
-        st.pattern = st.pattern.saturating_sub(1);
-    } else if wheel < 0.0 {
-        st.pattern = (st.pattern + 1).min(n - 1);
-    }
-    let popup = ui.make_persistent_id("pattern-list");
-    if resp.clicked() {
-        ui.memory_mut(|m| m.toggle_popup(popup));
-    }
-    let resp = resp.on_hover_text("Pattern: scroll to flip through, click for the list");
-    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
-        ui.set_min_width(r.width());
-        for i in 0..n {
-            ui.selectable_value(&mut st.pattern, i, &p.patterns[i].name);
-        }
-    });
-    if key(ui, Icon::Next, "Next pattern  ( ] )").clicked() {
-        st.pattern = (st.pattern + 1).min(n - 1);
-    }
-    ui.add_space(4.0);
-    if key(ui, Icon::Plus, "New empty pattern").clicked() {
-        h.checkpoint(p);
-        st.pattern = p.add_pattern();
-    }
-    if key(ui, Icon::Clone, "Duplicate this pattern").clicked() {
-        h.checkpoint(p);
-        st.pattern = p.clone_pattern(st.pattern);
-    }
 }

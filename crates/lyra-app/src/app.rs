@@ -1033,11 +1033,11 @@ impl LyraApp {
                 .frame(side)
                 .show(ctx, |ui| {
                     // Tabs: the project's racks. (The browser on the left is the library.)
-                    let tabs = [RightTab::Plugins, RightTab::Patterns, RightTab::Audio, RightTab::Automation];
+                    let tabs = [RightTab::Patterns, RightTab::Plugins, RightTab::Audio, RightTab::Automation];
                     let chosen = tabs.iter().position(|&t| t == self.ui.right_tab).unwrap_or(0);
                     let (tab, fold) = crate::widgets::panel_header(
                         ui,
-                        &["Plugins", "Patterns", "Audio", "Automation"],
+                        &["Patterns", "Plugins", "Audio", "Automation"],
                         chosen,
                         true,
                         "Fold this panel away  (F6)",
