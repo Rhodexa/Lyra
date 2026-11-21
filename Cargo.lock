@@ -1428,6 +1428,8 @@ dependencies = [
  "lyra-synth",
  "png",
  "rfd",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

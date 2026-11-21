@@ -258,6 +258,12 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   Chrysalis shares its newest voice's playing positions, LFO phases,
   envelope stages, matrix sums and output level (`telemetry.rs`); its editor
   animates from that and repaints only while something moves.
+* **Your presets** (`user_presets.rs`): one readable JSON file each in
+  `<data dir>/presets/<plugin id>/<name>.lyrapreset` (`{ format, version,
+  plugin, name, params }`, params by id; parameters added since get their
+  defaults on load). Every preset picker (Chrysalis, Fluttersine, the
+  generic editor's Presets menu) lists the factory presets, then yours with
+  an × to delete, then "Save as".
 * Plugin artwork (Fluttersine's wordmark, Chrysalis's emblem) lives in
   `lyra-app/assets/` and is live-reloaded from there while Lyra runs from the
   source tree (`theme::live_logo`).

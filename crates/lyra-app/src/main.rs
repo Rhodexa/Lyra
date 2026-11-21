@@ -27,6 +27,7 @@ mod samples;
 mod theme;
 mod timeline;
 mod transport;
+mod user_presets;
 mod waveform;
 mod widgets;
 

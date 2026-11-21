@@ -51,16 +51,19 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
             h.checkpoint(p);
             p.channels[ch].mixer = route;
         }
-        let presets = lyra_catalog::presets_for(&instrument);
-        if !presets.is_empty() && instrument != "lyra.fluttersine" && instrument != "lyra.chrysalis" {
+        // Factory presets and yours, and "Save as" (hand-made editors have their own pickers).
+        let melodic_or_drum = lyra_catalog::info(&instrument).is_some();
+        if melodic_or_drum && instrument != "lyra.fluttersine" && instrument != "lyra.chrysalis" {
             ui.add_space(8.0);
             ui.menu_button("Presets", |ui| {
-                for preset in presets {
-                    if ui.button(preset.name).clicked() {
-                        h.checkpoint(p);
-                        p.channels[ch].params = preset.params();
-                        ui.close_menu();
-                    }
+                let params = p.channels[ch].params.clone();
+                let (picked, close) = crate::user_presets::menu(ui, &instrument, &params, 220.0);
+                if let Some(e) = picked {
+                    h.checkpoint(p);
+                    p.channels[ch].params = e.params;
+                }
+                if close {
+                    ui.close_menu();
                 }
             });
         }

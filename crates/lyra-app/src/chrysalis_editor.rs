@@ -40,7 +40,7 @@ use lyra_chrysalis::curve::{self, Point, MAX_POINTS, SHAPES};
 use lyra_chrysalis::params::{ft, warp};
 use lyra_chrysalis::table::{self, Table, IMPORTED};
 use lyra_chrysalis::telemetry::{Snapshot, Telemetry};
-use lyra_chrysalis::{p, PARAMS, PRESETS};
+use lyra_chrysalis::{p, PARAMS};
 use lyra_model::{History, Project};
 use std::f32::consts::PI;
 use std::sync::Arc;
@@ -480,18 +480,21 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
 
 /// `‹ name ›` in `r`: click the name for the list, scroll over it to step.
 fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let n = PRESETS.len();
-    let current = current_preset(&ed.p.channels[ed.ch].params);
+    const PLUGIN: &str = "lyra.chrysalis";
+    let all = crate::user_presets::entries(PLUGIN);
+    let n = all.len();
+    let current = crate::user_presets::current(&all, &ed.p.channels[ed.ch].params);
     let last_id = Id::new(("chrys-last-preset", ed.ch));
-    let last = ui.ctx().data(|d| d.get_temp::<usize>(last_id));
-    let at = current.or(last).unwrap_or(0);
-    let (name, edited) = match (current, last) {
-        (Some(k), _) => (PRESETS[k].0, false),
-        (None, Some(k)) => (PRESETS[k].0, true),
-        (None, None) => ("Custom", false),
+    let last: Option<String> = ui.ctx().data(|d| d.get_temp(last_id));
+    let last_k = last.as_ref().and_then(|name| all.iter().position(|e| &e.name == name));
+    let at = current.or(last_k).unwrap_or(0);
+    let (name, edited) = match (current, last_k) {
+        (Some(k), _) => (all[k].name.clone(), false),
+        (None, Some(k)) => (all[k].name.clone(), true),
+        (None, None) => ("Custom".to_string(), false),
     };
     let [prev, field, next] = flex::row(r, [Px(r.height()), Grow(1.0), Px(r.height())], 4.0);
-    let mut pick = None;
+    let mut pick: Option<crate::user_presets::Entry> = None;
     for (rect, left) in [(prev, true), (next, false)] {
         let resp = ui.interact(rect, Id::new(("chrys-preset-step", left)), Sense::click());
         let p = ui.painter();
@@ -500,8 +503,8 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         let c = rect.center();
         let pts = vec![c + vec2(-2.5 * s, -5.0), c + vec2(2.5 * s, 0.0), c + vec2(-2.5 * s, 5.0)];
         p.add(Shape::line(pts, stroke(1.6, TURQ)));
-        if resp.on_hover_text(if left { "Previous preset" } else { "Next preset" }).clicked() {
-            pick = Some(if left { (at + n - 1) % n } else { (at + 1) % n });
+        if resp.on_hover_text(if left { "Previous preset" } else { "Next preset" }).clicked() && n > 0 {
+            pick = Some(all[if left { (at + n - 1) % n } else { (at + 1) % n }].clone());
         }
     }
     let resp = ui.interact(field, Id::new(("chrys-preset-field", ed.ch)), Sense::click());
@@ -509,34 +512,37 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     p.rect_filled(field, cr(3), if resp.hovered() { HOVER } else { SCREEN });
     let cap = caps(p, field.left_center() + vec2(10.0, 0.0), "preset", TEXT_FAINT, Align2::LEFT_CENTER);
     // The name stays clear of the chevron (clipped, never overlapping it).
-    let text_area =
-        Rect::from_min_max(pos2(cap.right() + 10.0, field.top()), pos2(field.right() - 24.0, field.bottom()));
+    let text_area = Rect::from_min_max(pos2(cap.right() + 10.0, field.top()), pos2(field.right() - 24.0, field.bottom()));
     let tp = ui.painter_at(text_area);
-    let t = tp.text(text_area.left_center(), Align2::LEFT_CENTER, name, FontId::proportional(15.0), TEXT);
+    let t = tp.text(text_area.left_center(), Align2::LEFT_CENTER, &name, FontId::proportional(15.0), TEXT);
     if edited {
         tp.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", FontId::proportional(10.5), TEXT_DIM);
     }
     chevron(p, field.right_center() - vec2(11.0, 1.0), 3.5, TURQ);
     if let Some(step) = wheel_step(ui, field) {
-        pick = Some((at as i32 + step).rem_euclid(n as i32) as usize);
+        if n > 0 {
+            pick = Some(all[(at as i32 + step).rem_euclid(n as i32) as usize].clone());
+        }
     }
     let popup = ui.make_persistent_id(("chrys-preset-list", ed.ch));
     if resp.clicked() {
         ui.memory_mut(|m| m.toggle_popup(popup));
     }
-    let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list");
-    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
-        ui.set_min_width(field.width());
-        for (k, (name, _)) in PRESETS.iter().enumerate() {
-            if ui.selectable_label(current == Some(k), *name).clicked() {
-                pick = Some(k);
-            }
+    let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list (and to save yours)");
+    let params = ed.p.channels[ed.ch].params.clone();
+    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+        let (picked, close) = crate::user_presets::menu(ui, PLUGIN, &params, field.width());
+        if picked.is_some() {
+            pick = picked;
+        }
+        if close {
+            ui.memory_mut(|m| m.close_popup());
         }
     });
-    if let Some(k) = pick {
+    if let Some(e) = pick {
         ed.h.checkpoint(ed.p);
-        ed.p.channels[ed.ch].params = preset_values(k);
-        ui.ctx().data_mut(|d| d.insert_temp(last_id, k));
+        ed.p.channels[ed.ch].params = e.params;
+        ui.ctx().data_mut(|d| d.insert_temp(last_id, e.name));
     }
 }
 
@@ -1280,19 +1286,6 @@ fn format_value(id: usize, v: f32) -> String {
         }
         _ => info.format(v),
     }
-}
-
-fn preset_values(k: usize) -> Vec<f32> {
-    let mut v = lyra_plugin::default_params(&PARAMS);
-    for &(id, x) in PRESETS[k].1 {
-        v[id] = x;
-    }
-    v
-}
-
-fn current_preset(params: &[f32]) -> Option<usize> {
-    (0..PRESETS.len())
-        .find(|&k| preset_values(k).iter().zip(params).all(|(a, b)| (a - b).abs() <= 1e-5 * a.abs().max(1.0)))
 }
 
 /// The table an oscillator plays, for its picture: a built-in, or the

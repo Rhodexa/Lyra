@@ -29,7 +29,7 @@ use crate::theme::{self, cr, stroke, Light};
 use crate::widgets::{self, Icon, Legend};
 use egui::{pos2, vec2, Align, Align2, Color32, FontId, Id, Layout, Rect, Response, RichText, Sense, Shape, Ui};
 use egui::{UiBuilder, Vec2};
-use lyra_fluttersine::{p, FM_PARAMS, FM_PRESETS};
+use lyra_fluttersine::{p, FM_PARAMS};
 use lyra_model::{History, Project};
 use p::{op, OPS};
 use std::f32::consts::TAU;
@@ -260,47 +260,32 @@ fn logo(ui: &mut Ui, r: Rect) {
 
 // ───────────────────────────────────────────────────────────── presets
 
-/// A preset's full parameter list (defaults + its changes), without allocating.
-fn preset_values(k: usize) -> [f32; p::COUNT] {
-    let mut v = [0.0; p::COUNT];
-    for (slot, info) in v.iter_mut().zip(FM_PARAMS.iter()) {
-        *slot = info.default;
-    }
-    for &(id, x) in FM_PRESETS[k].1 {
-        v[id] = x;
-    }
-    v
-}
-
-/// The preset the current sound is exactly equal to, if any.
-fn current_preset(params: &[f32]) -> Option<usize> {
-    (0..FM_PRESETS.len())
-        .find(|&k| preset_values(k).iter().zip(params).all(|(a, b)| (a - b).abs() <= 1e-5 * a.abs().max(1.0)))
-}
-
 /// `◀ [ preset ▾ ] ▶`, a dropdown like the pattern picker. Click for the list,
 /// scroll over it to step.
 fn preset_row(ui: &mut Ui, ed: &mut Ed) {
+    const PLUGIN: &str = "lyra.fluttersine";
     let s = sizes();
-    let n = FM_PRESETS.len();
-    let current = current_preset(&ed.p.channels[ed.ch].params);
+    let all = crate::user_presets::entries(PLUGIN);
+    let n = all.len();
+    let current = crate::user_presets::current(&all, &ed.p.channels[ed.ch].params);
     // The last preset loaded here, so ◀ ▶ still make sense after you tweak it.
     let last_id = Id::new(("fm-last-preset", ed.ch));
-    let last = ui.ctx().data(|d| d.get_temp::<usize>(last_id));
-    let at = current.or(last).unwrap_or(0);
-    let (name, edited) = match (current, last) {
-        (Some(k), _) => (FM_PRESETS[k].0, false),
-        (None, Some(k)) => (FM_PRESETS[k].0, true),
-        (None, None) => ("Custom", false),
+    let last: Option<String> = ui.ctx().data(|d| d.get_temp(last_id));
+    let last_k = last.as_ref().and_then(|name| all.iter().position(|e| &e.name == name));
+    let at = current.or(last_k).unwrap_or(0);
+    let (name, edited) = match (current, last_k) {
+        (Some(k), _) => (all[k].name.clone(), false),
+        (None, Some(k)) => (all[k].name.clone(), true),
+        (None, None) => ("Custom".to_string(), false),
     };
-    let mut pick = None;
+    let mut pick: Option<crate::user_presets::Entry> = None;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         let key = |ui: &mut Ui, icon, hint| {
             widgets::key(ui, vec2(s.preset_h, s.preset_h), Legend::Icon(icon), false, VOICE_LIGHT, hint)
         };
-        if key(ui, Icon::Prev, "Previous preset").clicked() {
-            pick = Some((at + n - 1) % n);
+        if key(ui, Icon::Prev, "Previous preset").clicked() && n > 0 {
+            pick = Some(all[(at + n - 1) % n].clone());
         }
         let well_w = ui.available_width() - s.preset_h - 4.0;
         let (r, resp) = ui.allocate_exact_size(vec2(well_w, s.preset_h), Sense::click());
@@ -310,7 +295,7 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed) {
         let text = painter.text(
             r.left_center() + vec2(10.0, 0.0),
             Align2::LEFT_CENTER,
-            name,
+            &name,
             FontId::proportional(m.text),
             theme::TEXT,
         );
@@ -327,29 +312,33 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed) {
         let chevron = vec![c + vec2(-3.5, -1.5), c + vec2(0.0, 2.0), c + vec2(3.5, -1.5)];
         painter.add(Shape::line(chevron, stroke(1.6, theme::TEXT_DIM)));
         if let Some(step) = wheel_step(ui, r) {
-            pick = Some((at as i32 + step).rem_euclid(n as i32) as usize);
+            if n > 0 {
+                pick = Some(all[(at as i32 + step).rem_euclid(n as i32) as usize].clone());
+            }
         }
         let popup = ui.make_persistent_id(("fm-preset-list", ed.ch));
         if resp.clicked() {
             ui.memory_mut(|m| m.toggle_popup(popup));
         }
-        let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list");
-        egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
-            ui.set_min_width(r.width());
-            for (k, (name, _)) in FM_PRESETS.iter().enumerate() {
-                if ui.selectable_label(current == Some(k), *name).clicked() {
-                    pick = Some(k);
-                }
+        let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list (and to save yours)");
+        let params = ed.p.channels[ed.ch].params.clone();
+        egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+            let (picked, close) = crate::user_presets::menu(ui, PLUGIN, &params, r.width());
+            if picked.is_some() {
+                pick = picked;
+            }
+            if close {
+                ui.memory_mut(|m| m.close_popup());
             }
         });
-        if key(ui, Icon::Next, "Next preset").clicked() {
-            pick = Some((at + 1) % n);
+        if key(ui, Icon::Next, "Next preset").clicked() && n > 0 {
+            pick = Some(all[(at + 1) % n].clone());
         }
     });
-    if let Some(k) = pick {
+    if let Some(e) = pick {
         ed.h.checkpoint(ed.p);
-        ed.p.channels[ed.ch].params = preset_values(k).to_vec();
-        ui.ctx().data_mut(|d| d.insert_temp(last_id, k));
+        ed.p.channels[ed.ch].params = e.params;
+        ui.ctx().data_mut(|d| d.insert_temp(last_id, e.name));
     }
 }
 
