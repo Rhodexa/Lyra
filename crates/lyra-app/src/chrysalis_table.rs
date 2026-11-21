@@ -1,19 +1,19 @@
-//! Chrysalis's **table studio**: make your own wavetable.
+//! Chrysalis's **table studio**: make your own wavetable. It is a page of
+//! Chrysalis's own editor (the header's TABLE key), not another window.
 //!
 //! ```text
-//!  ┌ name ─ NEW: sine saw square playing ─────────── LIVE · SAVE ┐
+//!  ┌ name ─ NEW: sine saw square playing ─── PLAY ON: osc a | osc b · LIVE · SAVE ┐
 //!  ├ undo · + frame · delete · morph (crossfade | spectral) · normalize · smooth · frames 8…256 ┤
-//!  │ the frame, drawn freehand            │ its first 64 harmonics  │
-//!  ├ every frame, side by side (click or drag to pick one) ───────┤
-//!  └──────────────────────────────────────────────────────────────┘
+//!  │ the frame, drawn freehand                         │ its first 64 harmonics   │
+//!  ├ every frame, side by side (click or drag to pick one) ──────────────────────┤
 //! ```
 //!
-//! It opens with a copy of the table the oscillator plays. Your table is a
-//! WAV (frames of 2048 samples, one after another) in
-//! `<data dir>/tables/<name>.wav`; saving makes it the channel's sample and
-//! the oscillator plays it as its imported table, so nothing new is stored in
-//! the synth. With LIVE on, every finished stroke or tool saves at once.
-//! The studio keeps its own undo (the table isn't part of the project's).
+//! It opens with a copy of the table an oscillator plays. Your table is a WAV
+//! (frames of 2048 samples, one after another) in `<data dir>/tables/<name>.wav`;
+//! saving makes it the channel's custom table ("Imported" in either
+//! oscillator's list) and the chosen oscillator plays it, so nothing new is
+//! stored in the synth. With LIVE on, every finished stroke or tool saves at
+//! once. The studio keeps its own undo (the table isn't part of the project's).
 
 use super::*;
 use lyra_chrysalis::table::FRAME;
@@ -64,41 +64,45 @@ pub(super) fn open(ui: &Ui, ed: &Ed, o: usize) {
     ui.ctx().data_mut(|d| d.insert_temp(doc_id(ed.ch), Some(shared)));
 }
 
-/// The studio's window, if it is open for this channel.
-pub(super) fn window(ui: &mut Ui, ed: &mut Ed) {
-    let id = doc_id(ed.ch);
-    let Some(shared) = ui.ctx().data(|d| d.get_temp::<Option<Shared>>(id)).flatten() else { return };
-    let mut open = true;
-    let frame = egui::Frame::default().fill(VOID).corner_radius(cr(6)).inner_margin(egui::Margin::same(10));
-    let osc = shared.lock().map_or(0, |d| d.osc);
-    let title = format!("Table studio · {} · osc {}", ed.p.channels[ed.ch].name, if osc == 0 { "A" } else { "B" });
-    egui::Window::new(title)
-        .id(Id::new(("chrys-studio-window", ed.ch)))
-        .open(&mut open)
-        .resizable(false)
-        .collapsible(false)
-        .frame(frame)
-        .show(ui.ctx(), |ui| {
-            let mut doc = shared.lock().unwrap_or_else(|e| e.into_inner());
-            studio(ui, ed, &mut doc);
-        });
-    if !open {
-        ui.ctx().data_mut(|d| d.insert_temp::<Option<Shared>>(id, None));
+/// Open the studio on whatever plays now, unless it already holds a table
+/// (from the oscillator playing the custom table, else oscillator A).
+pub(super) fn ensure(ui: &Ui, ed: &Ed) {
+    if ui.ctx().data(|d| d.get_temp::<Option<Shared>>(doc_id(ed.ch))).flatten().is_none() {
+        let o = (0..2).find(|&o| ed.choice(p::osc(o, p::TABLE)) == IMPORTED).unwrap_or(0);
+        open(ui, ed, o);
     }
 }
 
-const W: f32 = 980.0;
-const H: f32 = 520.0;
+/// The TABLE page, filling `r` below the editor's header.
+pub(super) fn page(ui: &mut Ui, ed: &mut Ed, r: Rect) {
+    ensure(ui, ed);
+    let Some(shared) = ui.ctx().data(|d| d.get_temp::<Option<Shared>>(doc_id(ed.ch))).flatten() else { return };
+    let inner = panel(ui, r, "", TURQ);
+    let mut doc = shared.lock().unwrap_or_else(|e| e.into_inner());
+    studio(ui, ed, &mut doc, inner);
+}
 
-fn studio(ui: &mut Ui, ed: &mut Ed, doc: &mut Doc) {
-    let (all, _) = ui.allocate_exact_size(vec2(W, H), Sense::hover());
-    let [bar1, bar2, main, strip] = flex::col(all, [Px(KEY_H), Px(KEY_H), Grow(1.0), Px(64.0)], 8.0);
+fn studio(ui: &mut Ui, ed: &mut Ed, doc: &mut Doc, all: Rect) {
+    let [bar1, bar2, main, strip] = flex::col(all, [Px(KEY_H), Px(KEY_H), Grow(1.0), Px(96.0)], 10.0);
     let color = OSC_COLORS[doc.osc];
     let mut changed = false; // edited by a click (saved now if live)
 
     // ── Name, new from…, live, save
-    let [name_r, new_cap, new_r, _, note_r, live_r, save_r] =
-        flex::row(bar1, [Px(230.0), Px(36.0), Px(300.0), Px(8.0), Grow(1.0), Px(64.0), Px(86.0)], 6.0);
+    let [name_r, new_cap, new_r, _, note_r, on_cap, on_r, live_r, save_r] = flex::row(
+        bar1,
+        [Px(230.0), Px(36.0), Px(300.0), Px(8.0), Grow(1.0), Px(58.0), Px(150.0), Px(64.0), Px(86.0)],
+        6.0,
+    );
+    caps(ui.painter(), on_cap.right_center(), "play on", TEXT_FAINT, Align2::RIGHT_CENTER);
+    let hint = "The oscillator that plays this table when it's saved (the other can pick it too: \"Imported\")";
+    let target =
+        place(ui, on_r, "studio-target", true, |ui| seg(ui, &["osc a", "osc b"], doc.osc, color, on_r.size(), hint));
+    if let Some(k) = target {
+        if k != doc.osc {
+            doc.osc = k;
+            changed = true;
+        }
+    }
     ui.painter().rect_filled(name_r, cr(3), SCREEN);
     let mut name_ui = ui.new_child(UiBuilder::new().max_rect(name_r.shrink2(vec2(8.0, 3.0))));
     name_ui.add(

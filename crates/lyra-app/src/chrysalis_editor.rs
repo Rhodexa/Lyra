@@ -173,8 +173,14 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
     let total = vec2(W, HEADER_H + OSC_H + FX_H + MOD_H + 3.0 * GAP);
     let (all, _) = ui.allocate_exact_size(total, Sense::hover());
     backdrop(ui, all);
-    let [header, oscs, fx, mods] = flex::col(all, [Px(HEADER_H), Px(OSC_H), Px(FX_H), Px(MOD_H)], GAP);
+    let [header, body] = flex::col(all, [Px(HEADER_H), Grow(1.0)], GAP);
     header_bar(ui, &mut ed, header);
+    // The TABLE page takes everything below the header: no extra window.
+    if view(ui, ch) == View::Table {
+        studio::page(ui, &mut ed, body);
+        return;
+    }
+    let [oscs, fx, mods] = flex::col(body, [Px(OSC_H), Px(FX_H), Px(MOD_H)], GAP);
     let [a, b] = flex::row(oscs, [Grow(1.0), Grow(1.0)], GAP);
     osc_panel(ui, &mut ed, 0, a);
     osc_panel(ui, &mut ed, 1, b);
@@ -185,7 +191,29 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
     let [modulation, macros] = flex::row(mods, [Grow(1.0), Px(180.0)], GAP);
     mod_panel(ui, &mut ed, modulation);
     macros_panel(ui, &mut ed, macros);
-    studio::window(ui, &mut ed);
+}
+
+/// Which page the editor shows below its header.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum View {
+    Synth,
+    Table,
+}
+
+fn view_id(ch: usize) -> Id {
+    Id::new(("chrys-view", ch))
+}
+
+fn view(ui: &Ui, ch: usize) -> View {
+    if ui.ctx().data(|d| d.get_temp::<bool>(view_id(ch))).unwrap_or(false) {
+        View::Table
+    } else {
+        View::Synth
+    }
+}
+
+fn set_view(ui: &Ui, ch: usize, v: View) {
+    ui.ctx().data_mut(|d| d.insert_temp(view_id(ch), v == View::Table));
 }
 
 /// A child Ui filling `r` exactly (top-down, centred), greyed out unless `enabled`.
@@ -452,7 +480,21 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
 
     let [left, _, right] = flex::row(r.shrink2(vec2(PAD + 4.0, 0.0)), [Grow(1.0), Px(190.0), Grow(1.0)], 0.0);
     // Left: the preset, and the readout of whatever the mouse is on.
-    let [read, preset] = flex::row(left, [Px(150.0), Grow(1.0)], 10.0);
+    // SYNTH / TABLE, stacked like POLY / MONO on the other side.
+    let [pages, read, preset] = flex::row(left, [Px(70.0), Px(132.0), Grow(1.0)], 10.0);
+    let [k1, k2] = flex::col(flex::center(pages, vec2(pages.width(), 2.0 * KEY_H + 6.0)), [Px(KEY_H), Px(KEY_H)], 6.0);
+    let now = view(ui, ed.ch);
+    for (r, v, name, hint) in [
+        (k1, View::Synth, "synth", "The synth: oscillators, filters, modulation"),
+        (k2, View::Table, "table", "The table studio: draw your own wavetable"),
+    ] {
+        if place(ui, r, ("chrys-page", name), true, |ui| key(ui, name, r.size(), now == v, TURQ, hint).clicked()) {
+            if v == View::Table {
+                studio::ensure(ui, ed);
+            }
+            set_view(ui, ed.ch, v);
+        }
+    }
     readout_display(ui, flex::center(read, vec2(read.width(), 46.0)));
     preset_row(ui, ed, flex::center(preset, vec2(preset.width(), 34.0)));
     // Right: the voice.
@@ -577,6 +619,7 @@ fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
     let hint = "Make your own table: draw frames, set harmonics, morph (starts from this oscillator's table)";
     if place(ui, edit, ("chrys-osc-edit", o), true, |ui| key(ui, "edit", edit.size(), false, color, hint).clicked()) {
         studio::open(ui, ed, o);
+        set_view(ui, ed.ch, View::Table);
     }
     if clicked {
         if let Some(path) = rfd::FileDialog::new().add_filter("Audio", &["wav", "flac"]).pick_file() {
