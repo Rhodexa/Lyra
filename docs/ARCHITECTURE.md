@@ -142,6 +142,16 @@ each lane at the song position every 64 samples while playing (chasing is
 free: the value only depends on the position), sets the control directly,
 and on Stop puts every control back at `rest`. Song mode only.
 
+**Knobs show automation.** The engine moves automated controls itself and
+leaves the project's values alone (they are where controls rest). Each frame
+while the song plays, the app evaluates every lane at the playhead
+(`Bridge::automated_at`, cheap: a curve depends only on the position) and
+`automation::shown` serves those values to the editors: Chrysalis,
+Fluttersine, the generic editor and the effect windows read their knobs
+through it. Dragging an automated knob edits its resting value. It's the
+host's job, as in CLAP; plugins aren't involved. (Mixer faders don't follow
+yet.)
+
 "Automate" automates the control changed last: the bridge compares the
 project with what it sent last frame (`Project::changed_control`), so any
 editor, and later any plugin window, feeds it.

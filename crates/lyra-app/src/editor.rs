@@ -170,7 +170,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
 
 fn param_cell(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, info: &ParamInfo, color: Color32) {
     let id = info.id as usize;
-    let mut v = p.channels[ch].params[id];
+    let mut v = crate::automation::shown_param(ch, id).unwrap_or(p.channels[ch].params[id]);
     let m = theme::m();
     let cell_w = m.knob_large + 22.0;
     ui.allocate_ui(vec2(cell_w, m.knob_large + 2.0 * m.text_small + 14.0), |ui| {
@@ -198,7 +198,7 @@ fn param_cell(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, info: &P
                 }
             }
             ui.label(RichText::new(info.name).small());
-            ui.label(RichText::new(info.format(p.channels[ch].params[id])).small().color(theme::TEXT_DIM));
+            ui.label(RichText::new(info.format(v)).small().color(theme::TEXT_DIM));
         });
     });
 }
@@ -270,7 +270,7 @@ fn matrix_grid(
             for col in 0..6 {
                 let id = first + row * 6 + col;
                 let Some(info) = params.get(id) else { continue };
-                let mut v = p.channels[ch].params[id];
+                let mut v = crate::automation::shown_param(ch, id).unwrap_or(p.channels[ch].params[id]);
                 let c = if row == col { theme::GOLD } else { color };
                 if tracked(&widgets::knob(ui, &mut v, info, size, c), h, p) {
                     p.channels[ch].params[id] = v;

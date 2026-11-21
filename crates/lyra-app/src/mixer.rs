@@ -575,14 +575,14 @@ pub fn effect_editor(ui: &mut Ui, p: &mut Project, h: &mut History, t: usize, i:
             ui.allocate_ui(cell, |ui| {
                 ui.set_min_size(cell);
                 ui.vertical_centered(|ui| {
-                    let mut v = value;
+                    // Where automation has it while the song plays, else its own value.
+                    let addr = lyra_engine::Addr::Effect { track: t, slot: i, id: id as u32 };
+                    let mut v = crate::automation::shown(addr).unwrap_or(value);
                     if tracked(&widgets::knob(ui, &mut v, info, m.knob_large, light.mid), h, p) {
                         p.mixer[t].effects[i].params[id] = v;
                     }
                     ui.label(RichText::new(info.name).small());
-                    ui.label(
-                        RichText::new(info.format(p.mixer[t].effects[i].params[id])).small().color(theme::TEXT_DIM),
-                    );
+                    ui.label(RichText::new(info.format(v)).small().color(theme::TEXT_DIM));
                 });
             });
             if k % 5 == 4 {

@@ -107,8 +107,9 @@ struct Ed<'a> {
 }
 
 impl Ed<'_> {
+    /// Where automation has it while the song plays, else its own value.
     fn v(&self, id: usize) -> f32 {
-        self.p.channels[self.ch].params[id]
+        crate::automation::shown_param(self.ch, id).unwrap_or(self.p.channels[self.ch].params[id])
     }
     fn on(&self, id: usize) -> bool {
         self.v(id) >= 0.5

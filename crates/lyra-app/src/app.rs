@@ -888,6 +888,9 @@ impl eframe::App for LyraApp {
         let (playing, playhead) =
             self.engine.as_ref().map_or((false, 0.0), |e| (e.shared().is_playing(), e.shared().playhead()));
         self.playhead = playhead;
+        // Editors show automation moving their knobs while the song plays.
+        let shown = if playing && self.ui.song_mode { self.bridge.automated_at(playhead) } else { Vec::new() };
+        crate::automation::set_shown(shown);
         // Closing the window with unsaved changes asks first, like New and Open.
         let closing = ctx.input(|i| i.viewport().close_requested());
         if closing && !self.may_close && !self.dev.closing && self.dirty() {

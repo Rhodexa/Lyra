@@ -15,6 +15,35 @@ use lyra_engine::{curve_at, Addr, AutoLane};
 use lyra_model::{Automation, Clip, Project, Target};
 use lyra_plugin::{Curve, ParamInfo};
 
+// ── What the knobs show ──
+//
+// The engine moves automated controls itself and leaves the project's own
+// values alone (they are where each control rests). So the editors can show
+// automation moving, the app works out every automated value at the playhead
+// once per frame while the song plays (the curve depends only on the song
+// position) and the editors read their knobs through `shown`. It is the
+// host's job, like a CLAP host telling a plugin's GUI about automation: no
+// plugin is involved.
+
+thread_local! {
+    static SHOWN: std::cell::RefCell<Vec<(Addr, f32)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// This frame's automated values (empty when the song isn't playing). UI thread.
+pub fn set_shown(values: Vec<(Addr, f32)>) {
+    SHOWN.with(|s| *s.borrow_mut() = values);
+}
+
+/// Where automation has a control right now, if it's automated and playing.
+pub fn shown(addr: Addr) -> Option<f32> {
+    SHOWN.with(|s| s.borrow().iter().find(|(a, _)| *a == addr).map(|(_, v)| *v))
+}
+
+/// …for an instrument parameter (channel index, parameter id).
+pub fn shown_param(channel: usize, id: usize) -> Option<f32> {
+    shown(Addr::Param { channel, id: id as u32 })
+}
+
 /// Mixer faders (see `mixer.rs`): the same law as the plugin rack's volume.
 static MIXER_VOLUME: ParamInfo = ParamInfo::new(0, "Volume", 0.0, 2.0, 1.0, "gain", Curve::Fader);
 

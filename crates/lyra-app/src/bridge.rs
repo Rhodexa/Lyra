@@ -37,6 +37,14 @@ pub struct Bridge {
 pub type Live = std::sync::Arc<dyn std::any::Any + Send + Sync>;
 
 impl Bridge {
+    /// Every automated control's value at song tick `tick` (from the lanes
+    /// last sent to the engine).
+    pub fn automated_at(&self, tick: f64) -> Vec<(lyra_engine::Addr, f32)> {
+        self.last_automation.as_ref().map_or_else(Vec::new, |a| {
+            a.lanes.iter().map(|l| (l.addr, l.info.from_normalized(l.travel_at(tick)))).collect()
+        })
+    }
+
     /// The live state of a channel's plugin, if it shares one.
     pub fn live(&self, ch: lyra_model::ChannelId) -> Option<Live> {
         self.live.get(&ch).cloned()
