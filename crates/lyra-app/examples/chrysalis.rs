@@ -198,12 +198,12 @@ fn build() -> Project {
     let snare = p.add_channel("Snare", "lyra.snare", plugin("lyra.snare", &[(0, 190.0), (2, 0.8), (3, 0.22)]));
     let clap = p.add_channel("Clap", "lyra.clap", plugin("lyra.clap", &[]));
     let hat = p.add_channel("Hat", "lyra.hihat", plugin("lyra.hihat", &[(1, 0.05), (2, 9000.0)]));
-    let pad = p.add_channel("Evolving pad", CH, chrys("Evolving pad", &[(cs::VOLUME, 0.28)]));
-    let pluck = p.add_channel("Pluck", CH, chrys("Pluck", &[(cs::VOLUME, 0.35)]));
-    let growl = p.add_channel("Growl", CH, chrys("Growl", &[(cs::mac(0), 0.6), (cs::VOLUME, 1.3)]));
-    let talker = p.add_channel("Talking bass", CH, chrys("Talking bass", &[(cs::VOLUME, 1.4)]));
-    let reese = p.add_channel("Reese", CH, chrys("Reese", &[(cs::VOLUME, 0.2), (cs::SUB_ON, 0.0)]));
-    let lead_ch = p.add_channel("Supersaw lead", CH, chrys("Supersaw lead", &[(cs::VOLUME, 0.45)]));
+    let pad = p.add_channel("Evolving pad", CH, chrys("Pad · Evolving", &[(cs::VOLUME, 0.28)]));
+    let pluck = p.add_channel("Pluck", CH, chrys("Pluck · Bright", &[(cs::VOLUME, 0.35)]));
+    let growl = p.add_channel("Growl", CH, chrys("Bass · Growl", &[(cs::mac(0), 0.6), (cs::VOLUME, 1.3)]));
+    let talker = p.add_channel("Talking bass", CH, chrys("Bass · Talking", &[(cs::VOLUME, 1.4)]));
+    let reese = p.add_channel("Reese", CH, chrys("Bass · Reese", &[(cs::VOLUME, 0.2), (cs::SUB_ON, 0.0)]));
+    let lead_ch = p.add_channel("Supersaw lead", CH, chrys("Lead · Supersaw", &[(cs::VOLUME, 0.45)]));
     let stab_ch = p.add_channel(
         "Stabs",
         CH,

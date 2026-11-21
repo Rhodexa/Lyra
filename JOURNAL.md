@@ -13,16 +13,12 @@ no marks would default to not urgent or 'coding teams judges'
 ## Friction
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
 // - [ ] ? bug or missing?
+- [ ] bug, pattern dropdown outgrows the screen and later patterns can be reached. 
 
 ## Wishes
 *Things you wish Lyra did.*
 - [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
-
-## Sound
-*Ears-only notes: "kick too clicky", "pad needs more air", "this preset slaps".*
-// Director's note: These don't belong to Lyra. They would be incumbent to the plugins and synths dev, which could be also us, but not Lyra's team
-
-- [ ]
+- [ ] vertical scroll bar could be slightly wider and zoom on the center
 
 ## Questions for Claude
 
@@ -48,6 +44,11 @@ no marks would default to not urgent or 'coding teams judges'
   - The built-in tables take ~37 MB of memory, shared by every Chrysalis.
   - Macros have numbers, not names (names aren't numbers, so they'd need that same state blob).
 - [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
+- [ ] *(from writing "Dawnbreaker", 2026-11-20: the first song built on automation clips. They did every build-up: shared curves, several links, offsets and "hold after the clip" all behaved.)* What was missing:
+  - **Sends.** Nine inserts each carry their own hall reverb because nothing can share one. That costs CPU, and the room isn't one room. (Roadmap M3: "Sends / sidechain".)
+  - **Tempo automation.** A heroic ending wants to broaden (a ritardando into the last chord); tempo isn't a control yet.
+  - **Chrysalis's vowel knob runs A–E–I–O–U.** Morphing "oo" to "ah" passes through "ee". Ordering it U–O–A–E–I (back of the mouth to front) would make every neighbour a natural glide: oo, oh, ah, eh, ee. Presets would need their vowels remapped (no file compat needed yet).
+  - **Stem export is slow.** 14 stems took 174 s against 17 s for the mix, because every stem runs every instrument and only mutes the others. Skipping muted channels, or one pass that taps every channel, would make it about as fast as one render.
 
 - [ ] KDE shows a generic "W" icon for Lyra (title bar and taskbar): Wayland takes the icon from a `.desktop` file, which Lyra doesn't have yet. Needs a `lyra.desktop` + icon install (app id `lyra`).
 - [ ] *From the manual pass (verified, not urgent):*
@@ -63,6 +64,16 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Automation on the knobs, turquoise, your presets, 17 new sounds (2026-11-20)**
+- [x] *(chat)* "Are the knobs moving with automation clips the synthesizer's concern?"
+  *→ no: Lyra's (the host knows the curves and the playhead, the same way a CLAP host tells a plugin's GUI). While the song plays, every editor's knobs follow their automation: Chrysalis (its pictures too), Fluttersine, the plain editor, effect windows. The mixer faders don't yet.* (`d64ab09`)
+- [x] *(chat)* "Her mane is turquoise… lighter field, softer colours, more turquoise than green", and the wing holes somewhere
+  *→ turquoise is Chrysalis's hero colour now (osc A, sub/noise, the voice, the nameplate); the banner's green, softened, is osc B; everything a little lighter and softer. The readout shows three of her wing holes while you aren't touching anything.* (`f9429e1`)
+- [x] *(chat)* "A way to store new presets"
+  *→ every instrument's preset list has YOURS and a Save field. Each is a small file in `~/.local/share/lyra/presets/<plugin>/`; × deletes it.* (`e254720`)
+- [x] *(chat)* Stronger growls, glitch hop, piano, pads, MDK / TheFatRat-style leads
+  *→ 17 new Chrysalis presets, all presets now named by kind: Bass · Monster growl, Metal growl, Yoi, Wub, Glitch, Neuro reese; Lead · Hero, Chip, Mega saw; Pluck · Arp, Glitch stab; Keys · Electric, Synth piano, Bells; Pad · Warm, Glass; FX · Riser. Levelled by measurement; please listen.*
 
 **Arrangement tools → `8821c56`**
 - [x] Slide pattern clip window

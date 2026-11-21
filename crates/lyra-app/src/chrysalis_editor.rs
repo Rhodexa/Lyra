@@ -512,7 +512,8 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     p.rect_filled(field, cr(3), if resp.hovered() { HOVER } else { SCREEN });
     let cap = caps(p, field.left_center() + vec2(10.0, 0.0), "preset", TEXT_FAINT, Align2::LEFT_CENTER);
     // The name stays clear of the chevron (clipped, never overlapping it).
-    let text_area = Rect::from_min_max(pos2(cap.right() + 10.0, field.top()), pos2(field.right() - 24.0, field.bottom()));
+    let text_area =
+        Rect::from_min_max(pos2(cap.right() + 10.0, field.top()), pos2(field.right() - 24.0, field.bottom()));
     let tp = ui.painter_at(text_area);
     let t = tp.text(text_area.left_center(), Align2::LEFT_CENTER, &name, FontId::proportional(15.0), TEXT);
     if edited {

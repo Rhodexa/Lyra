@@ -464,7 +464,7 @@ fn worst_case_cost() {
 #[ignore]
 fn preset_loudness() {
     for (name, values) in PRESETS.iter() {
-        let key = if name.contains("bass") || *name == "Growl" || *name == "Reese" { 41 } else { 60 };
+        let key = if name.starts_with("Bass") { 41 } else { 60 };
         let (l, r) = render(&mut with(values), &[on(key)], 1.5);
         let part =
             |x: &[f32]| x[(0.2 * SR) as usize..].iter().map(|v| v * v).sum::<f32>() / (x.len() as f32 - 0.2 * SR);
