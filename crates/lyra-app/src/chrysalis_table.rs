@@ -1,5 +1,5 @@
 //! Chrysalis's **table studio**: make your own wavetable. It is a page of
-//! Chrysalis's own editor (the header's TABLE key), not another window.
+//! Chrysalis's own editor (the header's WAVE EDITOR key), not another window.
 //!
 //! ```text
 //!  ┌ name ─ NEW: sine saw square playing ─── PLAY ON: osc a | osc b · LIVE · SAVE ┐

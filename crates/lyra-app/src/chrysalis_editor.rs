@@ -480,47 +480,57 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
 
     let [left, _, right] = flex::row(r.shrink2(vec2(PAD + 4.0, 0.0)), [Grow(1.0), Px(190.0), Grow(1.0)], 0.0);
     // Left: the preset, and the readout of whatever the mouse is on.
-    // SYNTH / TABLE, stacked like POLY / MONO on the other side.
-    let [pages, read, preset] = flex::row(left, [Px(70.0), Px(132.0), Grow(1.0)], 10.0);
-    let [k1, k2] = flex::col(flex::center(pages, vec2(pages.width(), 2.0 * KEY_H + 6.0)), [Px(KEY_H), Px(KEY_H)], 6.0);
-    let now = view(ui, ed.ch);
-    for (r, v, name, hint) in [
-        (k1, View::Synth, "synth", "The synth: oscillators, filters, modulation"),
-        (k2, View::Table, "table", "The table studio: draw your own wavetable"),
-    ] {
-        if place(ui, r, ("chrys-page", name), true, |ui| key(ui, name, r.size(), now == v, TURQ, hint).clicked()) {
-            if v == View::Table {
-                studio::ensure(ui, ed);
-            }
-            set_view(ui, ed.ch, v);
-        }
-    }
+    // Left: what the mouse is on, and the preset.
+    let [read, preset] = flex::row(left, [Px(150.0), Grow(1.0)], 10.0);
     readout_display(ui, flex::center(read, vec2(read.width(), 46.0)));
     preset_row(ui, ed, flex::center(preset, vec2(preset.width(), 34.0)));
-    // Right: the voice.
-    let [_, knobs, switches] = flex::row(right, [Grow(1.0), Px(3.0 * 62.0), Px(140.0)], 10.0);
+    // Right: the voice (knobs, then POLY over MONO, LEGATO over ALWAYS),
+    // a little apart, the page key.
+    let [_, knobs, mode, glide, _, page] =
+        flex::row(right, [Grow(1.0), Px(3.0 * 56.0), Px(62.0), Px(66.0), Px(4.0), Px(112.0)], 8.0);
     let cells = flex::even_row(flex::center(knobs, vec2(knobs.width(), 60.0)), 3, 0.0);
     knob_in(ui, ed, cells[0], p::VOLUME, "Volume", TURQ, true, 40.0);
     knob_in(ui, ed, cells[1], p::AMP_VEL, "Velocity", TURQ, true, 40.0);
     knob_in(ui, ed, cells[2], p::GLIDE, "Glide", TURQ, true, 40.0);
-    let [m1, m2] =
-        flex::col(flex::center(switches, vec2(switches.width(), 2.0 * KEY_H + 6.0)), [Px(KEY_H), Px(KEY_H)], 6.0);
+    let pair = |r: Rect| flex::col(flex::center(r, vec2(r.width(), 2.0 * KEY_H + 6.0)), [Px(KEY_H), Px(KEY_H)], 6.0);
     let mut set = None;
-    place(ui, m1, "chrys-mode", true, |ui| {
-        let hint = "Mono: one note at a time, with legato and glide";
-        if let Some(k) = seg(ui, &["poly", "mono"], ed.choice(p::MODE), TURQ, m1.size(), hint) {
-            set = Some((p::MODE, k));
-        }
-    });
     let glides = ed.v(p::GLIDE) > 0.0;
-    place(ui, m2, "chrys-glide-mode", glides, |ui| {
-        let hint = "Glide only between overlapping notes (legato), or on every note";
-        if let Some(k) = seg(ui, &["legato", "always"], ed.choice(p::GLIDE_MODE), TURQ, m2.size(), hint) {
-            set = Some((p::GLIDE_MODE, k));
+    for (r, id, labels, enabled, hint) in [
+        (mode, p::MODE, ["poly", "mono"], true, "Mono: one note at a time, with legato and glide"),
+        (
+            glide,
+            p::GLIDE_MODE,
+            ["legato", "always"],
+            glides,
+            "Glide only between overlapping notes (legato), or on every note",
+        ),
+    ] {
+        let now = ed.choice(id);
+        for (k, kr) in pair(r).into_iter().enumerate() {
+            let clicked = place(ui, kr, ("chrys-voice-key", id, k), enabled, |ui| {
+                key(ui, labels[k], kr.size(), now == k, TURQ, hint).clicked()
+            });
+            if clicked {
+                set = Some((id, k));
+            }
         }
-    });
+    }
     if let Some((id, k)) = set {
         ed.set(id, k as f32);
+    }
+    // One key for the page: it says where it takes you, and never changes size.
+    let pk = flex::center(page, vec2(page.width(), KEY_H + 4.0));
+    let on_table = view(ui, ed.ch) == View::Table;
+    let (text, hint) = if on_table {
+        ("back to synth", "Back to the oscillators, filters and modulation")
+    } else {
+        ("wave editor", "Draw your own wavetable (starts from what an oscillator plays)")
+    };
+    if place(ui, pk, "chrys-page-key", true, |ui| key(ui, text, pk.size(), on_table, TURQ, hint).clicked()) {
+        if !on_table {
+            studio::ensure(ui, ed);
+        }
+        set_view(ui, ed.ch, if on_table { View::Synth } else { View::Table });
     }
 }
 
