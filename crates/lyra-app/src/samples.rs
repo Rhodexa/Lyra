@@ -81,6 +81,12 @@ impl Samples {
         result
     }
 
+    /// Drop a sample from the cache, so the next `get` reads the file again.
+    pub fn forget(&mut self, name: &str) {
+        self.cache.remove(name);
+        self.peaks.remove(name);
+    }
+
     /// The sample's waveform summary (built on first use, then kept).
     pub fn peaks(&mut self, name: &str) -> Option<Arc<Peaks>> {
         if let Some(p) = self.peaks.get(name) {
@@ -165,6 +171,21 @@ impl Peaks {
         };
         Some((lo, hi))
     }
+}
+
+thread_local! {
+    static RELOAD: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Ask for a sample to be read again (its file was just rewritten, e.g. by
+/// Chrysalis's table studio): the app forgets it and remakes the channels.
+pub fn reload(name: &str) {
+    RELOAD.with(|r| r.borrow_mut().push(name.to_string()));
+}
+
+/// The samples asked to be read again since the last call. UI thread.
+pub fn take_reloads() -> Vec<String> {
+    RELOAD.with(|r| std::mem::take(&mut *r.borrow_mut()))
 }
 
 /// Read a WAV or FLAC file into float samples (-1..1), left and right.

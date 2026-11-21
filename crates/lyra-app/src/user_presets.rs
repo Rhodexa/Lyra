@@ -93,7 +93,8 @@ pub fn entries(plugin: &str) -> Vec<Entry> {
 /// The preset these parameters are exactly, if any.
 pub fn current(entries: &[Entry], params: &[f32]) -> Option<usize> {
     entries.iter().position(|e| {
-        e.params.len() == params.len() && e.params.iter().zip(params).all(|(a, b)| (a - b).abs() <= 1e-5 * a.abs().max(1.0))
+        e.params.len() == params.len()
+            && e.params.iter().zip(params).all(|(a, b)| (a - b).abs() <= 1e-5 * a.abs().max(1.0))
     })
 }
 
@@ -105,13 +106,20 @@ pub fn save(plugin: &str, name: &str, params: &[f32]) -> Result<(), String> {
     }
     let d = dir(plugin);
     std::fs::create_dir_all(&d).map_err(|e| format!("Can't make {}: {e}", d.display()))?;
-    let file =
-        File { format: "lyra-preset".into(), version: 1, plugin: plugin.into(), name: name.into(), params: params.to_vec() };
+    let file = File {
+        format: "lyra-preset".into(),
+        version: 1,
+        plugin: plugin.into(),
+        name: name.into(),
+        params: params.to_vec(),
+    };
     let text = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
     let path = d.join(file_name(name));
     // Crash-safe: write beside it, then swap it in.
     let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, &path)).map_err(|e| format!("Can't save the preset: {e}"))?;
+    std::fs::write(&tmp, text)
+        .and_then(|_| std::fs::rename(&tmp, &path))
+        .map_err(|e| format!("Can't save the preset: {e}"))?;
     forget(plugin);
     Ok(())
 }
@@ -161,7 +169,8 @@ pub fn menu(ui: &mut Ui, plugin: &str, params: &[f32], width: f32) -> (Option<En
     let mut name: String = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
     let err_id = id.with("error");
     ui.horizontal(|ui| {
-        let edit = ui.add(egui::TextEdit::singleline(&mut name).hint_text("New preset name").desired_width(width - 70.0));
+        let edit =
+            ui.add(egui::TextEdit::singleline(&mut name).hint_text("New preset name").desired_width(width - 70.0));
         let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         if ui.button("Save").clicked() || enter {
             match save(plugin, &name, params) {

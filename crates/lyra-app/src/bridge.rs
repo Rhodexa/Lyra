@@ -31,12 +31,20 @@ pub struct Bridge {
     /// Each channel's live state for its editor (see `Plugin::telemetry`),
     /// taken when the bridge makes the plugin.
     live: std::collections::HashMap<lyra_model::ChannelId, Live>,
+    /// Rebuild every channel on the next sync (a sample file changed on disk).
+    force: bool,
 }
 
 /// A plugin's live state, shared with the audio thread (atomics only).
 pub type Live = std::sync::Arc<dyn std::any::Any + Send + Sync>;
 
 impl Bridge {
+    /// Remake every channel's plugin on the next sync: a sample file changed,
+    /// and plugins only get their sample when they are made.
+    pub fn force_rebuild(&mut self) {
+        self.force = true;
+    }
+
     /// Every automated control's value at song tick `tick` (from the lanes
     /// last sent to the engine).
     pub fn automated_at(&self, tick: f64) -> Vec<(lyra_engine::Addr, f32)> {
@@ -51,9 +59,10 @@ impl Bridge {
     }
 
     pub fn sync(&mut self, p: &Project, target: Playing, eng: &mut EngineHandle, samples: &mut Samples) {
-        if self.last.as_ref() == Some(p) && self.last_target == Some(target) {
+        if !self.force && self.last.as_ref() == Some(p) && self.last_target == Some(target) {
             return; // nothing changed — the common case
         }
+        let forced = std::mem::take(&mut self.force);
         let last = self.last.take();
         if let Some(t) = last.as_ref().and_then(|l| p.changed_control(l)) {
             self.tweaked = Some(t);
@@ -61,16 +70,17 @@ impl Bridge {
 
         // Channels added/removed/reordered or instrument swapped → rebuild them all.
         // (Simple and correct; fine-grained insert/remove can come later.)
-        let rebuild = match &last {
-            None => true,
-            Some(l) => {
-                l.channels.len() != p.channels.len()
-                    || l.channels
-                        .iter()
-                        .zip(&p.channels)
-                        .any(|(a, b)| a.id != b.id || a.instrument != b.instrument || a.sample != b.sample)
-            }
-        };
+        let rebuild = forced
+            || match &last {
+                None => true,
+                Some(l) => {
+                    l.channels.len() != p.channels.len()
+                        || l.channels
+                            .iter()
+                            .zip(&p.channels)
+                            .any(|(a, b)| a.id != b.id || a.instrument != b.instrument || a.sample != b.sample)
+                }
+            };
         if rebuild {
             eng.send(Command::ClearChannels);
             self.live.clear();

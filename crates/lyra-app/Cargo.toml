@@ -14,6 +14,7 @@ lyra-plugin.workspace = true
 lyra-catalog.workspace = true
 lyra-fluttersine.workspace = true
 lyra-chrysalis.workspace = true
+lyra-dsp.workspace = true
 lyra-synth.workspace = true
 lyra-sampler.workspace = true
 lyra-engine.workspace = true

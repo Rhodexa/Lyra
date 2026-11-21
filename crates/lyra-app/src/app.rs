@@ -978,6 +978,11 @@ impl eframe::App for LyraApp {
             self.project.number_effects();
         }
         // ── Push changes to the engine ──
+        // Sample files rewritten this frame are read again, and their players remade.
+        for name in crate::samples::take_reloads() {
+            self.samples.forget(&name);
+            self.bridge.force_rebuild();
+        }
         if let Some(e) = &mut self.engine {
             let target = if self.ui.song_mode { Playing::Song } else { Playing::Pattern(self.ui.pattern) };
             self.bridge.sync(&self.project, target, e, &mut self.samples);

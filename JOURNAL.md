@@ -65,6 +65,10 @@ no marks would default to not urgent or 'coding teams judges'
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
+**Chrysalis's table studio (2026-11-21)**
+- [x] *(chat)* "It's very obviously missing its waveform editor"
+  *→ EDIT on each oscillator opens the table studio with a copy of the table it plays: draw a frame freehand, set its first 64 harmonics as bars, add / delete frames, MORPH everything between the first and the last frame (crossfade or spectral), resize to 8–256 frames, normalize, smooth, start over from a sine / saw / square / what's playing, and its own undo. Your table is a WAV in `~/.local/share/lyra/tables/`; with LIVE on, every stroke saves and the oscillator plays it at once (through the import, so a channel still has one imported table, shared by both oscillators).*
+
 **Automation on the knobs, turquoise, your presets, 17 new sounds (2026-11-20)**
 - [x] *(chat)* "Are the knobs moving with automation clips the synthesizer's concern?"
   *→ no: Lyra's (the host knows the curves and the playhead, the same way a CLAP host tells a plugin's GUI). While the song plays, every editor's knobs follow their automation: Chrysalis (its pictures too), Fluttersine, the plain editor, effect windows. The mixer faders don't yet.* (`d64ab09`)

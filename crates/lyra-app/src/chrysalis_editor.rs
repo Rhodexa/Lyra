@@ -28,6 +28,9 @@
 //! for an imported table). The pictures call `lyra_chrysalis` itself, so
 //! they show exactly what plays.
 
+#[path = "chrysalis_table.rs"]
+mod studio;
+
 use crate::flex::{self, Grow, Px};
 use crate::fm_editor::wheel_step;
 use crate::rack::tracked;
@@ -182,6 +185,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
     let [modulation, macros] = flex::row(mods, [Grow(1.0), Px(180.0)], GAP);
     mod_panel(ui, &mut ed, modulation);
     macros_panel(ui, &mut ed, macros);
+    studio::window(ui, &mut ed);
 }
 
 /// A child Ui filling `r` exactly (top-down, centred), greyed out unless `enabled`.
@@ -556,8 +560,8 @@ fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
     let on = ed.on(at(p::OSC_ON));
     let is_import = ed.choice(at(p::TABLE)) == IMPORTED;
     let [bar, scope, k1, k2] = flex::col(inner, [Px(KEY_H), Grow(1.0), Px(52.0), Px(52.0)], 6.0);
-    let [tog, table, load, name, warp_cap, warp_r] =
-        flex::row(bar, [Px(72.0), Px(124.0), Px(54.0), Grow(1.0), Px(40.0), Px(108.0)], 6.0);
+    let [tog, table, load, edit, name, warp_cap, warp_r] =
+        flex::row(bar, [Px(72.0), Px(124.0), Px(54.0), Px(50.0), Grow(1.0), Px(40.0), Px(108.0)], 6.0);
     let label = if o == 0 { "osc a" } else { "osc b" };
     place(ui, tog, ("chrys-osc-on", o), true, |ui| {
         toggle(ui, ed, at(p::OSC_ON), label, color, tog.size(), "Oscillator on / off")
@@ -570,6 +574,10 @@ fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
     let clicked = place(ui, load, ("chrys-osc-load", o), true, |ui| {
         key(ui, "load", load.size(), is_import && has, color, hint).clicked()
     });
+    let hint = "Make your own table: draw frames, set harmonics, morph (starts from this oscillator's table)";
+    if place(ui, edit, ("chrys-osc-edit", o), true, |ui| key(ui, "edit", edit.size(), false, color, hint).clicked()) {
+        studio::open(ui, ed, o);
+    }
     if clicked {
         if let Some(path) = rfd::FileDialog::new().add_filter("Audio", &["wav", "flac"]).pick_file() {
             ed.h.checkpoint(ed.p);
@@ -579,7 +587,7 @@ fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
     }
     if is_import {
         let text = ed.p.channels[ed.ch].sample.as_deref().map_or("no WAV loaded".into(), crate::samples::display_name);
-        ui.painter().text(name.left_center(), Align2::LEFT_CENTER, text, FontId::proportional(11.0), TEXT_DIM);
+        ui.painter_at(name).text(name.left_center(), Align2::LEFT_CENTER, text, FontId::proportional(11.0), TEXT_DIM);
     }
     caps(ui.painter(), warp_cap.right_center(), "warp", TEXT_FAINT, Align2::RIGHT_CENTER);
     place(ui, warp_r, ("chrys-osc-warp", o), true, |ui| {

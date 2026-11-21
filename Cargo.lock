@@ -1420,6 +1420,7 @@ dependencies = [
  "hound",
  "lyra-catalog",
  "lyra-chrysalis",
+ "lyra-dsp",
  "lyra-engine",
  "lyra-fluttersine",
  "lyra-model",
