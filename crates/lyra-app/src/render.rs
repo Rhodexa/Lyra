@@ -50,6 +50,34 @@ pub fn render(
     part: Part,
     progress: Option<&AtomicU32>,
 ) -> Result<Rendered, String> {
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: SAMPLE_RATE,
+        bits_per_sample: 24,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut wav = hound::WavWriter::create(path, spec).map_err(|e| format!("can't write {}: {e}", path.display()))?;
+    const FULL: f32 = 8_388_607.0; // 24-bit
+    let r = render_frames(project, samples, part, progress, |frames| {
+        for &s in frames {
+            wav.write_sample((s.clamp(-1.0, 1.0) * FULL) as i32).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })?;
+    wav.finalize().map_err(|e| format!("can't finish {}: {e}", path.display()))?;
+    Ok(r)
+}
+
+/// Render `part` of the song, handing each block of interleaved stereo frames
+/// (unclipped, 1.0 = 0 dBFS) to `sink`: the core of [`render`], also used to
+/// measure a mix without writing it ([`crate::report`]).
+pub fn render_frames(
+    project: &Project,
+    samples: &mut Samples,
+    part: Part,
+    progress: Option<&AtomicU32>,
+    mut sink: impl FnMut(&[f32]) -> Result<(), String>,
+) -> Result<Rendered, String> {
     let mut p = project.clone();
     match part {
         Part::Mix => {}
@@ -69,19 +97,11 @@ pub fn render(
     handle.send(Command::Seek(0.0));
     handle.send(Command::Play);
 
-    let spec = hound::WavSpec {
-        channels: 2,
-        sample_rate: SAMPLE_RATE,
-        bits_per_sample: 24,
-        sample_format: hound::SampleFormat::Int,
-    };
-    let mut wav = hound::WavWriter::create(path, spec).map_err(|e| format!("can't write {}: {e}", path.display()))?;
     let song_frames = (song_ticks as f64 * p.seconds_per_tick() * SAMPLE_RATE as f64).ceil() as usize;
     let max_frames = song_frames + (MAX_TAIL_S * SAMPLE_RATE as f64) as usize;
     let quiet_needed = (QUIET_S * SAMPLE_RATE as f64) as usize;
     let mut buf = vec![0.0f32; BLOCK * 2];
     let (mut done, mut quiet, mut peak) = (0usize, 0usize, 0.0f32);
-    const FULL: f32 = 8_388_607.0; // 24-bit
     while done < max_frames {
         engine.process(&mut buf, 2);
         let n = BLOCK.min(max_frames - done);
@@ -89,10 +109,8 @@ pub fn render(
             let level = frame[0].abs().max(frame[1].abs());
             peak = peak.max(level);
             quiet = if level < QUIET { quiet + 1 } else { 0 };
-            for &s in frame {
-                wav.write_sample((s.clamp(-1.0, 1.0) * FULL) as i32).map_err(|e| e.to_string())?;
-            }
         }
+        sink(&buf[..n * 2])?;
         done += n;
         handle.collect_garbage();
         if let Some(progress) = progress {
@@ -102,7 +120,6 @@ pub fn render(
             break;
         }
     }
-    wav.finalize().map_err(|e| format!("can't finish {}: {e}", path.display()))?;
     Ok(Rendered { seconds: done as f64 / SAMPLE_RATE as f64, peak })
 }
 
@@ -139,7 +156,7 @@ pub fn render_stems(
 }
 
 /// A channel name as a file name: no path separators or other troublemakers.
-fn file_safe(name: &str) -> String {
+pub(crate) fn file_safe(name: &str) -> String {
     let s: String = name.chars().map(|c| if c.is_alphanumeric() || " -_.()%".contains(c) { c } else { '_' }).collect();
     let s = s.trim().trim_start_matches('.').to_string();
     if s.is_empty() {

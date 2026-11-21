@@ -49,6 +49,7 @@ pub fn show(
                     ("Save as…", "Ctrl+Shift+S", Action::SaveAs),
                     ("Export WAV…", "Ctrl+E", Action::ExportWav),
                     ("Export stems…", "Ctrl+Shift+E", Action::ExportStems),
+                    ("Export data…", "", Action::ExportData),
                 ] {
                     if ui.add(egui::Button::new(label).shortcut_text(keys)).clicked() {
                         actions.push(action);

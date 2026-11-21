@@ -511,6 +511,32 @@ impl LyraApp {
         self.export = Some(Export { progress, thread });
     }
 
+    /// Export data: a saved song gets "<song> data" next to it, an unsaved
+    /// one asks where. Renders every stem to measure it, so it runs on a thread.
+    fn export_data(&mut self) {
+        if self.export.is_some() {
+            self.notify("Already exporting", false);
+            return;
+        }
+        let title = files::display_name(self.path.as_deref());
+        let dir = match &self.path {
+            Some(path) => crate::report::default_folder(path, &title),
+            None => match files::pick_folder("Export data: pick a folder") {
+                Some(d) => d.join(format!("{title} data")),
+                None => return,
+            },
+        };
+        let project = self.project.clone();
+        let progress = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let counter = progress.clone();
+        let thread = std::thread::spawn(move || {
+            let mut samples = crate::samples::Samples::default();
+            let written = crate::report::export(&project, &title, &mut samples, &dir, Some(&counter))?;
+            Ok(format!("Exported {} files to {}", written.len(), dir.display()))
+        });
+        self.export = Some(Export { progress, thread });
+    }
+
     fn poll_export(&mut self, ctx: &egui::Context) {
         let Some(export) = &self.export else { return };
         if !export.thread.is_finished() {
@@ -808,6 +834,7 @@ impl LyraApp {
             Action::Save => self.save(false),
             Action::SaveAs => self.save(true),
             Action::ExportWav | Action::ExportStems => self.export(a == Action::ExportStems),
+            Action::ExportData => self.export_data(),
             Action::Arrow { dy, .. } if dy != 0 => {
                 let last = self.project.channels.len().saturating_sub(1);
                 self.ui.selected =

@@ -81,6 +81,8 @@ pub enum Action {
     /// Render the song to a WAV file (Ctrl+E), or one WAV per channel (Ctrl+Shift+E).
     ExportWav,
     ExportStems,
+    /// MIDI, notes, chords and mix measurements in a "<song> data" folder.
+    ExportData,
 }
 
 #[derive(Default)]

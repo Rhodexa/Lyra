@@ -23,6 +23,7 @@ mod playlist;
 mod pool;
 mod rack;
 mod render;
+mod report;
 mod samples;
 mod theme;
 mod timeline;
@@ -39,6 +40,10 @@ fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|a| a == "--render") {
         std::process::exit(render::cli(&args[1..]));
+    }
+    // `lyra --export-data song.lyra [folder]`: MIDI, notes, chords and mix measurements.
+    if args.first().is_some_and(|a| a == "--export-data") {
+        std::process::exit(report::cli(&args[1..]));
     }
     // Chrysalis's built-in wavetables take a moment to build: start now, off the UI thread.
     lyra_chrysalis::warm_up();
