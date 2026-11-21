@@ -52,28 +52,33 @@ const fn hex(v: u32) -> Color32 {
 }
 
 /// Behind everything: teal-black, with violet glowing in at the corners.
-const VOID: Color32 = hex(0x08110f);
-const VIOLET_GLOW: Color32 = Color32::from_rgba_premultiplied(0x22, 0x14, 0x48, 0x60);
-const PANEL: Color32 = hex(0x0e1b1c);
+// Her mane is turquoise: so is the hero colour, and the ground leans teal,
+// a little lighter and softer than black.
+const VOID: Color32 = hex(0x0b1b1c);
+const VIOLET_GLOW: Color32 = Color32::from_rgba_premultiplied(0x26, 0x1a, 0x4c, 0x5a);
+const PANEL: Color32 = hex(0x12262a);
 /// Edges are darker than what they edge, never lighter.
-const PANEL_EDGE: Color32 = hex(0x070f10);
+const PANEL_EDGE: Color32 = hex(0x0a1618);
 /// Screens and recesses: darker than the panels.
-const SCREEN: Color32 = hex(0x060d0e);
+const SCREEN: Color32 = hex(0x091619);
 /// A control or segment under the mouse.
-const HOVER: Color32 = hex(0x16292b);
+const HOVER: Color32 = hex(0x1b3539);
 /// Lettering on a solid, lit colour.
-const INK_ON: Color32 = hex(0x041012);
-const GRID: Color32 = Color32::from_rgba_premultiplied(0x10, 0x2a, 0x2a, 0x80);
-const TEXT: Color32 = hex(0xcde8df);
-const TEXT_DIM: Color32 = hex(0x76968f);
-const TEXT_FAINT: Color32 = hex(0x445e5a);
+const INK_ON: Color32 = hex(0x06191b);
+const GRID: Color32 = Color32::from_rgba_premultiplied(0x15, 0x38, 0x3a, 0x80);
+const TEXT: Color32 = hex(0xd2efe8);
+const TEXT_DIM: Color32 = hex(0x82a7a1);
+const TEXT_FAINT: Color32 = hex(0x4f706c);
 
-const GREEN: Color32 = hex(0x8cff7a);
-const CYAN: Color32 = hex(0x45e6da);
-const LIME: Color32 = hex(0xc8ff5e);
-const AQUA: Color32 = hex(0x5cc8ff);
-const VIOLET: Color32 = hex(0x9b7bff);
-const OSC_COLORS: [Color32; 2] = [GREEN, CYAN];
+/// The hero: oscillator A, sub and noise, the voice, the nameplate.
+const TURQ: Color32 = hex(0x5ce8cf);
+/// The banner's green, softened: oscillator B.
+const MINT: Color32 = hex(0x9cf0a2);
+const LIME: Color32 = hex(0xcfe87c);
+const AQUA: Color32 = hex(0x79c8f2);
+/// Everything that moves the sound.
+const VIOLET: Color32 = hex(0xa58fff);
+const OSC_COLORS: [Color32; 2] = [TURQ, MINT];
 
 /// The level the pictures draw from: 128 harmonics, smooth but still sharp.
 const PICTURE_LEVEL: usize = 6;
@@ -277,6 +282,13 @@ fn readout_display(ui: &Ui, r: Rect) {
     screen(p, r);
     let shown = ui.ctx().data(|d| d.get_temp::<Readout>(readout_id()));
     let inner = r.shrink2(vec2(10.0, 6.0));
+    if shown.is_none() {
+        // Nothing touched yet: three holes of her wings, big to small.
+        let c = r.center();
+        for (dx, dy, rx, ry) in [(-22.0, 2.0, 15.0, 8.5), (8.0, -6.0, 10.0, 5.6), (30.0, 5.0, 6.0, 3.4)] {
+            wing_hole(p, c + vec2(dx, dy), rx, ry, -0.45, 0.8);
+        }
+    }
     if let Some(ro) = shown {
         // The editor calls the oscillators A and B; the saved names say 1 and 2.
         let name = ro.name.replace("Osc 1", "Osc A").replace("Osc 2", "Osc B");
@@ -410,12 +422,12 @@ fn well(ui: &mut Ui, ed: &mut Ed, id: usize, size: Vec2, color: Color32, hint: &
 // ───────────────────────────────────────────────────────────── header
 
 fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    panel(ui, r, "", GREEN);
+    panel(ui, r, "", TURQ);
     let p = ui.painter();
     // The nameplate: the emblem lights the bar around it, and its glow runs
     // out along the bar like the wings' trails.
     let c = r.center();
-    let glow = [(0.0, alpha(GREEN, 0.16)), (0.5, alpha(CYAN, 0.05)), (1.0, Color32::TRANSPARENT)];
+    let glow = [(0.0, alpha(TURQ, 0.18)), (0.5, alpha(TURQ, 0.05)), (1.0, Color32::TRANSPARENT)];
     theme::radial_circle(p, c, 190.0, c, &glow);
     for side in [-1.0f32, 1.0] {
         let n = 24;
@@ -424,7 +436,7 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
             let x = |t: f32| c.x + side * (60.0 + t * 230.0);
             let y = |t: f32| c.y + 14.0 - 10.0 * (t * PI).sin() * (1.0 - t);
             let a = (1.0 - t0).powi(2);
-            p.line_segment([pos2(x(t0), y(t0)), pos2(x(t1), y(t1))], stroke(1.2, alpha(CYAN, 0.5 * a)));
+            p.line_segment([pos2(x(t0), y(t0)), pos2(x(t1), y(t1))], stroke(1.2, alpha(TURQ, 0.5 * a)));
         }
     }
     let (tex, [w, h]) = theme::chrysalis_emblem(ui.ctx());
@@ -442,22 +454,22 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     // Right: the voice.
     let [_, knobs, switches] = flex::row(right, [Grow(1.0), Px(3.0 * 62.0), Px(140.0)], 10.0);
     let cells = flex::even_row(flex::center(knobs, vec2(knobs.width(), 60.0)), 3, 0.0);
-    knob_in(ui, ed, cells[0], p::VOLUME, "Volume", GREEN, true, 40.0);
-    knob_in(ui, ed, cells[1], p::AMP_VEL, "Velocity", GREEN, true, 40.0);
-    knob_in(ui, ed, cells[2], p::GLIDE, "Glide", GREEN, true, 40.0);
+    knob_in(ui, ed, cells[0], p::VOLUME, "Volume", TURQ, true, 40.0);
+    knob_in(ui, ed, cells[1], p::AMP_VEL, "Velocity", TURQ, true, 40.0);
+    knob_in(ui, ed, cells[2], p::GLIDE, "Glide", TURQ, true, 40.0);
     let [m1, m2] =
         flex::col(flex::center(switches, vec2(switches.width(), 2.0 * KEY_H + 6.0)), [Px(KEY_H), Px(KEY_H)], 6.0);
     let mut set = None;
     place(ui, m1, "chrys-mode", true, |ui| {
         let hint = "Mono: one note at a time, with legato and glide";
-        if let Some(k) = seg(ui, &["poly", "mono"], ed.choice(p::MODE), GREEN, m1.size(), hint) {
+        if let Some(k) = seg(ui, &["poly", "mono"], ed.choice(p::MODE), TURQ, m1.size(), hint) {
             set = Some((p::MODE, k));
         }
     });
     let glides = ed.v(p::GLIDE) > 0.0;
     place(ui, m2, "chrys-glide-mode", glides, |ui| {
         let hint = "Glide only between overlapping notes (legato), or on every note";
-        if let Some(k) = seg(ui, &["legato", "always"], ed.choice(p::GLIDE_MODE), GREEN, m2.size(), hint) {
+        if let Some(k) = seg(ui, &["legato", "always"], ed.choice(p::GLIDE_MODE), TURQ, m2.size(), hint) {
             set = Some((p::GLIDE_MODE, k));
         }
     });
@@ -487,7 +499,7 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         let s = if left { -1.0 } else { 1.0 };
         let c = rect.center();
         let pts = vec![c + vec2(-2.5 * s, -5.0), c + vec2(2.5 * s, 0.0), c + vec2(-2.5 * s, 5.0)];
-        p.add(Shape::line(pts, stroke(1.6, GREEN)));
+        p.add(Shape::line(pts, stroke(1.6, TURQ)));
         if resp.on_hover_text(if left { "Previous preset" } else { "Next preset" }).clicked() {
             pick = Some(if left { (at + n - 1) % n } else { (at + 1) % n });
         }
@@ -504,7 +516,7 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     if edited {
         tp.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", FontId::proportional(10.5), TEXT_DIM);
     }
-    chevron(p, field.right_center() - vec2(11.0, 1.0), 3.5, GREEN);
+    chevron(p, field.right_center() - vec2(11.0, 1.0), 3.5, TURQ);
     if let Some(step) = wheel_step(ui, field) {
         pick = Some((at as i32 + step).rem_euclid(n as i32) as usize);
     }
@@ -594,32 +606,32 @@ fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
 // ───────────────────────────────────────────────────────────── sub, noise, drive
 
 fn sub_panel(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let inner = panel(ui, r, "", GREEN);
+    let inner = panel(ui, r, "", TURQ);
     let [a, b] = flex::row(inner, [Grow(1.0), Grow(1.0)], 8.0);
     let [t, s1, s2, k] = flex::col(a, [Px(KEY_H), Px(KEY_H), Px(KEY_H), Grow(1.0)], 6.0);
     let sub = ed.on(p::SUB_ON);
     place(ui, t, "chrys-sub-on", true, |ui| {
-        toggle(ui, ed, p::SUB_ON, "sub", GREEN, t.size(), "Sub oscillator on / off")
+        toggle(ui, ed, p::SUB_ON, "sub", TURQ, t.size(), "Sub oscillator on / off")
     });
     let mut set = None;
     place(ui, s1, "chrys-sub-shape", sub, |ui| {
-        if let Some(k) = seg(ui, &["sine", "square"], ed.choice(p::SUB_SHAPE), GREEN, s1.size(), "Sub shape") {
+        if let Some(k) = seg(ui, &["sine", "square"], ed.choice(p::SUB_SHAPE), TURQ, s1.size(), "Sub shape") {
             set = Some((p::SUB_SHAPE, k));
         }
     });
     place(ui, s2, "chrys-sub-oct", sub, |ui| {
-        if let Some(k) = seg(ui, &["−1 oct", "−2 oct"], ed.choice(p::SUB_OCT), GREEN, s2.size(), "Below the note") {
+        if let Some(k) = seg(ui, &["−1 oct", "−2 oct"], ed.choice(p::SUB_OCT), TURQ, s2.size(), "Below the note") {
             set = Some((p::SUB_OCT, k));
         }
     });
-    knob_in(ui, ed, k, p::SUB_LEVEL, "Level", GREEN, sub, 40.0);
+    knob_in(ui, ed, k, p::SUB_LEVEL, "Level", TURQ, sub, 40.0);
     let [t2, ka, kb] = flex::col(b, [Px(KEY_H), Grow(1.0), Grow(1.0)], 6.0);
     let noise = ed.on(p::NOISE_ON);
     place(ui, t2, "chrys-noise-on", true, |ui| {
-        toggle(ui, ed, p::NOISE_ON, "noise", GREEN, t2.size(), "Noise on / off (a little different on each side)")
+        toggle(ui, ed, p::NOISE_ON, "noise", TURQ, t2.size(), "Noise on / off (a little different on each side)")
     });
-    knob_in(ui, ed, ka, p::NOISE_COLOR, "Colour", GREEN, noise, 40.0);
-    knob_in(ui, ed, kb, p::NOISE_LEVEL, "Level", GREEN, noise, 40.0);
+    knob_in(ui, ed, ka, p::NOISE_COLOR, "Colour", TURQ, noise, 40.0);
+    knob_in(ui, ed, kb, p::NOISE_LEVEL, "Level", TURQ, noise, 40.0);
     if let Some((id, k)) = set {
         ed.set(id, k as f32);
     }
@@ -1049,6 +1061,21 @@ fn panel(ui: &Ui, r: Rect, title: &str, _color: Color32) -> Rect {
     }
     caps(p, r.left_top() + vec2(PAD + 2.0, PAD + 6.0), title, TEXT_DIM, Align2::LEFT_CENTER);
     Rect::from_min_max(r.left_top() + vec2(PAD, PAD + TITLE_H), r.right_bottom() - vec2(PAD, PAD))
+}
+
+/// One hole of her wings: an oval cut into the plate (darker than it), with a
+/// faint turquoise rim; `fade` 0..1 dims it.
+fn wing_hole(p: &egui::Painter, c: Pos2, rx: f32, ry: f32, tilt: f32, fade: f32) {
+    let (s, co) = tilt.sin_cos();
+    let pts: Vec<Pos2> = (0..28)
+        .map(|k| {
+            let a = k as f32 / 28.0 * std::f32::consts::TAU;
+            let (x, y) = (rx * a.cos(), ry * a.sin());
+            c + vec2(x * co - y * s, x * s + y * co)
+        })
+        .collect();
+    p.add(Shape::convex_polygon(pts.clone(), SCREEN, egui::Stroke::NONE));
+    p.add(Shape::closed_line(pts, stroke(1.0, alpha(TURQ, 0.55 * fade))));
 }
 
 /// Small spaced capitals.
