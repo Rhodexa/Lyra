@@ -25,6 +25,7 @@ mod rack;
 mod render;
 mod report;
 mod samples;
+mod spectrogram;
 mod theme;
 mod timeline;
 mod transport;

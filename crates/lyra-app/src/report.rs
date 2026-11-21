@@ -15,6 +15,7 @@
 //! - `mix.md`: the mix measured: level per stem per four bars, stereo width,
 //!   and band balance (how much top end there is against the middle).
 //! - `levels.csv`: the same measurements per bar, for spreadsheets.
+//! - `spectrogram.png`: the mix over time, log frequency, colour = loudness.
 //!
 //! Everything comes from the project and from renders made the same way
 //! Export WAV makes them. Nothing here changes the song.
@@ -58,9 +59,14 @@ pub fn export(
         write(&format!("{}.mid", render::file_safe(title)), &midi(project, title))?,
         write("song.md", sheet(project, title).as_bytes())?,
     ];
-    let (md, csv) = mix_report(project, title, samples, progress)?;
+    let mut mono = Vec::new();
+    let (md, csv) = mix_report(project, title, samples, progress, &mut mono)?;
     written.push(write("mix.md", md.as_bytes())?);
     written.push(write("levels.csv", csv.as_bytes())?);
+    let frames_per_bar = TICKS_PER_BAR as f64 * project.seconds_per_tick() * SAMPLE_RATE as f64;
+    let bars = (project.song_length() / TICKS_PER_BAR) as usize;
+    let image = crate::spectrogram::png(&mono, SAMPLE_RATE as f32, frames_per_bar, bars)?;
+    written.push(write("spectrogram.png", &image)?);
     Ok(written)
 }
 
@@ -467,19 +473,32 @@ fn sheet(p: &Project, title: &str) -> String {
     }
 
     // Chords.
-    let _ = writeln!(s, "\n## Chords (estimated)\n");
-    let _ = writeln!(s, "Guessed from every pitched note sounding in each half bar, weighted by how long it sounds; \"/X\" is the lowest note. A guess, not the composer's intent.\n");
+    let _ = writeln!(s, "\n## Harmony, half bar by half bar\n");
+    let _ = writeln!(
+        s,
+        "Every pitched note sounding in each half bar (for at least a sixteenth), lowest first, chords and melody together: \
+         the song may not use chords as such, so read these as notes, not as chord symbols. \
+         \"Strongest\" are the pitch classes that sound longest. The guess is a chord name that fits those notes, \
+         made by a program. It is not the composer's intent.\n"
+    );
     let half = TICKS_PER_BAR / 2;
-    let mut line = Vec::new();
     for bar in 0..bars {
-        let a = chord_at(&pitched, bar * TICKS_PER_BAR, half);
-        let b = chord_at(&pitched, bar * TICKS_PER_BAR + half, half);
-        let cell = if a == b { a } else { format!("{a} {b}") };
-        line.push(cell);
-        if line.len() == 4 || bar + 1 == bars {
-            let first = bar + 2 - line.len() as u32;
-            let _ = writeln!(s, "- bars {first}–{}: | {} |", bar + 1, line.join(" | "));
-            line.clear();
+        for k in 0..2 {
+            let from = bar * TICKS_PER_BAR + k * half;
+            let keys = sounding(&pitched, from, half);
+            let at = format!("{}.{}", bar + 1, 1 + k * 2);
+            if keys.is_empty() {
+                let _ = writeln!(s, "- {at}: (no pitched notes)");
+                continue;
+            }
+            let names: Vec<String> = keys.iter().map(|&k| note_name(k)).collect();
+            let _ = writeln!(
+                s,
+                "- {at}: {} · strongest {} · guess {}",
+                names.join(" "),
+                strongest(&pitched, from, half).join(" "),
+                chord_at(&pitched, from, half)
+            );
         }
     }
 
@@ -617,6 +636,29 @@ const CHORDS: &[(&str, &[u8])] = &[
     ("7sus4", &[0, 5, 7, 10]),
     ("mMaj7", &[0, 3, 7, 11]),
 ];
+
+/// The distinct keys sounding for at least a sixteenth in [from, from + len), low to high.
+fn sounding(notes: &[(usize, u32, u32, u8, f32)], from: u32, len: u32) -> Vec<u8> {
+    let mut keys: Vec<u8> = notes
+        .iter()
+        .filter(|n| (n.1 + n.2).min(from + len).saturating_sub(n.1.max(from)) >= TICKS_PER_STEP)
+        .map(|n| n.3)
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    keys
+}
+
+/// Up to four pitch classes that sound longest in [from, from + len).
+fn strongest(notes: &[(usize, u32, u32, u8, f32)], from: u32, len: u32) -> Vec<&'static str> {
+    let mut w = [0u32; 12];
+    for n in notes {
+        w[n.3 as usize % 12] += (n.1 + n.2).min(from + len).saturating_sub(n.1.max(from));
+    }
+    let mut pcs: Vec<usize> = (0..12).filter(|&i| w[i] > 0).collect();
+    pcs.sort_by_key(|&i| std::cmp::Reverse(w[i]));
+    pcs.into_iter().take(4).map(|i| lyra_model::theory::NOTE_NAMES[i]).collect()
+}
 
 /// The chord sounding in [from, from + len), or "—" for silence.
 fn chord_at(notes: &[(usize, u32, u32, u8, f32)], from: u32, len: u32) -> String {
@@ -809,7 +851,14 @@ fn db(power: f32) -> f32 {
 }
 
 /// Render `part` and measure every bar of it (the tail is the last entry).
-fn measure(p: &Project, samples: &mut Samples, part: Part, bars: usize) -> Result<Vec<Bar>, String> {
+/// `keep`, if given, collects the mid (L+R)/2 signal for the spectrogram.
+fn measure(
+    p: &Project,
+    samples: &mut Samples,
+    part: Part,
+    bars: usize,
+    mut keep: Option<&mut Vec<f32>>,
+) -> Result<Vec<Bar>, String> {
     let frames_per_bar = TICKS_PER_BAR as f64 * p.seconds_per_tick() * SAMPLE_RATE as f64;
     let mut out = vec![Bar::default(); bars + 1];
     let mut bands: Vec<Band> = BANDS.iter().map(|b| Band::new(b.1, b.2)).collect();
@@ -829,6 +878,9 @@ fn measure(p: &Project, samples: &mut Samples, part: Part, bars: usize) -> Resul
                 let y = band.run(m);
                 b.bands[i] += (y * y) as f64;
             }
+            if let Some(keep) = keep.as_deref_mut() {
+                keep.push(m);
+            }
             frame += 1;
         }
         Ok(())
@@ -841,6 +893,7 @@ fn mix_report(
     title: &str,
     samples: &mut Samples,
     progress: Option<&AtomicU32>,
+    mono: &mut Vec<f32>,
 ) -> Result<(String, String), String> {
     let bars = (p.song_length() / TICKS_PER_BAR) as usize;
     let notes = song_notes(p);
@@ -855,7 +908,8 @@ fn mix_report(
     }
     let mut measured = Vec::new();
     for (k, (part, name)) in parts.iter().enumerate() {
-        measured.push((name.clone(), measure(p, samples, *part, bars)?));
+        let keep = (*part == Part::Mix).then_some(&mut *mono);
+        measured.push((name.clone(), measure(p, samples, *part, bars, keep)?));
         if let Some(progress) = progress {
             progress.store(((k + 1) * 1000 / parts.len()) as u32, Ordering::Relaxed);
         }
@@ -876,6 +930,12 @@ fn mix_report(
          Width is side against mid in dB (−∞ = mono, around −10 = gently wide, 0 = as much side as centre). \
          Bands are the mid (L+R) signal through 24 dB/octave filters.\n",
         SAMPLE_RATE
+    );
+    let _ = writeln!(
+        s,
+        "`spectrogram.png` (next to this file) shows the mix: time left to right with a numbered line every four bars, \
+         frequency bottom to top on a log scale from 20 Hz to 20 kHz (lines at 50, 100, 200, 500, 1k, 2k, 5k and 10k Hz), \
+         loudness as colour from black (90 dB below the loudest moment) through purple, red and orange to pale yellow.\n"
     );
     let _ = writeln!(s, "## Whole song\n");
     let _ = writeln!(
