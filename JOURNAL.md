@@ -63,9 +63,9 @@ no marks would default to not urgent or 'coding teams judges'
 
 **Engine robustness (2026-11-22)**
 - [x] Changing channels (add, remove, reorder, replace) rebuilt every engine channel, cutting off tails.
-  *→ the engine keeps the channels it still has and only makes new ones for new or swapped instruments; the rest ring on (COMMIT).*
-- [x] Notes played live from the typing keyboard didn't trigger choke groups. *→ they do (COMMIT).*
-- [x] A full command FIFO dropped commands silently. *→ they wait in a backlog and go out in order (COMMIT).*
+  *→ the engine keeps the channels it still has and only makes new ones for new or swapped instruments; the rest ring on (7cd5c85).*
+- [x] Notes played live from the typing keyboard didn't trigger choke groups. *→ they do (7cd5c85).*
+- [x] A full command FIFO dropped commands silently. *→ they wait in a backlog and go out in order (7cd5c85).*
 
 **Files tab (2026-11-22)**
 - [x] bug, pattern dropdown outgrows the screen and later patterns can be reached.
