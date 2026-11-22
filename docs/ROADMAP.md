@@ -44,7 +44,7 @@ built before the line it depends on.
 - [x] Audio clips in the arrangement: drop a sample on a track; shared like patterns (Ctrl+U makes a copy unique); trim each copy's ends; fades with curves (on the clip or in the audio-clip editor), gain, trim; each track picks the insert its audio plays into
 - [x] Lyra's logo as its window and desktop icon (`lyra --install-desktop`)
 - [x] The browser in tabs (Files, Instruments, Effects): search every folder by name, add any folder (your animation project's voice folder), each file's length
-- [ ] Audio stored with the project: an `audio/` folder next to the `.lyra`, every path relative to the project file, Collect copies outside files in, then the destructive editor and recording below
+- [x] Audio stored with the project: sounds in the song's folder or the one above saved relative to the song; Collect copies the rest into `audio/`, then the destructive editor and recording below
 - More waveform editing: split at the playhead, normalize, reverse; clips that follow tempo changes
 - The audio-clip editor as a small *destructive* recording editor (Rhodexa's idea; non-destructive editing is the arrangement's job): New, Save, Record (always appends to the end of the audio), select a range, then Silence it (clears the samples) or Collapse it (closes the gap: everything after moves up, so cutting from the start shifts the rest to the beginning); Invert selection. A few tools, on the sample data itself
 - Sample browser: drag files in from the file manager (needs window drag-and-drop on Wayland)

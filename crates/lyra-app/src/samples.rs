@@ -8,7 +8,12 @@
 //!
 //! **Names in projects.** A sample from Lyra's own library is saved as
 //! `bundled:<path inside assets/samples>`, so projects don't break when Lyra
-//! is installed somewhere else; anything else is saved as its full path.
+//! is installed somewhere else. A file in the song's folder, or the folder
+//! above it, is saved relative to the song (`project:audio/take 1.wav`,
+//! `project:../library/kick.wav`), so a song folder, or a folder of songs
+//! sharing a library, can move as a whole. Anything else is saved as its
+//! full path. In memory every name is a full path (or `bundled:`); the
+//! conversion happens only on save and open (`for_saving`, `from_saved`).
 //!
 //! **Decoding** (WAV via `hound`, FLAC via `claxon`) happens on the UI thread,
 //! once per file; the result is shared with the audio thread through an `Arc`.
@@ -19,6 +24,51 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const BUNDLED: &str = "bundled:";
+const PROJECT: &str = "project:";
+
+/// A name as it is written into a song saved in folder `dir`.
+pub fn for_saving(name: &str, dir: &Path) -> String {
+    if name.starts_with(BUNDLED) {
+        return name.to_string();
+    }
+    let path = Path::new(name);
+    if let Ok(rel) = path.strip_prefix(dir) {
+        return format!("{PROJECT}{}", rel.to_string_lossy());
+    }
+    // The folder above (a library shared by a folder of songs), but never
+    // the filesystem's root: that would make every path "relative".
+    let up = dir.parent().filter(|up| up.parent().is_some());
+    match up.and_then(|up| path.strip_prefix(up).ok()) {
+        Some(rel) => format!("{PROJECT}../{}", rel.to_string_lossy()),
+        None => name.to_string(),
+    }
+}
+
+/// A name read from a song saved in folder `dir`, as a full path again.
+pub fn from_saved(name: &str, dir: &Path) -> String {
+    match name.strip_prefix(PROJECT) {
+        Some(rel) => {
+            // Lexically: `..` goes up a folder (the files may not exist).
+            let mut path = dir.to_path_buf();
+            for part in Path::new(rel).components() {
+                match part {
+                    std::path::Component::ParentDir => {
+                        path.pop();
+                    }
+                    std::path::Component::Normal(p) => path.push(p),
+                    _ => {}
+                }
+            }
+            path.to_string_lossy().into_owned()
+        }
+        None => name.to_string(),
+    }
+}
+
+/// Whether a stored name is one of Lyra's own samples.
+pub fn is_bundled(name: &str) -> bool {
+    name.starts_with(BUNDLED)
+}
 
 /// Where Lyra's own samples live.
 pub fn bundled_root() -> PathBuf {
@@ -280,6 +330,26 @@ pub fn scan(path: &Path, name: &str) -> Option<Folder> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_are_saved_relative_to_the_song() {
+        let dir = Path::new("/home/me/Music/Lyra/My Song");
+        let round = |name: &str, saved: &str| {
+            assert_eq!(for_saving(name, dir), saved);
+            assert_eq!(from_saved(saved, dir), name);
+        };
+        round("/home/me/Music/Lyra/My Song/audio/take 1.wav", "project:audio/take 1.wav");
+        round("/home/me/Music/Lyra/library/kick.wav", "project:../library/kick.wav");
+        round("/home/me/Voices/line.wav", "/home/me/Voices/line.wav");
+        round("bundled:Starter Kit/Kicks/bd_haus.flac", "bundled:Starter Kit/Kicks/bd_haus.flac");
+        // Opened from somewhere else, the same song finds its files there.
+        assert_eq!(
+            from_saved("project:../library/kick.wav", Path::new("/mnt/usb/My Song")),
+            "/mnt/usb/library/kick.wav"
+        );
+        // Never relative to the filesystem's root.
+        assert_eq!(for_saving("/etc/x.wav", Path::new("/song")), "/etc/x.wav");
+    }
 
     #[test]
     fn the_starter_kit_decodes() {

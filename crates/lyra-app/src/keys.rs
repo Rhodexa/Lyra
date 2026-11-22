@@ -78,6 +78,8 @@ pub enum Action {
     OpenBackup,
     Save,
     SaveAs,
+    /// Copy the files the song uses into its folder's `audio/`.
+    Collect,
     /// Render the song to a WAV file (Ctrl+E), or one WAV per channel (Ctrl+Shift+E).
     ExportWav,
     ExportStems,

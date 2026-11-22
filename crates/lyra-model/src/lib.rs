@@ -784,6 +784,13 @@ impl Project {
         self.audio.iter().position(|a| a.id == id)
     }
 
+    /// Every file name the project refers to: samplers' samples and audio
+    /// clips' sounds (the app decides what a name means).
+    pub fn file_names_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        let channels = self.channels.iter_mut().filter_map(|c| c.sample.as_mut());
+        channels.chain(self.audio.iter_mut().map(|a| &mut a.sample))
+    }
+
     pub fn audio(&self, id: AudioId) -> Option<&Audio> {
         self.audio.iter().find(|a| a.id == id)
     }

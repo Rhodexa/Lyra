@@ -586,6 +586,29 @@ impl LyraApp {
         }
     }
 
+    /// Collect: the song's folder gets a copy of every file it uses from
+    /// elsewhere, and the song is saved pointing at them. An unsaved song is
+    /// saved first (it needs a folder).
+    fn collect(&mut self) {
+        if self.path.is_none() {
+            self.save(true);
+        }
+        let Some(path) = self.path.clone() else { return };
+        let before = self.project.clone();
+        match files::collect(&mut self.project, &path) {
+            Ok((_, 0)) if self.project == before => self.notify("Every file is already in the song's folder", false),
+            Ok((copied, missing)) => {
+                if self.project != before {
+                    self.save(false);
+                }
+                let lost =
+                    if missing > 0 { format!(" · {missing} missing, left as they were") } else { String::new() };
+                self.notify(&format!("Copied {copied} files into audio/{lost}"), missing > 0);
+            }
+            Err(e) => self.notify(&format!("Collect failed: {e}"), true),
+        }
+    }
+
     /// Window title ("My Song • — Lyra" with unsaved changes) and the periodic backup.
     fn housekeeping(&mut self, ctx: &egui::Context) {
         let dirty = self.project != self.saved;
@@ -856,6 +879,7 @@ impl LyraApp {
             Action::OpenBackup => self.leave(ctx, Leave::OpenBackup),
             Action::Save => self.save(false),
             Action::SaveAs => self.save(true),
+            Action::Collect => self.collect(),
             Action::ExportWav | Action::ExportStems => self.export(a == Action::ExportStems),
             Action::ExportData => self.export_data(),
             Action::Arrow { dy, .. } if dy != 0 => {
