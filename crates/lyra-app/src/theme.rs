@@ -228,9 +228,11 @@ pub struct Textures {
     logo: TextureHandle,
 }
 
-/// Raw RGBA pixels, pre-converted from `assets/icon.png` so the app needs no
+/// Raw RGBA pixels, pre-converted from `docs/artwork/lyra/logo_simple_color.png` so the app needs no
 /// image-decoding library. Regenerate with Pillow if the icon changes:
-/// `Image.open("assets/icon.png").convert("RGBA").resize((48, 48), Image.LANCZOS).tobytes()`
+/// trim to the drawing, pad square, then
+/// `.convert("RGBA").resize((48, 48), Image.LANCZOS).tobytes()` (and 128 for the
+/// window icon, 256 as `icon_256.png` for `lyra --install-desktop`).
 pub const LOGO_48: &[u8] = include_bytes!("../assets/logo_48.rgba");
 pub const ICON_128: &[u8] = include_bytes!("../assets/icon_128.rgba");
 

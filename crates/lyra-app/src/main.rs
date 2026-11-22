@@ -11,6 +11,7 @@ mod browser;
 mod chrysalis_editor;
 mod demo;
 mod design;
+mod desktop;
 mod devtools;
 mod editor;
 mod files;
@@ -45,6 +46,10 @@ fn main() -> eframe::Result {
     // `lyra --export-data song.lyra [folder]`: MIDI, notes, chords and mix measurements.
     if args.first().is_some_and(|a| a == "--export-data") {
         std::process::exit(report::cli(&args[1..]));
+    }
+    // `lyra --install-desktop`: the desktop entry and icon (so Wayland shows Lyra's logo).
+    if args.first().is_some_and(|a| a == "--install-desktop") {
+        std::process::exit(desktop::cli());
     }
     // Chrysalis's built-in wavetables take a moment to build: start now, off the UI thread.
     lyra_chrysalis::warm_up();

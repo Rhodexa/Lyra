@@ -18,6 +18,7 @@ no marks would default to not urgent or 'coding teams judges'
 *Things you wish Lyra did.*
 - [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
 - [ ] vertical scroll bar could be slightly wider and zoom on the center
+- [ ] ~ *(from chat, 2026-11-22, deferred)* The top bar's buttons for opening sections came from FL and are now unneeded and confusing. Drop them; add a small bar at the bottom that opens and closes the bottom area; better keys (rough idea: F1 left panel, F4 right panel, F2/F3 bottom area).
 
 ## Questions for Claude
 
@@ -29,7 +30,7 @@ no marks would default to not urgent or 'coding teams judges'
 *My own small to-dos, kept here so they don't get lost.*
 
 - [ ] *(from chat, 2026-11-16)* The instrument window's top bar (name field, "Lyra FM", mixer dropdown) looks out of place above the Fluttersine rack: restyle it in the plate language, later. Also still open: rename "Lyra FM" to Fluttersine (one word in `lyra-dsp`).
-- [ ] Remember sizes / zoom between runs (needs settings saving, comes with project save/load). Until then, "Copy as code" in F12 and I'll make your numbers the defaults.
+- [ ] Remember sizes / zoom between runs? You'd rather Lyra remembered as little as possible (2026-11-22), so this waits until a size really bothers you. "Copy as code" in F12 and I'll make your numbers the defaults.
 - [ ] Wheel-over-note changes velocity only while *hovering* a note. With a selection but no hover, the wheel still scrolls, otherwise you couldn't scroll while anything is selected. Tell me if you want it the other way.
 
 - [ ] *(deferred, 2026-11-19)* The ↕ gain grip sits in the middle of a clip (or of its frame in the audio-clip editor), so on a clip wider than the view it can be off screen. Fix: keep it in the middle of the clip's *visible* part.
@@ -49,7 +50,7 @@ no marks would default to not urgent or 'coding teams judges'
   - **Chrysalis's vowel knob runs A–E–I–O–U.** Morphing "oo" to "ah" passes through "ee". Ordering it U–O–A–E–I (back of the mouth to front) would make every neighbour a natural glide: oo, oh, ah, eh, ee. Presets would need their vowels remapped (no file compat needed yet).
   - **Stem export is slow.** 14 stems took 174 s against 17 s for the mix, because every stem runs every instrument and only mutes the others. Skipping muted channels, or one pass that taps every channel, would make it about as fast as one render.
 
-- [ ] KDE shows a generic "W" icon for Lyra (title bar and taskbar): Wayland takes the icon from a `.desktop` file, which Lyra doesn't have yet. Needs a `lyra.desktop` + icon install (app id `lyra`).
+- [ ] KDE shows a generic "W" icon for Lyra: **Rhodexa, run `cargo run --release -- --install-desktop` once** and tell me if the taskbar shows the logo. Then the logo can leave the toolbar (your wish above).
 - [ ] *From the manual pass (verified, not urgent):*
   - Changing channels (add, remove, reorder, replace) rebuilds every engine channel, which cuts off any tails still ringing. Make it insert/remove just the one channel.
   - Notes played live from the typing keyboard don't trigger choke groups.

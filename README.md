@@ -11,6 +11,12 @@ cargo run --release
 
 On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 
+To give Lyra its icon in the taskbar and the app menu, run once (and again if the binary moves):
+
+```bash
+cargo run --release -- --install-desktop
+```
+
 ## Play
 
 | Do | How |

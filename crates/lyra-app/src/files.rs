@@ -11,9 +11,14 @@
 use lyra_model::{file, Project};
 use std::path::{Path, PathBuf};
 
+/// `$XDG_DATA_HOME`, else `~/.local/share`.
+pub fn xdg_data_home() -> PathBuf {
+    std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|| home().join(".local/share"))
+}
+
 /// `$XDG_DATA_HOME/lyra`, else `~/.local/share/lyra`.
 pub fn data_dir() -> PathBuf {
-    let base = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|| home().join(".local/share"));
+    let base = xdg_data_home();
     base.join("lyra")
 }
 
