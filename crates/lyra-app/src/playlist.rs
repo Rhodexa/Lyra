@@ -204,6 +204,8 @@ struct FadeGeo {
     x_in: f32,
     x_out: f32,
     x_end: f32,
+    /// The arrangement's visible left and right edges.
+    view: (f32, f32),
 }
 
 fn fade_geo(v: &View, p: &Project, c: &Clip) -> FadeGeo {
@@ -215,7 +217,7 @@ fn fade_geo(v: &View, p: &Project, c: &Clip) -> FadeGeo {
     let px = |secs: f32| secs / spt * v.time.ppt;
     let x_in = (x0 + px(c.fade_in.len)).min(x_end);
     let x_out = (x_end - px(c.fade_out.len)).max(x0);
-    FadeGeo { body, handles_y: strip.bottom(), x0, x_in, x_out, x_end }
+    FadeGeo { body, handles_y: strip.bottom(), x0, x_in, x_out, x_end, view: (v.grid.left(), v.grid.right()) }
 }
 
 /// The part of an audio clip's handles a press lands on.
@@ -252,9 +254,11 @@ fn curve_mid(g: &FadeGeo, end: End, tension: f32) -> Option<Pos2> {
         .then(|| pos2((f0 + f1) * 0.5, g.body.bottom() - lyra_engine::fade_curve(0.5, tension) * g.body.height()))
 }
 
-/// The gain grip sits in the middle of the sound.
+/// The gain grip sits in the middle of the sound's visible part (so a clip
+/// wider than the view still has it in reach).
 fn gain_pos(g: &FadeGeo) -> Pos2 {
-    pos2((g.x0 + g.x_end) * 0.5, g.body.center().y)
+    let (l, r) = (g.x0.max(g.view.0), g.x_end.min(g.view.1));
+    pos2((l + r) * 0.5, g.body.center().y)
 }
 
 /// The handle under `pos`, on the clip it hovers (only that clip shows them).
@@ -416,7 +420,7 @@ impl Playlist {
         // win egui's hit test over the docked panels' resize edges.
         let (rect, _resp) = ui.allocate_exact_size(size, Sense::hover());
         // The vertical bar runs down the right of the grid, thinner than the overview.
-        let vbar_w = (m.overview_h * 0.6).round();
+        let vbar_w = VBar::width();
         let right = rect.right() - vbar_w - 2.0;
         let overview_r =
             Rect::from_min_max(pos2(rect.left() + HEADER_W, rect.top()), pos2(right, rect.top() + m.overview_h));
@@ -1318,8 +1322,7 @@ fn paint_curve(
 /// A pattern clip's body: note silhouettes of every channel, repeated across the clip.
 fn paint_notes(painter: &egui::Painter, v: &View, p: &Project, c: &Clip, pat: &lyra_model::Pattern, body: Rect) {
     let body_r = body.shrink2(vec2(2.0, 2.0));
-    let (lo, hi) = pat.notes.values().flatten().fold((127u8, 0u8), |(lo, hi), n| (lo.min(n.key), hi.max(n.key)));
-    let span = (hi.saturating_sub(lo) as f32).max(12.0);
+    let rows = crate::pool::NoteRows::new(p, pat);
     let clipped = painter.with_clip_rect(body_r.intersect(v.grid));
     // Where the pattern starts over.
     for t in c.pattern_restarts(pat) {
@@ -1331,7 +1334,7 @@ fn paint_notes(painter: &egui::Painter, v: &View, p: &Project, c: &Clip, pat: &l
         for (at, len, n) in c.pattern_notes(pat, ch.id) {
             let x0 = v.x((c.start + at) as f32);
             let x1 = v.x((c.start + at + len) as f32);
-            let y = body_r.bottom() - (n.key - lo) as f32 / span * (body_r.height() - 2.0);
+            let y = rows.y(body_r, ch.id, n.key) + 1.5;
             clipped.rect_filled(Rect::from_min_max(pos2(x0, y - 1.5), pos2(x1.max(x0 + 1.5), y)), cr(0), ink);
         }
     }
@@ -1429,5 +1432,27 @@ fn paint_audio(
     if gain_hot {
         let text = format!("{:+.1} dB", c.gain);
         clipped.text(at + vec2(9.0, 0.0), Align2::LEFT_CENTER, text, FontId::monospace(m.text_small), light.hi);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_gain_grip_stays_on_screen() {
+        let body = Rect::from_min_max(pos2(-5000.0, 0.0), pos2(9000.0, 40.0));
+        let g = FadeGeo {
+            body,
+            handles_y: 0.0,
+            x0: -5000.0,
+            x_in: -4990.0,
+            x_out: 8990.0,
+            x_end: 9000.0,
+            view: (200.0, 1400.0),
+        };
+        assert_eq!(gain_pos(&g).x, 800.0, "the middle of what you see");
+        let short = FadeGeo { x0: 300.0, x_end: 500.0, ..g };
+        assert_eq!(gain_pos(&short).x, 400.0, "a clip in view keeps it in its own middle");
     }
 }

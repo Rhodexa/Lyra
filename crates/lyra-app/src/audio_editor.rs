@@ -185,6 +185,9 @@ struct Frame {
     x_in: f32,
     x_out: f32,
     handles_y: f32,
+    /// The gain grip: the middle of the part of the frame on screen, so a
+    /// clip wider than the view still has it in reach.
+    gain_at: Pos2,
     reverse: bool,
 }
 
@@ -202,7 +205,9 @@ impl Frame {
         } else {
             (v.x(from + fi).min(rect.right()), v.x(to - fo).max(rect.left()))
         };
-        Frame { clip, from, to, rect, x_in, x_out, handles_y: rect.top() + 12.0, reverse: c.reverse }
+        let (l, r) = (rect.left().max(v.wave.left()), rect.right().min(v.wave.right()));
+        let gain_at = pos2((l + r) * 0.5, rect.center().y);
+        Frame { clip, from, to, rect, x_in, x_out, handles_y: rect.top() + 12.0, gain_at, reverse: c.reverse }
     }
 
     /// A fade's stretch on screen and the shape it has there: (from x, to x,
@@ -248,7 +253,7 @@ fn hover(v: &View, p: &Project, a: &lyra_model::Audio, frame: Option<&Frame>, po
         if near(pos2(f.x_out, f.handles_y)) {
             return Some(Hover::Fade(End::Out));
         }
-        if pos.distance(f.rect.center()) <= HANDLE_R + 4.0 {
+        if pos.distance(f.gain_at) <= HANDLE_R + 4.0 {
             return Some(Hover::Gain);
         }
         if f.curve_mid(End::In, c.fade_in.tension).is_some_and(near) {
@@ -596,11 +601,11 @@ impl AudioEditor {
                 );
             }
             let gain_hot = hv == Some(Hover::Gain);
-            waveform::paint_gain(&painter, f.rect.center(), light.hi, gain_hot, waveform::LARGE);
+            waveform::paint_gain(&painter, f.gain_at, light.hi, gain_hot, waveform::LARGE);
             if gain_hot || c.gain != 0.0 {
                 let text = format!("{:+.1} dB", c.gain);
                 painter.text(
-                    f.rect.center() + vec2(12.0, 0.0),
+                    f.gain_at + vec2(12.0, 0.0),
                     Align2::LEFT_CENTER,
                     text,
                     FontId::monospace(m.text_small),

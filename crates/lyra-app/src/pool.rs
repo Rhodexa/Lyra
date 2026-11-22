@@ -125,18 +125,57 @@ pub fn patterns(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState)
     }
 }
 
+/// Where a pattern's notes sit in a small preview (the Patterns tab, pattern
+/// clips). An instrument that only ever plays one key here (a drum) gets a
+/// lane of its own along the bottom, in rack order; the others share the
+/// pitch range above them.
+pub struct NoteRows {
+    drums: Vec<lyra_model::ChannelId>,
+    /// The part of the height the drum lanes take (all of it with no melody).
+    drum_share: f32,
+    lo: u8,
+    span: f32,
+}
+
+impl NoteRows {
+    pub fn new(p: &Project, pat: &lyra_model::Pattern) -> Self {
+        let one_key = |id| {
+            let mut keys = pat.notes(id).iter().map(|n| n.key);
+            keys.next().is_some_and(|k| keys.all(|o| o == k))
+        };
+        let drums: Vec<_> = p.channels.iter().map(|c| c.id).filter(|&id| one_key(id)).collect();
+        let tunes = p.channels.iter().filter(|c| !drums.contains(&c.id)).flat_map(|c| pat.notes(c.id));
+        let (lo, hi) = tunes.fold((127u8, 0u8), |(lo, hi), n| (lo.min(n.key), hi.max(n.key)));
+        let melody = lo <= hi;
+        let n = drums.len() as f32;
+        let drum_share = if !melody { 1.0 } else { (n / (n + 3.0)).min(0.5) };
+        Self { drums, drum_share, lo, span: (hi.saturating_sub(lo) as f32).max(12.0) }
+    }
+
+    /// A note's height in `r`: the bottom edge of its bar.
+    pub fn y(&self, r: Rect, ch: lyra_model::ChannelId, key: u8) -> f32 {
+        let h = r.height() - 2.0;
+        let up = match self.drums.iter().position(|&d| d == ch) {
+            // First channel on top, like the rack.
+            // (A little under the line, so the top lane never touches the lowest melody note.)
+            Some(i) => (self.drums.len() - i) as f32 / self.drums.len() as f32 * self.drum_share * 0.85,
+            None => self.drum_share + key.saturating_sub(self.lo) as f32 / self.span * (1.0 - self.drum_share),
+        };
+        r.bottom() - up * h
+    }
+}
+
 /// One loop of pattern `i`'s notes in `r`, each instrument in its colour.
 fn paint_notes(painter: &egui::Painter, r: Rect, p: &Project, i: usize) {
     let pat = &p.patterns[i];
     let len = (pat.play_length() * lyra_model::TICKS_PER_STEP).max(1) as f32;
-    let (lo, hi) = pat.notes.values().flatten().fold((127u8, 0u8), |(lo, hi), n| (lo.min(n.key), hi.max(n.key)));
-    let span = (hi.saturating_sub(lo) as f32).max(12.0);
+    let rows = NoteRows::new(p, pat);
     for ch in &p.channels {
         let ink = theme::channel_light(ch.color).mid.gamma_multiply(0.85);
         for n in pat.notes(ch.id) {
             let x0 = r.left() + n.start as f32 / len * r.width();
             let x1 = r.left() + (n.start + n.len) as f32 / len * r.width();
-            let y = r.bottom() - (n.key - lo) as f32 / span * (r.height() - 2.0);
+            let y = rows.y(r, ch.id, n.key) + 1.5;
             painter.rect_filled(Rect::from_min_max(pos2(x0, y - 1.5), pos2(x1.max(x0 + 1.5), y)), cr(0), ink);
         }
     }

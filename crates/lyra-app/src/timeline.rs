@@ -178,12 +178,17 @@ pub enum VDrag {
 
 /// The overview bar's vertical twin, beside a row editor: drag the thumb to
 /// scroll, drag an end to zoom the rows, click the track to jump there, wheel
-/// over it to zoom (keeping the top row still). Thinner than the overview.
+/// over it to zoom (keeping the middle row still). Thinner than the overview.
 pub struct VBar {
     pub rect: Rect,
 }
 
 impl VBar {
+    /// How wide every row editor's bar is.
+    pub fn width() -> f32 {
+        (theme::m().overview_h * 0.7).round()
+    }
+
     fn span(&self, v: &RowView) -> f32 {
         v.total.max(v.start + v.visible).max(1.0)
     }
@@ -230,10 +235,12 @@ impl VBar {
         }
     }
 
-    /// Wheel over the bar: zoom the rows, keeping the top row still.
+    /// Wheel over the bar: zoom the rows around the middle of the view.
     pub fn wheel_zoom(&self, v: &mut RowView, wheel_y: f32, min_rows: f32, max_rows: f32) {
         if wheel_y != 0.0 {
+            let middle = v.start + v.visible * 0.5;
             v.visible = (v.visible * (-wheel_y * 0.004).exp()).clamp(min_rows, max_rows);
+            v.start = (middle - v.visible * 0.5).clamp(0.0, (v.total - v.visible).max(0.0));
         }
     }
 

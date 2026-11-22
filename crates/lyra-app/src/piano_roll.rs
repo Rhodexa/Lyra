@@ -302,7 +302,7 @@ impl PianoRoll {
         // win egui's hit test over the docked panels' resize edges.
         let (rect, _resp) = ui.allocate_exact_size(size, Sense::hover());
         // The vertical bar runs down the right of the grid, thinner than the overview.
-        let vbar_w = (m.overview_h * 0.6).round();
+        let vbar_w = VBar::width();
         let right = rect.right() - vbar_w - 2.0;
         let overview_r =
             Rect::from_min_max(pos2(rect.left() + m.keys_w, rect.top()), pos2(right, rect.top() + m.overview_h));
