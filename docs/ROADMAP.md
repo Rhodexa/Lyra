@@ -12,7 +12,7 @@ built before the line it depends on.
 - [x] First build, plus fixing measured audio underruns (512-frame default, live underrun monitor)
 - [ ] Tune the drum sounds by ear
 
-## M2: Patterns & melody (current)
+## M2: Patterns & melody
 - [x] Lyra Synth: poly, unison ×7, sub, SVF filter + envelope, ADSR, 7 presets
 - [x] Engine tracks held notes, so notes never hang when edited mid-play
 - [x] Piano roll: FL-style mouse, chord stamp in key, scale highlight, velocity lane, ghosts
@@ -37,20 +37,21 @@ built before the line it depends on.
 - Built-in FX: EQ, compressor, delay, reverb, filter, sidechain pump
 - Save/load projects; render to WAV (the same engine running offline)
 
-## M4: Audio
+## M4: Audio (current)
 - [x] Sampler instrument (one-shot / hold, root key, tune, attack/release, start), WAV + FLAC
 - [x] Starter Kit: 65 CC0 one-shots (from Sonic Pi via Freesound, credits per file)
 - [x] Browser: sample library (kit + your folder), click to hear, double-click / drag onto the plugin rack
 - [x] Audio clips in the arrangement: drop a sample on a track; shared like patterns (Ctrl+U makes a copy unique); trim each copy's ends; fades with curves (on the clip or in the audio-clip editor), gain, trim; each track picks the insert its audio plays into
-- [ ] Settings saving (layout, sizes, zoom); WAV export
-- [ ] Add any folder to the browser (your animation project's voice folder), not only the library
+- [ ] Settings saving (layout, sizes, zoom)
+- [x] The browser in tabs (Files, Instruments, Effects): search every folder by name, add any folder (your animation project's voice folder), each file's length
+- [ ] Audio stored with the project (folder layout still to decide), then the destructive editor and recording below
 - More waveform editing: split at the playhead, normalize, reverse; clips that follow tempo changes
 - The audio-clip editor as a small *destructive* recording editor (Rhodexa's idea; non-destructive editing is the arrangement's job): New, Save, Record (always appends to the end of the audio), select a range, then Silence it (clears the samples) or Collapse it (closes the gap: everything after moves up, so cutting from the start shifts the rest to the beginning); Invert selection. A few tools, on the sample data itself
 - Sample browser: drag files in from the file manager (needs window drag-and-drop on Wayland)
 
 ## M5: Plugins & automation
 - CLAP hosting with plugin windows (third-party synths/FX)
-- Automation clips
+- [x] Automation clips: shared curves, several links each with its own range, chase and hold; the automation editor; right-click a control → Automate
 - Docs for writing Lyra/CLAP plugins
 
 ## Later

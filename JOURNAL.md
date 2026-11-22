@@ -13,7 +13,6 @@ no marks would default to not urgent or 'coding teams judges'
 ## Friction
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
 // - [ ] ? bug or missing?
-- [ ] bug, pattern dropdown outgrows the screen and later patterns can be reached. 
 
 ## Wishes
 *Things you wish Lyra did.*
@@ -64,6 +63,10 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Files tab (2026-11-22)**
+- [x] bug, pattern dropdown outgrows the screen and later patterns can be reached.
+  *→ the dropdown is gone: patterns live in their own tab of the right panel, which scrolls (a82f65a).*
 
 **Chrysalis's table studio (2026-11-21)**
 - [x] *(chat)* "It's very obviously missing its waveform editor"
