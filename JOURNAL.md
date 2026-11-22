@@ -51,10 +51,6 @@ no marks would default to not urgent or 'coding teams judges'
   - **Stem export is slow.** 14 stems took 174 s against 17 s for the mix, because every stem runs every instrument and only mutes the others. Skipping muted channels, or one pass that taps every channel, would make it about as fast as one render.
 
 - [ ] KDE shows a generic "W" icon for Lyra: **Rhodexa, run `cargo run --release -- --install-desktop` once** and tell me if the taskbar shows the logo. Then the logo can leave the toolbar (your wish above).
-- [ ] *From the manual pass (verified, not urgent):*
-  - Changing channels (add, remove, reorder, replace) rebuilds every engine channel, which cuts off any tails still ringing. Make it insert/remove just the one channel.
-  - Notes played live from the typing keyboard don't trigger choke groups.
-  - If the engine's command FIFO is ever full, a dropped `SetSequence` goes unnoticed (the bridge thinks it was sent).
 
 - [ ] *Lyra FM, notes from the port (behaviour kept from Fluttersine for now):*
   - Saw/pulse stop being band-limited while modulated, so some aliasing on bright FM patches.
@@ -64,6 +60,12 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Engine robustness (2026-11-22)**
+- [x] Changing channels (add, remove, reorder, replace) rebuilt every engine channel, cutting off tails.
+  *→ the engine keeps the channels it still has and only makes new ones for new or swapped instruments; the rest ring on (COMMIT).*
+- [x] Notes played live from the typing keyboard didn't trigger choke groups. *→ they do (COMMIT).*
+- [x] A full command FIFO dropped commands silently. *→ they wait in a backlog and go out in order (COMMIT).*
 
 **Files tab (2026-11-22)**
 - [x] bug, pattern dropdown outgrows the screen and later patterns can be reached.

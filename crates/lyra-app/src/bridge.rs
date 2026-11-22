@@ -6,7 +6,9 @@
 //! for edits themselves — they just change the project. One direction, one place.
 
 use crate::samples::Samples;
-use lyra_engine::{AudioLane, AudioRegion, ChannelSlot, Command, EngineHandle, FxChain, SeqNote, Sequence};
+use lyra_engine::{
+    Arrangement, AudioLane, AudioRegion, ChannelSlot, Command, EngineHandle, FxChain, Place, SeqNote, Sequence,
+};
 use lyra_model::{Pattern, Project, TICKS_PER_STEP};
 
 /// What the engine should loop: one pattern, or the whole arrangement.
@@ -58,6 +60,23 @@ impl Bridge {
         self.live.get(&ch).cloned()
     }
 
+    /// A channel's plugin, made and set up on this (UI) thread.
+    fn make_channel(&mut self, ch: &lyra_model::Channel, sample_rate: f32, samples: &mut Samples) -> Box<ChannelSlot> {
+        let mut plugin = lyra_catalog::create_or_silence(&ch.instrument);
+        match plugin.telemetry() {
+            Some(live) => self.live.insert(ch.id, live),
+            None => self.live.remove(&ch.id),
+        };
+        for (id, v) in ch.params.iter().enumerate() {
+            plugin.set_param(id as u32, *v);
+        }
+        // Samplers get their sample here, decoded on this thread.
+        if let Some(Ok(data)) = ch.sample.as_deref().map(|name| samples.get(name)) {
+            plugin.set_sample(data);
+        }
+        ChannelSlot::new(plugin, sample_rate)
+    }
+
     pub fn sync(&mut self, p: &Project, target: Playing, eng: &mut EngineHandle, samples: &mut Samples) {
         if !self.force && self.last.as_ref() == Some(p) && self.last_target == Some(target) {
             return; // nothing changed — the common case
@@ -68,40 +87,40 @@ impl Bridge {
             self.tweaked = Some(t);
         }
 
-        // Channels added/removed/reordered or instrument swapped → rebuild them all.
-        // (Simple and correct; fine-grained insert/remove can come later.)
-        let rebuild = forced
-            || match &last {
-                None => true,
-                Some(l) => {
-                    l.channels.len() != p.channels.len()
-                        || l.channels
-                            .iter()
-                            .zip(&p.channels)
-                            .any(|(a, b)| a.id != b.id || a.instrument != b.instrument || a.sample != b.sample)
-                }
-            };
+        // Each channel as the engine has it now: where it sits there (None =
+        // it needs a fresh plugin: new, swapped instrument or sample, or forced).
+        let kept: Vec<Option<usize>> = p
+            .channels
+            .iter()
+            .map(|ch| {
+                let l = last.as_ref().filter(|_| !forced)?;
+                let j = l.channels.iter().position(|c| c.id == ch.id)?;
+                let old = &l.channels[j];
+                (old.instrument == ch.instrument && old.sample == ch.sample).then_some(j)
+            })
+            .collect();
+        let unchanged = last.as_ref().is_some_and(|l| l.channels.len() == p.channels.len())
+            && kept.iter().enumerate().all(|(i, k)| *k == Some(i));
+        // Any fresh plugin, or channels moved: the per-channel lists (notes,
+        // automation) are re-sent, since they address channels by index.
+        let rebuild = !unchanged;
         if rebuild {
-            eng.send(Command::ClearChannels);
-            self.live.clear();
-            for ch in &p.channels {
-                let mut plugin = lyra_catalog::create_or_silence(&ch.instrument);
-                if let Some(live) = plugin.telemetry() {
-                    self.live.insert(ch.id, live);
-                }
-                for (id, v) in ch.params.iter().enumerate() {
-                    plugin.set_param(id as u32, *v);
-                }
-                // Samplers get their sample here, decoded on this (UI) thread.
-                if let Some(Ok(data)) = ch.sample.as_deref().map(|name| samples.get(name)) {
-                    plugin.set_sample(data);
-                }
-                eng.send(Command::AddChannel(ChannelSlot::new(plugin, eng.sample_rate())));
-            }
+            let places = p
+                .channels
+                .iter()
+                .zip(&kept)
+                .map(|(ch, k)| match k {
+                    Some(j) => Place::Keep(*j),
+                    None => Place::Fresh(Some(self.make_channel(ch, eng.sample_rate(), samples))),
+                })
+                .collect();
+            eng.send(Command::Arrange(Arrangement::new(places)));
+            self.live.retain(|id, _| p.channels.iter().any(|c| c.id == *id));
         }
 
         for (i, ch) in p.channels.iter().enumerate() {
-            let prev = if rebuild { None } else { last.as_ref().map(|l| &l.channels[i]) };
+            // A kept channel compares with itself last frame; a fresh one gets everything.
+            let prev = kept[i].and_then(|j| last.as_ref().map(|l| &l.channels[j]));
             if let Some(prev) = prev {
                 for (id, v) in ch.params.iter().enumerate() {
                     if prev.params.get(id) != Some(v) {
@@ -124,7 +143,7 @@ impl Bridge {
 
         // Routing: which mixer track each channel plays into.
         for (i, ch) in p.channels.iter().enumerate() {
-            let prev = if rebuild { None } else { last.as_ref().map(|l| l.channels[i].mixer) };
+            let prev = kept[i].and_then(|j| last.as_ref().map(|l| l.channels[j].mixer));
             if prev != Some(ch.mixer) {
                 eng.send(Command::SetRoute { channel: i, track: ch.mixer });
             }
@@ -199,8 +218,8 @@ impl Bridge {
             eng.send(Command::SetAudio(Box::new(lane.clone())));
             self.last_audio = Some(lane);
         }
-        // Automation too: song mode only. (Rebuilt channels lost their
-        // automated values, so a rebuild re-sends it.)
+        // Automation too: song mode only. (Fresh channels don't have their
+        // automated values yet, and moved ones changed address: re-send it.)
         let set = match target {
             Playing::Song => crate::automation::compile(p),
             Playing::Pattern(_) => lyra_engine::Automation::default(),
@@ -297,6 +316,36 @@ mod tests {
         let ch = p.add_channel("k", "lyra.kick", vec![]);
         p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 24, key: 60, velocity: 1.0 });
         p
+    }
+
+    #[test]
+    fn adding_an_instrument_lets_the_others_ring_on() {
+        let mut p = Project::default();
+        let ch = p.add_channel("Pad", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
+        p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 4 * TICKS_PER_BAR, key: 60, velocity: 1.0 });
+        let (mut eng, mut h) = lyra_engine::create(48_000.0);
+        let (mut bridge, mut samples) = (Bridge::default(), Samples::default());
+        let mut out = vec![0.0; 2 * 4800];
+        let mut loudness = |eng: &mut lyra_engine::Engine| {
+            eng.process(&mut out, 2);
+            (out.iter().map(|x| x * x).sum::<f32>() / out.len() as f32).sqrt()
+        };
+        bridge.sync(&p, Playing::Pattern(0), &mut h, &mut samples);
+        h.send(Command::Play);
+        for _ in 0..5 {
+            loudness(&mut eng); // half a second into the note
+        }
+        let before = loudness(&mut eng);
+        // A new instrument at the top of the rack: the pad moves to index 1.
+        let kick = p.add_channel("Kick", "lyra.kick", vec![]);
+        let last = p.channels.len() - 1;
+        p.channels.swap(0, last);
+        bridge.sync(&p, Playing::Pattern(0), &mut h, &mut samples);
+        let after = loudness(&mut eng);
+        assert!(before > 0.01, "the pad sounds ({before})");
+        assert!(after > before * 0.5, "and keeps sounding: {before} → {after}");
+        assert_eq!(p.channels[0].id, kick);
+        h.collect_garbage();
     }
 
     #[test]

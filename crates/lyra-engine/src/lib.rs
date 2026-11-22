@@ -306,6 +306,24 @@ impl ChannelSlot {
     }
 }
 
+/// The new channel list, built on the UI thread: for each position, either
+/// the engine's channel now at index `keep` or a fresh slot. Channels no
+/// position keeps are thrown away (as trash).
+pub struct Arrangement {
+    places: Vec<Place>,
+}
+
+pub enum Place {
+    Keep(usize),
+    Fresh(Option<Box<ChannelSlot>>),
+}
+
+impl Arrangement {
+    pub fn new(places: Vec<Place>) -> Box<Self> {
+        Box::new(Self { places })
+    }
+}
+
 /// One mixer track's effects, in order. Built and activated on the UI thread,
 /// then swapped into the engine whole (the old chain comes back as trash).
 pub struct FxChain {
@@ -358,7 +376,10 @@ pub enum Command {
     SetMasterVolume(f32),
     SetSequence(Box<Sequence>),
     AddChannel(Box<ChannelSlot>),
-    ClearChannels,
+    /// The channel list changed (added, removed, reordered, swapped): the
+    /// engine keeps the channels it still has, so their tails ring on, and
+    /// throws away the rest. See [`Arrangement`].
+    Arrange(Box<Arrangement>),
     SetParam {
         channel: usize,
         id: u32,
@@ -419,6 +440,7 @@ pub enum Command {
 }
 
 enum Trash {
+    Arrangement(#[allow(dead_code)] Box<Arrangement>),
     Audio(#[allow(dead_code)] Box<AudioLane>),
     Automation(#[allow(dead_code)] Box<Automation>),
     Sequence(#[allow(dead_code)] Box<Sequence>),
@@ -492,17 +514,42 @@ pub struct EngineHandle {
     trash: Consumer<Trash>,
     shared: Arc<Shared>,
     sample_rate: f32,
+    backlog: std::collections::VecDeque<Command>,
 }
 
 impl EngineHandle {
-    /// Queue a command. If the FIFO is full (it shouldn't be), the command is dropped.
+    /// Queue a command. If the FIFO is full (the audio thread stalled, or a
+    /// huge edit), it waits in a backlog here and goes out, in order, as soon
+    /// as there is room: a command is never lost.
     pub fn send(&mut self, cmd: Command) {
-        let _ = self.tx.push(cmd);
+        self.flush();
+        if !self.backlog.is_empty() {
+            self.backlog.push_back(cmd);
+        } else if let Err(rtrb::PushError::Full(cmd)) = self.tx.push(cmd) {
+            self.backlog.push_back(cmd);
+        }
     }
 
-    /// Free whatever the audio thread handed back. Call once per UI frame.
+    /// Send what the backlog holds, as far as the FIFO has room.
+    pub fn flush(&mut self) {
+        while let Some(cmd) = self.backlog.pop_front() {
+            if let Err(rtrb::PushError::Full(cmd)) = self.tx.push(cmd) {
+                self.backlog.push_front(cmd);
+                break;
+            }
+        }
+    }
+
+    /// Commands still waiting for room in the FIFO.
+    pub fn backlog(&self) -> usize {
+        self.backlog.len()
+    }
+
+    /// Free whatever the audio thread handed back, and send any backlog.
+    /// Call once per UI frame.
     pub fn collect_garbage(&mut self) {
         while self.trash.pop().is_ok() {}
+        self.flush();
     }
 
     pub fn shared(&self) -> &Shared {
@@ -526,6 +573,9 @@ pub struct Engine {
     // so the audio thread only ever moves 8 bytes, never a whole slot.
     #[allow(clippy::vec_box)]
     channels: Vec<Box<ChannelSlot>>,
+    /// Scratch space for `Command::Arrange`.
+    #[allow(clippy::vec_box)]
+    spare: Vec<Option<Box<ChannelSlot>>>,
     seq: Box<Sequence>,
     audio: Box<AudioLane>,
     automation: Box<Automation>,
@@ -561,6 +611,7 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
         trash: trash_tx,
         shared: shared.clone(),
         channels: Vec::with_capacity(MAX_CHANNELS),
+        spare: Vec::with_capacity(MAX_CHANNELS),
         seq: Box::default(),
         audio: Box::default(),
         automation: Box::default(),
@@ -588,7 +639,7 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
         preview: None,
         chokes: Vec::with_capacity(64),
     };
-    let handle = EngineHandle { tx, trash: trash_rx, shared, sample_rate };
+    let handle = EngineHandle { tx, trash: trash_rx, shared, sample_rate, backlog: Default::default() };
     (engine, handle)
 }
 
@@ -669,10 +720,25 @@ impl Engine {
                         self.discard(Trash::Channel(slot));
                     }
                 }
-                Command::ClearChannels => {
-                    while let Some(ch) = self.channels.pop() {
-                        self.discard(Trash::Channel(ch));
+                Command::Arrange(mut arr) => {
+                    // Both lists have MAX_CHANNELS reserved: only pointers move.
+                    self.spare.clear();
+                    self.spare.extend(self.channels.drain(..).map(Some));
+                    for place in arr.places.iter_mut().take(MAX_CHANNELS) {
+                        let slot = match place {
+                            Place::Keep(j) => self.spare.get_mut(*j).and_then(Option::take),
+                            Place::Fresh(slot) => slot.take(),
+                        };
+                        // A bad index can't happen, but never leave a hole: indexes must line up.
+                        let Some(slot) = slot else { break };
+                        self.channels.push(slot);
                     }
+                    for i in 0..self.spare.len() {
+                        if let Some(gone) = self.spare[i].take() {
+                            self.discard(Trash::Channel(gone));
+                        }
+                    }
+                    self.discard(Trash::Arrangement(arr));
                 }
                 Command::SetParam { channel, id, value } => {
                     if let Some(ch) = self.channels.get_mut(channel) {
@@ -758,10 +824,14 @@ impl Engine {
     fn render_block(&mut self, n: usize) {
         let transport = Transport { tempo: self.tempo, playing: self.playing, position: self.pos };
         // 1. Gather this block's events: live notes first, then the sequencer.
-        for ch in &mut self.channels {
-            let ChannelSlot { events, pending, .. } = &mut **ch;
+        for (i, ch) in self.channels.iter_mut().enumerate() {
+            let ChannelSlot { events, pending, choke, .. } = &mut **ch;
             events.clear();
             for e in pending.drain(..) {
+                // A live note chokes its group too (a closed hat played on the keyboard).
+                if matches!(e, Event::NoteOn { .. }) && *choke > 0 && self.chokes.len() < self.chokes.capacity() {
+                    self.chokes.push((0, *choke, i));
+                }
                 events.push(TimedEvent { offset: 0, event: e });
             }
         }
@@ -1110,6 +1180,56 @@ mod tests {
         run(&mut eng, 30_000);
         let log = log.lock().unwrap();
         assert!(log.iter().any(|(_, e)| matches!(e, Event::NoteOff { key: 60 })), "the note must not hang");
+    }
+
+    #[test]
+    fn a_kept_channel_rings_on_when_another_is_added_before_it() {
+        let (mut eng, mut h, log) = setup();
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(0, 96)] })));
+        h.send(Command::Play);
+        run(&mut eng, 5_000); // the note is sounding
+        let other: Log = Arc::default();
+        let fresh = ChannelSlot::new(Box::new(Recorder { log: other.clone(), clock: 0 }), 48_000.0);
+        h.send(Command::Arrange(Arrangement::new(vec![Place::Fresh(Some(fresh)), Place::Keep(0)])));
+        // The note's channel moved to index 1; the sequence follows it.
+        let moved = SeqNote { channel: 1, ..note(0, 96) };
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![moved] })));
+        run(&mut eng, 30_000);
+        let log = log.lock().unwrap();
+        assert!(!log.iter().any(|(_, e)| matches!(e, Event::AllNotesOff)), "not cut off");
+        let off = log.iter().find(|(_, e)| matches!(e, Event::NoteOff { .. })).expect("released on time").0;
+        assert!((23_900..=24_100).contains(&off), "96 ticks ≈ 24000 samples, got {off}");
+        assert!(other.lock().unwrap().is_empty(), "the new channel heard nothing");
+        h.collect_garbage();
+    }
+
+    #[test]
+    fn a_full_fifo_keeps_commands_in_a_backlog() {
+        let (mut eng, mut h, _log) = setup();
+        for _ in 0..1500 {
+            h.send(Command::SetSwing(0.0));
+        }
+        h.send(Command::SetTempo(90.0));
+        assert!(h.backlog() > 0);
+        while h.backlog() > 0 {
+            run(&mut eng, 64);
+            h.collect_garbage();
+        }
+        run(&mut eng, 64);
+        assert_eq!(eng.tempo, 90.0, "the last command arrived, in order");
+    }
+
+    #[test]
+    fn a_live_note_chokes_its_group() {
+        let (mut eng, mut h, log) = setup();
+        let open: Log = Arc::default();
+        h.send(Command::AddChannel(ChannelSlot::new(Box::new(Recorder { log: open.clone(), clock: 0 }), 48_000.0)));
+        h.send(Command::SetMix { channel: 0, volume: 0.8, pan: 0.0, mute: false, choke: 1 });
+        h.send(Command::SetMix { channel: 1, volume: 0.8, pan: 0.0, mute: false, choke: 1 });
+        h.send(Command::Live { channel: 0, event: Event::NoteOn { key: 42, velocity: 1.0 } });
+        run(&mut eng, 256);
+        assert!(open.lock().unwrap().iter().any(|(_, e)| matches!(e, Event::AllNotesOff)), "the open hat is cut");
+        assert!(!log.lock().unwrap().iter().any(|(_, e)| matches!(e, Event::AllNotesOff)), "not the one played");
     }
 
     /// A second of a steady 0.5 tone at 48 kHz.
