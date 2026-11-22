@@ -1,96 +1,182 @@
-//! The browser: the docked panel on the left (F4 shows / hides it).
+//! The browser: the docked panel on the left (F4 shows / hides it), the
+//! library: what you can add. Tabs:
 //!
-//! * **Samples** — Lyra's Starter Kit and your library folder. Click a sample
-//!   to hear it; double-click (or drag it onto the plugin rack) to make a
-//!   sampler that plays it; drag it onto a rack row to swap that sample in
+//! * **Files** — Lyra's Starter Kit, your library folder, and any folders
+//!   you add (**+ Add folder…**; right-click one: open it in the file
+//!   manager, or take it out of the browser). The search box looks through
+//!   all of them. Each sample shows how long it is. Click a sample: hear it ·
+//!   double-click: a sampler that plays it · drag: onto the plugin rack (a
+//!   sampler), onto a rack row (swap it in), or onto an arrangement track (an
+//!   audio clip)
 //! * **Instruments** — click to add one to the instrument rack; open the
 //!   arrow for its presets
 //! * **Effects** — click to plug one into the selected mixer track
 //!
 //! What the *project* holds (patterns, audio clips, automation) is in the
-//! right panel instead: see `pool.rs`. Left is the library, right the project.
-//!
-//! The library is scanned when Lyra starts; the ↻ on the Samples header
-//! scans again (after you add files to your library folder).
+//! right panel instead: see `pool.rs`.
 
-use crate::app::{Focus, UiState};
+use crate::app::{Focus, LeftTab, UiState};
 use crate::samples::{self, Folder};
 use crate::theme::{self, cr};
 use egui::{pos2, vec2, Align2, FontId, Rect, Response, Sense, Ui};
 use lyra_model::{EffectSlot, History, Project};
+use std::path::Path;
 
 pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
-    egui::ScrollArea::vertical().id_salt("browser").auto_shrink([false, false]).show(ui, |ui| {
+    match st.left_tab {
+        LeftTab::Files => files(ui, p, h, st),
+        LeftTab::Instruments => instruments(ui, p, h, st),
+        LeftTab::Effects => effects(ui, p, h, st),
+    }
+}
+
+/// The Files tab: search, the folders, + Add folder.
+fn files(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+    let m = theme::m();
+    // The search box and ↻, laid out in a fixed row: the panel grows to fit
+    // its content, and a text field sized by number came out a little wider
+    // than asked, widening the panel every frame.
+    let (row_r, _) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::hover());
+    let [field, again] = crate::flex::row(row_r, [crate::flex::Grow(1.0), crate::flex::Px(m.control_h)], 4.0);
+    // (A text field's width doesn't count its inner margin: take it off.)
+    let search = egui::TextEdit::singleline(&mut st.search)
+        .hint_text("Search samples")
+        .margin(egui::Margin::symmetric(4, 2))
+        .desired_width((field.width() - 10.0).max(20.0));
+    ui.put(field, search);
+    // ↻ as a drawn key: an egui button with that glyph came out wider than
+    // its slot, and the panel kept growing to fit it.
+    let resp = ui.interact(again, ui.id().with("rescan"), Sense::click());
+    theme::well(ui.painter(), again);
+    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+    let (c, rad) = (again.center(), again.height() * 0.24);
+    let arc: Vec<egui::Pos2> = (0..=20)
+        .map(|i| {
+            let a = -0.6 + i as f32 / 20.0 * 4.9;
+            c + vec2(a.cos(), a.sin()) * rad
+        })
+        .collect();
+    let tip = arc[arc.len() - 1];
+    ui.painter().add(egui::Shape::line(arc, theme::stroke(1.5, ink)));
+    let head = vec![tip + vec2(-3.5, 0.5), tip + vec2(1.5, -3.0), tip + vec2(2.0, 2.5)];
+    ui.painter().add(egui::Shape::convex_polygon(head, ink, egui::Stroke::NONE));
+    if resp.on_hover_text("Look again for new files").clicked() {
+        st.rescan = true;
+    }
+    ui.add_space(4.0);
+    let library = std::mem::take(&mut st.library);
+    let query = st.search.trim().to_lowercase();
+    let mut remove = None;
+    egui::ScrollArea::vertical().id_salt("browser-files").auto_shrink([false, false]).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 1.0;
-
-        // ── Samples ──
-        let library = std::mem::take(&mut st.library);
-        let count = library.iter().map(count_files).sum();
-        if section(ui, "Samples", count) {
+        if !query.is_empty() {
+            // Everything that matches, from every folder, flat.
+            let mut found = Vec::new();
             for root in &library {
-                folder(ui, root, 0, p, h, st);
+                matches(root, &query, &mut found);
             }
-            if library.iter().all(|f| f.files.is_empty() && f.folders.is_empty()) {
-                ui.label(egui::RichText::new("No samples found.").small().color(theme::TEXT_DIM));
+            if found.is_empty() {
+                ui.label(egui::RichText::new("Nothing matches.").small().color(theme::TEXT_DIM));
             }
-            let lib = samples::user_root();
-            ui.horizontal(|ui| {
-                if ui.small_button("Rescan").on_hover_text("Look for new files in the library folders").clicked() {
+            for path in found.iter().take(400) {
+                file_row(ui, path, 12.0, p, h, st);
+            }
+        } else {
+            let added = crate::files::browser_folders();
+            for root in &library {
+                let r = folder(ui, root, 0, p, h, st);
+                let yours = added.contains(&root.path);
+                r.context_menu(|ui| {
+                    if ui.button("Open in the file manager").clicked() {
+                        let _ = std::fs::create_dir_all(&root.path);
+                        let _ = std::process::Command::new("xdg-open").arg(&root.path).spawn();
+                        ui.close_menu();
+                    }
+                    if yours && ui.button("Take it out of the browser").clicked() {
+                        remove = Some(root.path.clone());
+                        ui.close_menu();
+                    }
+                });
+            }
+            ui.add_space(6.0);
+            if crate::widgets::wide_key(ui, "+ Add folder…", "Show another folder of sounds here (Lyra remembers it)")
+                .clicked()
+            {
+                if let Some(dir) = crate::files::pick_folder("Add a folder of sounds to the browser") {
+                    let mut folders = crate::files::browser_folders();
+                    if !folders.contains(&dir) {
+                        folders.push(dir);
+                        crate::files::set_browser_folders(&folders);
+                    }
                     st.rescan = true;
                 }
-                if ui
-                    .small_button("Your folder…")
-                    .on_hover_text(format!("Put your own samples in {}", lib.display()))
-                    .clicked()
-                {
-                    let _ = std::fs::create_dir_all(&lib);
-                    let _ = std::process::Command::new("xdg-open").arg(&lib).spawn();
-                    st.rescan = true;
-                }
-            });
+            }
         }
-        st.library = library;
+    });
+    if let Some(dir) = remove {
+        let folders: Vec<_> = crate::files::browser_folders().into_iter().filter(|f| *f != dir).collect();
+        crate::files::set_browser_folders(&folders);
+        st.rescan = true;
+    }
+    st.library = library;
+}
 
-        // ── Instruments ──
-        if section(ui, "Instruments", lyra_catalog::instruments().len()) {
-            for inst in lyra_catalog::instruments() {
-                let presets = lyra_catalog::presets_for(inst.id);
-                let open_id = ui.id().with(("presets", inst.id));
-                let mut open: bool = ui.data(|d| d.get_temp(open_id)).unwrap_or(false);
-                let (r, arrow) = row_with_arrow(ui, inst.name, !presets.is_empty(), open);
-                if arrow {
-                    open ^= true;
-                    ui.data_mut(|d| d.insert_temp(open_id, open));
-                } else if r.on_hover_text("Click: add to the instrument rack").clicked() {
-                    add_instrument(p, h, st, inst.name, inst.id, lyra_catalog::default_params(inst.id));
-                }
-                if open {
-                    for preset in &presets {
-                        let r = row(ui, preset.name, None, false, 14.0);
-                        if r.on_hover_text("Click: add this preset to the instrument rack").clicked() {
-                            add_instrument(p, h, st, preset.name, inst.id, preset.params());
-                        }
+/// Every file under `f` whose name contains `query` (lower case).
+fn matches(f: &Folder, query: &str, out: &mut Vec<std::path::PathBuf>) {
+    for sub in &f.folders {
+        matches(sub, query, out);
+    }
+    for file in &f.files {
+        if file.file_stem().is_some_and(|n| n.to_string_lossy().to_lowercase().contains(query)) {
+            out.push(file.clone());
+        }
+    }
+}
+
+/// The Instruments tab.
+fn instruments(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+    egui::ScrollArea::vertical().id_salt("browser-instruments").auto_shrink([false, false]).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 1.0;
+        for inst in lyra_catalog::instruments() {
+            let presets = lyra_catalog::presets_for(inst.id);
+            let open_id = ui.id().with(("presets", inst.id));
+            let mut open: bool = ui.data(|d| d.get_temp(open_id)).unwrap_or(false);
+            let (r, arrow) = row_with_arrow(ui, inst.name, !presets.is_empty(), open);
+            if arrow {
+                open ^= true;
+                ui.data_mut(|d| d.insert_temp(open_id, open));
+            } else if r.on_hover_text("Click: add to the instrument rack").clicked() {
+                add_instrument(p, h, st, inst.name, inst.id, lyra_catalog::default_params(inst.id));
+            }
+            if open {
+                for preset in &presets {
+                    let r = row(ui, preset.name, None, false, 14.0, 0.0);
+                    if r.on_hover_text("Click: add this preset to the instrument rack").clicked() {
+                        add_instrument(p, h, st, preset.name, inst.id, preset.params());
                     }
                 }
             }
         }
+    });
+}
 
-        // ── Effects ──
-        if section(ui, "Effects", lyra_catalog::effects::all().len()) {
-            let t = st.mixer_selected.min(p.mixer.len() - 1);
-            let full = p.mixer[t].effects.len() >= lyra_engine::MAX_FX;
-            for e in lyra_catalog::effects::all() {
-                let hint = if full {
-                    format!("{}'s effect rack is full", p.mixer[t].name)
-                } else {
-                    format!("Click: plug into {} (the selected mixer track)", p.mixer[t].name)
-                };
-                if row(ui, e.name, None, false, 0.0).on_hover_text(hint).clicked() && !full {
-                    h.checkpoint(p);
-                    p.mixer[t].effects.push(EffectSlot::new(e.id, lyra_catalog::effects::default_params(e.id)));
-                    st.effect = Some((t, p.mixer[t].effects.len() - 1));
-                    st.raise = Some(Focus::Effect);
-                }
+/// The Effects tab.
+fn effects(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+    egui::ScrollArea::vertical().id_salt("browser-effects").auto_shrink([false, false]).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 1.0;
+        let t = st.mixer_selected.min(p.mixer.len() - 1);
+        let full = p.mixer[t].effects.len() >= lyra_engine::MAX_FX;
+        for e in lyra_catalog::effects::all() {
+            let hint = if full {
+                format!("{}'s effect rack is full", p.mixer[t].name)
+            } else {
+                format!("Click: plug into {} (the selected mixer track)", p.mixer[t].name)
+            };
+            if row(ui, e.name, None, false, 0.0, 0.0).on_hover_text(hint).clicked() && !full {
+                h.checkpoint(p);
+                p.mixer[t].effects.push(EffectSlot::new(e.id, lyra_catalog::effects::default_params(e.id)));
+                st.effect = Some((t, p.mixer[t].effects.len() - 1));
+                st.raise = Some(Focus::Effect);
             }
         }
     });
@@ -101,56 +187,88 @@ fn count_files(f: &Folder) -> usize {
 }
 
 /// A library folder: a foldable row, then its subfolders and samples.
-fn folder(ui: &mut Ui, f: &Folder, depth: usize, p: &mut Project, h: &mut History, st: &mut UiState) {
+/// Returns the folder row's response (for its right-click menu).
+fn folder(ui: &mut Ui, f: &Folder, depth: usize, p: &mut Project, h: &mut History, st: &mut UiState) -> Response {
     let id = ui.id().with(("folder", &f.path));
     let mut open: bool = ui.data(|d| d.get_temp(id)).unwrap_or(depth == 0);
     let indent = depth as f32 * 12.0;
-    let r = row(ui, &f.name, None, false, indent + 12.0);
+    let r = row(ui, &f.name, None, false, indent + 12.0, 30.0);
     chevron(ui.painter(), pos2(r.rect.left() + indent + 10.0, r.rect.center().y), open, theme::TEXT_DIM);
+    let count = count_files(f);
+    ui.painter().text(
+        r.rect.right_center() - vec2(6.0, 0.0),
+        Align2::RIGHT_CENTER,
+        count.to_string(),
+        FontId::monospace(theme::m().text_small),
+        theme::TEXT_DIM,
+    );
     if r.clicked() {
         open ^= true;
         ui.data_mut(|d| d.insert_temp(id, open));
     }
-    if !open {
-        return;
-    }
-    for sub in &f.folders {
-        folder(ui, sub, depth + 1, p, h, st);
-    }
-    for file in &f.files {
-        let name = samples::name_for(file);
-        let shown = samples::display_name(&name);
-        let (r, resp) = {
-            let m = theme::m();
-            ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click_and_drag())
-        };
-        paint_row(ui, r, &resp, &shown, None, st.previewing.as_deref() == Some(name.as_str()), indent + 24.0);
-        // A small speaker mark: "click to hear".
-        let c = pos2(r.left() + indent + 16.0, r.center().y);
-        let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
-        ui.painter().add(egui::Shape::convex_polygon(
-            vec![
-                c + vec2(-3.0, -2.0),
-                c + vec2(0.0, -2.0),
-                c + vec2(3.0, -4.5),
-                c + vec2(3.0, 4.5),
-                c + vec2(0.0, 2.0),
-                c + vec2(-3.0, 2.0),
-            ],
-            ink,
-            egui::Stroke::NONE,
-        ));
-        if resp.drag_started() {
-            egui::DragAndDrop::set_payload(ui.ctx(), SampleDrag(name.clone()));
+    if open {
+        for sub in &f.folders {
+            folder(ui, sub, depth + 1, p, h, st);
         }
-        let resp = resp
-            .on_hover_text("Click: hear it · double-click: new sampler · drag: onto the plugin rack, or onto a track");
-        if resp.clicked() {
-            if double_click(ui, "browser-last-sample-click", name.clone()) {
-                add_sampler(p, h, st, &name);
-            } else {
-                st.preview = Some(name.clone());
-            }
+        for file in &f.files {
+            file_row(ui, file, indent + 24.0, p, h, st);
+        }
+    }
+    r
+}
+
+/// One sample: a speaker mark, its name, how long it is.
+fn file_row(ui: &mut Ui, file: &Path, indent: f32, p: &mut Project, h: &mut History, st: &mut UiState) {
+    let m = theme::m();
+    let name = samples::name_for(file);
+    let shown = samples::display_name(&name);
+    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click_and_drag());
+    paint_row(ui, r, &resp, &shown, None, st.previewing.as_deref() == Some(name.as_str()), indent, 58.0);
+    // A small speaker mark: "click to hear".
+    let c = pos2(r.left() + indent + 6.0, r.center().y);
+    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+    ui.painter().add(egui::Shape::convex_polygon(
+        vec![
+            c + vec2(-3.0, -2.0),
+            c + vec2(0.0, -2.0),
+            c + vec2(3.0, -4.5),
+            c + vec2(3.0, 4.5),
+            c + vec2(0.0, 2.0),
+            c + vec2(-3.0, 2.0),
+        ],
+        ink,
+        egui::Stroke::NONE,
+    ));
+    // Its length (read from the header once, then remembered).
+    let secs = *st.lengths.entry(file.to_path_buf()).or_insert_with(|| samples::length(file));
+    if let Some(secs) = secs {
+        let text = if secs < 10.0 {
+            format!("{secs:.2} s")
+        } else if secs < 60.0 {
+            format!("{secs:.1} s")
+        } else {
+            format!("{}:{:02}", (secs / 60.0) as u32, secs as u32 % 60)
+        };
+        ui.painter().text(
+            r.right_center() - vec2(6.0, 0.0),
+            Align2::RIGHT_CENTER,
+            text,
+            FontId::monospace(m.text_small),
+            theme::TEXT_DIM,
+        );
+    }
+    if resp.drag_started() {
+        egui::DragAndDrop::set_payload(ui.ctx(), SampleDrag(name.clone()));
+    }
+    let resp = resp.on_hover_text(format!(
+        "{}\nClick: hear it · double-click: new sampler · drag: onto the plugin rack, or onto a track",
+        file.display()
+    ));
+    if resp.clicked() {
+        if double_click(ui, "browser-last-sample-click", name.clone()) {
+            add_sampler(p, h, st, &name);
+        } else {
+            st.preview = Some(name.clone());
         }
     }
 }
@@ -192,41 +310,11 @@ fn add_instrument(p: &mut Project, h: &mut History, st: &mut UiState, name: &str
     st.show_plugins = true;
 }
 
-/// A section header (click to fold). Returns whether it's open.
-fn section(ui: &mut Ui, title: &str, count: usize) -> bool {
-    let m = theme::m();
-    let id = ui.id().with(("section", title));
-    let mut open: bool = ui.data(|d| d.get_temp(id)).unwrap_or(true);
-    ui.add_space(6.0);
-    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click());
-    if resp.clicked() {
-        open ^= true;
-        ui.data_mut(|d| d.insert_temp(id, open));
-    }
-    let p = ui.painter();
-    chevron(p, pos2(r.left() + 8.0, r.center().y), open, theme::TEXT_DIM);
-    p.text(
-        r.left_center() + vec2(20.0, 0.0),
-        Align2::LEFT_CENTER,
-        title.to_uppercase(),
-        FontId::proportional(m.text_small),
-        if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM },
-    );
-    p.text(
-        r.right_center() - vec2(6.0, 0.0),
-        Align2::RIGHT_CENTER,
-        count.to_string(),
-        FontId::monospace(m.text_small),
-        theme::TEXT_DIM,
-    );
-    open
-}
-
 /// One item: an optional light, the name, a highlight when hovered or chosen.
-fn row(ui: &mut Ui, name: &str, light: Option<theme::Light>, chosen: bool, indent: f32) -> Response {
+fn row(ui: &mut Ui, name: &str, light: Option<theme::Light>, chosen: bool, indent: f32, reserve: f32) -> Response {
     let m = theme::m();
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click());
-    paint_row(ui, r, &resp, name, light, chosen, indent);
+    paint_row(ui, r, &resp, name, light, chosen, indent, reserve);
     resp
 }
 
@@ -235,7 +323,7 @@ fn row(ui: &mut Ui, name: &str, light: Option<theme::Light>, chosen: bool, inden
 fn row_with_arrow(ui: &mut Ui, name: &str, has_arrow: bool, open: bool) -> (Response, bool) {
     let m = theme::m();
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click());
-    paint_row(ui, r, &resp, name, None, false, 0.0);
+    paint_row(ui, r, &resp, name, None, false, 0.0, m.control_h);
     if !has_arrow {
         return (resp, false);
     }
@@ -249,7 +337,19 @@ fn row_with_arrow(ui: &mut Ui, name: &str, has_arrow: bool, open: bool) -> (Resp
     (resp.on_hover_text("Presets: the arrow"), clicked)
 }
 
-fn paint_row(ui: &Ui, r: Rect, resp: &Response, name: &str, light: Option<theme::Light>, chosen: bool, indent: f32) {
+/// `reserve`: points kept free at the right (for a count or a length); the
+/// name is cut off before them.
+#[allow(clippy::too_many_arguments)]
+fn paint_row(
+    ui: &Ui,
+    r: Rect,
+    resp: &Response,
+    name: &str,
+    light: Option<theme::Light>,
+    chosen: bool,
+    indent: f32,
+    reserve: f32,
+) {
     let m = theme::m();
     let p = ui.painter();
     if chosen || resp.hovered() {
@@ -260,7 +360,8 @@ fn paint_row(ui: &Ui, r: Rect, resp: &Response, name: &str, light: Option<theme:
         p.circle_filled(pos2(x + 3.0, r.center().y), 3.5, l.mid);
         x += 14.0;
     }
-    p.text(
+    let room = Rect::from_min_max(r.min, pos2(r.right() - reserve, r.bottom()));
+    p.with_clip_rect(room.intersect(p.clip_rect())).text(
         pos2(x, r.center().y),
         Align2::LEFT_CENTER,
         name,

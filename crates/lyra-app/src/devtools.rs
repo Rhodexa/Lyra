@@ -16,7 +16,7 @@
 //!
 //! Script steps, separated by `;`: `wait N` (frames), `move X Y` (points),
 //! `down` / `up` (left button), `rdown` / `rup` (right button), `click`,
-//! `wheel DY`, `key NAME` (an egui key name, e.g. `Space`, `ArrowUp`),
+//! `wheel DY`, `type TEXT` (typed text, for text fields), `key NAME` (an egui key name, e.g. `Space`, `ArrowUp`),
 //! `mods alt|shift|ctrl|none` (held modifiers, e.g. `mods alt+shift`),
 //! `log` (print the step counter). Example — drag the first volume knob up:
 //! `LYRA_SCRIPT="wait 30; move 71 134; down; move 71 120; move 71 100; up"`
@@ -100,6 +100,7 @@ impl DevTools {
                 raw.events.push(button(true, egui::PointerButton::Primary, pos));
                 raw.events.push(button(false, egui::PointerButton::Primary, pos));
             }
+            "type" => raw.events.push(egui::Event::Text(parts[1..].join(" "))),
             "wheel" => raw.events.push(egui::Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Point,
                 delta: egui::vec2(0.0, num(1)),

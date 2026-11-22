@@ -229,6 +229,24 @@ fn decode_flac(path: &Path) -> Result<(u32, usize, Vec<f32>), String> {
     Ok((info.sample_rate, info.channels as usize, data))
 }
 
+/// How long an audio file is, in seconds, from its header only (fast: no
+/// decoding). None if it can't be read.
+pub fn length(path: &Path) -> Option<f64> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "wav" => {
+            let r = hound::WavReader::open(path).ok()?;
+            Some(r.duration() as f64 / r.spec().sample_rate.max(1) as f64)
+        }
+        "flac" => {
+            let r = claxon::FlacReader::open(path).ok()?;
+            let info = r.streaminfo();
+            Some(info.samples? as f64 / info.sample_rate.max(1) as f64)
+        }
+        _ => None,
+    }
+}
+
 /// A folder in the library, as the browser shows it: subfolders first, then
 /// audio files, both sorted. Hidden entries are skipped.
 pub struct Folder {
@@ -292,6 +310,14 @@ mod tests {
         assert_eq!(p.range(70_123.0, 70_124.0), Some((0.9, 0.9)), "one sample");
         assert_eq!(p.range(0.0, 1_000.0), Some((0.0, 0.0)));
         assert_eq!(p.range(200_000.0, 300_000.0), None);
+    }
+
+    #[test]
+    fn lengths_come_from_the_header() {
+        let kick = path_for("bundled:Starter Kit/Kicks/bd_haus.flac");
+        let len = length(&kick).expect("a flac's length");
+        let decoded = decode(&kick).unwrap();
+        assert!((len - decoded.seconds() as f64).abs() < 1e-3, "{len} vs {}", decoded.seconds());
     }
 
     #[test]

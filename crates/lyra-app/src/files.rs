@@ -135,6 +135,23 @@ pub fn pick_folder(title: &str) -> Option<PathBuf> {
     rfd::FileDialog::new().set_title(title).set_directory(default_dir()).pick_folder()
 }
 
+/// The folders you added to the browser (one path per line in
+/// `~/.local/share/lyra/folders`).
+pub fn browser_folders() -> Vec<PathBuf> {
+    std::fs::read_to_string(data_dir().join("folders"))
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(PathBuf::from)
+        .collect()
+}
+
+pub fn set_browser_folders(folders: &[PathBuf]) {
+    let text: String = folders.iter().map(|f| format!("{}\n", f.display())).collect();
+    let _ = std::fs::create_dir_all(data_dir());
+    let _ = std::fs::write(data_dir().join("folders"), text);
+}
+
 /// "My Song" for `/…/My Song.lyra`.
 pub fn display_name(path: Option<&Path>) -> String {
     path.and_then(|p| p.file_stem()).map_or("Untitled".into(), |s| s.to_string_lossy().into_owned())

@@ -92,6 +92,11 @@ pub struct UiState {
     pub place_automation: bool,
     /// Which rack the right panel shows.
     pub right_tab: RightTab,
+    /// Which tab the browser shows, and what the Files tab searches for.
+    pub left_tab: LeftTab,
+    pub search: String,
+    /// Sample lengths in seconds, read from file headers as rows show up.
+    pub lengths: std::collections::HashMap<std::path::PathBuf, Option<f64>>,
     /// The control changed last, anywhere: what "Automate" automates.
     pub last_tweaked: Option<lyra_model::Target>,
     /// The pattern last frame: picking another one goes back to placing patterns.
@@ -133,6 +138,9 @@ impl Default for UiState {
             open_automation: None,
             place_automation: false,
             right_tab: RightTab::Plugins,
+            left_tab: LeftTab::Files,
+            search: String::new(),
+            lengths: std::collections::HashMap::new(),
             last_tweaked: None,
             last_pattern: 0,
         }
@@ -189,6 +197,14 @@ pub struct LyraApp {
     leaving: Option<Leave>,
     /// The window may close now (the question was answered).
     may_close: bool,
+}
+
+/// The browser's tabs: the library.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LeftTab {
+    Files,
+    Instruments,
+    Effects,
 }
 
 /// The right panel's racks: what's in the project.
@@ -680,9 +696,16 @@ impl LyraApp {
     fn sample_housekeeping(&mut self, ctx: &egui::Context) {
         if std::mem::take(&mut self.ui.rescan) {
             use crate::samples::{bundled_root, scan, user_root};
-            self.ui.library = [(bundled_root(), "Lyra"), (user_root(), "Your library")]
+            // Lyra's own kit, your library folder, then the folders you added.
+            let added = files::browser_folders().into_iter().map(|path| {
+                let name =
+                    path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
+                (path, name)
+            });
+            self.ui.library = [(bundled_root(), "Lyra".to_string()), (user_root(), "Your library".to_string())]
                 .into_iter()
-                .filter_map(|(path, name)| scan(&path, name))
+                .chain(added)
+                .filter_map(|(path, name)| scan(&path, &name))
                 .collect();
         }
         if let Some(name) = self.ui.preview.take() {
@@ -1048,8 +1071,18 @@ impl LyraApp {
                 .width_range(160.0..=480.0)
                 .frame(side)
                 .show(ctx, |ui| {
-                    let (_, fold) =
-                        crate::widgets::panel_header(ui, &["Browser"], 0, false, "Fold the browser away  (F4)");
+                    let tabs = [LeftTab::Files, LeftTab::Instruments, LeftTab::Effects];
+                    let chosen = tabs.iter().position(|&t| t == self.ui.left_tab).unwrap_or(0);
+                    let (tab, fold) = crate::widgets::panel_header(
+                        ui,
+                        &["Files", "Instruments", "Effects"],
+                        chosen,
+                        false,
+                        "Fold the browser away  (F4)",
+                    );
+                    if let Some(i) = tab {
+                        self.ui.left_tab = tabs[i];
+                    }
                     if fold {
                         self.ui.show_browser = false;
                     }

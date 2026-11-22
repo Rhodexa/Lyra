@@ -17,7 +17,7 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 |---|---|
 | Play / stop | `Space` · Stop while stopped goes back to the start |
 | Project | click the logo (New is only there: no shortcut, so it can't happen by accident) · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as. New, Open and closing the window ask first when there are unsaved changes |
-| Layout | Left: the browser (`F4`), the library, things you can add. Right (`F6`): the project's racks, in tabs: **Plugins** (instruments), **Patterns** (each showing its notes; + New, right-click to clone), **Audio** (audio clips as rack rows: mute, pan, volume, insert) and **Automation**. Click one: the next click on the arrangement places it; double-click: open it; drag it onto a track. Both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Audio clip, Automation, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
+| Layout | Left: the browser (`F4`), in tabs: **Files** (samples and your folders), **Instruments**, **Effects**. Right (`F6`): the project's racks, in tabs: **Plugins** (instruments), **Patterns** (each showing its notes; + New, right-click to clone), **Audio** (audio clips as rack rows: mute, pan, volume, insert) and **Automation**. Click one: the next click on the arrangement places it; double-click: open it; drag it onto a track. Both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Audio clip, Automation, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
 | Patterns | the right panel's **Patterns** tab (+ New pattern, right-click to clone), or `[` / `]` |
@@ -64,14 +64,17 @@ On Fedora you need `alsa-lib-devel`, `clang` and `mesa-libGL-devel` installed.
 | Effects | "+ add effect"; light = bypass; ^ v reorder; x remove |
 | Route a channel | instrument editor (F8) → "mixer" menu |
 
-**Samples** (browser → Samples)
+**Files** (browser → Files)
 
 | Do | How |
 |---|---|
 | Hear a sample | click it |
 | Make a sampler for it | double-click it, or drag it onto the plugin rack |
 | Swap a sample in | drag it onto an instrument's name in the plugin rack (any instrument becomes a sampler) |
-| Your own samples | put WAV/FLAC files (folders are fine) in `~/.local/share/lyra/library` ("Your folder…" opens it), then Rescan |
+| Find a sample | type in the search field: every folder, flat, by name |
+| Your own folders | "+ Add folder…" at the bottom; right-click a folder: open it in the file manager, or take it out of the browser |
+| Your own samples | or put WAV/FLAC files in `~/.local/share/lyra/library`, then rescan (the round arrow by the search) |
+| How long | each file shows its length, read from its header |
 
 Lyra ships a **Starter Kit** of 65 CC0 one-shots (see `assets/samples/Starter Kit/CREDITS.md`).
 
