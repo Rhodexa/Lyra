@@ -17,7 +17,6 @@ no marks would default to not urgent or 'coding teams judges'
 ## Wishes
 *Things you wish Lyra did.*
 - [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
-- [ ] vertical scroll bar could be slightly wider and zoom on the center
 - [ ] ~ *(from chat, 2026-11-22, deferred)* The top bar's buttons for opening sections came from FL and are now unneeded and confusing. Drop them; add a small bar at the bottom that opens and closes the bottom area; better keys (rough idea: F1 left panel, F4 right panel, F2/F3 bottom area).
 
 ## Questions for Claude
@@ -33,7 +32,6 @@ no marks would default to not urgent or 'coding teams judges'
 - [ ] Remember sizes / zoom between runs? You'd rather Lyra remembered as little as possible (2026-11-22), so this waits until a size really bothers you. "Copy as code" in F12 and I'll make your numbers the defaults.
 - [ ] Wheel-over-note changes velocity only while *hovering* a note. With a selection but no hover, the wheel still scrolls, otherwise you couldn't scroll while anything is selected. Tell me if you want it the other way.
 
-- [ ] *(deferred, 2026-11-19)* The ↕ gain grip sits in the middle of a clip (or of its frame in the audio-clip editor), so on a clip wider than the view it can be off screen. Fix: keep it in the middle of the clip's *visible* part.
 - [ ] *(from writing "Lyra Ascendant", 2026-11-19)* No automation yet. Risers had to be faked (an 8-second attack plus a 10-second filter-envelope attack on noise, and a supersaw gliding between overlapping notes). Synced LFOs now cover the wobble speeds; automation (M5, after CLAP) is still the real fix for risers and swells.
 - [ ] *Chrysalis, first version (2026-11-19): what's left out or rough, on purpose:*
   - One imported WAV per channel: both oscillators can play it, but they can't each have their own. (A second file needs a real plugin-state blob; see ARCHITECTURE "Plugin parameters".)
@@ -43,7 +41,6 @@ no marks would default to not urgent or 'coding teams judges'
   - While a note glides, the band-limited copy changes every half octave with no crossfade: in theory a faint step in brightness at the very top.
   - The built-in tables take ~37 MB of memory, shared by every Chrysalis.
   - Macros have numbers, not names (names aren't numbers, so they'd need that same state blob).
-- [ ] Drum clips in the playlist show their notes as one flat line (every drum sits on C4). Draw one lane per drum channel instead.
 - [ ] *(from writing "Dawnbreaker", 2026-11-20: the first song built on automation clips. They did every build-up: shared curves, several links, offsets and "hold after the clip" all behaved.)* What was missing:
   - **Sends.** Nine inserts each carry their own hall reverb because nothing can share one. That costs CPU, and the room isn't one room. (Roadmap M3: "Sends / sidechain".)
   - **Tempo automation.** A heroic ending wants to broaden (a ritardando into the last chord); tempo isn't a control yet.
@@ -60,6 +57,12 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Small visible things (2026-11-22)**
+- [x] vertical scroll bar could be slightly wider and zoom on the center
+  *→ a little wider in the arrangement and the piano roll (one shared width now); the wheel over it zooms around the middle (645ba6a).*
+- [x] Drum clips showed their notes as one flat line. *→ an instrument that only plays one key in a pattern gets its own lane, in rack order, under the melody; the Patterns tab draws the same way (645ba6a).*
+- [x] The ↕ gain grip could be off screen on a wide clip. *→ it sits in the middle of the clip's visible part, in the arrangement and the audio-clip editor (645ba6a).*
 
 **Engine robustness (2026-11-22)**
 - [x] Changing channels (add, remove, reorder, replace) rebuilt every engine channel, cutting off tails.
