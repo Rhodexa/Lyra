@@ -14,15 +14,18 @@ const ICON_256: &[u8] = include_bytes!("../assets/icon_256.png");
 pub fn install(data: &Path, exe: &Path) -> std::io::Result<()> {
     let icons = data.join("icons/hicolor/256x256/apps");
     std::fs::create_dir_all(&icons)?;
-    std::fs::write(icons.join("lyra.png"), ICON_256)?;
+    let icon = icons.join("lyra.png");
+    std::fs::write(&icon, ICON_256)?;
     let apps = data.join("applications");
     std::fs::create_dir_all(&apps)?;
     let exec = exe.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
+    // The icon by its full path: KDE's icon cache can miss a fresh theme icon (it showed "?").
+    let icon = icon.to_string_lossy();
     std::fs::write(
         apps.join("lyra.desktop"),
         format!(
             "[Desktop Entry]\nType=Application\nName=Lyra\nComment=Make music\nExec=\"{exec}\"\n\
-             Icon=lyra\nTerminal=false\nCategories=AudioVideo;Audio;Music;\nStartupWMClass=lyra\n"
+             Icon={icon}\nTerminal=false\nCategories=AudioVideo;Audio;Music;\nStartupWMClass=lyra\n"
         ),
     )
 }
@@ -58,7 +61,7 @@ mod tests {
         super::install(&dir, std::path::Path::new("/opt/my lyra/lyra")).unwrap();
         let entry = std::fs::read_to_string(dir.join("applications/lyra.desktop")).unwrap();
         assert!(entry.contains("Exec=\"/opt/my lyra/lyra\"\n"));
-        assert!(entry.contains("Icon=lyra"));
+        assert!(entry.contains("Icon=/") && entry.contains("/apps/lyra.png"));
         assert!(dir.join("icons/hicolor/256x256/apps/lyra.png").exists());
         let _ = std::fs::remove_dir_all(dir);
     }
