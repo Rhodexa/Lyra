@@ -51,6 +51,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* crystalize: way too much legato. Taps sound uncanny right at the note after silence: a player places the finger quietly beforehand. Spiccato needs a stronger bow *landing*. (Sounds better overall.)
   - Claude: all 129 slurs came from "fast runs four to a bow" firing on any quick pair. Now only real runs (four or more fast notes) slur: very fast (<0.15 s) in fours, moderately fast in pairs (129 → 59; quick figures bounce instead). No finger tap after a rest. Bounces land with a knock through the body plus a stronger, longer scrape. Note: the inferred Bach prelude is now bowed in pairs, not fours.
 
+- [ ] *(Rhodexa, 2026-11-23)* beethoven2.mid (Beethoven Virus) track 5, 0:51–1:04: lots of string crossing, yet it slurs.
+  - Claude: 0.09 s sixteenths hit "very fast runs four to a bow", but those are zig-zag figures rocking across strings (D2–A2–D2–G2…, a pedal note against a moving one), which players bow note by note. Now fast runs slur only where the line flows (steps, or leaps continuing the same direction); a leap reversing against a neighbouring interval is bowed separately, and short notes bounce. 0:51–1:04 now: sweeping arpeggios slurred, rocking figures bounced. Rendered as `midi/beethoven2.wav`.
+
 ## Wishes
 
 - [ ]

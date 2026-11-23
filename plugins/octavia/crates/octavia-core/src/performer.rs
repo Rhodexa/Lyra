@@ -12,8 +12,10 @@
 //!
 //! What it infers when the notes carry no hints:
 //! * **Slurs**: overlapping notes are slurred. Runs of four or more fast
-//!   touching notes are slurred: very fast ones four to a bow, moderately
-//!   fast ones in pairs. Other touching notes get separate bows.
+//!   touching notes are slurred where the line flows (steps, or arpeggios
+//!   sweeping one way): very fast ones four to a bow, moderately fast ones
+//!   in pairs. Zig-zag figures rocking across strings are bowed note by
+//!   note (and, being short, bounce). Other touching notes get separate bows.
 //! * **Staccato**: short notes followed by a clear gap.
 //! * **Accents**: notes clearly louder than their neighbours.
 //! * **Spiccato**: fast notes bowed separately bounce (a drop, a tick of
@@ -325,13 +327,27 @@ impl Performer {
             while fwd < 3 && i + 2 + fwd < self.notes.len() && self.fast_link(i + 1 + fwd) {
                 fwd += 1;
             }
-            if back + 1 + fwd < 3 {
+            if back + 1 + fwd < 3 || !self.flowing(i) {
                 return false;
             }
             let group = if n.dur < 0.15 { 4 } else { 2 };
             return back % group != group - 1;
         }
         false
+    }
+
+    /// Does the line flow from note `i` to `i + 1`: a small step, or a leap
+    /// carrying on in the same direction (an arpeggio sweeping)? Zig-zag
+    /// leaps, a figure rocking across strings, are bowed note by note.
+    fn flowing(&self, i: usize) -> bool {
+        let d = self.notes[i + 1].pitch - self.notes[i].pitch;
+        if d.abs() <= 2.0 {
+            return true; // a step
+        }
+        let before = (i > 0 && self.fast_link(i - 1)).then(|| self.notes[i].pitch - self.notes[i - 1].pitch);
+        let after = (i + 2 < self.notes.len() && self.fast_link(i + 1)).then(|| self.notes[i + 2].pitch - self.notes[i + 1].pitch);
+        let reverses = |x: Option<f32>| x.is_some_and(|x| x.abs() >= 3.0 && x.signum() != d.signum());
+        d.abs() <= 9.0 && !reverses(before) && !reverses(after)
     }
 
     /// Notes `j` and `j + 1` belong to the same fast run.
@@ -932,6 +948,33 @@ mod tests {
         assert_eq!(d[1], Played::Bounced);
         assert_ne!(d[3], Played::Bounced, "a 1 s note doesn't bounce");
         assert_eq!(d[3], Played::NewBow, "the bow is already moving after a bounce");
+    }
+
+    #[test]
+    fn zig_zag_figures_are_bowed_separately_and_scales_are_slurred() {
+        let inst = cello();
+        let run = |keys: &[&str]| {
+            let mut text = String::new();
+            for (k, key) in keys.iter().enumerate() {
+                text += &format!("{} 0.09 {key} 0.6\n", k as f64 * 0.09);
+            }
+            let mut p = Performer::new(&inst, &Style::default());
+            for n in roll(&text).notes {
+                p.add_note(n);
+            }
+            let mut ev = Vec::new();
+            for _ in 0..(2.0 * FRAME_RATE) as usize {
+                p.next_frame(&mut ev);
+            }
+            p.decisions().iter().map(|d| d.played).collect::<Vec<_>>()
+        };
+        // A pedal D2 rocking against notes on the next string (Beethoven Virus).
+        let zig = run(&["D2", "A2", "D2", "G2", "D2", "F2", "D2", "G2"]);
+        assert!(!zig.contains(&Played::Slurred), "{zig:?}");
+        assert!(zig[1..7].iter().all(|p| *p == Played::Bounced), "{zig:?}");
+        // A scale flows: slurred.
+        let scale = run(&["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4"]);
+        assert!(scale.iter().filter(|p| **p == Played::Slurred).count() >= 4, "{scale:?}");
     }
 
     #[test]
