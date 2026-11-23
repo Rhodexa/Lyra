@@ -353,29 +353,35 @@ const fn build_params() -> [ParamInfo; p::COUNT] {
 /// and which operators are heard. Pressing one in the editor reshapes the
 /// matrix (see `apply_algorithm`); the amounts you set are kept.
 pub struct Algorithm {
+    /// A word or two, printed on its key.
+    pub short: &'static str,
+    /// What it is and what it's good for.
     pub name: &'static str,
     pub edges: &'static [(usize, usize)],
     pub carriers: &'static [usize],
 }
 
-/// The starting routings, from one long stack to six plain carriers (DX-style).
-pub const ALGORITHMS: [Algorithm; 8] = [
-    Algorithm {
-        name: "Stack: 6 > 5 > 4 > 3 > 2 > 1",
-        edges: &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)],
-        carriers: &[0],
-    },
-    Algorithm { name: "Stack of four, and a pair", edges: &[(1, 0), (2, 1), (3, 2), (5, 4)], carriers: &[0, 4] },
-    Algorithm { name: "Two stacks of three", edges: &[(1, 0), (2, 1), (4, 3), (5, 4)], carriers: &[0, 3] },
-    Algorithm { name: "Three pairs (e-piano)", edges: &[(1, 0), (3, 2), (5, 4)], carriers: &[0, 2, 4] },
-    Algorithm { name: "Three into one, and a pair", edges: &[(1, 0), (2, 0), (3, 0), (5, 4)], carriers: &[0, 4] },
-    Algorithm {
-        name: "A pair, and one into three (brass)",
-        edges: &[(1, 0), (5, 2), (5, 3), (5, 4)],
-        carriers: &[0, 2, 3, 4],
-    },
-    Algorithm { name: "Five into one", edges: &[(1, 0), (2, 0), (3, 0), (4, 0), (5, 0)], carriers: &[0] },
-    Algorithm { name: "Six carriers (organ)", edges: &[], carriers: &[0, 1, 2, 3, 4, 5] },
+const fn alg(
+    short: &'static str,
+    name: &'static str,
+    edges: &'static [(usize, usize)],
+    carriers: &'static [usize],
+) -> Algorithm {
+    Algorithm { short, name, edges, carriers }
+}
+
+/// The starting routings, from one long stack to six plain carriers (DX-style),
+/// in the order the editor's 3 × 3 grid shows them.
+pub const ALGORITHMS: [Algorithm; 9] = [
+    alg("Stack", "One stack of six: deep, growling", &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)], &[0]),
+    alg("Stack + pair", "A stack of four and a pair", &[(1, 0), (2, 1), (3, 2), (5, 4)], &[0, 4]),
+    alg("Two stacks", "Two stacks of three: two voices in one", &[(1, 0), (2, 1), (4, 3), (5, 4)], &[0, 3]),
+    alg("Three pairs", "Three pairs: e-pianos, keys", &[(1, 0), (3, 2), (5, 4)], &[0, 2, 4]),
+    alg("Two forks", "Two into one, twice: basses, brass", &[(1, 0), (2, 0), (4, 3), (5, 3)], &[0, 3]),
+    alg("Three into one", "Three into one, and a pair", &[(1, 0), (2, 0), (3, 0), (5, 4)], &[0, 4]),
+    alg("Brass", "A pair, and one into three: brass, strings", &[(1, 0), (5, 2), (5, 3), (5, 4)], &[0, 2, 3, 4]),
+    alg("Five into one", "Five into one: bright, metallic", &[(1, 0), (2, 0), (3, 0), (4, 0), (5, 0)], &[0]),
+    alg("Organ", "Six carriers: organs, additive", &[], &[0, 1, 2, 3, 4, 5]),
 ];
 
 /// Where a newly connected matrix cell starts.

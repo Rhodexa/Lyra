@@ -238,9 +238,10 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   editor (`editor.rs`) is generated from `params()` and `groups()` alone, so any
   future plugin gets an editor for free.
 * Hand-made editors take over below the editor's header for one instrument id.
-  Fluttersine (id `lyra.fluttersine`) has one: `fm_editor.rs` (operator tabs, always-visible
-  matrix, draggable envelopes and filter curve, the LFO page for both LFOs and
-  their sync, the MOD page for the mod envelopes and slots). It still only
+  Fluttersine (id `lyra.fluttersine`) has one: `fm_editor.rs` (a header with the hover
+  readout, preset, logo and Tone/Time/Volume/Glide; operator / filter / LFO / MOD
+  tabs on the left; MATRIX / ALGORITHMS tabs on the right; draggable envelopes
+  and filter curve; flat keys; laid out with `flex`). It still only
   edits `params`. Chrysalis (`lyra.chrysalis`) has `chrysalis_editor.rs`,
   with **its own look** (the user's call: the sound is aggressive, the editor
   shouldn't whisper): teal-black panels, dark screens with glowing curves,
