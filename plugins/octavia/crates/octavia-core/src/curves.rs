@@ -9,6 +9,7 @@
 //! ...
 //! pluck,1.250,50.000,0.600,0.550,2
 //! tap,2.000,0.700
+//! ring,2.500,43.000,0.600,1,1
 //! ```
 
 pub const FRAME_RATE: f64 = 250.0;
@@ -47,11 +48,23 @@ pub struct Tap {
     pub strength: f32,
 }
 
+/// The bow has left a string, which rings on by itself.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Ring {
+    pub time: f64,
+    pub pitch: f32,
+    pub level: f32,
+    pub string: u8,
+    /// Open strings ring long; stopped ones are damped by the finger.
+    pub open: bool,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Curves {
     pub frames: Vec<Frame>,
     pub plucks: Vec<Pluck>,
     pub taps: Vec<Tap>,
+    pub rings: Vec<Ring>,
 }
 
 impl Curves {
@@ -70,6 +83,9 @@ impl Curves {
         for k in &self.taps {
             s += &format!("tap,{:.4},{:.3}\n", k.time, k.strength);
         }
+        for r in &self.rings {
+            s += &format!("ring,{:.4},{:.3},{:.4},{},{}\n", r.time, r.pitch, r.level, r.string, r.open as u8);
+        }
         s
     }
 
@@ -83,7 +99,15 @@ impl Curves {
             let err = || format!("line {}: can't read {line:?}", ln + 1);
             let cols: Vec<&str> = line.split(',').map(str::trim).collect();
             let num = |i: usize| cols.get(i).and_then(|v| v.parse::<f64>().ok()).ok_or_else(err);
-            if cols[0] == "tap" {
+            if cols[0] == "ring" {
+                c.rings.push(Ring {
+                    time: num(1)?,
+                    pitch: num(2)? as f32,
+                    level: num(3)? as f32,
+                    string: num(4)? as u8,
+                    open: num(5)? != 0.0,
+                });
+            } else if cols[0] == "tap" {
                 c.taps.push(Tap { time: num(1)?, strength: num(2)? as f32 });
             } else if cols[0] == "pluck" {
                 c.plucks.push(Pluck {
@@ -105,6 +129,7 @@ impl Curves {
         }
         c.plucks.sort_by(|a, b| a.time.total_cmp(&b.time));
         c.taps.sort_by(|a, b| a.time.total_cmp(&b.time));
+        c.rings.sort_by(|a, b| a.time.total_cmp(&b.time));
         Ok(c)
     }
 }
@@ -122,11 +147,13 @@ mod tests {
             ],
             plucks: vec![Pluck { time: 0.5, pitch: 50.0, velocity: 0.6, brightness: 0.5, string: 2 }],
             taps: vec![Tap { time: 0.25, strength: 0.7 }],
+            rings: vec![Ring { time: 0.75, pitch: 43.0, level: 0.6, string: 1, open: true }],
         };
         let back = Curves::from_csv(&c.to_csv()).unwrap();
         assert_eq!(back.frames.len(), 2);
         assert_eq!(back.plucks, c.plucks);
         assert_eq!(back.taps, c.taps);
+        assert_eq!(back.rings, c.rings);
         assert!((back.frames[1].pitch - 43.12).abs() < 1e-3);
     }
 }

@@ -4,7 +4,8 @@
 //!  frames ─▶ BowVoice ─┬─ overtones (body applied per overtone) ─────────┬─▶ out
 //!                      └─ bow noise ─┐                                    │
 //!  plucks ─▶ Plucks ─────────────────┤                                    │
-//!  taps ───▶ Knocks ─────────────────┴─▶ (+ sympathetic strings) ─▶ Body ─┘
+//!  taps ───▶ Knocks ─────────────────┤                                    │
+//!  rings ──▶ strings left ringing ───┴─▶ (+ sympathetic strings) ─▶ Body ─┘
 //! ```
 //!
 //! * [`Sound`] plays curves, one frame-to-frame hop at a time.
@@ -19,6 +20,7 @@ use crate::dsp::OnePole;
 use crate::instrument::Instrument;
 use crate::performer::{Event, Performer, Style};
 use crate::pluck::Plucks;
+use crate::ring::Rings;
 use crate::rand::Rng;
 use crate::score::{Note, Score};
 use crate::sympathetic::Sympathetic;
@@ -33,6 +35,7 @@ fn event_sample(e: &Event, sr: f32) -> u64 {
     let t = match e {
         Event::Pluck(p) => p.time,
         Event::Tap(k) => k.time,
+        Event::Ring(r) => r.time,
     };
     (t.max(0.0) * sr as f64).round() as u64
 }
@@ -42,6 +45,7 @@ pub struct Sound {
     voice: BowVoice,
     plucks: Plucks,
     knocks: Knocks,
+    rings: Rings,
     sym: Sympathetic,
     body: Body,
     tone: Vec<f32>,
@@ -58,6 +62,7 @@ impl Sound {
             voice,
             plucks: Plucks::new(sr, inst.pluck_ring, seed),
             knocks: Knocks::new(sr, seed),
+            rings: Rings::new(sr),
             sym: Sympathetic::new(&inst.open_strings, sr),
             body: Body::new(inst, sr, seed),
             tone: vec![0.0; hop],
@@ -78,6 +83,9 @@ impl Sound {
             self.noise.resize(n, 0.0);
         }
         self.voice.process(a, b, &mut self.tone[..n], &mut self.noise[..n]);
+        if b.loudness > 0.05 {
+            self.rings.choke(b.string);
+        }
         let mut next = 0;
         for (i, o) in out.iter_mut().enumerate() {
             while let Some((at, e)) = events.get(next) {
@@ -87,10 +95,11 @@ impl Sound {
                 match e {
                     Event::Pluck(p) => self.plucks.trigger(p),
                     Event::Tap(k) => self.knocks.trigger(k.strength),
+                    Event::Ring(r) => self.rings.start(r),
                 }
                 next += 1;
             }
-            let raw = self.noise[i] + self.plucks.tick() + self.knocks.tick();
+            let raw = self.noise[i] + self.plucks.tick() + self.knocks.tick() + self.rings.tick();
             // The open strings hear everything at the bridge, tone included.
             let ring = self.sym.tick(raw + self.tone[i]);
             *o = self.tone[i] + self.body.process(raw + ring);
@@ -109,6 +118,7 @@ pub fn render(curves: &Curves, inst: &Instrument, sr: f32, seed: u64, bright: f3
         .iter()
         .map(|p| Event::Pluck(*p))
         .chain(curves.taps.iter().map(|k| Event::Tap(*k)))
+        .chain(curves.rings.iter().map(|r| Event::Ring(*r)))
         .map(|e| (event_sample(&e, sr), e))
         .collect();
     events.sort_by_key(|(s, _)| *s);
@@ -218,6 +228,7 @@ impl Engine {
                 match e {
                     Event::Pluck(p) => rec.plucks.push(p),
                     Event::Tap(k) => rec.taps.push(k),
+                    Event::Ring(r) => rec.rings.push(r),
                 }
             }
             self.pending.push((event_sample(&e, self.sr), e));

@@ -23,11 +23,12 @@ pub mod performer;
 pub mod pluck;
 pub mod rand;
 pub mod render;
+pub mod ring;
 pub mod score;
 pub mod sympathetic;
 pub mod voice;
 
-pub use curves::{Curves, Frame, Pluck, Tap, FRAME_RATE};
+pub use curves::{Curves, Frame, Pluck, Ring, Tap, FRAME_RATE};
 pub use instrument::Instrument;
 pub use performer::{perform, Event, Performer, Style, LOOKAHEAD};
 pub use render::{render, render_score, Engine, Sound};

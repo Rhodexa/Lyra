@@ -32,10 +32,15 @@
 //! * **Finger taps**: a finger landing knocks the fingerboard, hardest when
 //!   it hammers down mid-slur; lifting off makes a smaller one.
 //! * **Releases**: when the bow stops, the string rings on and darkens.
-//! * **String choice** stays on the current string while it can and avoids
-//!   open strings on long notes (so they can have vibrato).
+//!   When the bow crosses to another string, the one it left rings on by
+//!   itself (open strings for long).
+//! * **Fingering**: a left hand covering ~4 semitones on all strings at once.
+//!   Open strings and notes under the hand are free, crossing strings is
+//!   cheap, shifting the hand is expensive. So arpeggios cross strings (the
+//!   Bach prelude: open G, open D, A string) instead of leaping up one string.
+//!   Long notes avoid open strings so they can have vibrato.
 
-use crate::curves::{Curves, Frame, Pluck, Tap, FRAME_RATE};
+use crate::curves::{Curves, Frame, Pluck, Ring, Tap, FRAME_RATE};
 use crate::dsp::smoothstep;
 use crate::instrument::Instrument;
 use crate::rand::{hash_bipolar, Wander};
@@ -70,6 +75,7 @@ impl Default for Style {
 pub enum Event {
     Pluck(Pluck),
     Tap(Tap),
+    Ring(Ring),
 }
 
 /// Notes closer than this count as connected.
@@ -140,6 +146,8 @@ pub struct Performer {
     smooth_loud: f32,
     loud_keep: f32,
     prev_string: Option<u8>,
+    /// Where the left hand sits (see [`choose_fingering`]).
+    hand: f32,
 }
 
 impl Performer {
@@ -157,6 +165,7 @@ impl Performer {
             // Loudness can't jump: the bow has mass. ~8 ms smoothing.
             loud_keep: (-(1.0 / FRAME_RATE as f32) / 0.008).exp(),
             prev_string: None,
+            hand: 1.0,
         }
     }
 
@@ -354,7 +363,8 @@ impl Performer {
             _ => 0.0,
         };
 
-        let string = choose_string(n.pitch, self.prev_string, n.dur > 0.5 && !pizz, inst);
+        let fingering = choose_fingering(n.pitch, self.prev_string, self.hand, n.dur > 0.5 && !pizz, inst);
+        let string = fingering.string;
         let crossing = self.prev_string.is_some_and(|s| s != string);
         let open = (n.pitch - inst.open_strings[string as usize]).abs() < 0.01;
 
@@ -393,10 +403,12 @@ impl Performer {
                 let k = (n.pitch - pn.pitch).abs();
                 if k < 0.5 {
                     0.0
-                } else if k >= 5.0 && pn.dur > 0.3 {
-                    0.05 + 0.04 * e // an audible shift: the only slide
                 } else if crossing {
                     0.004 // another string: nothing to slide on
+                } else if fingering.shift > 0.0 && k >= 5.0 && pn.dur > 0.3 {
+                    0.05 + 0.04 * e // an expressive shift: a real slide
+                } else if fingering.shift > 0.0 {
+                    (0.02 + 0.007 * fingering.shift).min(0.06) // the hand travels
                 } else {
                     0.008 // a finger lands: fast, no audible slide
                 }
@@ -454,7 +466,22 @@ impl Performer {
             events.push(Event::Tap(Tap { time: (n.start - lead).max(t), strength }));
         }
 
+        // Crossing away from a string that was sounding: it rings on.
+        if let (true, false, Some((pn, pp))) = (crossing, pizz, prev) {
+            if entry != Entry::Fresh {
+                let open_prev = (pn.pitch - inst.open_strings[pp.string as usize]).abs() < 0.01;
+                events.push(Event::Ring(Ring {
+                    time: (n.start - glide as f64).max(t),
+                    pitch: pp.pitch,
+                    level: pp.level,
+                    string: pp.string,
+                    open: open_prev,
+                }));
+            }
+        }
+
         self.prev_string = Some(string);
+        self.hand = fingering.hand;
         self.plans.push(plan);
     }
 
@@ -575,35 +602,60 @@ pub fn perform(score: &Score, inst: &Instrument, style: &Style) -> Curves {
             match e {
                 Event::Pluck(x) => curves.plucks.push(x),
                 Event::Tap(x) => curves.taps.push(x),
+                Event::Ring(x) => curves.rings.push(x),
             }
         }
     }
     curves
 }
 
-/// Stay on the current string while the note is in reach; otherwise take the
-/// highest string where the note sits in the first few positions. Long notes
-/// avoid open strings so they can sing with vibrato.
-fn choose_string(pitch: f32, prev: Option<u8>, avoid_open: bool, inst: &Instrument) -> u8 {
-    let os = &inst.open_strings;
-    let is_open = |s: usize| (pitch - os[s]).abs() < 0.01;
-    if let Some(s) = prev {
-        let s = s as usize;
-        let reach = if s == 3 { 24.0 } else { 9.0 };
-        if pitch >= os[s] - 0.01 && pitch <= os[s] + reach && !(avoid_open && is_open(s) && s > 0) {
-            return s as u8;
+/// How many semitones the left hand covers without moving (cello, lower
+/// positions: four fingers over about a major third, plus a stretch).
+const HAND_SPAN: f32 = 4.0;
+
+/// A fingering choice: which string, where the hand ends up, how far it moved.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Fingering {
+    string: u8,
+    hand: f32,
+    shift: f32,
+}
+
+/// Picks the cheapest way to reach `pitch`, as a cellist would: an open
+/// string or a note already under the hand is free, crossing to a neighbour
+/// string is cheap, moving the hand (a shift) is expensive and more so the
+/// further it goes, and climbing high on the low strings is discouraged.
+/// Long notes avoid open strings so they can have vibrato.
+///
+/// `hand` is the lowest offset (semitones above any open string) the hand
+/// covers; the strings are tuned in fifths, so it's the same on all of them.
+fn choose_fingering(pitch: f32, prev: Option<u8>, hand: f32, avoid_open: bool, inst: &Instrument) -> Fingering {
+    let mut best = Fingering { string: 0, hand, shift: 0.0 };
+    let mut best_cost = f32::MAX;
+    for (s, &open) in inst.open_strings.iter().enumerate() {
+        let off = pitch - open;
+        if off < -0.01 {
+            continue;
+        }
+        let (mut cost, new_hand, shift) = if off.abs() < 0.01 {
+            (if avoid_open { 2.5 } else { 0.0 }, hand, 0.0)
+        } else if off >= hand - 0.01 && off <= hand + HAND_SPAN + 0.01 {
+            (0.0, hand, 0.0)
+        } else {
+            let to = if off < hand { off } else { off - HAND_SPAN }.max(1.0);
+            let shift = (to - hand).abs();
+            (1.0 + 0.25 * shift, to, shift)
+        };
+        if s < 3 {
+            cost += 0.15 * (off - 7.0).max(0.0);
+        }
+        cost += prev.map_or(0.0, |p| 0.35 * (s as f32 - p as f32).abs());
+        if cost < best_cost {
+            best_cost = cost;
+            best = Fingering { string: s as u8, hand: new_hand, shift };
         }
     }
-    let mut best = 0;
-    for (s, &o) in os.iter().enumerate() {
-        if pitch >= o - 0.01 && (s == 3 || pitch <= o + 7.01) {
-            best = s;
-        }
-    }
-    if avoid_open && is_open(best) && best > 0 {
-        best -= 1;
-    }
-    best as u8
+    best
 }
 
 #[cfg(test)]
@@ -708,8 +760,25 @@ mod tests {
     #[test]
     fn long_open_string_notes_move_to_a_lower_string() {
         let inst = cello();
-        assert_eq!(choose_string(50.0, None, false, &inst), 2);
-        assert_eq!(choose_string(50.0, None, true, &inst), 1);
+        assert_eq!(choose_fingering(50.0, None, 1.0, false, &inst).string, 2);
+        assert_eq!(choose_fingering(50.0, None, 1.0, true, &inst).string, 1);
+    }
+
+    #[test]
+    fn arpeggios_cross_strings_instead_of_leaping() {
+        // Bach prelude, bar 1: G2 D3 B3 A3 B3 D3 B3 D3, played on open G,
+        // open D, then the A string (B3 under the hand, A3 open).
+        let inst = cello();
+        let (mut prev, mut hand) = (None, 1.0);
+        let mut strings = Vec::new();
+        for p in [43.0, 50.0, 59.0, 57.0, 59.0, 50.0, 59.0, 50.0] {
+            let f = choose_fingering(p, prev, hand, false, &inst);
+            assert_eq!(f.shift, 0.0, "no hand shifts in bar 1");
+            strings.push(f.string);
+            prev = Some(f.string);
+            hand = f.hand;
+        }
+        assert_eq!(strings, [1, 2, 3, 3, 3, 2, 3, 2]);
     }
 
     #[test]

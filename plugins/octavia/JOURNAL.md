@@ -29,6 +29,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* v6: "It definitely sounds like a cello now!" Loves v6 *and* v4; v4 isn't bad in retrospect. Loves v4's brightness and power, "boss fight" like a French horn.
   - Claude: `--bright 0..1` dial: 0 = v6 natural, 1 = v4-like bright and powerful (brighter overtones, lighter and smoother noise). Examples in `renders/bright/0.5` and `renders/bright/1`. In Lyra this becomes a knob.
 
+- [ ] *(Rhodexa, 2026-11-23)* Prelude feels wrong: fast, wide legato leaps, as if sliding far up one string. A real player would change strings instead.
+  - Claude: right, a real bug. The old rule stuck to one string within 9 semitones, so G2→D3 was a 7-semitone leap on the G string. Now there's a left-hand model: open strings and notes under the hand are free, crossings cheap, shifts expensive. Bar 1 plays open G, open D, A string with no shifts (tested). Shift slides scale with distance. And since one oscillator still sounds like one string leaping, **strings left behind now ring on** (open ones ~1.6 s, stopped ones ~0.5 s, choked when the bow returns), about 13 dB under the bowed line. A/B: `renders/ab/prelude-v6.wav` vs `prelude-v7.wav`.
+
 ## Wishes
 
 - [ ]
