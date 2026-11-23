@@ -48,6 +48,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* crystalize.mid (Lindsey Stirling): great test material, lots of string switching.
   - Claude: rendered on violin (`midi/crystalize.wav`, shifted up an octave to fit) and cello (`midi/cello/crystalize.wav`). `--explain` now also shows the string (IV lowest … I highest), open strings, hand position and shifts. Found that the hand was cello-sized on the violin too, giving 61 tiny one-semitone shifts. Hand span is now per instrument (cello 4, violin 6 semitones): 8 shifts left, all real climbs to D6/G6 and back.
 
+- [ ] *(Rhodexa, 2026-11-23)* crystalize: way too much legato. Taps sound uncanny right at the note after silence: a player places the finger quietly beforehand. Spiccato needs a stronger bow *landing*. (Sounds better overall.)
+  - Claude: all 129 slurs came from "fast runs four to a bow" firing on any quick pair. Now only real runs (four or more fast notes) slur: very fast (<0.15 s) in fours, moderately fast in pairs (129 → 59; quick figures bounce instead). No finger tap after a rest. Bounces land with a knock through the body plus a stronger, longer scrape. Note: the inferred Bach prelude is now bowed in pairs, not fours.
+
 ## Wishes
 
 - [ ]

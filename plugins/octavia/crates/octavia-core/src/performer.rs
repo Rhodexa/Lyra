@@ -11,9 +11,9 @@
 //! and get identical results).
 //!
 //! What it infers when the notes carry no hints:
-//! * **Slurs**: overlapping notes are slurred. Fast runs of touching notes
-//!   are slurred in groups of four, as a cellist would bow them. Other
-//!   touching notes get separate bows.
+//! * **Slurs**: overlapping notes are slurred. Runs of four or more fast
+//!   touching notes are slurred: very fast ones four to a bow, moderately
+//!   fast ones in pairs. Other touching notes get separate bows.
 //! * **Staccato**: short notes followed by a clear gap.
 //! * **Accents**: notes clearly louder than their neighbours.
 //! * **Spiccato**: fast notes bowed separately bounce (a drop, a tick of
@@ -32,7 +32,8 @@
 //! * **Intonation**: a few cents of human error that settles after the
 //!   attack; leading tones lean up toward the note they resolve to.
 //! * **Finger taps**: a finger landing knocks the fingerboard, hardest when
-//!   it hammers down mid-slur; lifting off makes a smaller one.
+//!   it hammers down mid-slur; lifting off makes a smaller one. After a rest
+//!   the finger is placed silently. A bounced bow knocks as it lands.
 //! * **Releases**: when the bow stops, the string rings on and darkens.
 //!   When the bow crosses to another string, the one it left rings on by
 //!   itself (open strings for long).
@@ -316,17 +317,34 @@ impl Performer {
             return true; // drawn overlapping
         }
         if n.dur < FAST && q.dur < FAST {
-            return self.run_index(i) % 4 != 3; // fast runs: four to a bow
+            // Only a real run (four or more fast notes) is slurred, and only
+            // very fast notes four to a bow; moderately fast ones in pairs. A
+            // quick pair inside a mixed rhythm gets separate bows.
+            let back = self.run_index(i);
+            let mut fwd = 0;
+            while fwd < 3 && i + 2 + fwd < self.notes.len() && self.fast_link(i + 1 + fwd) {
+                fwd += 1;
+            }
+            if back + 1 + fwd < 3 {
+                return false;
+            }
+            let group = if n.dur < 0.15 { 4 } else { 2 };
+            return back % group != group - 1;
         }
         false
+    }
+
+    /// Notes `j` and `j + 1` belong to the same fast run.
+    fn fast_link(&self, j: usize) -> bool {
+        let (a, b) = (&self.notes[j], &self.notes[j + 1]);
+        touching(a, b) && a.dur < FAST && b.dur < FAST && a.slur.is_none() && (a.pitch - b.pitch).abs() > 0.01
     }
 
     /// Position of note `i` in its run of fast, touching notes.
     fn run_index(&self, i: usize) -> usize {
         let mut j = i;
         while j > 0 {
-            let (a, b) = (&self.notes[j - 1], &self.notes[j]);
-            if touching(a, b) && a.dur < FAST && b.dur < FAST && a.slur.is_none() {
+            if self.fast_link(j - 1) {
                 j -= 1;
             } else {
                 break;
@@ -407,6 +425,8 @@ impl Performer {
             }
             _ => Entry::Fresh,
         };
+        // After a rest the finger is placed quietly, long before the bow.
+        let from_silence = prev.is_none_or(|(pn, _)| n.start - pn.end() > PHRASE_GAP);
         let staccato = !pizz
             && match n.articulation {
                 Articulation::Staccato => true,
@@ -569,7 +589,12 @@ impl Performer {
                     string: lower,
                 }));
             }
-        } else if let Some(strength) = tap_strength(entry, prev.map(|(pn, pp)| (pn, pp.string)), n, string, open) {
+        } else if spiccato {
+            // The bow lands: hair and stick knock the string.
+            events.push(Event::Tap(Tap { time: n.start.max(t), strength: 0.45 }));
+        } else if let Some(strength) = tap_strength(entry, prev.map(|(pn, pp)| (pn, pp.string)), n, string, open)
+            .filter(|_| !from_silence)
+        {
             let lead = if entry == Entry::Legato { glide as f64 } else { 0.015 };
             events.push(Event::Tap(Tap { time: (n.start - lead).max(t), strength }));
         }
@@ -669,7 +694,7 @@ impl Performer {
         // A free-ringing string (bow lifted or stopped) loses its highs first.
         let release_dark = if matches!(exit, Exit::Decay(_)) && t > sound_end { 0.35 * (1.0 - fall) } else { 0.0 };
         // A lifted bow leaves the string ringing free: darker by the moment.
-        let lifted = if p.spiccato { 0.15 * (-since / 0.012).exp() - 0.22 * (1.0 - (-since / 0.08).exp()) } else { 0.0 };
+        let lifted = if p.spiccato { 0.25 * (-since / 0.015).exp() - 0.22 * (1.0 - (-since / 0.08).exp()) } else { 0.0 };
         let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite + lifted - release_dark).clamp(0.0, 1.0);
 
         let spike = match p.entry {
@@ -681,7 +706,7 @@ impl Performer {
         // A bowed string always breathes: a steady layer of rosin noise under the tone.
         let noise = if p.spiccato {
             // The hair hits the string (a tick), then hardly any rosin: the bow is off.
-            (0.3 * self.style.breath * bounce + 0.6 * (-since / 0.015).exp()).min(1.0)
+            (0.3 * self.style.breath * bounce + 0.95 * (-since / 0.02).exp()).min(1.0)
         } else {
             (0.3 * self.style.breath + spike * (-since / 0.035).exp() + if loudness < 0.25 { 0.08 } else { 0.0 }).min(1.0)
         };
