@@ -84,5 +84,11 @@ needs that Lyra's trait doesn't have yet:
 Code: MIT OR Apache-2.0, same as Lyra. Training audio must be clearly
 licensed (CC0/CC-BY, or recorded for us under terms we write). Public-domain
 *compositions* are fine to perform; most *recordings* of them are not fine to
-train on. If clean data can't be had, stage 4 stalls and the rules-plus-
+train on. Known sources: **University of Iowa MIS** samples are free to use for
+anything, so they're the first training candidate. The **Aalto anechoic orchestra**
+recordings have restrictive terms: use them for listening and measuring only, never for
+training or shipping. Anything else in `ext_sample/` is listening and measuring
+material only.
+
+If clean data can't be had, stage 4 stalls and the rules-plus-
 recipe instrument is still the product.

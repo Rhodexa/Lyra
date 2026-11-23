@@ -25,7 +25,8 @@ Claude reads this before choosing what to work on.
 
 - [ ] *(Rhodexa, 2026-11-23)* v5 sounds much better. Found raw recordings (Iowa sample, anechoic Mozart cello): real cellos are much noisier than expected; the old breath-2.5 render was closer.
   - Claude: added a "noise floor" measure (energy between the overtones). Clean references sit at −21 to −23 dB; our held note at breath 1 was −30. Bow noise is now 8 dB louder at the voice, so breath 1 measures −24 on a held note. Attack scrapes rose with it. Files: `renders/ab/*-v6.wav`.
-  - Possible training data later, licences to check before use: University of Iowa MIS samples (I believe they're free to use) and the Aalto anechoic orchestra recordings (terms unknown).
+  - Licences (Rhodexa): Iowa MIS = free for anything (training candidate). Aalto anechoic = restrictive, so listening and measuring only.
+- [ ] *(Rhodexa, 2026-11-23)* v6: "It definitely sounds like a cello now!" Loves v6 *and* v4; v4 isn't bad in retrospect.
 
 ## Wishes
 
