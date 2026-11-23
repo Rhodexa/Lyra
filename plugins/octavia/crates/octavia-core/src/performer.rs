@@ -16,6 +16,8 @@
 //!   touching notes get separate bows.
 //! * **Staccato**: short notes followed by a clear gap.
 //! * **Accents**: notes clearly louder than their neighbours.
+//! * **Spiccato**: fast notes bowed separately bounce (a drop, a tick of
+//!   hair, then the string rings free). Repeated notes are never slurred.
 //!
 //! How it plays:
 //! * **Phrases** are split at rests. Loudness grows over the first couple of
@@ -119,6 +121,8 @@ struct Plan {
     attack: f32,
     accent: f32,
     staccato: bool,
+    /// Bounced bow: a drop, a tick of hair, then the string rings free.
+    spiccato: bool,
     level: f32,
     ramp: f32,
     swell: f32,
@@ -237,12 +241,20 @@ impl Performer {
 
     /// Is note `i` slurred into note `i + 1`? Needs `plans[i]`.
     fn slurred(&self, i: usize) -> bool {
+        self.slur_rule(i, self.plans[i].staccato || self.plans[i].spiccato)
+    }
+
+    /// The slur decision, given whether note `i` itself is short and lifted.
+    fn slur_rule(&self, i: usize, lifted: bool) -> bool {
         let (n, q) = (&self.notes[i], &self.notes[i + 1]);
-        if !touching(n, q) || self.is_pizz(n) || self.is_pizz(q) || self.plans[i].staccato {
+        if !touching(n, q) || self.is_pizz(n) || self.is_pizz(q) || lifted {
             return false;
         }
         if let Some(s) = n.slur {
             return s;
+        }
+        if (q.pitch - n.pitch).abs() < 0.01 {
+            return false; // a repeated note is always re-articulated
         }
         if q.start < n.end() - 0.005 {
             return true; // drawn overlapping
@@ -290,6 +302,9 @@ impl Performer {
         if p.pizz {
             return Exit::Decay(0.1);
         }
+        if p.spiccato {
+            return Exit::Decay(0.05); // the bow is already off the string
+        }
         let ring = if p.staccato { 0.07 } else { 0.3 };
         match self.next_visible(i, t) {
             Some(q) if touching(n, q) && !self.is_pizz(q) && !p.staccato => {
@@ -325,7 +340,7 @@ impl Performer {
 
         let entry = match prev {
             _ if pizz => Entry::Fresh,
-            Some((pn, pp)) if touching(pn, n) && !pp.pizz && !pp.staccato => {
+            Some((pn, pp)) if touching(pn, n) && !pp.pizz && !pp.staccato && !pp.spiccato => {
                 if self.slurred(i - 1) {
                     Entry::Legato
                 } else {
@@ -340,6 +355,16 @@ impl Performer {
                 Articulation::Auto => {
                     n.dur < 0.3 && next.is_none_or(|q| q.start - n.end() >= (0.35 * n.dur).max(0.05))
                 }
+                _ => false,
+            };
+        // Fast notes bowed separately (no slur on either side) bounce.
+        let fast = next.is_some_and(|q| q.start - n.start < FAST + 0.02)
+            || prev.is_some_and(|(pn, _)| n.start - pn.start < FAST + 0.02);
+        let slur_out = next.is_some() && i + 1 < self.notes.len() && self.slur_rule(i, staccato);
+        let spiccato = !pizz
+            && match n.articulation {
+                Articulation::Spiccato => true,
+                Articulation::Auto => fast && !staccato && entry != Entry::Legato && !slur_out,
                 _ => false,
             };
 
@@ -394,7 +419,7 @@ impl Performer {
         let settle =
             if entry == Entry::Legato || open || pizz { 0.0 } else { e * 0.05 * hash_bipolar(self.style.seed ^ 0xA77AC, i) };
 
-        let vib_depth = if pizz || open || n.dur < 0.22 { 0.0 } else { (0.13 + 0.14 * level) * self.style.vibrato };
+        let vib_depth = if pizz || open || spiccato || n.dur < 0.22 { 0.0 } else { (0.13 + 0.14 * level) * self.style.vibrato };
         let prev_vibrated = prev.is_some_and(|(_, pp)| pp.vib_depth > 0.0);
         let vib_delay = if entry == Entry::Legato && prev_vibrated { 0.05 } else { 0.14 };
 
@@ -439,6 +464,7 @@ impl Performer {
             attack,
             accent,
             staccato,
+            spiccato,
             level,
             ramp: n.dynamic_end - n.dynamic,
             swell: if n.dur > 0.9 && !pizz && !hairpin { 0.07 * e } else { 0.0 },
@@ -523,7 +549,16 @@ impl Performer {
             _ => 0.0,
         };
         let shape = 1.0 + p.swell * (std::f32::consts::PI * prog).sin() - fade;
-        let loudness = if p.pizz { 0.0 } else { ((p.level + p.ramp * prog) * shape).max(0.0) * rise * bite * fall };
+        // A bounce: the bow drops, grips for a moment and lifts off; the
+        // string keeps ringing until the next drop.
+        let bounce = 0.18 + 0.82 * smoothstep(since / 0.01) * (-(since - 0.01).max(0.0) / 0.065).exp();
+        let loudness = if p.pizz {
+            0.0
+        } else if p.spiccato {
+            (p.level * (1.0 + 0.25 * p.accent)).max(0.0) * bounce * fall
+        } else {
+            ((p.level + p.ramp * prog) * shape).max(0.0) * rise * bite * fall
+        };
 
         // Left hand: settling intonation, vibrato, moving into the next note.
         let mut pitch = p.pitch + p.settle * (-since / 0.05).exp();
@@ -543,7 +578,9 @@ impl Performer {
         let attack_bite = if p.entry == Entry::Legato { 0.0 } else { (0.12 + 0.25 * p.accent) * (-since / 0.09).exp() };
         // A free-ringing string (bow lifted or stopped) loses its highs first.
         let release_dark = if matches!(exit, Exit::Decay(_)) && t > sound_end { 0.35 * (1.0 - fall) } else { 0.0 };
-        let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite - release_dark).clamp(0.0, 1.0);
+        // A lifted bow leaves the string ringing free: darker by the moment.
+        let lifted = if p.spiccato { 0.15 * (-since / 0.012).exp() - 0.22 * (1.0 - (-since / 0.08).exp()) } else { 0.0 };
+        let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite + lifted - release_dark).clamp(0.0, 1.0);
 
         let spike = match p.entry {
             Entry::Legato if p.crossing => 0.15,
@@ -552,8 +589,12 @@ impl Performer {
             Entry::Fresh => 0.35,
         } + 0.4 * p.accent;
         // A bowed string always breathes: a steady layer of rosin noise under the tone.
-        let noise = (0.3 * self.style.breath + spike * (-since / 0.035).exp() + if loudness < 0.25 { 0.08 } else { 0.0 })
-            .min(1.0);
+        let noise = if p.spiccato {
+            // The hair hits the string (a tick), then hardly any rosin: the bow is off.
+            (0.3 * self.style.breath * bounce + 0.6 * (-since / 0.015).exp()).min(1.0)
+        } else {
+            (0.3 * self.style.breath + spike * (-since / 0.035).exp() + if loudness < 0.25 { 0.08 } else { 0.0 }).min(1.0)
+        };
 
         Frame { pitch, loudness, brightness, noise, string: p.string }
     }
@@ -711,6 +752,23 @@ mod tests {
         };
         assert!(dip_at(2.0) > 0.35, "inside a slur: {}", dip_at(2.0));
         assert!(dip_at(4.0) < dip_at(2.0) - 0.1, "bow change at 4: {} vs {}", dip_at(4.0), dip_at(2.0));
+    }
+
+    #[test]
+    fn repeated_fast_notes_bounce_instead_of_smearing() {
+        let inst = cello();
+        // Four touching C4s, 0.19 s each: re-articulated, each a bounce.
+        let mut text = String::new();
+        for k in 0..4 {
+            text += &format!("{} 0.19 C4 0.6\n", k as f64 * 0.19);
+        }
+        let c = perform(&roll(&text), &inst, &Style::default());
+        for k in 1..4 {
+            let at = k as f64 * 0.19;
+            let before = frame_at(&c, at - 0.01).loudness;
+            let peak = (0..10).map(|j| frame_at(&c, at + j as f64 * 0.004).loudness).fold(0.0, f32::max);
+            assert!(peak > before * 2.0, "note {k} should bounce: {before} -> {peak}");
+        }
     }
 
     #[test]

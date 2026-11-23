@@ -35,6 +35,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* MIDIs in `midi/`: marmalade is the best of them. Monophonic of course, but it already makes some very interesting tests.
   - Claude: marmalade is a piano track (57% chords, E1–A6). The top-note line was grabbing left-hand notes under held melody notes and folding 53 notes by an octave one at a time, both heard as octave spikes. Now accompaniment under a held note is skipped, the octave shift is chosen to need the fewest folds (53 → 12), and the cello range goes up to A5. Re-rendered into `midi/marmalade.wav`.
 
+- [ ] *(Rhodexa, 2026-11-23)* marmalade ~31–32 s: a note repeated fast smears out (the bow just goes back and forth). It should bounce the bow (spiccato) instead.
+  - Claude: the four repeated C5s were slurred by the fast-run rule (a slur between identical notes = one long note), and the MIDI import read a small same-key overlap as a slur. Now repeated notes are never slurred, same-key overlaps are cut, and **spiccato** is inferred for fast notes bowed separately: a drop, a tick of hair, then the string rings free and darkens. Score mark `*`. Re-rendered `midi/marmalade.wav`.
+
 ## Wishes
 
 - [ ]

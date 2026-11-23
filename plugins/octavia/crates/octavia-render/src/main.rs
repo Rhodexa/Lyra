@@ -198,6 +198,9 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
             };
             let (score, what) = midi::to_line(&file, &pick)?;
             println!("{stem}: {what}");
+            // The line Octavia actually plays, at 60 bpm (1 beat = 1 second).
+            let roll = args.out.join(format!("{stem}.roll"));
+            std::fs::write(&roll, score.to_roll(60.0)).map_err(|e| e.to_string())?;
             score
         } else if ext == "roll" {
             Score::parse_roll(&text)?

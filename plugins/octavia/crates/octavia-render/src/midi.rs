@@ -254,7 +254,8 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
         let mut slur = None;
         if let Some(next) = line.get(i + 1) {
             if end > next.start {
-                if end - next.start <= 0.15 {
+                // Same key twice can't be a slur: it's re-struck.
+                if end - next.start <= 0.15 && next.key != n.key {
                     slur = Some(true);
                 } else {
                     end = next.start;

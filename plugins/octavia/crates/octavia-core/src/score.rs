@@ -17,7 +17,7 @@
 //!
 //! Durations: `w h q e s t` (whole … 32nd), `3` after the letter for a
 //! triplet, dots for dotted. Marks before a note: `^` accent, `'` staccato
-//! (the note is shortened, as if drawn short), `-` tenuto. Dynamics:
+//! (the note is shortened, as if drawn short), `*` spiccato (bounced), `-` tenuto. Dynamics:
 //! `pp p mp mf f ff`. `r` is a rest. Unmarked notes are left to the performer.
 //!
 //! And a **roll**, exactly what a piano roll holds, nothing more:
@@ -36,6 +36,8 @@ pub enum Articulation {
     /// Ordinary separate bow.
     Detache,
     Staccato,
+    /// Bounced bow.
+    Spiccato,
     Accent,
     Tenuto,
     Pizzicato,
@@ -207,6 +209,9 @@ impl Score {
                         t = r;
                     } else if let Some(r) = t.strip_prefix('\'') {
                         art = Articulation::Staccato;
+                        t = r;
+                    } else if let Some(r) = t.strip_prefix('*') {
+                        art = Articulation::Spiccato;
                         t = r;
                     } else if let Some(r) = t.strip_prefix('-') {
                         art = Articulation::Tenuto;
