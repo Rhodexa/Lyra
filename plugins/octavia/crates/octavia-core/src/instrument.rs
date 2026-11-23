@@ -22,6 +22,8 @@ pub struct Instrument {
     pub body_modes: Vec<Mode>,
     /// Frequency range (Hz) of the scattered small modes, and how many.
     pub body_grain: (f32, f32, usize),
+    /// Dense detail of the body response applied per overtone: Hz range, count.
+    pub body_detail: (f32, f32, usize),
     /// How much of the string goes straight out, unfiltered by the body.
     pub body_direct: f32,
     /// Below this the body radiates poorly (12 dB/octave roll-off).
@@ -68,6 +70,7 @@ pub fn cello() -> Instrument {
             m(2100.0, 8.0, 0.25),
         ],
         body_grain: (150.0, 6000.0, 110),
+        body_detail: (80.0, 9000.0, 320),
         body_direct: 0.22,
         radiation_hz: 110.0,
         pluck_ring: 1.6,
@@ -94,6 +97,7 @@ pub fn violin() -> Instrument {
             m(3500.0, 8.0, 0.25),
         ],
         body_grain: (700.0, 7000.0, 28),
+        body_detail: (200.0, 12000.0, 320),
         body_direct: 0.22,
         radiation_hz: 260.0,
         pluck_ring: 0.8,

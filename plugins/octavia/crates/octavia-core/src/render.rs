@@ -1,12 +1,12 @@
 //! Curves → mono audio. The instrument half of the pipeline.
 //!
 //! ```text
-//!  frames ─▶ BowVoice ─┐
-//!                      ├─▶ (+ sympathetic strings) ─▶ Body ─▶ out
-//!  plucks ─▶ Plucks ───┘
+//!  frames ─▶ BowVoice ─┬─ overtones (body applied per overtone) ─────────┬─▶ out
+//!                      └─ bow noise ─┐                                    │
+//!  plucks ─▶ Plucks ─────────────────┴─▶ (+ sympathetic strings) ─▶ Body ─┘
 //! ```
 
-use crate::body::Body;
+use crate::body::{Body, BodyResponse};
 use crate::curves::{Curves, FRAME_RATE};
 use crate::instrument::Instrument;
 use crate::pluck::Plucks;
@@ -20,18 +20,20 @@ pub fn render(curves: &Curves, inst: &Instrument, sr: f32, seed: u64) -> Vec<f32
     }
     let at = |f: usize| (f as f64 * sr as f64 / FRAME_RATE).round() as usize;
     let len = at(frames.len() - 1);
-    let mut bow = vec![0.0f32; len];
+    let mut tone = vec![0.0f32; len];
+    let mut noise = vec![0.0f32; len];
 
-    let mut voice = BowVoice::new(sr, seed);
+    let mut voice = BowVoice::new(sr, BodyResponse::new(inst, seed), seed);
     for f in 0..frames.len() - 1 {
-        voice.process(&frames[f], &frames[f + 1], &mut bow[at(f)..at(f + 1)]);
+        let (s0, s1) = (at(f), at(f + 1));
+        voice.process(&frames[f], &frames[f + 1], &mut tone[s0..s1], &mut noise[s0..s1]);
     }
 
     let mut plucks = Plucks::new(sr, inst.pluck_ring, seed);
     let mut sym = Sympathetic::new(&inst.open_strings, sr);
     let mut body = Body::new(inst, sr, seed);
     let mut next_pluck = 0;
-    let mut out = bow;
+    let mut out = tone;
     for (i, s) in out.iter_mut().enumerate() {
         while let Some(p) = curves.plucks.get(next_pluck) {
             if (p.time * sr as f64) as usize > i {
@@ -40,9 +42,10 @@ pub fn render(curves: &Curves, inst: &Instrument, sr: f32, seed: u64) -> Vec<f32
             plucks.trigger(p);
             next_pluck += 1;
         }
-        let bridge = *s + plucks.tick();
-        let ring = sym.tick(bridge);
-        *s = body.process(bridge + ring);
+        let raw = noise[i] + plucks.tick();
+        // The open strings hear everything at the bridge, tone included.
+        let ring = sym.tick(raw + *s);
+        *s += body.process(raw + ring);
     }
     out
 }

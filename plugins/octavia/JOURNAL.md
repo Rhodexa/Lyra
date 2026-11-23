@@ -14,6 +14,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* lament / prelude / articulations: tries to be a string instrument, but there's a synth behind it, like a ~12% duty pulse wave, very chiptune-y. (Nice songs though.) violin-air: genuinely convincing, couldn't tell if it was a recording.
   - Claude: the diagnosis was literal. The bow-position notches `sin(nπβ)` are exactly a 6–13% pulse spectrum, and on cello they land at 0.8–1.6 kHz. First fix: notches blurred over the bow's width, bow position wanders, cello body 28 → 110 small modes. A/B: `renders/ab/lament-before.wav` vs `-after.wav` (same for prelude). If it's still chippy, the next suspects are the overtones' perfectly locked phases (a too-clean pulse shape) and a body that is still too sparse.
 
+- [ ] *(Rhodexa, 2026-11-23)* After the notch fix: better, but still "a Game Boy playing from inside someone's mouth". Vowel-like filtering on a pulse. The first second is convincing, then it falls apart.
+  - Claude: two causes. (1) A few broad body resonances = formants = vowels. (2) Overtones perfectly in phase and every cycle identical = a frozen pulse in the sustain. Fix v3: a dense, jagged body response (about 340 interfering modes) applied *per overtone* as gain plus phase, so overtones no longer line up and each flickers under vibrato; faster and deeper jitter and shimmer. Held low G crest factor went from 12.9 to 9.8 dB (less pulse-like). Files: `renders/ab/*-v2.wav` / `*-before.wav` vs `*-v3.wav`.
+
 ## Wishes
 
 - [ ]
