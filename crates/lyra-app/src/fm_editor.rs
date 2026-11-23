@@ -29,7 +29,7 @@ use crate::theme::{self, cr, stroke, Light};
 use crate::widgets::{self, Icon, Legend};
 use egui::{pos2, vec2, Align, Align2, Color32, FontId, Id, Layout, Rect, Response, RichText, Sense, Shape, Ui};
 use egui::{UiBuilder, Vec2};
-use lyra_fluttersine::{p, FM_PARAMS};
+use lyra_fluttersine::{apply_algorithm, macro_factor, matching_algorithm, p, Algorithm, ALGORITHMS, FM_PARAMS};
 use lyra_model::{History, Project};
 use p::{op, OPS};
 use std::f32::consts::TAU;
@@ -52,6 +52,8 @@ const SS_DETUNE: [f32; 6] = [-0.110, -0.063, -0.020, 0.020, 0.062, 0.107];
 
 /// Padding inside a plate.
 const PAD: f32 = 8.0;
+/// Space between the matrix and the algorithm keys under it.
+const ALG_GAP: f32 = 8.0;
 /// Space between the matrix and its OUT column.
 const OUT_GAP: f32 = 6.0;
 
@@ -154,6 +156,8 @@ struct Sizes {
     matrix_h: f32,
     mcell: Vec2,
     mlabel_w: f32,
+    /// Height of the algorithm keys under the matrix.
+    alg_h: f32,
     /// Height of the LCD displays on the operator page.
     display_h: f32,
     /// The MOD page: small knob cells (envelopes) and one row per slot.
@@ -173,6 +177,7 @@ fn sizes() -> Sizes {
     let mcell = Vec2::splat(m.knob_small + 6.0);
     let mlabel_w = 30.0;
     let header_h = 16.0;
+    let alg_h = m.control_h + 8.0;
     Sizes {
         cell_w,
         cell_h,
@@ -183,11 +188,12 @@ fn sizes() -> Sizes {
         preset_h: m.control_h + 14.0,
         tab_h: m.control_h + 8.0,
         page_h: key_h + gap + 32.0 + gap + display_h + gap + 2.0 * cell_h + gap,
-        matrix_h: header_h + 2.0 + 6.0 * mcell.y,
+        matrix_h: header_h + 2.0 + 6.0 * mcell.y + ALG_GAP + alg_h,
+        alg_h,
         mcell,
         mlabel_w,
         display_h,
-        small_cell_w: m.knob_small + 24.0,
+        small_cell_w: m.knob_small + 20.0,
         small_cell_h: m.knob_small + 2.0 * m.text_small + 12.0,
         slot_h: key_h + 6.0,
     }
@@ -800,28 +806,45 @@ fn mod_page(ui: &mut Ui, ed: &mut Ed) {
         }
     });
     ui.add_space(4.0);
-    for k in 0..p::MOD_SLOTS {
-        let live = ed.choice(mod_src(k)) != 0 && ed.choice(mod_dest(k)) != 0;
-        ui.allocate_ui_with_layout(vec2(s.left_w, s.slot_h), Layout::left_to_right(Align::Center), |ui| {
-            ui.spacing_mut().item_spacing.x = 6.0;
-            let ink = if live { theme::TEXT } else { theme::TEXT_DIM };
-            ui.add_sized(vec2(14.0, s.key_h), egui::Label::new(RichText::new(format!("{}", k + 1)).small().color(ink)));
-            choice_well(ui, ed, mod_src(k), 116.0, "Source: what moves this slot");
-            // An arrow, drawn (the UI font has no "→").
-            let (ar, _) = ui.allocate_exact_size(vec2(14.0, s.key_h), Sense::hover());
-            let (y, x0, x1) = (ar.center().y, ar.left() + 1.0, ar.right() - 1.0);
-            let arrow = stroke(1.4, theme::TEXT_DIM);
-            ui.painter().line_segment([pos2(x0, y), pos2(x1, y)], arrow);
-            ui.painter().add(Shape::line(vec![pos2(x1 - 4.0, y - 3.5), pos2(x1, y), pos2(x1 - 4.0, y + 3.5)], arrow));
-            choice_well(ui, ed, mod_dest(k), 150.0, "Destination: what it moves");
-            let info = &FM_PARAMS[mod_amt(k)];
-            let mut v = ed.v(mod_amt(k));
-            let r = widgets::knob(ui, &mut v, info, theme::m().knob_small, if live { c } else { theme::TEXT_DIM });
-            ed.track(&r, mod_amt(k), v);
-            r.on_hover_text("Amount: how far, and which way (double-click: 0)");
-            ui.label(RichText::new(info.format(ed.v(mod_amt(k)))).small().color(ink));
+    let slots_w = s.left_w - s.small_cell_w - 12.0;
+    ui.horizontal_top(|ui| {
+        ui.vertical(|ui| {
+            for k in 0..p::MOD_SLOTS {
+                let live = ed.choice(mod_src(k)) != 0 && ed.choice(mod_dest(k)) != 0;
+                ui.allocate_ui_with_layout(vec2(slots_w, s.slot_h), Layout::left_to_right(Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    let ink = if live { theme::TEXT } else { theme::TEXT_DIM };
+                    ui.add_sized(
+                        vec2(14.0, s.key_h),
+                        egui::Label::new(RichText::new(format!("{}", k + 1)).small().color(ink)),
+                    );
+                    choice_well(ui, ed, mod_src(k), 116.0, "Source: what moves this slot");
+                    // An arrow, drawn (the UI font has no "→").
+                    let (ar, _) = ui.allocate_exact_size(vec2(14.0, s.key_h), Sense::hover());
+                    let (y, x0, x1) = (ar.center().y, ar.left() + 1.0, ar.right() - 1.0);
+                    let arrow = stroke(1.4, theme::TEXT_DIM);
+                    ui.painter().line_segment([pos2(x0, y), pos2(x1, y)], arrow);
+                    ui.painter()
+                        .add(Shape::line(vec![pos2(x1 - 4.0, y - 3.5), pos2(x1, y), pos2(x1 - 4.0, y + 3.5)], arrow));
+                    choice_well(ui, ed, mod_dest(k), 150.0, "Destination: what it moves");
+                    let info = &FM_PARAMS[mod_amt(k)];
+                    let mut v = ed.v(mod_amt(k));
+                    let r =
+                        widgets::knob(ui, &mut v, info, theme::m().knob_small, if live { c } else { theme::TEXT_DIM });
+                    ed.track(&r, mod_amt(k), v);
+                    r.on_hover_text("Amount: how far, and which way (double-click: 0)");
+                    ui.label(RichText::new(info.format(ed.v(mod_amt(k)))).small().color(ink));
+                });
+            }
         });
-    }
+        // Beside the slots: how velocity sets the loudness, and the supersaw's stereo width.
+        ui.add_space(8.0);
+        ui.vertical(|ui| {
+            let saws = (0..OPS).any(|i| ed.choice(op(i, p::OP_WAVE)) == W_SSAW);
+            small_cell(ui, ed, p::AMP_VEL, "Velocity", c, true);
+            small_cell(ui, ed, p::WIDTH, "Width", c, saws);
+        });
+    });
 }
 
 /// A dropdown well for a choice parameter: click for the list, wheel to step.
@@ -882,10 +905,10 @@ fn small_cell(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, 
                 if enabled {
                     ed.track(&r, id, v);
                 }
-                r.on_hover_text(info.name);
+                r.on_hover_text(hint(id).unwrap_or(info.name));
                 ui.add_space(2.0);
                 ui.label(RichText::new(label).small().color(theme::TEXT_DIM));
-                ui.label(RichText::new(info.format(ed.v(id))).small().color(theme::TEXT));
+                ui.label(RichText::new(format_value(id, ed.v(id))).small().color(theme::TEXT));
             });
         });
     });
@@ -960,6 +983,89 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, page: &mut Page, used: &[bool; OPS]) {
             ed.track(&r, id, v);
         }
     }
+
+    // Algorithms: one key per classic routing, its picture printed on it. A key
+    // lights while the matrix has its shape; pressing one reshapes the matrix
+    // and keeps the amounts you set.
+    let top = row_y(OPS) + ALG_GAP;
+    let gap = 3.0;
+    let n = ALGORITHMS.len() as f32;
+    let w = (s.right_w - gap * (n - 1.0)) / n;
+    let current = matching_algorithm(&ed.p.channels[ed.ch].params);
+    let mut pick = None;
+    for (k, alg) in ALGORITHMS.iter().enumerate() {
+        let r = Rect::from_min_size(pos2(origin.x + k as f32 * (w + gap), top), vec2(w, s.alg_h));
+        let resp = ui.interact(r, Id::new(("fm-algorithm", k)), Sense::click());
+        let pressed = resp.is_pointer_button_down_on();
+        let lit = (current == Some(k)).then_some(MOD_LIGHT);
+        let painter = ui.painter();
+        theme::key(painter, r, lit, resp.hovered() && !pressed, if pressed { 0.9 } else { 1.0 });
+        draw_algorithm(painter, theme::key_face(r).shrink2(vec2(4.0, 4.0)), alg, theme::key_ink(lit.is_some()));
+        if resp.on_hover_text(alg.name).clicked() {
+            pick = Some(k);
+        }
+    }
+    if let Some(k) = pick {
+        let changes = apply_algorithm(&ed.p.channels[ed.ch].params, &ALGORITHMS[k]);
+        ed.h.checkpoint(ed.p);
+        for (id, x) in changes {
+            ed.put(id, x);
+        }
+    }
+}
+
+/// A routing as a tiny diagram: carriers on a bus line at the bottom, each
+/// modulator above what it modulates, lines for the connections.
+fn draw_algorithm(painter: &egui::Painter, r: Rect, alg: &Algorithm, ink: Color32) {
+    // Depth: carriers 0, a modulator one above the deepest thing it feeds.
+    let mut depth = [0usize; OPS];
+    for _ in 0..OPS {
+        for &(from, to) in alg.edges {
+            depth[from] = depth[from].max(depth[to] + 1);
+        }
+    }
+    let levels = depth.iter().copied().max().unwrap_or(0);
+    // Across: carriers evenly spaced; a modulator over the middle of its targets,
+    // then neighbours on the same level that landed on one spot are fanned out.
+    let mut x = [0.0f32; OPS];
+    for (k, &c) in alg.carriers.iter().enumerate() {
+        x[c] = k as f32;
+    }
+    for d in 1..=levels {
+        for i in (0..OPS).filter(|&i| depth[i] == d) {
+            let targets: Vec<f32> = alg.edges.iter().filter(|e| e.0 == i).map(|e| x[e.1]).collect();
+            x[i] = targets.iter().sum::<f32>() / targets.len().max(1) as f32;
+        }
+        let mut row: Vec<usize> = (0..OPS).filter(|&i| depth[i] == d).collect();
+        row.sort_by(|a, b| x[*a].total_cmp(&x[*b]));
+        let mut k = 0;
+        while k < row.len() {
+            let same: Vec<usize> = row[k..].iter().copied().take_while(|&i| (x[i] - x[row[k]]).abs() < 0.01).collect();
+            let mid = x[row[k]];
+            for (j, &i) in same.iter().enumerate() {
+                x[i] = mid + (j as f32 - (same.len() - 1) as f32 * 0.5);
+            }
+            k += same.len();
+        }
+    }
+    let (lo, hi) = x.iter().fold((f32::MAX, f32::MIN), |(a, b), v| (a.min(*v), b.max(*v)));
+    let bus = r.bottom() - 1.0;
+    let step_y = ((r.height() - 4.0) / levels.max(1) as f32).min(7.0);
+    let step_x = if hi > lo { ((r.width() - 4.0) / (hi - lo)).min(8.0) } else { 0.0 };
+    let at = |i: usize| pos2(r.center().x + (x[i] - (lo + hi) * 0.5) * step_x, bus - 3.0 - depth[i] as f32 * step_y);
+    let line = stroke(1.0, ink);
+    // The output bus under the carriers.
+    let (cl, cr_) = alg.carriers.iter().fold((f32::MAX, f32::MIN), |(a, b), &c| (a.min(at(c).x), b.max(at(c).x)));
+    painter.line_segment([pos2(cl - 2.0, bus), pos2(cr_ + 2.0, bus)], line);
+    for &c in alg.carriers {
+        painter.line_segment([at(c), pos2(at(c).x, bus)], line);
+    }
+    for &(from, to) in alg.edges {
+        painter.line_segment([at(from), at(to)], line);
+    }
+    for i in 0..OPS {
+        painter.circle_filled(at(i), 1.9, ink);
+    }
 }
 
 fn voice(ui: &mut Ui, ed: &mut Ed) {
@@ -967,14 +1073,13 @@ fn voice(ui: &mut Ui, ed: &mut Ed) {
     let (mode, glide_mode) = (ed.choice(p::MODE), ed.choice(p::GLIDE_MODE));
     let glides = ed.v(p::GLIDE) > 0.0;
     let mut set = None;
-    let saws = (0..OPS).any(|i| ed.choice(op(i, p::OP_WAVE)) == W_SSAW);
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
+        small_cell(ui, ed, p::TONE, "Tone", c, true);
+        small_cell(ui, ed, p::TIME, "Time", c, true);
         small_cell(ui, ed, p::VOLUME, "Volume", c, true);
-        small_cell(ui, ed, p::AMP_VEL, "Velocity", c, true);
-        small_cell(ui, ed, p::WIDTH, "Width", c, saws);
         small_cell(ui, ed, p::GLIDE, "Glide", c, true);
-        ui.add_space(6.0);
+        ui.add_space(2.0);
         ui.vertical(|ui| {
             ui.add_space(8.0);
             ui.spacing_mut().item_spacing.y = 8.0;
@@ -1021,8 +1126,19 @@ fn knob_cell(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, e
     });
 }
 
+/// Explanations for the knobs whose name isn't enough.
+fn hint(id: usize) -> Option<&'static str> {
+    match id {
+        p::TONE => Some("Tone: every FM amount at once. Left softer, right brighter and harsher."),
+        p::TIME => Some("Time: every envelope at once. Left shorter and pluckier, right longer."),
+        _ => None,
+    }
+}
+
 fn format_value(id: usize, v: f32) -> String {
-    if id < p::MATRIX && id % p::OP_STRIDE == p::OP_RATIO {
+    if id == p::TONE || id == p::TIME {
+        format!("×{:.2}", macro_factor(v))
+    } else if id < p::MATRIX && id % p::OP_STRIDE == p::OP_RATIO {
         format!("×{v:.2}")
     } else {
         FM_PARAMS[id].format(v)

@@ -167,8 +167,14 @@ pub mod p {
     pub const WIDTH: usize = PAN + OPS;
     /// How much note velocity sets the voice's loudness (1 = fully, like the other synths).
     pub const AMP_VEL: usize = WIDTH + 1;
+    /// Macro: scales every FM amount in the matrix (feedback too), ×¼ … ×4.
+    /// The one "softer ↔ brighter/harsher" knob for any patch.
+    pub const TONE: usize = AMP_VEL + 1;
+    /// Macro: scales every envelope's attack, decay and release (operators,
+    /// filter, mod envelopes), ×¼ … ×4. Plucky ↔ long.
+    pub const TIME: usize = TONE + 1;
 
-    pub const COUNT: usize = AMP_VEL + 1;
+    pub const COUNT: usize = TIME + 1;
 }
 
 pub use lyra_dsp::{SYNC_BEATS, SYNC_LABELS};
@@ -338,7 +344,95 @@ const fn build_params() -> [ParamInfo; p::COUNT] {
     }
     set!(WIDTH, new "Width", 0.0, 1.0, 0.5, "%", Lin);
     set!(AMP_VEL, new "Velocity", 0.0, 1.0, 1.0, "%", Lin);
+    set!(TONE, new "Tone", -1.0, 1.0, 0.0, "%", Lin);
+    set!(TIME, new "Time", -1.0, 1.0, 0.0, "%", Lin);
     a
+}
+
+/// A classic routing: which operator modulates which (`(from, to)`, 0-based),
+/// and which operators are heard. Pressing one in the editor reshapes the
+/// matrix (see `apply_algorithm`); the amounts you set are kept.
+pub struct Algorithm {
+    pub name: &'static str,
+    pub edges: &'static [(usize, usize)],
+    pub carriers: &'static [usize],
+}
+
+/// The starting routings, from one long stack to six plain carriers (DX-style).
+pub const ALGORITHMS: [Algorithm; 8] = [
+    Algorithm {
+        name: "Stack: 6 > 5 > 4 > 3 > 2 > 1",
+        edges: &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)],
+        carriers: &[0],
+    },
+    Algorithm { name: "Stack of four, and a pair", edges: &[(1, 0), (2, 1), (3, 2), (5, 4)], carriers: &[0, 4] },
+    Algorithm { name: "Two stacks of three", edges: &[(1, 0), (2, 1), (4, 3), (5, 4)], carriers: &[0, 3] },
+    Algorithm { name: "Three pairs (e-piano)", edges: &[(1, 0), (3, 2), (5, 4)], carriers: &[0, 2, 4] },
+    Algorithm { name: "Three into one, and a pair", edges: &[(1, 0), (2, 0), (3, 0), (5, 4)], carriers: &[0, 4] },
+    Algorithm {
+        name: "A pair, and one into three (brass)",
+        edges: &[(1, 0), (5, 2), (5, 3), (5, 4)],
+        carriers: &[0, 2, 3, 4],
+    },
+    Algorithm { name: "Five into one", edges: &[(1, 0), (2, 0), (3, 0), (4, 0), (5, 0)], carriers: &[0] },
+    Algorithm { name: "Six carriers (organ)", edges: &[], carriers: &[0, 1, 2, 3, 4, 5] },
+];
+
+/// Where a newly connected matrix cell starts.
+const ALGORITHM_FM: f32 = 0.25;
+
+/// The parameter changes that give `params` the shape of `alg`: cells it
+/// connects keep their amount (or start at a gentle default), every other
+/// cell and OUT goes to zero. Feedback (the diagonal) is yours and stays.
+pub fn apply_algorithm(params: &[f32], alg: &Algorithm) -> Vec<(usize, f32)> {
+    use p::*;
+    let mut changes = Vec::new();
+    for from in 0..OPS {
+        for to in (0..OPS).filter(|&t| t != from) {
+            let id = matrix(from, to);
+            let want = if alg.edges.contains(&(from, to)) {
+                if params[id] > 0.0 {
+                    params[id]
+                } else {
+                    ALGORITHM_FM
+                }
+            } else {
+                0.0
+            };
+            changes.push((id, want));
+        }
+        let id = out(from);
+        let level = (1.0 / alg.carriers.len() as f32).max(0.2);
+        let want = if alg.carriers.contains(&from) {
+            if params[id] > 0.0 {
+                params[id]
+            } else {
+                level
+            }
+        } else {
+            0.0
+        };
+        changes.push((id, want));
+    }
+    changes
+}
+
+/// The algorithm whose shape the matrix has right now, if any.
+pub fn matching_algorithm(params: &[f32]) -> Option<usize> {
+    use p::*;
+    ALGORITHMS.iter().position(|alg| {
+        (0..OPS).all(|from| {
+            (params[out(from)] > 0.0) == alg.carriers.contains(&from)
+                && (0..OPS)
+                    .filter(|&to| to != from)
+                    .all(|to| (params[matrix(from, to)] > 0.0) == alg.edges.contains(&(from, to)))
+        })
+    })
+}
+
+/// What a macro knob (−1 … 1) multiplies by: ×¼ at the left, ×1 in the middle, ×4 at the right.
+pub fn macro_factor(v: f32) -> f32 {
+    4f32.powf(v.clamp(-1.0, 1.0))
 }
 
 pub static FM_PARAMS: [ParamInfo; p::COUNT] = build_params();
@@ -362,7 +456,7 @@ static FM_GROUPS: [ParamGroup; 15] = [
     ParamGroup { name: "Env 1", ids: p::ENV1 as u32..p::ENV2 as u32 },
     ParamGroup { name: "Env 2", ids: p::ENV2 as u32..p::MODS as u32 },
     ParamGroup { name: "Mod slots", ids: p::MODS as u32..p::PAN as u32 },
-    ParamGroup { name: "Stereo, velocity", ids: p::PAN as u32..p::COUNT as u32 },
+    ParamGroup { name: "Stereo, velocity, macros", ids: p::PAN as u32..p::COUNT as u32 },
 ];
 
 /// Fluttersine's factory patches: (name, parameters that differ from the defaults).
@@ -977,6 +1071,8 @@ impl Prep {
     fn compute(p: &[f32; p::COUNT], sr: f32) -> Self {
         use p::*;
         let mut q = Prep::default();
+        // The two macros (see `macro_factor`).
+        let (tone, time) = (macro_factor(p[TONE]), macro_factor(p[TIME]));
         for i in 0..OPS {
             let at = |k: usize| p[op(i, k)];
             let mix = at(OP_SS_MIX);
@@ -996,20 +1092,21 @@ impl Prep {
                 cen,
                 side,
                 ssn: 1.0 / (cen + side * 2.45),
-                attack_inc: 1.0 / (at(OP_ATTACK).max(0.0005) * sr),
-                decay_k: fall(at(OP_DECAY), sr),
+                attack_inc: 1.0 / ((at(OP_ATTACK) * time).max(0.0005) * sr),
+                decay_k: fall(at(OP_DECAY) * time, sr),
                 sustain: at(OP_SUSTAIN).clamp(0.0, 1.0),
-                release_k: fall(at(OP_RELEASE), sr),
+                release_k: fall(at(OP_RELEASE) * time, sr),
             };
             q.out[i] = p[out(i)].max(0.0);
         }
-        // Matrix: row j modulates column i.
+        // Matrix: row j modulates column i. TONE scales every amount; feedback
+        // stays at most 1, past which it only turns to noise.
         for i in 0..OPS {
-            q.feedback[i] = p[matrix(i, i)].max(0.0);
+            q.feedback[i] = (p[matrix(i, i)].max(0.0) * tone).min(1.0);
             for j in (i + 1..OPS).chain(0..i) {
                 let amt = p[matrix(j, i)];
                 if amt > 0.0 {
-                    q.mods[i][q.n_mods[i]] = (j as u8, amt);
+                    q.mods[i][q.n_mods[i]] = (j as u8, amt * tone);
                     q.n_mods[i] += 1;
                 }
             }
@@ -1033,10 +1130,10 @@ impl Prep {
         q.f_env = p[F_ENV];
         q.keytrack = p[KEYTRACK];
         q.f_lfo = p[F_LFO];
-        q.f_attack_inc = 1.0 / (p[F_ATTACK].max(0.0005) * csr);
-        q.f_decay_k = fall(p[F_DECAY], csr);
+        q.f_attack_inc = 1.0 / ((p[F_ATTACK] * time).max(0.0005) * csr);
+        q.f_decay_k = fall(p[F_DECAY] * time, csr);
         q.f_sustain = p[F_SUSTAIN].clamp(0.0, 1.0);
-        q.f_release_k = fall(p[F_RELEASE], csr);
+        q.f_release_k = fall(p[F_RELEASE] * time, csr);
         q.hp_on = p[HP_ON] >= 0.5;
         q.hp_k = 2.0 - 1.98 * p[HP_RESO].clamp(0.0, 1.0);
         q.hp = svf_coeffs(p[HP_CUTOFF].clamp(10.0, sr * 0.45), sr, q.hp_k);
@@ -1052,10 +1149,10 @@ impl Prep {
         q.lfo_beats = [beats(LFO_SYNC), beats(LFO2_SYNC)];
         for e in 0..2 {
             q.env[e] = EnvPrep {
-                attack_inc: 1.0 / (p[env(e, ENV_ATTACK)].max(0.0005) * csr),
-                decay_k: fall(p[env(e, ENV_DECAY)], csr),
+                attack_inc: 1.0 / ((p[env(e, ENV_ATTACK)] * time).max(0.0005) * csr),
+                decay_k: fall(p[env(e, ENV_DECAY)] * time, csr),
                 sustain: p[env(e, ENV_SUSTAIN)].clamp(0.0, 1.0),
-                release_k: fall(p[env(e, ENV_RELEASE)], csr),
+                release_k: fall(p[env(e, ENV_RELEASE)] * time, csr),
             };
         }
         for k in 0..MOD_SLOTS {
@@ -2172,6 +2269,69 @@ mod tests {
             assert_eq!(fm.active_voices(), 0, "{name}: voices never freed");
             println!("{name:28} peak {peak:.2}  tail {tail_s:.0} s");
         }
+    }
+
+    #[test]
+    fn algorithms_reshape_the_matrix_and_keep_your_amounts() {
+        use p::*;
+        let mut v: Vec<f32> = FM_PARAMS.iter().map(|i| i.default).collect();
+        v[matrix(1, 0)] = 0.6; // your own op 2 > op 1
+        v[matrix(4, 4)] = 0.3; // feedback on op 5
+        for (k, alg) in ALGORITHMS.iter().enumerate() {
+            let mut w = v.clone();
+            for (id, x) in apply_algorithm(&w, alg) {
+                w[id] = x;
+            }
+            assert_eq!(matching_algorithm(&w), Some(k), "{}", alg.name);
+            assert_eq!(w[matrix(4, 4)], 0.3, "feedback must stay");
+            if alg.edges.contains(&(1, 0)) {
+                assert_eq!(w[matrix(1, 0)], 0.6, "{}: a kept cell keeps its amount", alg.name);
+            }
+            // And it plays.
+            let mut fm = Fm::new();
+            for (i, x) in w.iter().enumerate() {
+                fm.set_param(i as u32, *x);
+            }
+            fm.activate(SR);
+            assert!(peak(&render(&mut fm, &[on(60)], 0.2)) > 0.05, "{} is silent", alg.name);
+        }
+        // Init (op 1 alone) is "six carriers" minus five, so it matches nothing.
+        assert_eq!(matching_algorithm(&v[..]), None);
+    }
+
+    #[test]
+    fn tone_scales_the_fm_brightness() {
+        use p::*;
+        // Brightness ≈ how much the signal moves from sample to sample, relative to its size.
+        let bright = |tone: f32| {
+            let (l, _) = render_lr(&mut with(&[(matrix(1, 0), 0.25), (TONE, tone)]), &[on(57)], 0.25);
+            let moves: f32 = l.windows(2).map(|w| (w[1] - w[0]).abs()).sum();
+            moves / l.iter().map(|x| x.abs()).sum::<f32>().max(1e-9)
+        };
+        let (soft, mid, harsh) = (bright(-1.0), bright(0.0), bright(1.0));
+        assert!(soft < mid && mid < harsh, "tone should brighten: {soft} {mid} {harsh}");
+        // Fully left, a light patch is nearly a plain sine again.
+        let sine = {
+            let (l, _) = render_lr(&mut with(&[]), &[on(57)], 0.25);
+            let moves: f32 = l.windows(2).map(|w| (w[1] - w[0]).abs()).sum();
+            moves / l.iter().map(|x| x.abs()).sum::<f32>()
+        };
+        assert!((soft - sine).abs() < (mid - sine).abs(), "tone −1 should be closer to a sine");
+    }
+
+    #[test]
+    fn time_stretches_every_envelope() {
+        use p::*;
+        // A pluck: how long it stays above 5% of its peak.
+        let length = |time: f32| {
+            let pluck = [(op(0, OP_DECAY), 0.3), (op(0, OP_SUSTAIN), 0.0), (TIME, time)];
+            let a = render(&mut with(&pluck), &[on(60)], 3.0);
+            let top = a.iter().cloned().fold(0.0, f32::max);
+            a.iter().rposition(|x| *x > 0.05 * top).unwrap_or(0) as f32 / SR
+        };
+        let (short, normal, long) = (length(-1.0), length(0.0), length(1.0));
+        assert!((normal / short - 4.0).abs() < 0.6, "time −1 should quarter the pluck: {short} vs {normal}");
+        assert!((long / normal - 4.0).abs() < 0.6, "time +1 should make it 4× longer: {normal} vs {long}");
     }
 
     #[test]
