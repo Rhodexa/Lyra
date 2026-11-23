@@ -4,8 +4,8 @@
 //! events (pizzicato). It saves as CSV so it can be plotted and hand-edited:
 //!
 //! ```text
-//! pitch,loudness,brightness,noise,string
-//! 43.000,0.000,0.420,0.050,1
+//! pitch,loudness,brightness,noise,string,pitch2,string2
+//! 43.000,0.000,0.420,0.050,1,0,0
 //! ...
 //! pluck,1.250,50.000,0.600,0.550,2
 //! tap,2.000,0.700
@@ -27,6 +27,9 @@ pub struct Frame {
     pub noise: f32,
     /// Which string (0 = lowest), for tone and sympathetic resonance.
     pub string: u8,
+    /// A double stop's second, lower note (0 = none), on `string2`.
+    pub pitch2: f32,
+    pub string2: u8,
 }
 
 /// A pizzicato pluck.
@@ -73,9 +76,12 @@ impl Curves {
     }
 
     pub fn to_csv(&self) -> String {
-        let mut s = String::from("pitch,loudness,brightness,noise,string\n");
+        let mut s = String::from("pitch,loudness,brightness,noise,string,pitch2,string2\n");
         for f in &self.frames {
-            s += &format!("{:.3},{:.4},{:.4},{:.4},{}\n", f.pitch, f.loudness, f.brightness, f.noise, f.string);
+            s += &format!(
+                "{:.3},{:.4},{:.4},{:.4},{},{:.3},{}\n",
+                f.pitch, f.loudness, f.brightness, f.noise, f.string, f.pitch2, f.string2
+            );
         }
         for p in &self.plucks {
             s += &format!("pluck,{:.4},{:.3},{:.4},{:.4},{}\n", p.time, p.pitch, p.velocity, p.brightness, p.string);
@@ -124,6 +130,8 @@ impl Curves {
                     brightness: num(2)? as f32,
                     noise: num(3)? as f32,
                     string: num(4)? as u8,
+                    pitch2: num(5).unwrap_or(0.0) as f32,
+                    string2: num(6).unwrap_or(0.0) as u8,
                 });
             }
         }
@@ -142,8 +150,8 @@ mod tests {
     fn csv_round_trip() {
         let c = Curves {
             frames: vec![
-                Frame { pitch: 43.0, loudness: 0.5, brightness: 0.4, noise: 0.05, string: 1 },
-                Frame { pitch: 43.12, loudness: 0.55, brightness: 0.45, noise: 0.06, string: 1 },
+                Frame { pitch: 43.0, loudness: 0.5, brightness: 0.4, noise: 0.05, string: 1, ..Frame::default() },
+                Frame { pitch: 50.12, loudness: 0.55, brightness: 0.45, noise: 0.06, string: 2, pitch2: 43.1, string2: 1 },
             ],
             plucks: vec![Pluck { time: 0.5, pitch: 50.0, velocity: 0.6, brightness: 0.5, string: 2 }],
             taps: vec![Tap { time: 0.25, strength: 0.7 }],
@@ -154,6 +162,7 @@ mod tests {
         assert_eq!(back.plucks, c.plucks);
         assert_eq!(back.taps, c.taps);
         assert_eq!(back.rings, c.rings);
-        assert!((back.frames[1].pitch - 43.12).abs() < 1e-3);
+        assert!((back.frames[1].pitch - 50.12).abs() < 1e-3);
+        assert!((back.frames[1].pitch2 - 43.1).abs() < 1e-3 && back.frames[1].string2 == 1);
     }
 }

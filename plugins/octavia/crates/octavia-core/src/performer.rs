@@ -134,6 +134,8 @@ struct Plan {
     crossing: bool,
     pizz: bool,
     phrase_start: f64,
+    /// A double stop's lower note (with its intonation) and its string.
+    double: Option<(f32, u8)>,
 }
 
 /// A streaming performer. Feed it notes (in start order, ideally at least
@@ -388,7 +390,16 @@ impl Performer {
             _ => 0.0,
         };
 
-        let fingering = choose_fingering(n.pitch, self.prev_string, self.hand, n.dur > 0.5 && !pizz, inst);
+        // A double stop if a hand can play it and the note is long enough to
+        // bother (plucked chords are always fine); otherwise the top note.
+        let pair = n
+            .double
+            .filter(|_| n.dur >= 0.25 || pizz)
+            .and_then(|d| choose_double(n.pitch, d, self.prev_string, self.hand, inst).map(|f| (f, d)));
+        let (fingering, double) = match pair {
+            Some(((f, lower), d)) => (f, Some((d + 0.02 * e * hash_bipolar(self.style.seed ^ 0xD0B1, i), lower))),
+            None => (choose_fingering(n.pitch, self.prev_string, self.hand, n.dur > 0.5 && !pizz, inst), None),
+        };
         let string = fingering.string;
         let crossing = self.prev_string.is_some_and(|s| s != string);
         let open = (n.pitch - inst.open_strings[string as usize]).abs() < 0.01;
@@ -476,6 +487,7 @@ impl Performer {
             crossing,
             pizz,
             phrase_start,
+            double,
         };
 
         // Events.
@@ -487,6 +499,15 @@ impl Performer {
                 brightness: (0.35 + 0.5 * level + inst.string_tone[string as usize]).clamp(0.0, 1.0),
                 string,
             }));
+            if let Some((d, lower)) = double {
+                events.push(Event::Pluck(Pluck {
+                    time: n.start + 0.012, // a finger rolls across the strings
+                    pitch: d,
+                    velocity: level * 0.9,
+                    brightness: (0.35 + 0.5 * level + inst.string_tone[lower as usize]).clamp(0.0, 1.0),
+                    string: lower,
+                }));
+            }
         } else if let Some(strength) = tap_strength(entry, prev.map(|(pn, pp)| (pn, pp.string)), n, string, open) {
             let lead = if entry == Entry::Legato { glide as f64 } else { 0.015 };
             events.push(Event::Tap(Tap { time: (n.start - lead).max(t), strength }));
@@ -561,17 +582,25 @@ impl Performer {
         };
 
         // Left hand: settling intonation, vibrato, moving into the next note.
-        let mut pitch = p.pitch + p.settle * (-since / 0.05).exp();
+        let settle = p.settle * (-since / 0.05).exp();
+        let mut pitch = p.pitch + settle;
+        let mut pitch2 = p.double.map_or(0.0, |(d, _)| d + settle);
         let mut vib = p.vib_depth * smoothstep((since - p.vib_delay) / 0.3);
         if let (Some(qn), Some(q)) = (self.next_visible(i, t), self.plans.get(i + 1)) {
             let to_next = (qn.start - t) as f32;
             if q.glide > 0.0 && to_next < q.glide {
                 let s = smoothstep(1.0 - to_next / q.glide);
                 pitch += (q.pitch - pitch) * s;
+                if let (true, Some((d, _))) = (pitch2 > 0.0, q.double) {
+                    pitch2 += (d - pitch2) * s;
+                }
                 vib *= 1.0 - s;
             }
         }
         pitch += vib * (self.vib_phase as f32).sin();
+        if pitch2 > 0.0 {
+            pitch2 += vib * (self.vib_phase as f32).sin(); // one hand, one vibrato
+        }
 
         // Bow contact: louder and accented means closer to the bridge, brighter.
         let tone = self.inst.string_tone[p.string as usize];
@@ -596,7 +625,8 @@ impl Performer {
             (0.3 * self.style.breath + spike * (-since / 0.035).exp() + if loudness < 0.25 { 0.08 } else { 0.0 }).min(1.0)
         };
 
-        Frame { pitch, loudness, brightness, noise, string: p.string }
+        let string2 = p.double.map_or(0, |(_, s)| s);
+        Frame { pitch, loudness, brightness, noise, string: p.string, pitch2, string2 }
     }
 }
 
@@ -694,6 +724,38 @@ fn choose_fingering(pitch: f32, prev: Option<u8>, hand: f32, avoid_open: bool, i
         if cost < best_cost {
             best_cost = cost;
             best = Fingering { string: s as u8, hand: new_hand, shift };
+        }
+    }
+    best
+}
+
+/// A fingering for two notes on neighbouring strings (lower on `s`, upper
+/// on `s + 1`) that one hand can reach. Returns the upper note's fingering
+/// and the lower string, or `None` if no hand could play it.
+fn choose_double(high: f32, low: f32, prev: Option<u8>, hand: f32, inst: &Instrument) -> Option<(Fingering, u8)> {
+    let os = &inst.open_strings;
+    let mut best = None;
+    let mut best_cost = f32::MAX;
+    for s in 0..os.len() - 1 {
+        let (o1, o2) = (low - os[s], high - os[s + 1]);
+        if o1 < -0.01 || o2 < -0.01 {
+            continue;
+        }
+        let stopped: Vec<f32> = [o1, o2].into_iter().filter(|o| o.abs() > 0.01).collect();
+        let (lo, hi) = stopped.iter().fold((f32::MAX, f32::MIN), |(a, b), &o| (a.min(o), b.max(o)));
+        let (mut cost, new_hand, shift) = if stopped.is_empty() || (lo >= hand - 0.01 && hi <= hand + HAND_SPAN + 0.01) {
+            (0.0, hand, 0.0)
+        } else if hi - lo > HAND_SPAN + 0.01 {
+            continue; // the fingers can't stretch that far
+        } else {
+            let to = if lo < hand { lo } else { hi - HAND_SPAN }.max(1.0);
+            (1.0 + 0.25 * (to - hand).abs(), to, (to - hand).abs())
+        };
+        cost += 0.15 * (o1.max(o2) - 7.0).max(0.0);
+        cost += prev.map_or(0.0, |p| 0.35 * (s as f32 + 1.0 - p as f32).abs());
+        if cost < best_cost {
+            best_cost = cost;
+            best = Some((Fingering { string: s as u8 + 1, hand: new_hand, shift }, s as u8));
         }
     }
     best
@@ -837,6 +899,22 @@ mod tests {
             hand = f.hand;
         }
         assert_eq!(strings, [1, 2, 3, 3, 3, 2, 3, 2]);
+    }
+
+    #[test]
+    fn double_stops_need_neighbouring_strings_and_a_hand_that_reaches() {
+        let inst = cello();
+        // D3 + A3: open D and open A? Not neighbours (strings 2 and 3 are D, A: yes).
+        let (f, lower) = choose_double(57.0, 50.0, None, 1.0, &inst).unwrap();
+        assert_eq!((f.string, lower), (3, 2));
+        // A sixth (C3 + A3): G string + D string... or neighbours that reach.
+        assert!(choose_double(57.0, 48.0, None, 1.0, &inst).is_some());
+        // Two octaves apart: impossible on neighbouring strings.
+        assert!(choose_double(62.0, 38.0, None, 1.0, &inst).is_none());
+        // In a performance: both pitches present for a long note, not a short one.
+        let c = perform(&Score::parse("tempo 60\nA3+D3:h C4+E3:t").unwrap(), &inst, &Style::default());
+        assert!((frame_at(&c, 0.5).pitch2 - 50.0).abs() < 0.3);
+        assert_eq!(frame_at(&c, 2.06).pitch2, 0.0, "a 32nd is too short to bother");
     }
 
     #[test]

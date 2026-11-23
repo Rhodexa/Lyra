@@ -13,6 +13,7 @@
 //! (G2:e D3 B3) A3 B3 D3 B3 D3     # ( ) = slur, durations are sticky
 //! < ^C4:q 'D4 -E4 f               # < or > starts a hairpin, ending at the next dynamic
 //! pizz G2:q r D3 arco
+//! D3+A3:h                         # + joins a double stop (two strings at once)
 //! ```
 //!
 //! Durations: `w h q e s t` (whole … 32nd), `3` after the letter for a
@@ -59,6 +60,9 @@ pub struct Note {
     /// Slurred into the next note (same bow, no re-attack)? `None` = let the
     /// performer decide (it slurs overlapping notes and fast runs).
     pub slur: Option<bool>,
+    /// A second, lower note bowed together with this one on the next string
+    /// down (a double stop). The performer drops it if no hand could play it.
+    pub double: Option<f32>,
 }
 
 impl Note {
@@ -115,11 +119,39 @@ impl Score {
                 dynamic_end: dynamic,
                 articulation: Articulation::Auto,
                 slur: None,
+                double: None,
             });
         }
         let mut s = Score { notes };
         s.tidy();
+        s.merge_chords();
         Ok(s)
+    }
+
+    /// Notes starting together become one note: the highest, with the next
+    /// one down as its double stop. Any others are dropped.
+    pub fn merge_chords(&mut self) {
+        let mut out: Vec<Note> = Vec::with_capacity(self.notes.len());
+        let mut group: Vec<Note> = Vec::new();
+        let flush = |group: &mut Vec<Note>, out: &mut Vec<Note>| {
+            if group.is_empty() {
+                return;
+            }
+            group.sort_by(|a, b| b.pitch.total_cmp(&a.pitch));
+            let mut top = group[0].clone();
+            let below = group[1..].iter().flat_map(|n| std::iter::once(n.pitch).chain(n.double)).chain(top.double);
+            top.double = below.filter(|&p| p < top.pitch).reduce(f32::max);
+            out.push(top);
+            group.clear();
+        };
+        for n in self.notes.drain(..) {
+            if group.first().is_some_and(|g| (n.start - g.start).abs() >= 0.01) {
+                flush(&mut group, &mut out);
+            }
+            group.push(n);
+        }
+        flush(&mut group, &mut out);
+        self.notes = out;
     }
 
     /// Writes the notes as a piano roll would hold them: timing, pitch and
@@ -134,6 +166,9 @@ impl Score {
                 vel = (vel + 0.2).min(1.0);
             }
             s += &format!("{:.4} {:.4} {} {:.2}\n", n.start / beat, n.dur / beat, pitch_name(n.pitch), vel);
+            if let Some(d) = n.double {
+                s += &format!("{:.4} {:.4} {} {:.2}\n", n.start / beat, n.dur / beat, pitch_name(d), vel);
+            }
         }
         s
     }
@@ -234,7 +269,14 @@ impl Score {
                 if name == "r" {
                     time += secs;
                 } else {
-                    let pitch = parse_pitch(name).ok_or_else(|| err("bad note name"))?;
+                    let (pitch, double) = match name.split_once('+') {
+                        Some((a, b)) => {
+                            let a = parse_pitch(a).ok_or_else(|| err("bad note name"))?;
+                            let b = parse_pitch(b).ok_or_else(|| err("bad note name"))?;
+                            (a.max(b), Some(a.min(b)))
+                        }
+                        None => (parse_pitch(name).ok_or_else(|| err("bad note name"))?, None),
+                    };
                     // Staccato is played short: write it as if drawn short.
                     let dur = if art == Articulation::Staccato { secs * 0.45 } else { secs };
                     notes.push(Note {
@@ -245,6 +287,7 @@ impl Score {
                         dynamic_end: dynamic,
                         articulation: art,
                         slur: if in_slur { Some(true) } else { None },
+                        double,
                     });
                     time += secs;
                 }
@@ -400,6 +443,18 @@ mod tests {
         assert!(back.notes.iter().all(|n| n.slur.is_none() && n.articulation == Articulation::Auto));
         assert!(back.notes[2].dynamic > back.notes[0].dynamic, "accent became velocity");
         assert_eq!(pitch_name(61.0), "C#4");
+    }
+
+    #[test]
+    fn double_stops_from_plus_and_from_rolls() {
+        let s = Score::parse("A3+D3:h").unwrap();
+        assert_eq!((s.notes[0].pitch, s.notes[0].double), (57.0, Some(50.0)));
+        let r = Score::parse_roll("tempo 60\n0 1 D3 0.5\n0 1 A3 0.5\n0 1 F3 0.5\n1 1 G3 0.5").unwrap();
+        assert_eq!(r.notes.len(), 2);
+        assert_eq!((r.notes[0].pitch, r.notes[0].double), (57.0, Some(53.0)), "top + the next one down");
+        assert_eq!(r.notes[1].double, None);
+        let back = Score::parse_roll(&s.to_roll(60.0)).unwrap();
+        assert_eq!(back.notes[0].double, Some(50.0));
     }
 
     #[test]

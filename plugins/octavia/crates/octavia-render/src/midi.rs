@@ -195,6 +195,8 @@ pub struct Pick {
     pub transpose: Option<i32>,
     /// Playable range (MIDI notes), lowest open string to a comfortable top.
     pub range: (f32, f32),
+    /// Keep a second chord note as a double stop.
+    pub doubles: bool,
 }
 
 /// Turns the chosen notes into one line the performer can play.
@@ -221,6 +223,8 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
     // While a melody note is still held, notes well below it (above it, for
     // --bottom) are the accompaniment moving underneath: skip them.
     let mut line: Vec<MidiNote> = Vec::new();
+    // The other notes of each chord (key, end), for double stops.
+    let mut others: Vec<Vec<(u8, f64)>> = Vec::new();
     for n in chosen {
         if let Some(last) = line.last() {
             let held = last.end > n.start + 0.05 && (n.start - last.start) >= 0.02;
@@ -238,11 +242,18 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
                     Voice::Top => n.key > last.key,
                     Voice::Bottom => n.key < last.key,
                 };
+                let rest = others.last_mut().unwrap();
                 if better {
+                    rest.push((last.key, last.end));
                     *last = n.clone();
+                } else {
+                    rest.push((n.key, n.end));
                 }
             }
-            _ => line.push(n.clone()),
+            _ => {
+                line.push(n.clone());
+                others.push(Vec::new());
+            }
         }
     }
 
@@ -262,6 +273,18 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
                 }
             }
         }
+        // A double stop: the chord's next note down, if it's held about as
+        // long and sits a third to an octave below (the performer still
+        // checks that a hand can play it).
+        let double = (pick.doubles && pick.voice == Voice::Top)
+            .then(|| {
+                others[i]
+                    .iter()
+                    .filter(|(k, e)| (3..=12).contains(&(n.key as i32 - *k as i32)) && *e >= n.end - 0.1)
+                    .map(|(k, _)| *k as f32)
+                    .reduce(f32::max)
+            })
+            .flatten();
         let dynamic = velocity_to_dynamic(n.velocity as f32 / 127.0);
         notes.push(Note {
             start: n.start,
@@ -271,6 +294,7 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
             dynamic_end: dynamic,
             articulation: Articulation::Auto,
             slur,
+            double,
         });
     }
 
@@ -296,7 +320,9 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
         }
     };
     let mut folded = 0;
+    let mut doubles = 0;
     for n in &mut notes {
+        let before = n.pitch;
         n.pitch += shift;
         while n.pitch < lo {
             n.pitch += 12.0;
@@ -306,11 +332,15 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
             n.pitch -= 12.0;
             folded += 1;
         }
+        let moved = n.pitch - before;
+        n.double = n.double.map(|d| d + moved).filter(|&d| d >= lo && d < n.pitch);
+        doubles += n.double.is_some() as usize;
     }
     let name = m.names.get(track).filter(|s| !s.is_empty()).map_or(String::new(), |s| format!(" \"{s}\""));
     let note = format!(
-        "track {track}{name}: {} notes, {:+} semitones{}",
+        "track {track}{name}: {} notes ({} with a double stop), {:+} semitones{}",
         notes.len(),
+        doubles,
         shift as i32,
         if folded > 0 { format!(", {folded} folded by an octave") } else { String::new() }
     );
@@ -422,11 +452,13 @@ mod tests {
     #[test]
     fn makes_one_fitted_line() {
         let m = parse(&sample()).unwrap();
-        let pick = Pick { track: None, channel: None, voice: Voice::Top, transpose: None, range: (36.0, 76.0) };
+        let pick = Pick { track: None, channel: None, voice: Voice::Top, transpose: None, range: (36.0, 76.0), doubles: true };
         let (score, _) = to_line(&m, &pick).unwrap();
         let keys: Vec<f32> = score.notes.iter().map(|n| n.pitch).collect();
         // C4 D4 C5 (chord top), shifted down an octave toward the cello's middle.
         assert_eq!(keys, [48.0, 50.0, 60.0]);
+        // The chord C5-G4-E4 keeps G4 (a fourth below) as a double stop.
+        assert_eq!(score.notes[2].double, Some(55.0));
         let bottom = Pick { voice: Voice::Bottom, transpose: Some(0), ..pick };
         let (score, _) = to_line(&m, &bottom).unwrap();
         assert_eq!(score.notes[2].pitch, 64.0);

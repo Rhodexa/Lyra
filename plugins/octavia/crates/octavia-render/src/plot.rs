@@ -118,6 +118,20 @@ pub fn curves_png(curves: &Curves, score: Option<&Score>, path: &Path) -> std::i
             prev = None;
         }
     }
+    // A double stop's second note, in green.
+    let mut prev2: Option<(i64, i64)> = None;
+    for (i, f) in curves.frames.iter().enumerate() {
+        let x = x_of(i as f64 / FRAME_RATE);
+        if f.loudness > 0.01 && f.pitch2 > 0.0 {
+            let y = y_of_pitch(f.pitch2);
+            if let Some((px, py)) = prev2 {
+                c.line(px, py, x, y, [120, 230, 150]);
+            }
+            prev2 = Some((x, y));
+        } else {
+            prev2 = None;
+        }
+    }
     for (row, col) in lanes {
         let top = (row * lane + (row - 1) * gap) as i64;
         c.line(0, top, w as i64, top, GRID);

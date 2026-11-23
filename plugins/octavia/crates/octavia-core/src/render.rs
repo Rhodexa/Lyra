@@ -43,6 +43,12 @@ fn event_sample(e: &Event, sr: f32) -> u64 {
 /// The instrument: plays curves.
 pub struct Sound {
     voice: BowVoice,
+    /// The second string of a double stop: same body, its own vibration.
+    voice2: BowVoice,
+    voice2_live: bool,
+    last_pitch2: f32,
+    tone2: Vec<f32>,
+    noise2: Vec<f32>,
     plucks: Plucks,
     knocks: Knocks,
     rings: Rings,
@@ -57,9 +63,16 @@ impl Sound {
     pub fn new(inst: &Instrument, sr: f32, seed: u64, bright: f32) -> Self {
         let mut voice = BowVoice::new(sr, BodyResponse::new(inst, seed), seed);
         voice.set_bright(bright);
+        let mut voice2 = BowVoice::new(sr, BodyResponse::new(inst, seed), seed ^ 0x2D0B);
+        voice2.set_bright(bright);
         let hop = (sr as f64 / FRAME_RATE).ceil() as usize + 1;
         Self {
             voice,
+            voice2,
+            voice2_live: false,
+            last_pitch2: 48.0,
+            tone2: vec![0.0; hop],
+            noise2: vec![0.0; hop],
             plucks: Plucks::new(sr, inst.pluck_ring, seed),
             knocks: Knocks::new(sr, seed),
             rings: Rings::new(sr),
@@ -72,6 +85,23 @@ impl Sound {
 
     pub fn set_bright(&mut self, bright: f32) {
         self.voice.set_bright(bright);
+        self.voice2.set_bright(bright);
+    }
+
+    /// What the second string does in frame `f`. Two strings share the
+    /// bow's weight, so each sounds a little softer.
+    fn second(&mut self, f: &Frame) -> Frame {
+        if f.pitch2 > 0.0 {
+            self.last_pitch2 = f.pitch2;
+        }
+        Frame {
+            pitch: self.last_pitch2,
+            loudness: if f.pitch2 > 0.0 { f.loudness * 0.8 } else { 0.0 },
+            brightness: f.brightness,
+            noise: f.noise * 0.6,
+            string: f.string2,
+            ..Frame::default()
+        }
     }
 
     /// One hop gliding from frame `a` to frame `b`. `events` are (offset in
@@ -79,12 +109,27 @@ impl Sound {
     pub fn hop(&mut self, a: &Frame, b: &Frame, out: &mut [f32], events: &[(usize, Event)]) {
         let n = out.len();
         if self.tone.len() < n {
-            self.tone.resize(n, 0.0);
-            self.noise.resize(n, 0.0);
+            for v in [&mut self.tone, &mut self.noise, &mut self.tone2, &mut self.noise2] {
+                v.resize(n, 0.0);
+            }
         }
         self.voice.process(a, b, &mut self.tone[..n], &mut self.noise[..n]);
+        let double = a.pitch2 > 0.0 || b.pitch2 > 0.0;
+        if double || self.voice2_live {
+            // Keeps running one hop after a double stop ends, to fade out.
+            let (a2, b2) = (self.second(a), self.second(b));
+            self.voice2.process(&a2, &b2, &mut self.tone2[..n], &mut self.noise2[..n]);
+            for k in 0..n {
+                self.tone[k] += self.tone2[k];
+                self.noise[k] += self.noise2[k];
+            }
+            self.voice2_live = double;
+        }
         if b.loudness > 0.05 {
             self.rings.choke(b.string);
+            if b.pitch2 > 0.0 {
+                self.rings.choke(b.string2);
+            }
         }
         let mut next = 0;
         for (i, o) in out.iter_mut().enumerate() {

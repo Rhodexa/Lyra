@@ -38,6 +38,10 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* marmalade ~31–32 s: a note repeated fast smears out (the bow just goes back and forth). It should bounce the bow (spiccato) instead.
   - Claude: the four repeated C5s were slurred by the fast-run rule (a slur between identical notes = one long note), and the MIDI import read a small same-key overlap as a slur. Now repeated notes are never slurred, same-key overlaps are cut, and **spiccato** is inferred for fast notes bowed separately: a drop, a tick of hair, then the string rings free and darkens. Score mark `*`. Re-rendered `midi/marmalade.wav`.
 
+- [ ] *(Rhodexa, 2026-11-23)* Double stops, please.
+  - Claude: done. A note can carry a second, lower pitch (`D3+A3` in scores; two notes starting together in a roll; a held chord note in MIDI). The performer only plays it if one hand can reach both notes on neighbouring strings and the note is at least 0.25 s long; otherwise it plays the top note alone. A second bowed voice shares the body and the vibrato. Pizzicato double stops pluck both notes, rolled by 12 ms. In marmalade, 21.75–28.5 s is now a run of double stops; octaves get refused (too wide for the hand). `--no-doubles` turns it off for MIDI.
+- [ ] Octave double stops need a stretched hand (or thumb position), which isn't modelled; for now they're played as single notes.
+
 ## Wishes
 
 - [ ]

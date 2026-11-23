@@ -26,6 +26,7 @@ usage: octavia <score.txt | curves.csv>... [options]
   --channel N        MIDI: only this channel (1-16)
   --bottom           MIDI: in chords, keep the lowest note (default: highest)
   --transpose N      MIDI: shift by N semitones (default: fit the range by octaves)
+  --no-doubles       MIDI: never keep a second chord note as a double stop
   --dry              no room reverb
   --sr N             sample rate (default 48000)
 
@@ -49,6 +50,7 @@ struct Args {
     channel: Option<u8>,
     bottom: bool,
     transpose: Option<i32>,
+    doubles: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -64,6 +66,7 @@ fn parse_args() -> Result<Args, String> {
         channel: None,
         bottom: false,
         transpose: None,
+        doubles: true,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -81,6 +84,7 @@ fn parse_args() -> Result<Args, String> {
             "--dry" => a.dry = true,
             "--pizz" => a.style.pizzicato = true,
             "--bottom" => a.bottom = true,
+            "--no-doubles" => a.doubles = false,
             "--track" => a.track = Some(val("--track")?.parse().map_err(|_| "bad --track")?),
             "--channel" => {
                 let c: u8 = val("--channel")?.parse().map_err(|_| "bad --channel")?;
@@ -195,6 +199,7 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
                 voice: if args.bottom { midi::Voice::Bottom } else { midi::Voice::Top },
                 transpose: args.transpose,
                 range: (inst.open_strings[0], inst.open_strings[3] + 24.0),
+                doubles: args.doubles,
             };
             let (score, what) = midi::to_line(&file, &pick)?;
             println!("{stem}: {what}");

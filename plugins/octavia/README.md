@@ -49,8 +49,11 @@ cargo run --release -- song.mid --track 2               # one line from track 2
 cargo run --release -- song.mid --bottom --transpose -12
 ```
 
-Chords collapse to their top note (`--bottom` for the lowest), small overlaps
-become slurs, and the line is shifted by octaves into the instrument's range.
+Chords collapse to their top note (`--bottom` for the lowest), keeping the
+next note down as a **double stop** when it's held and playable
+(`--no-doubles` to turn that off). Small overlaps become slurs, and the line
+is shifted by octaves into the instrument's range. The extracted line is
+written as `NAME.roll`, so you can see and edit what Octavia plays.
 
 ## Score format
 
@@ -61,6 +64,8 @@ mp
 ^C4:q 'D4 -E4           # ^ accent, ' staccato, - tenuto
 p < C3:w f              # hairpins run to the next dynamic, even inside one note
 pizz G2:q r D3 arco
+*C4:s *C4 *C4           # * spiccato (bounced); fast separate notes bounce anyway
+D3+A3:h                 # + a double stop (two strings at once)
 ```
 
 ## License
