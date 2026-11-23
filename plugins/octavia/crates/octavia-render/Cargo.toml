@@ -1,0 +1,15 @@
+[package]
+name = "octavia-render"
+description = "Command-line renderer: score or curves in, WAV + curves + plots + measurements out."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "octavia"
+path = "src/main.rs"
+
+[dependencies]
+octavia-core.workspace = true
+hound.workspace = true
+png.workspace = true

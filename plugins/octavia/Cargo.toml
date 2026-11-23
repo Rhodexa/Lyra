@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+octavia-core = { path = "crates/octavia-core" }
+hound = "3.5"
+png = "0.18"
+
+# DSP is unusable unoptimised; keep debug builds fast.
+[profile.dev]
+opt-level = 2
+
+[profile.release]
+debug = 1

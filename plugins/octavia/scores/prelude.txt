@@ -1,0 +1,9 @@
+# J.S. Bach, Cello Suite No. 1, Prelude, opening bars (public domain).
+# Tests: fast string crossings under slurs.
+tempo 72
+mf
+(G2:s D3 B3 A3) (B3 D3 B3 D3) (G2 D3 B3 A3) (B3 D3 B3 D3)
+(G2 E3 C4 B3) (C4 E3 C4 E3) (G2 E3 C4 B3) (C4 E3 C4 E3)
+(G2 F#3 C4 B3) (C4 F#3 C4 F#3) (G2 F#3 C4 B3) (C4 F#3 C4 F#3)
+(G2 G3 B3 A3) (B3 G3 B3 F#3) (G2 G3 B3 A3) (B3 G3 B3 F#3)
+G2:w
