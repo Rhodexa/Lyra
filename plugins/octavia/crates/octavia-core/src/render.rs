@@ -15,7 +15,8 @@ use crate::dsp::OnePole;
 use crate::rand::Rng;
 use crate::voice::BowVoice;
 
-pub fn render(curves: &Curves, inst: &Instrument, sr: f32, seed: u64) -> Vec<f32> {
+/// `bright`: the character dial, 0 = natural (matched to recordings), 1 = bright and powerful.
+pub fn render(curves: &Curves, inst: &Instrument, sr: f32, seed: u64, bright: f32) -> Vec<f32> {
     let frames = &curves.frames;
     if frames.len() < 2 {
         return Vec::new();
@@ -26,6 +27,7 @@ pub fn render(curves: &Curves, inst: &Instrument, sr: f32, seed: u64) -> Vec<f32
     let mut noise = vec![0.0f32; len];
 
     let mut voice = BowVoice::new(sr, BodyResponse::new(inst, seed), seed);
+    voice.set_bright(bright);
     for f in 0..frames.len() - 1 {
         let (s0, s1) = (at(f), at(f + 1));
         voice.process(&frames[f], &frames[f + 1], &mut tone[s0..s1], &mut noise[s0..s1]);
@@ -104,7 +106,7 @@ mod tests {
         let inst = cello();
         let s = Score::parse("tempo 80\n(G2:e D3 B3) A3 B3 D3 B3 D3 pizz G2:q D3 arco C3:h").unwrap();
         let c = perform(&s, &inst, &Style::default());
-        let out = render(&c, &inst, 48_000.0, 1);
+        let out = render(&c, &inst, 48_000.0, 1, 0.0);
         assert!(out.iter().all(|v| v.is_finite()));
         let peak = out.iter().fold(0.0f32, |m, v| m.max(v.abs()));
         assert!(peak > 0.01 && peak < 4.0, "peak {peak}");
@@ -118,7 +120,7 @@ mod tests {
         let inst = cello();
         let s = Score::parse("C3:q E3 G3").unwrap();
         let c = perform(&s, &inst, &Style::default());
-        assert_eq!(render(&c, &inst, 44_100.0, 7), render(&c, &inst, 44_100.0, 7));
+        assert_eq!(render(&c, &inst, 44_100.0, 7, 0.5), render(&c, &inst, 44_100.0, 7, 0.5));
     }
 }
 

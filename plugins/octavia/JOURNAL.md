@@ -26,7 +26,8 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* v5 sounds much better. Found raw recordings (Iowa sample, anechoic Mozart cello): real cellos are much noisier than expected; the old breath-2.5 render was closer.
   - Claude: added a "noise floor" measure (energy between the overtones). Clean references sit at −21 to −23 dB; our held note at breath 1 was −30. Bow noise is now 8 dB louder at the voice, so breath 1 measures −24 on a held note. Attack scrapes rose with it. Files: `renders/ab/*-v6.wav`.
   - Licences (Rhodexa): Iowa MIS = free for anything (training candidate). Aalto anechoic = restrictive, so listening and measuring only.
-- [ ] *(Rhodexa, 2026-11-23)* v6: "It definitely sounds like a cello now!" Loves v6 *and* v4; v4 isn't bad in retrospect.
+- [ ] *(Rhodexa, 2026-11-23)* v6: "It definitely sounds like a cello now!" Loves v6 *and* v4; v4 isn't bad in retrospect. Loves v4's brightness and power, "boss fight" like a French horn.
+  - Claude: `--bright 0..1` dial: 0 = v6 natural, 1 = v4-like bright and powerful (brighter overtones, lighter and smoother noise). Examples in `renders/bright/0.5` and `renders/bright/1`. In Lyra this becomes a knob.
 
 ## Wishes
 

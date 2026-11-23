@@ -21,7 +21,7 @@ Everything lands in `renders/`:
 | `NAME.spec.png` | spectrogram, 40 Hz – 16 kHz, dotted lines at each C |
 
 Useful A/B switches: `--expression 0` (deadpan, rules off), `--vibrato 0`,
-`--breath 2` (more steady bow noise),
+`--breath 2` (more steady bow noise), `--bright 1` (bright, powerful character),
 `--seed 2` (another take).
 
 To compare with a real recording (kept in `ext_sample/`, never committed):

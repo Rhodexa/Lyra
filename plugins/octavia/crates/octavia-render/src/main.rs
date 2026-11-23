@@ -16,6 +16,7 @@ usage: octavia <score.txt | curves.csv>... [options]
   --instrument NAME  cello (default) or violin
   --expression X     0 = deadpan, 1 = normal, 2 = a lot
   --vibrato X        vibrato depth scale (default 1)
+  --bright X         character: 0 = natural cello (default), 1 = bright and powerful
   --breath X         steady bow noise under the tone (default 1; try 0.5 .. 3)
   --seed N           a different take of the same performance
   --dry              no room reverb
@@ -31,6 +32,7 @@ struct Args {
     style: Style,
     dry: bool,
     sr: f32,
+    bright: f32,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -41,6 +43,7 @@ fn parse_args() -> Result<Args, String> {
         style: Style::default(),
         dry: false,
         sr: 48_000.0,
+        bright: 0.0,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -51,6 +54,7 @@ fn parse_args() -> Result<Args, String> {
             "--instrument" => a.instrument = val("--instrument")?,
             "--expression" => a.style.expression = val("--expression")?.parse().map_err(|_| "bad --expression")?,
             "--vibrato" => a.style.vibrato = val("--vibrato")?.parse().map_err(|_| "bad --vibrato")?,
+            "--bright" => a.bright = val("--bright")?.parse().map_err(|_| "bad --bright")?,
             "--breath" => a.style.breath = val("--breath")?.parse().map_err(|_| "bad --breath")?,
             "--seed" => a.style.seed = val("--seed")?.parse().map_err(|_| "bad --seed")?,
             "--sr" => a.sr = val("--sr")?.parse().map_err(|_| "bad --sr")?,
@@ -122,7 +126,7 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
     };
     let t_perform = t0.elapsed();
     let t1 = Instant::now();
-    let mono = render(&curves, inst, args.sr, args.style.seed);
+    let mono = render(&curves, inst, args.sr, args.style.seed, args.bright);
     let t_render = t1.elapsed();
 
     // Room, then a fixed gain so loudness differences between renders are real.

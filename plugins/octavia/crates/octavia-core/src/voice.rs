@@ -54,6 +54,8 @@ pub struct BowVoice {
     noise_hp: OnePole,
     noise_lp: Biquad,
     noise_amp: f32,
+    /// 0 = natural (matched to recordings), 1 = bright and powerful ("boss fight").
+    bright: f32,
     comb: Vec<f32>,
     comb_w: usize,
 }
@@ -79,9 +81,15 @@ impl BowVoice {
             noise_hp: OnePole::new(sr, 250.0),
             noise_lp: Biquad::lowpass(sr, 3000.0, 0.7),
             noise_amp: 0.0,
+            bright: 0.0,
             comb: vec![0.0; 4096],
             comb_w: 0,
         }
+    }
+
+    /// The character dial: 0 = natural cello, 1 = bright and powerful.
+    pub fn set_bright(&mut self, bright: f32) {
+        self.bright = bright.clamp(0.0, 1.0);
     }
 
     /// Complex overtone amplitudes for one frame, scaled by loudness.
@@ -89,9 +97,9 @@ impl BowVoice {
         let b = fr.brightness.clamp(0.0, 1.0);
         // Bow moves toward the bridge when bright, and never holds still.
         let beta = (0.13 - 0.07 * b) * (1.0 + 0.12 * self.bow_drift.next(1.0 / FRAME_RATE as f32));
-        let tilt = 1.5 - 0.5 * b;
+        let tilt = lerp(1.5 - 0.5 * b, 1.25 - 0.6 * b, self.bright);
         let f0 = midi_to_hz(fr.pitch);
-        let fc = 1800.0 + 3500.0 * b;
+        let fc = lerp(1800.0 + 3500.0 * b, 3500.0 + 8000.0 * b, self.bright);
         let mut amps = [0.0f32; MAX_PARTIALS];
         let mut energy = 0.0f32;
         for (k, slot) in amps.iter_mut().enumerate().take(count) {
@@ -143,10 +151,11 @@ impl BowVoice {
         }
         self.count = count;
 
-        let fc = 1000.0 + 2500.0 * b.brightness.clamp(0.0, 1.0);
+        let nb = b.brightness.clamp(0.0, 1.0);
+        let fc = lerp(1000.0 + 2500.0 * nb, 2000.0 + 6000.0 * nb, self.bright);
         self.noise_lp.set_lowpass(self.sr, fc, 0.7);
         // Level matched to clean cello recordings: ~−22 dB floor between overtones.
-        let noise_target = 0.3 * b.loudness.max(0.0).powf(1.2) * b.noise;
+        let noise_target = lerp(0.3, 0.15, self.bright) * b.loudness.max(0.0).powf(1.2) * b.noise;
         let noise_step = (noise_target - self.noise_amp) * inv;
 
         let sr = self.sr as f64;
@@ -184,7 +193,7 @@ impl BowVoice {
             // slower scratchy patches. (Rhodexa: "a pencil on paper".)
             let g = 0.5 + 0.5 * self.grain.next(dt);
             let sc = 0.5 + 0.5 * self.scratch.next(dt);
-            let texture = (0.2 + 1.6 * g * g) * (0.6 + 0.8 * sc);
+            let texture = lerp((0.2 + 1.6 * g * g) * (0.6 + 0.8 * sc), 1.0, 0.5 * self.bright);
             let raw = shaped * (0.35 + 2.6 * pulse) * texture;
             // Harmonic noise: a comb one period long.
             let len = self.comb.len();
@@ -200,4 +209,9 @@ impl BowVoice {
             noise[i] = (0.5 * raw + 0.25 * y) * self.noise_amp;
         }
     }
+}
+
+#[inline]
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
 }
