@@ -11,6 +11,8 @@ use crate::curves::{Curves, FRAME_RATE};
 use crate::instrument::Instrument;
 use crate::pluck::Plucks;
 use crate::sympathetic::Sympathetic;
+use crate::dsp::OnePole;
+use crate::rand::Rng;
 use crate::voice::BowVoice;
 
 pub fn render(curves: &Curves, inst: &Instrument, sr: f32, seed: u64) -> Vec<f32> {
@@ -32,6 +34,8 @@ pub fn render(curves: &Curves, inst: &Instrument, sr: f32, seed: u64) -> Vec<f32
     let mut plucks = Plucks::new(sr, inst.pluck_ring, seed);
     let mut sym = Sympathetic::new(&inst.open_strings, sr);
     let mut body = Body::new(inst, sr, seed);
+    let mut knocks = Knocks::new(sr, seed);
+    let mut next_tap = 0;
     let mut next_pluck = 0;
     let mut out = tone;
     for (i, s) in out.iter_mut().enumerate() {
@@ -42,12 +46,46 @@ pub fn render(curves: &Curves, inst: &Instrument, sr: f32, seed: u64) -> Vec<f32
             plucks.trigger(p);
             next_pluck += 1;
         }
-        let raw = noise[i] + plucks.tick();
+        while let Some(k) = curves.taps.get(next_tap) {
+            if (k.time * sr as f64) as usize > i {
+                break;
+            }
+            knocks.trigger(k.strength);
+            next_tap += 1;
+        }
+        let raw = noise[i] + plucks.tick() + knocks.tick();
         // The open strings hear everything at the bridge, tone included.
         let ring = sym.tick(raw + *s);
         *s += body.process(raw + ring);
     }
     out
+}
+
+/// Finger knocks: a click and a few milliseconds of dull noise. The body's
+/// resonances turn them into "a fingertip on a wooden table".
+struct Knocks {
+    env: f32,
+    click: f32,
+    decay: f32,
+    lp: OnePole,
+    rng: Rng,
+}
+
+impl Knocks {
+    fn new(sr: f32, seed: u64) -> Self {
+        Self { env: 0.0, click: 0.0, decay: (-1.0 / (0.004 * sr)).exp(), lp: OnePole::new(sr, 1800.0), rng: Rng::new(seed ^ 0x7A9) }
+    }
+    fn trigger(&mut self, strength: f32) {
+        self.env += 0.2 * strength;
+        self.click += 0.45 * strength;
+    }
+    #[inline]
+    fn tick(&mut self) -> f32 {
+        let y = self.lp.lowpass(self.rng.bipolar() * self.env + self.click);
+        self.env *= self.decay;
+        self.click *= 0.5;
+        y
+    }
 }
 
 #[cfg(test)]

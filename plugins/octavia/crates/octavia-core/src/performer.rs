@@ -18,6 +18,10 @@
 //!   is absent on short notes and on open strings.
 //! * **Intonation**: a few cents of human error that settles after the
 //!   attack; leading tones lean up toward the note they resolve to.
+//! * **Finger taps**: a finger landing on the fingerboard knocks the wood,
+//!   hardest when it hammers down mid-slur; lifting off makes a smaller one.
+//!   Open strings need no finger.
+//! * **Releases**: when the bow stops, the string rings on and darkens.
 //! * **String choice** stays on the current string while it can, and
 //!   avoids open strings on long notes (so they can have vibrato).
 //!
@@ -25,7 +29,7 @@
 //! phrase, so it needs to see ahead. Offline that's free; inside a DAW the
 //! host can hand it the clip's notes (see docs/DESIGN.md).
 
-use crate::curves::{Curves, Frame, Pluck, FRAME_RATE};
+use crate::curves::{Curves, Frame, Pluck, Tap, FRAME_RATE};
 use crate::dsp::smoothstep;
 use crate::instrument::Instrument;
 use crate::rand::{hash_bipolar, Wander};
@@ -112,7 +116,7 @@ pub fn perform(score: &Score, inst: &Instrument, style: &Style) -> Curves {
     let dt = 1.0 / FRAME_RATE;
     let frames_len = ((score.end() + 2.0) * FRAME_RATE).ceil() as usize;
 
-    let mut curves = Curves { frames: Vec::with_capacity(frames_len), plucks: Vec::new() };
+    let mut curves = Curves { frames: Vec::with_capacity(frames_len), ..Curves::default() };
     for (n, p) in notes.iter().zip(&plans) {
         if p.pizz {
             curves.plucks.push(Pluck {
@@ -124,6 +128,8 @@ pub fn perform(score: &Score, inst: &Instrument, style: &Style) -> Curves {
             });
         }
     }
+
+    curves.taps = finger_taps(notes, &plans, inst);
 
     let mut rate_wander = Wander::new(style.seed ^ 0x5EED, 0.8);
     let mut vib_phase = 0.0f64;
@@ -203,7 +209,9 @@ fn note_frame(notes: &[Note], plans: &[Plan], i: usize, t: f64, vib_phase: f32, 
     // Bow contact: louder and accented means closer to the bridge, brighter.
     let tone = inst.string_tone[p.string as usize];
     let attack_bite = if p.entry == Entry::Legato { 0.0 } else { (0.12 + 0.25 * p.accent) * (-since / 0.09).exp() };
-    let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite).clamp(0.0, 1.0);
+    // A free-ringing string (bow lifted or stopped) loses its highs first.
+    let release_dark = if matches!(p.exit, Exit::Decay(_)) && t > p.sound_end { 0.35 * (1.0 - fall) } else { 0.0 };
+    let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite - release_dark).clamp(0.0, 1.0);
 
     let spike = match p.entry {
         Entry::Legato if p.crossing => 0.15,
@@ -277,9 +285,9 @@ fn plan(notes: &[Note], inst: &Instrument, style: &Style) -> Vec<Plan> {
                 }
             }
             _ => Exit::Decay(match n.articulation {
-                Articulation::Staccato => 0.03,
-                _ if last_in_phrase => 0.2,
-                _ => 0.07,
+                Articulation::Staccato => 0.07,
+                _ if last_in_phrase => 0.3,
+                _ => 0.1,
             }),
         };
 
@@ -376,6 +384,40 @@ fn plan(notes: &[Note], inst: &Instrument, style: &Style) -> Vec<Plan> {
         });
     }
     plans
+}
+
+fn finger_taps(notes: &[Note], plans: &[Plan], inst: &Instrument) -> Vec<Tap> {
+    let mut taps = Vec::new();
+    for (i, (n, p)) in notes.iter().zip(plans).enumerate() {
+        if p.pizz {
+            continue;
+        }
+        let open = (n.pitch - inst.open_strings[p.string as usize]).abs() < 0.01;
+        let prev = i.checked_sub(1).map(|j| (&notes[j], &plans[j]));
+        let strength = match (p.entry, prev) {
+            // Mid-slur on the same string: hammer down, or lift off.
+            (Entry::Legato, Some((pn, pp))) if pp.string == p.string => {
+                if n.pitch > pn.pitch {
+                    0.7
+                } else if open {
+                    0.45
+                } else {
+                    0.3
+                }
+            }
+            (Entry::Legato, Some(_)) if !open => 0.25,
+            (Entry::Legato, _) => 0.0,
+            // A new bow: the finger went down just before it.
+            (_, Some((pn, _))) if (pn.pitch - n.pitch).abs() > 0.01 && !open => 0.3,
+            (_, None) if !open => 0.3,
+            _ => 0.0,
+        };
+        if strength > 0.0 {
+            let lead = if p.entry == Entry::Legato { p.glide as f64 } else { 0.015 };
+            taps.push(Tap { time: (n.start - lead).max(0.0), strength });
+        }
+    }
+    taps
 }
 
 /// 0 at the ends, 1 at `peak`.

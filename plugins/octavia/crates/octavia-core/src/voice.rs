@@ -48,6 +48,8 @@ pub struct BowVoice {
     rng: Rng,
     jitter: Wander,
     wobble: Wander,
+    grain: Wander,
+    scratch: Wander,
     bow_drift: Wander,
     noise_hp: OnePole,
     noise_lp: Biquad,
@@ -71,8 +73,10 @@ impl BowVoice {
             rng: Rng::new(seed ^ 0xB0B0),
             jitter: Wander::new(seed ^ 0x717, 70.0),
             wobble: Wander::new(seed ^ 0x3C3, 9.0),
+            grain: Wander::new(seed ^ 0x6A1, 180.0),
+            scratch: Wander::new(seed ^ 0x5C7, 14.0),
             bow_drift: Wander::new(seed ^ 0xD71F7, 1.3),
-            noise_hp: OnePole::new(sr, 500.0),
+            noise_hp: OnePole::new(sr, 250.0),
             noise_lp: Biquad::lowpass(sr, 3000.0, 0.7),
             noise_amp: 0.0,
             comb: vec![0.0; 4096],
@@ -85,9 +89,9 @@ impl BowVoice {
         let b = fr.brightness.clamp(0.0, 1.0);
         // Bow moves toward the bridge when bright, and never holds still.
         let beta = (0.13 - 0.07 * b) * (1.0 + 0.12 * self.bow_drift.next(1.0 / FRAME_RATE as f32));
-        let tilt = 1.25 - 0.6 * b;
+        let tilt = 1.5 - 0.5 * b;
         let f0 = midi_to_hz(fr.pitch);
-        let fc = 3500.0 + 8000.0 * b;
+        let fc = 1800.0 + 3500.0 * b;
         let mut amps = [0.0f32; MAX_PARTIALS];
         let mut energy = 0.0f32;
         for (k, slot) in amps.iter_mut().enumerate().take(count) {
@@ -139,7 +143,7 @@ impl BowVoice {
         }
         self.count = count;
 
-        let fc = 2000.0 + 6000.0 * b.brightness.clamp(0.0, 1.0);
+        let fc = 1000.0 + 2500.0 * b.brightness.clamp(0.0, 1.0);
         self.noise_lp.set_lowpass(self.sr, fc, 0.7);
         let noise_target = 0.12 * b.loudness.max(0.0).powf(1.2) * b.noise;
         let noise_step = (noise_target - self.noise_amp) * inv;
@@ -175,7 +179,12 @@ impl BowVoice {
             // One slip per period: noise bunches up around the same phase.
             let pulse = (0.5 + 0.5 * (self.phase - PI).cos()).powi(3) as f32;
             self.noise_amp += noise_step;
-            let raw = shaped * (0.35 + 2.6 * pulse);
+            // Paper texture: the hair's grip comes and goes in grains, and in
+            // slower scratchy patches. (Rhodexa: "a pencil on paper".)
+            let g = 0.5 + 0.5 * self.grain.next(dt);
+            let sc = 0.5 + 0.5 * self.scratch.next(dt);
+            let texture = (0.2 + 1.6 * g * g) * (0.6 + 0.8 * sc);
+            let raw = shaped * (0.35 + 2.6 * pulse) * texture;
             // Harmonic noise: a comb one period long.
             let len = self.comb.len();
             let d = (sr / f).clamp(2.0, (len - 2) as f64) as f32;

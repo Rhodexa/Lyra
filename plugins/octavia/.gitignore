@@ -3,3 +3,5 @@
 /renders
 *.wav
 Cargo.lock.bak
+# Reference recordings: private listening material, never committed or trained on.
+/ext_sample

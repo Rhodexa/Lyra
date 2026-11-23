@@ -40,6 +40,8 @@ pub fn fft(re: &mut [f32], im: &mut [f32]) {
 }
 
 pub struct Report {
+    /// Long-term spectrum per octave band (63 Hz … 16 kHz), dB relative to the loudest band.
+    pub octaves: [f32; 9],
     pub peak_db: f32,
     pub rms_db: f32,
     pub centroid_hz: f32,
@@ -54,6 +56,7 @@ pub fn report(x: &[f32], sr: f32) -> Report {
     let rms = (x.iter().map(|v| (v * v) as f64).sum::<f64>() / x.len().max(1) as f64).sqrt() as f32;
     const N: usize = 4096;
     let mut bands = [0.0f64; 4];
+    let mut oct = [0.0f64; 9];
     let (mut num, mut den) = (0.0f64, 0.0f64);
     let mut pos = 0;
     while pos + N <= x.len() {
@@ -80,11 +83,19 @@ pub fn report(x: &[f32], sr: f32) -> Report {
             if band(100.0, 1000.0) {
                 bands[3] += p;
             }
+            for (b, slot) in oct.iter_mut().enumerate() {
+                let centre = 62.5 * 2f32.powi(b as i32);
+                if band(centre / 2f32.sqrt(), centre * 2f32.sqrt()) {
+                    *slot += p;
+                }
+            }
         }
         pos += N / 2;
     }
     let db = |a: f64, b: f64| (10.0 * (a.max(1e-20) / b.max(1e-20)).log10()) as f32;
+    let top = oct.iter().cloned().fold(1e-20, f64::max);
     Report {
+        octaves: oct.map(|v| db(v, top)),
         peak_db: 20.0 * peak.max(1e-9).log10(),
         rms_db: 20.0 * rms.max(1e-9).log10(),
         centroid_hz: (num / den.max(1e-20)) as f32,

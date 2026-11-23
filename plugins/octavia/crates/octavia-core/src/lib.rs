@@ -6,7 +6,8 @@
 //!   Score ──[performer]──▶ Curves ──[instrument]──▶ audio
 //!   (notes,                (pitch, loudness,         (voice + plucks
 //!    articulations)         brightness, noise,        → sympathetic strings
-//!                           string, plucks @ 250 Hz)  → body)
+//!                           string @ 250 Hz, plucks,  → body)
+//!                           finger taps)
 //! ```
 //!
 //! [`Curves`] is the contract: it can be saved, read back, plotted and
@@ -26,7 +27,7 @@ pub mod score;
 pub mod sympathetic;
 pub mod voice;
 
-pub use curves::{Curves, Frame, Pluck, FRAME_RATE};
+pub use curves::{Curves, Frame, Pluck, Tap, FRAME_RATE};
 pub use instrument::Instrument;
 pub use performer::{perform, Style};
 pub use render::render;

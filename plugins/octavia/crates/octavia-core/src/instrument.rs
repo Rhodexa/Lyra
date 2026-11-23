@@ -72,7 +72,7 @@ pub fn cello() -> Instrument {
         body_grain: (150.0, 6000.0, 110),
         body_detail: (80.0, 9000.0, 320),
         body_direct: 0.22,
-        radiation_hz: 110.0,
+        radiation_hz: 70.0,
         pluck_ring: 1.6,
         vibrato_rate: 5.4,
     }

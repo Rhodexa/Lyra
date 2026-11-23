@@ -10,6 +10,7 @@ use std::time::Instant;
 
 const USAGE: &str = "\
 usage: octavia <score.txt | curves.csv>... [options]
+       octavia analyze <file.wav>...      measure any recording the same way
 
   -o DIR             where to write (default: renders/)
   --instrument NAME  cello (default) or violin
@@ -65,6 +66,17 @@ fn parse_args() -> Result<Args, String> {
 }
 
 fn main() {
+    let all: Vec<String> = std::env::args().collect();
+    if all.get(1).is_some_and(|a| a == "analyze") {
+        let mut failed = false;
+        for p in &all[2..] {
+            if let Err(e) = analyze_file(Path::new(p)) {
+                eprintln!("{p}: {e}");
+                failed = true;
+            }
+        }
+        std::process::exit(failed as i32);
+    }
     let args = match parse_args() {
         Ok(a) => a,
         Err(e) => {
@@ -148,6 +160,7 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
 
     let secs = mono.len() as f64 / args.sr as f64;
     let r = analyze::report(&mono, args.sr);
+    println!("{}", octave_line(&r));
     println!(
         "{stem}: {secs:.1} s, {} notes | perform {:.1} ms, sound {:.0} ms = {:.0}x real time | \
          dry peak {:+.1} dBFS, rms {:+.1} dB{} | centroid {:.0} Hz, presence(2-5k/0.1-1k) {:+.1} dB, air(8-16k/1-4k) {:+.1} dB",
@@ -169,4 +182,42 @@ fn with_suffix(base: &Path, suffix: &str) -> PathBuf {
     let mut s = base.as_os_str().to_owned();
     s.push(suffix);
     PathBuf::from(s)
+}
+
+fn octave_line(r: &analyze::Report) -> String {
+    let names = ["63", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+    let cells: Vec<String> = names.iter().zip(r.octaves).map(|(n, v)| format!("{n}:{v:+.0}")).collect();
+    format!("  octaves (dB) {}", cells.join(" "))
+}
+
+/// Measures a recording the same way renders are measured, and draws its spectrogram.
+fn analyze_file(path: &Path) -> Result<(), String> {
+    let mut reader = hound::WavReader::open(path).map_err(|e| e.to_string())?;
+    let spec = reader.spec();
+    let ch = spec.channels.max(1) as usize;
+    let interleaved: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Float => reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect(),
+        hound::SampleFormat::Int => {
+            let scale = 1.0 / (1u64 << (spec.bits_per_sample - 1)) as f32;
+            reader.samples::<i32>().map(|s| s.unwrap_or(0) as f32 * scale).collect()
+        }
+    };
+    let mono: Vec<f32> = interleaved.chunks(ch).map(|c| c.iter().sum::<f32>() / ch as f32).collect();
+    let sr = spec.sample_rate as f32;
+    let r = analyze::report(&mono, sr);
+    let out = with_suffix(&path.with_extension(""), ".spec.png");
+    plot::spectrogram_png(&mono, sr, &out).map_err(|e| e.to_string())?;
+    println!(
+        "{}: {:.1} s | peak {:+.1} dBFS, rms {:+.1} dB | centroid {:.0} Hz, presence(2-5k/0.1-1k) {:+.1} dB, air(8-16k/1-4k) {:+.1} dB\n{}\n  spectrogram: {}",
+        path.display(),
+        mono.len() as f32 / sr,
+        r.peak_db,
+        r.rms_db,
+        r.centroid_hz,
+        r.presence_db,
+        r.air_db,
+        octave_line(&r),
+        out.display()
+    );
+    Ok(())
 }

@@ -8,6 +8,7 @@
 //! 43.000,0.000,0.420,0.050,1
 //! ...
 //! pluck,1.250,50.000,0.600,0.550,2
+//! tap,2.000,0.700
 //! ```
 
 pub const FRAME_RATE: f64 = 250.0;
@@ -37,10 +38,20 @@ pub struct Pluck {
     pub string: u8,
 }
 
+/// A left-hand finger hitting (or leaving) the fingerboard: a small
+/// wooden knock, separate from the tone.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tap {
+    pub time: f64,
+    /// 0..1
+    pub strength: f32,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Curves {
     pub frames: Vec<Frame>,
     pub plucks: Vec<Pluck>,
+    pub taps: Vec<Tap>,
 }
 
 impl Curves {
@@ -56,6 +67,9 @@ impl Curves {
         for p in &self.plucks {
             s += &format!("pluck,{:.4},{:.3},{:.4},{:.4},{}\n", p.time, p.pitch, p.velocity, p.brightness, p.string);
         }
+        for k in &self.taps {
+            s += &format!("tap,{:.4},{:.3}\n", k.time, k.strength);
+        }
         s
     }
 
@@ -69,7 +83,9 @@ impl Curves {
             let err = || format!("line {}: can't read {line:?}", ln + 1);
             let cols: Vec<&str> = line.split(',').map(str::trim).collect();
             let num = |i: usize| cols.get(i).and_then(|v| v.parse::<f64>().ok()).ok_or_else(err);
-            if cols[0] == "pluck" {
+            if cols[0] == "tap" {
+                c.taps.push(Tap { time: num(1)?, strength: num(2)? as f32 });
+            } else if cols[0] == "pluck" {
                 c.plucks.push(Pluck {
                     time: num(1)?,
                     pitch: num(2)? as f32,
@@ -88,6 +104,7 @@ impl Curves {
             }
         }
         c.plucks.sort_by(|a, b| a.time.total_cmp(&b.time));
+        c.taps.sort_by(|a, b| a.time.total_cmp(&b.time));
         Ok(c)
     }
 }
@@ -104,10 +121,12 @@ mod tests {
                 Frame { pitch: 43.12, loudness: 0.55, brightness: 0.45, noise: 0.06, string: 1 },
             ],
             plucks: vec![Pluck { time: 0.5, pitch: 50.0, velocity: 0.6, brightness: 0.5, string: 2 }],
+            taps: vec![Tap { time: 0.25, strength: 0.7 }],
         };
         let back = Curves::from_csv(&c.to_csv()).unwrap();
         assert_eq!(back.frames.len(), 2);
         assert_eq!(back.plucks, c.plucks);
+        assert_eq!(back.taps, c.taps);
         assert!((back.frames[1].pitch - 43.12).abs() < 1e-3);
     }
 }
