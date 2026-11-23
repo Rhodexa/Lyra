@@ -11,7 +11,9 @@
 //! * **Bow changes** between separate notes dip the loudness and add a
 //!   puff of bow noise; **slurred** notes keep the bow moving, only the
 //!   left hand changes (a quick pitch move, a tiny dip).
-//! * **Shifts**: big slurred leaps after a long note slide audibly.
+//! * **Shifts**: big slurred leaps after a long note slide audibly. Every
+//!   other slurred change is a finger landing (~8 ms) or a string crossing,
+//!   with no slide; sliding them all sounds fake.
 //! * **Vibrato** starts a moment after the note, grows in, follows loudness,
 //!   is absent on short notes and on open strings.
 //! * **Intonation**: a few cents of human error that settles after the
@@ -37,12 +39,14 @@ pub struct Style {
     pub expression: f32,
     /// Vibrato depth scale. 0 = none.
     pub vibrato: f32,
+    /// Steady bow noise under the tone (rosin, hair). 1 = normal.
+    pub breath: f32,
     pub seed: u64,
 }
 
 impl Default for Style {
     fn default() -> Self {
-        Self { expression: 1.0, vibrato: 1.0, seed: 1 }
+        Self { expression: 1.0, vibrato: 1.0, breath: 1.0, seed: 1 }
     }
 }
 
@@ -143,7 +147,7 @@ pub fn perform(score: &Score, inst: &Instrument, style: &Style) -> Curves {
 
         let mut frame = match owner {
             None => Frame { pitch: plans[0].pitch, brightness: 0.4, string: plans[0].string, ..Frame::default() },
-            Some(i) => note_frame(notes, &plans, i, t, vib_phase as f32, inst),
+            Some(i) => note_frame(notes, &plans, i, t, vib_phase as f32, inst, style.breath),
         };
         smooth_loud = frame.loudness + loud_keep * (smooth_loud - frame.loudness);
         frame.loudness = smooth_loud;
@@ -152,7 +156,7 @@ pub fn perform(score: &Score, inst: &Instrument, style: &Style) -> Curves {
     curves
 }
 
-fn note_frame(notes: &[Note], plans: &[Plan], i: usize, t: f64, vib_phase: f32, inst: &Instrument) -> Frame {
+fn note_frame(notes: &[Note], plans: &[Plan], i: usize, t: f64, vib_phase: f32, inst: &Instrument, breath: f32) -> Frame {
     let n = &notes[i];
     let p = &plans[i];
     let since = (t - n.start) as f32;
@@ -202,12 +206,13 @@ fn note_frame(notes: &[Note], plans: &[Plan], i: usize, t: f64, vib_phase: f32, 
     let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite).clamp(0.0, 1.0);
 
     let spike = match p.entry {
-        Entry::Legato if p.crossing => 0.12,
-        Entry::Legato => 0.0,
+        Entry::Legato if p.crossing => 0.15,
+        Entry::Legato => 0.08, // the finger landing
         Entry::BowChange => 0.3,
         Entry::Fresh => 0.35,
     } + 0.4 * p.accent;
-    let noise = (0.05 + spike * (-since / 0.035).exp() + if loudness < 0.25 { 0.04 } else { 0.0 }).min(1.0);
+    // A bowed string always breathes: a steady layer of rosin noise under the tone.
+    let noise = (0.3 * breath + spike * (-since / 0.035).exp() + if loudness < 0.25 { 0.08 } else { 0.0 }).min(1.0);
 
     Frame { pitch, loudness, brightness, noise, string: p.string }
 }
@@ -326,11 +331,11 @@ fn plan(notes: &[Note], inst: &Instrument, style: &Style) -> Vec<Plan> {
                 if k < 0.5 {
                     0.0
                 } else if k >= 5.0 && p.dur > 0.3 {
-                    0.06 + 0.05 * e // an audible shift
+                    0.05 + 0.04 * e // an audible shift: the only slide
                 } else if crossing {
-                    0.02
+                    0.004 // another string: nothing to slide on
                 } else {
-                    0.03
+                    0.008 // a finger lands: fast, no audible slide
                 }
             }
             (Entry::BowChange, _) => 0.012,
@@ -460,7 +465,7 @@ mod tests {
     #[test]
     fn deadpan_has_flat_dynamics() {
         let s = Score::parse("tempo 60\nmf C3:q D3 E3 F3 G3").unwrap();
-        let style = Style { expression: 0.0, vibrato: 0.0, seed: 1 };
+        let style = Style { expression: 0.0, vibrato: 0.0, ..Style::default() };
         let c = perform(&s, &cello(), &style);
         let mids: Vec<f32> = (0..5).map(|k| frame_at(&c, k as f64 + 0.5).loudness).collect();
         for m in &mids[..4] {

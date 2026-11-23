@@ -15,6 +15,7 @@ usage: octavia <score.txt | curves.csv>... [options]
   --instrument NAME  cello (default) or violin
   --expression X     0 = deadpan, 1 = normal, 2 = a lot
   --vibrato X        vibrato depth scale (default 1)
+  --breath X         steady bow noise under the tone (default 1; try 0.5 .. 3)
   --seed N           a different take of the same performance
   --dry              no room reverb
   --sr N             sample rate (default 48000)
@@ -49,6 +50,7 @@ fn parse_args() -> Result<Args, String> {
             "--instrument" => a.instrument = val("--instrument")?,
             "--expression" => a.style.expression = val("--expression")?.parse().map_err(|_| "bad --expression")?,
             "--vibrato" => a.style.vibrato = val("--vibrato")?.parse().map_err(|_| "bad --vibrato")?,
+            "--breath" => a.style.breath = val("--breath")?.parse().map_err(|_| "bad --breath")?,
             "--seed" => a.style.seed = val("--seed")?.parse().map_err(|_| "bad --seed")?,
             "--sr" => a.sr = val("--sr")?.parse().map_err(|_| "bad --sr")?,
             "--dry" => a.dry = true,

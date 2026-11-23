@@ -17,6 +17,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* After the notch fix: better, but still "a Game Boy playing from inside someone's mouth". Vowel-like filtering on a pulse. The first second is convincing, then it falls apart.
   - Claude: two causes. (1) A few broad body resonances = formants = vowels. (2) Overtones perfectly in phase and every cycle identical = a frozen pulse in the sustain. Fix v3: a dense, jagged body response (about 340 interfering modes) applied *per overtone* as gain plus phase, so overtones no longer line up and each flickers under vibrato; faster and deeper jitter and shimmer. Held low G crest factor went from 12.9 to 9.8 dB (less pulse-like). Files: `renders/ab/*-v2.wav` / `*-before.wav` vs `*-v3.wav`.
 
+- [ ] *(Rhodexa, 2026-11-23)* v3: starting to sound convincing (prelude, lament): a cello, but in perfect unison with a Game Boy. Fine in attacks and decays; in sustains the perfect waveform slowly comes to the front. Prelude legato slides sound very fake. Violin barely changed, still good, but lacks power/low end.
+  - Claude: measured the parts. Sympathetic strings −48 dB (not it). Bow noise was 40 dB under the tone in sustains, so the sustain was a pure additive synth. v4: steady bow noise raised about 15 dB, half of it combed around the overtones; slurs are now a finger landing (8 ms) or a string crossing (4 ms), and only big expressive shifts slide; violin radiation roll-off 260 → 190 Hz and bridge hill lowered. New knob `--breath X`. Files: `renders/ab/*-v4.wav`, plus `prelude-v4-breath2.5.wav`. Diagnostic: `cargo test --release -p octavia-core how_loud -- --ignored --nocapture`.
+
 ## Wishes
 
 - [ ]

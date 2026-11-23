@@ -19,7 +19,10 @@
 //!   no two cycles are identical.
 //!
 //! Bow noise is high-passed white noise, low-passed by brightness and pulsed
-//! once per period, because the bow slips once per cycle. It comes out
+//! once per period, because the bow slips once per cycle. Half of it runs
+//! through a comb tuned to the note, so it gathers around the overtones the
+//! way real bow noise does. Without a steady layer of it the sustain is a
+//! "perfect waveform" (heard as a Game Boy in unison with the cello). It comes out
 //! separately ([`BowVoice::process`]) because it goes through the
 //! time-domain body, not the per-overtone one.
 
@@ -49,6 +52,8 @@ pub struct BowVoice {
     noise_hp: OnePole,
     noise_lp: Biquad,
     noise_amp: f32,
+    comb: Vec<f32>,
+    comb_w: usize,
 }
 
 impl BowVoice {
@@ -70,6 +75,8 @@ impl BowVoice {
             noise_hp: OnePole::new(sr, 500.0),
             noise_lp: Biquad::lowpass(sr, 3000.0, 0.7),
             noise_amp: 0.0,
+            comb: vec![0.0; 4096],
+            comb_w: 0,
         }
     }
 
@@ -168,7 +175,19 @@ impl BowVoice {
             // One slip per period: noise bunches up around the same phase.
             let pulse = (0.5 + 0.5 * (self.phase - PI).cos()).powi(3) as f32;
             self.noise_amp += noise_step;
-            noise[i] = shaped * (0.35 + 2.6 * pulse) * self.noise_amp;
+            let raw = shaped * (0.35 + 2.6 * pulse);
+            // Harmonic noise: a comb one period long.
+            let len = self.comb.len();
+            let d = (sr / f).clamp(2.0, (len - 2) as f64) as f32;
+            let di = d as usize;
+            let fr = d - di as f32;
+            let r0 = (self.comb_w + len - di) % len;
+            let r1 = (r0 + len - 1) % len;
+            let delayed = self.comb[r0] * (1.0 - fr) + self.comb[r1] * fr;
+            let y = raw + 0.9 * delayed;
+            self.comb[self.comb_w] = y;
+            self.comb_w = (self.comb_w + 1) % len;
+            noise[i] = (0.5 * raw + 0.25 * y) * self.noise_amp;
         }
     }
 }

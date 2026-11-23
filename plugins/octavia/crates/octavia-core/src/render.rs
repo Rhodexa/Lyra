@@ -83,3 +83,44 @@ mod tests {
         assert_eq!(render(&c, &inst, 44_100.0, 7), render(&c, &inst, 44_100.0, 7));
     }
 }
+
+#[cfg(test)]
+mod probe {
+    use crate::body::{Body, BodyResponse};
+    use crate::instrument::cello;
+    use crate::performer::{perform, Style};
+    use crate::score::Score;
+    use crate::sympathetic::Sympathetic;
+    use crate::voice::BowVoice;
+    use crate::curves::FRAME_RATE;
+
+    #[test]
+    #[ignore]
+    fn how_loud_are_the_parts() {
+        let inst = cello();
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../scores/prelude.txt")).unwrap();
+        let c = perform(&Score::parse(&text).unwrap(), &inst, &Style::default());
+        let sr = 48_000.0;
+        let at = |f: usize| (f as f64 * sr as f64 / FRAME_RATE).round() as usize;
+        let len = at(c.frames.len() - 1);
+        let (mut tone, mut noise) = (vec![0.0; len], vec![0.0; len]);
+        let mut v = BowVoice::new(sr, BodyResponse::new(&inst, 1), 1);
+        for f in 0..c.frames.len() - 1 {
+            let (a, b) = (at(f), at(f + 1));
+            v.process(&c.frames[f], &c.frames[f + 1], &mut tone[a..b], &mut noise[a..b]);
+        }
+        let mut sym = Sympathetic::new(&inst.open_strings, sr);
+        let mut body = Body::new(&inst, sr, 1);
+        let (mut ring_out, mut noise_out) = (vec![0.0f32; len], vec![0.0f32; len]);
+        for i in 0..len {
+            let ring = sym.tick(noise[i] + tone[i]);
+            ring_out[i] = body.process(ring);
+        }
+        let mut body2 = Body::new(&inst, sr, 1);
+        for i in 0..len {
+            noise_out[i] = body2.process(noise[i]);
+        }
+        let db = |x: &[f32]| 10.0 * (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).log10();
+        println!("tone {:.1} dB | sympathetic {:.1} dB | bow noise {:.1} dB", db(&tone), db(&ring_out), db(&noise_out));
+    }
+}

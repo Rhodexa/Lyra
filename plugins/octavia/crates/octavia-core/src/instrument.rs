@@ -92,14 +92,14 @@ pub fn violin() -> Instrument {
             m(1050.0, 18.0, 0.45),
             m(1300.0, 15.0, 0.4),
             m(1700.0, 12.0, 0.35),
-            m(2300.0, 5.0, 0.6), // the "bridge hill"
-            m(2800.0, 6.0, 0.45),
+            m(2300.0, 5.0, 0.4), // the "bridge hill"
+            m(2800.0, 6.0, 0.3),
             m(3500.0, 8.0, 0.25),
         ],
         body_grain: (700.0, 7000.0, 28),
-        body_detail: (200.0, 12000.0, 320),
+        body_detail: (150.0, 12000.0, 320),
         body_direct: 0.22,
-        radiation_hz: 260.0,
+        radiation_hz: 190.0,
         pluck_ring: 0.8,
         vibrato_rate: 5.8,
     }
