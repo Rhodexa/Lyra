@@ -8,7 +8,10 @@
 //!
 //! The overtone recipe (until a trained model replaces it):
 //! * a sawtooth-like `1/n^tilt` slope, steeper when dark;
-//! * notches where the bow position `β` sits on a node (`sin(nπβ)`);
+//! * soft dips where the bow position `β` sits near a node. Not clean
+//!   `sin(nπβ)` notches: those are exactly a narrow pulse wave's spectrum and
+//!   sound like a chip. The bow hair is a wide ribbon and its position drifts,
+//!   so the dips are averaged over a spread of `β` and wander;
 //! * a soft high cut from string damping;
 //! * a slow random shimmer per overtone, more in the highs.
 //!
@@ -32,6 +35,7 @@ pub struct BowVoice {
     count: usize,
     rng: Rng,
     jitter: Wander,
+    bow_drift: Wander,
     noise_hp: OnePole,
     noise_lp: Biquad,
     noise_amp: f32,
@@ -48,6 +52,7 @@ impl BowVoice {
             count: 0,
             rng: Rng::new(seed ^ 0xB0B0),
             jitter: Wander::new(seed ^ 0x717, 28.0),
+            bow_drift: Wander::new(seed ^ 0xD71F7, 1.3),
             noise_hp: OnePole::new(sr, 500.0),
             noise_lp: Biquad::lowpass(sr, 3000.0, 0.7),
             noise_amp: 0.0,
@@ -57,14 +62,17 @@ impl BowVoice {
     /// Overtone levels for one frame, already scaled by loudness.
     fn targets(&mut self, fr: &Frame, count: usize, out: &mut [f32; MAX_PARTIALS]) {
         let b = fr.brightness.clamp(0.0, 1.0);
-        let beta = 0.13 - 0.07 * b; // bow moves toward the bridge when bright
+        // Bow moves toward the bridge when bright, and never holds still.
+        let beta = (0.13 - 0.07 * b) * (1.0 + 0.12 * self.bow_drift.next(1.0 / crate::FRAME_RATE as f32));
         let tilt = 1.25 - 0.6 * b;
         let f0 = midi_to_hz(fr.pitch);
         let fc = 3500.0 + 8000.0 * b;
         let mut energy = 0.0f32;
         for (k, slot) in out.iter_mut().enumerate().take(count) {
             let n = (k + 1) as f32;
-            let notch = 0.15 + 0.85 * (n * std::f32::consts::PI * beta).sin().abs();
+            let x = n * std::f32::consts::PI * beta;
+            let ribbon = ((x * 0.8).sin().abs() + x.sin().abs() + (x * 1.3).sin().abs()) / 3.0;
+            let notch = 0.45 + 0.55 * ribbon;
             let hf = n * f0 / fc;
             let a = n.powf(-tilt) * notch / (1.0 + hf * hf);
             energy += a * a;

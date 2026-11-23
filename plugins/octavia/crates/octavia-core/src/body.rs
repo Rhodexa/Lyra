@@ -21,7 +21,8 @@ impl Body {
         for _ in 0..count {
             let hz = lo * (hi / lo).powf(rng.uniform());
             let q = 18.0 + 25.0 * rng.uniform();
-            let gain = 0.12 + 0.22 * rng.uniform();
+            // More modes, each quieter, so the total stays about the same.
+            let gain = (0.12 + 0.22 * rng.uniform()) * (28.0 / count.max(1) as f32).sqrt();
             modes.push((Biquad::bandpass(sr, hz, q), gain));
         }
         Self { modes, direct: inst.body_direct, radiation: [OnePole::new(sr, inst.radiation_hz); 2] }
