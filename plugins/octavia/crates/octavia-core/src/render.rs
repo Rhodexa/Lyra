@@ -18,7 +18,7 @@ use crate::body::{Body, BodyResponse};
 use crate::curves::{Curves, Frame, FRAME_RATE};
 use crate::dsp::OnePole;
 use crate::instrument::Instrument;
-use crate::performer::{Event, Performer, Played, Style};
+use crate::performer::{Decision, Event, Performer, Style};
 use crate::pluck::Plucks;
 use crate::ring::Rings;
 use crate::rand::Rng;
@@ -314,7 +314,7 @@ pub struct Rendered {
     pub audio: Vec<f32>,
     pub curves: Curves,
     /// How each note was played (and whether as a double stop), in note order.
-    pub decisions: Vec<(Played, bool)>,
+    pub decisions: Vec<Decision>,
 }
 
 /// Performs and plays a whole score through the streaming engine.

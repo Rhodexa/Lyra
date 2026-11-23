@@ -30,6 +30,10 @@ pub struct Instrument {
     pub radiation_hz: f32,
     /// Seconds a low pizzicato rings (higher notes ring shorter).
     pub pluck_ring: f32,
+    /// Semitones the left hand covers without moving: four fingers over
+    /// about a major third on a cello (with a stretch); a whole fifth on a
+    /// violin, whose strings are much shorter.
+    pub hand_span: f32,
     /// Typical vibrato speed, Hz.
     pub vibrato_rate: f32,
 }
@@ -74,6 +78,7 @@ pub fn cello() -> Instrument {
         body_direct: 0.22,
         radiation_hz: 70.0,
         pluck_ring: 1.6,
+        hand_span: 4.0,
         vibrato_rate: 5.4,
     }
 }
@@ -101,6 +106,7 @@ pub fn violin() -> Instrument {
         body_direct: 0.22,
         radiation_hz: 190.0,
         pluck_ring: 0.8,
+        hand_span: 6.0,
         vibrato_rate: 5.8,
     }
 }

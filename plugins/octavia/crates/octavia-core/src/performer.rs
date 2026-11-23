@@ -36,7 +36,8 @@
 //! * **Releases**: when the bow stops, the string rings on and darkens.
 //!   When the bow crosses to another string, the one it left rings on by
 //!   itself (open strings for long).
-//! * **Fingering**: a left hand covering ~4 semitones on all strings at once.
+//! * **Fingering**: a left hand covering a few semitones on all strings at
+//!   once (about 4 on a cello, a fifth on a violin).
 //!   Open strings and notes under the hand are free, crossing strings is
 //!   cheap, shifting the hand is expensive. So arpeggios cross strings (the
 //!   Bach prelude: open G, open D, A string) instead of leaping up one string.
@@ -85,6 +86,19 @@ pub enum Played {
     /// Bounced bow (spiccato).
     Bounced,
     Plucked,
+}
+
+/// One note's decision: how it's played and where on the instrument.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Decision {
+    pub played: Played,
+    /// Played as a double stop.
+    pub double: bool,
+    /// String (0 = lowest).
+    pub string: u8,
+    /// Hand position (lowest semitone offset it covers) and how far it moved.
+    pub hand: f32,
+    pub shift: f32,
 }
 
 /// Something the instrument must do at an exact time, besides the frames.
@@ -151,6 +165,8 @@ struct Plan {
     phrase_start: f64,
     /// A double stop's lower note (with its intonation) and its string.
     double: Option<(f32, u8)>,
+    hand: f32,
+    shift: f32,
 }
 
 /// A streaming performer. Feed it notes (in start order, ideally at least
@@ -198,7 +214,7 @@ impl Performer {
     }
 
     /// How each note planned so far is being played, in note order.
-    pub fn decisions(&self) -> Vec<(Played, bool)> {
+    pub fn decisions(&self) -> Vec<Decision> {
         self.plans
             .iter()
             .map(|p| {
@@ -215,7 +231,7 @@ impl Performer {
                         Entry::Legato => Played::Slurred,
                     }
                 };
-                (how, p.double.is_some())
+                Decision { played: how, double: p.double.is_some(), string: p.string, hand: p.hand, shift: p.shift }
             })
             .collect()
     }
@@ -531,6 +547,8 @@ impl Performer {
             pizz,
             phrase_start,
             double,
+            hand: fingering.hand,
+            shift: fingering.shift,
         };
 
         // Events.
@@ -723,10 +741,6 @@ pub fn perform(score: &Score, inst: &Instrument, style: &Style) -> Curves {
     curves
 }
 
-/// How many semitones the left hand covers without moving (cello, lower
-/// positions: four fingers over about a major third, plus a stretch).
-const HAND_SPAN: f32 = 4.0;
-
 /// A fingering choice: which string, where the hand ends up, how far it moved.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Fingering {
@@ -753,10 +767,10 @@ fn choose_fingering(pitch: f32, prev: Option<u8>, hand: f32, avoid_open: bool, i
         }
         let (mut cost, new_hand, shift) = if off.abs() < 0.01 {
             (if avoid_open { 2.5 } else { 0.0 }, hand, 0.0)
-        } else if off >= hand - 0.01 && off <= hand + HAND_SPAN + 0.01 {
+        } else if off >= hand - 0.01 && off <= hand + inst.hand_span + 0.01 {
             (0.0, hand, 0.0)
         } else {
-            let to = if off < hand { off } else { off - HAND_SPAN }.max(1.0);
+            let to = if off < hand { off } else { off - inst.hand_span }.max(1.0);
             let shift = (to - hand).abs();
             (1.0 + 0.25 * shift, to, shift)
         };
@@ -786,12 +800,12 @@ fn choose_double(high: f32, low: f32, prev: Option<u8>, hand: f32, inst: &Instru
         }
         let stopped: Vec<f32> = [o1, o2].into_iter().filter(|o| o.abs() > 0.01).collect();
         let (lo, hi) = stopped.iter().fold((f32::MAX, f32::MIN), |(a, b), &o| (a.min(o), b.max(o)));
-        let (mut cost, new_hand, shift) = if stopped.is_empty() || (lo >= hand - 0.01 && hi <= hand + HAND_SPAN + 0.01) {
+        let (mut cost, new_hand, shift) = if stopped.is_empty() || (lo >= hand - 0.01 && hi <= hand + inst.hand_span + 0.01) {
             (0.0, hand, 0.0)
-        } else if hi - lo > HAND_SPAN + 0.01 {
+        } else if hi - lo > inst.hand_span + 0.01 {
             continue; // the fingers can't stretch that far
         } else {
-            let to = if lo < hand { lo } else { hi - HAND_SPAN }.max(1.0);
+            let to = if lo < hand { lo } else { hi - inst.hand_span }.max(1.0);
             (1.0 + 0.25 * (to - hand).abs(), to, (to - hand).abs())
         };
         cost += 0.15 * (o1.max(o2) - 7.0).max(0.0);
@@ -889,7 +903,7 @@ mod tests {
         for _ in 0..(3.0 * FRAME_RATE) as usize {
             p.next_frame(&mut ev);
         }
-        let d: Vec<Played> = p.decisions().iter().map(|d| d.0).collect();
+        let d: Vec<Played> = p.decisions().iter().map(|d| d.played).collect();
         assert_eq!(d[1], Played::Bounced);
         assert_ne!(d[3], Played::Bounced, "a 1 s note doesn't bounce");
         assert_eq!(d[3], Played::NewBow, "the bow is already moving after a bounce");

@@ -45,6 +45,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* Bug in what it does after a spiccato (`midi/angel.mid --track 8 --bright 0.5`). Would love to see it side by side with the MIDI.
   - Claude: three bugs. (1) Long notes ending a fast run were bounced (A#4 0.78 s, D#5 2.6 s: a drop, then two seconds of free ringing), so now only short notes bounce. (2) The note after a bounce started "from silence" with a slow, soft attack; now it's a new stroke. (3) Any note after a short lift (bounce or staccato) got the slow start; now only real rests do. For side by side: the curves plot colours each written note by how it was played, and `--explain` lists it.
 
+- [ ] *(Rhodexa, 2026-11-23)* crystalize.mid (Lindsey Stirling): great test material, lots of string switching.
+  - Claude: rendered on violin (`midi/crystalize.wav`, shifted up an octave to fit) and cello (`midi/cello/crystalize.wav`). `--explain` now also shows the string (IV lowest … I highest), open strings, hand position and shifts. Found that the hand was cello-sized on the violin too, giving 61 tiny one-semitone shifts. Hand span is now per instrument (cello 4, violin 6 semitones): 8 shifts left, all real climbs to D6/G6 and back.
+
 ## Wishes
 
 - [ ]

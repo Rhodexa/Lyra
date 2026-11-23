@@ -221,17 +221,35 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
     };
     let t_render = t0.elapsed();
     if let (true, Some(s)) = (args.explain, &score) {
-        for (n, (how, double)) in s.notes.iter().zip(&decisions) {
-            let d = if *double { n.double.map_or(String::new(), |d| format!(" + {}", octavia_core::score::pitch_name(d))) } else { String::new() };
+        const STRINGS: [&str; 4] = ["IV", "III", "II", "I"];
+        println!("  start    length  note        how       string  hand");
+        let mut shifts = 0;
+        for (n, d) in s.notes.iter().zip(&decisions) {
+            let dbl = match (d.double, n.double) {
+                (true, Some(p)) => format!("+{}", octavia_core::score::pitch_name(p)),
+                _ => String::new(),
+            };
+            let open = (n.pitch - inst.open_strings[d.string as usize]).abs() < 0.01;
+            let moved = if d.shift > 0.0 {
+                shifts += 1;
+                format!("  shift {:.0}", d.shift)
+            } else {
+                String::new()
+            };
             println!(
-                "  {:7.3}s {:>5.3}s  {:<4}{:<6} {:?}",
+                "  {:7.3}s {:>5.3}s  {:<4}{:<7} {:<9} {:<3} {:<4} {:>3.0}{}",
                 n.start,
                 n.dur,
                 octavia_core::score::pitch_name(n.pitch),
-                d,
-                how
+                dbl,
+                format!("{:?}", d.played),
+                STRINGS[d.string as usize],
+                if open { "open" } else { "" },
+                d.hand,
+                moved
             );
         }
+        println!("  ({} notes, {} hand shifts; strings: IV = lowest … I = highest)", decisions.len(), shifts);
     }
 
     // Room, then a fixed gain so loudness differences between renders are real.

@@ -1,7 +1,7 @@
 //! Just enough raster drawing to see curves and spectrograms. No fonts:
 //! the lanes are always in the same order (see the README).
 
-use octavia_core::{Curves, Played, Score, FRAME_RATE};
+use octavia_core::{Curves, Decision, Played, Score, FRAME_RATE};
 use std::path::Path;
 
 pub struct Canvas {
@@ -77,7 +77,7 @@ fn played_colour(p: Option<Played>) -> [u8; 3] {
 /// Four lanes, top to bottom: pitch (with the written notes behind it,
 /// coloured by how each was played), loudness, brightness, noise. One
 /// vertical grid line per second.
-pub fn curves_png(curves: &Curves, score: Option<&Score>, decisions: &[(Played, bool)], path: &Path) -> std::io::Result<()> {
+pub fn curves_png(curves: &Curves, score: Option<&Score>, decisions: &[Decision], path: &Path) -> std::io::Result<()> {
     let secs = curves.duration();
     let w = ((secs * 160.0) as usize).clamp(800, 6000);
     let lane = 140usize;
@@ -114,7 +114,7 @@ pub fn curves_png(curves: &Curves, score: Option<&Score>, decisions: &[(Played, 
     if let Some(s) = score {
         for (i, n) in s.notes.iter().enumerate() {
             let y = y_of_pitch(n.pitch);
-            let (how, double) = decisions.get(i).map_or((None, false), |d| (Some(d.0), d.1));
+            let (how, double) = decisions.get(i).map_or((None, false), |d| (Some(d.played), d.double));
             let col = played_colour(how);
             c.rect(x_of(n.start), y - 3, x_of(n.end()) - 2, y + 3, col);
             if let (Some(d), true) = (n.double, double) {
