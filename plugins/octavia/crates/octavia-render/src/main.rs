@@ -194,7 +194,7 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
                 channel: args.channel,
                 voice: if args.bottom { midi::Voice::Bottom } else { midi::Voice::Top },
                 transpose: args.transpose,
-                range: (inst.open_strings[0], inst.open_strings[3] + 19.0),
+                range: (inst.open_strings[0], inst.open_strings[3] + 24.0),
             };
             let (score, what) = midi::to_line(&file, &pick)?;
             println!("{stem}: {what}");

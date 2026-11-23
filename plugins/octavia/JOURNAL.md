@@ -32,6 +32,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* Prelude feels wrong: fast, wide legato leaps, as if sliding far up one string. A real player would change strings instead.
   - Claude: right, a real bug. The old rule stuck to one string within 9 semitones, so G2→D3 was a 7-semitone leap on the G string. Now there's a left-hand model: open strings and notes under the hand are free, crossings cheap, shifts expensive. Bar 1 plays open G, open D, A string with no shifts (tested). Shift slides scale with distance. And since one oscillator still sounds like one string leaping, **strings left behind now ring on** (open ones ~1.6 s, stopped ones ~0.5 s, choked when the bow returns), about 13 dB under the bowed line. A/B: `renders/ab/prelude-v6.wav` vs `prelude-v7.wav`.
 
+- [ ] *(Rhodexa, 2026-11-23)* MIDIs in `midi/`: marmalade is the best of them. Monophonic of course, but it already makes some very interesting tests.
+  - Claude: marmalade is a piano track (57% chords, E1–A6). The top-note line was grabbing left-hand notes under held melody notes and folding 53 notes by an octave one at a time, both heard as octave spikes. Now accompaniment under a held note is skipped, the octave shift is chosen to need the fewest folds (53 → 12), and the cello range goes up to A5. Re-rendered into `midi/marmalade.wav`.
+
 ## Wishes
 
 - [ ]

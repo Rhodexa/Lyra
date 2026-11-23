@@ -218,8 +218,20 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
     }
 
     // One note per onset: chords collapse to their top (or bottom) note.
+    // While a melody note is still held, notes well below it (above it, for
+    // --bottom) are the accompaniment moving underneath: skip them.
     let mut line: Vec<MidiNote> = Vec::new();
     for n in chosen {
+        if let Some(last) = line.last() {
+            let held = last.end > n.start + 0.05 && (n.start - last.start) >= 0.02;
+            let under = match pick.voice {
+                Voice::Top => (n.key as i32) < last.key as i32 - 4,
+                Voice::Bottom => (n.key as i32) > last.key as i32 + 4,
+            };
+            if held && under {
+                continue;
+            }
+        }
         match line.last_mut() {
             Some(last) if (n.start - last.start).abs() < 0.02 => {
                 let better = match pick.voice {
@@ -264,14 +276,22 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
     // Fit the range: shift by octaves so the line's middle sits well, then
     // fold any stragglers up or down an octave.
     let (lo, hi) = pick.range;
+    // Choose the octave shift that leaves the fewest notes out of range
+    // (each one folded is an artificial leap), then the one closest to the
+    // instrument's middle.
     let shift = match pick.transpose {
         Some(t) => t as f32,
         None => {
             let mut pitches: Vec<f32> = notes.iter().map(|n| n.pitch).collect();
             pitches.sort_by(f32::total_cmp);
             let median = pitches[pitches.len() / 2];
-            let target = lo + (hi - lo) * 0.4;
-            12.0 * ((target - median) / 12.0).round()
+            let target = lo + (hi - lo) * 0.45;
+            let cost = |k: i32| {
+                let s = 12.0 * k as f32;
+                let out = pitches.iter().filter(|&&p| p + s < lo || p + s > hi).count();
+                out as f32 * 1000.0 + (median + s - target).abs()
+            };
+            12.0 * (-5..=5).min_by(|a, b| cost(*a).total_cmp(&cost(*b))).unwrap_or(0) as f32
         }
     };
     let mut folded = 0;
