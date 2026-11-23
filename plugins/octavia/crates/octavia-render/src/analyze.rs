@@ -49,6 +49,11 @@ pub struct Report {
     pub air_db: f32,
     /// Energy in 2–5 kHz relative to 100–1000 Hz, dB.
     pub presence_db: f32,
+    /// Noise between the overtones, 200 Hz–4 kHz: the quiet floor of each
+    /// third-octave band (its 20th-percentile bin) relative to the band's
+    /// total, over the loud frames. A pure tone is around −40 dB or lower,
+    /// pure noise about −7 dB.
+    pub floor_db: f32,
 }
 
 pub fn report(x: &[f32], sr: f32) -> Report {
@@ -58,6 +63,16 @@ pub fn report(x: &[f32], sr: f32) -> Report {
     let mut bands = [0.0f64; 4];
     let mut oct = [0.0f64; 9];
     let (mut num, mut den) = (0.0f64, 0.0f64);
+    let (mut floor, mut floor_total) = (0.0f64, 0.0f64);
+    // First pass: frame energies, to skip the quiet frames.
+    let mut energies = Vec::new();
+    let mut pos = 0;
+    while pos + N <= x.len() {
+        energies.push(x[pos..pos + N].iter().map(|v| (v * v) as f64).sum::<f64>());
+        pos += N / 2;
+    }
+    let loudest = energies.iter().cloned().fold(0.0, f64::max);
+    let mut frame = 0;
     let mut pos = 0;
     while pos + N <= x.len() {
         let mut re: Vec<f32> = (0..N)
@@ -65,6 +80,20 @@ pub fn report(x: &[f32], sr: f32) -> Report {
             .collect();
         let mut im = vec![0.0; N];
         fft(&mut re, &mut im);
+        if energies[frame] > loudest * 0.01 {
+            let mut lo = 200.0f32;
+            while lo < 4000.0 {
+                let hi = lo * 2f32.powf(1.0 / 3.0);
+                let (k0, k1) = ((lo / sr * N as f32) as usize, (hi / sr * N as f32) as usize);
+                let mut p: Vec<f64> = (k0..k1.max(k0 + 1)).map(|k| (re[k] * re[k] + im[k] * im[k]) as f64).collect();
+                let total: f64 = p.iter().sum();
+                p.sort_by(|a, b| a.total_cmp(b));
+                floor += p[p.len() / 5] * p.len() as f64;
+                floor_total += total;
+                lo = hi;
+            }
+        }
+        frame += 1;
         for k in 1..N / 2 {
             let f = k as f32 * sr / N as f32;
             let p = (re[k] * re[k] + im[k] * im[k]) as f64;
@@ -101,6 +130,7 @@ pub fn report(x: &[f32], sr: f32) -> Report {
         centroid_hz: (num / den.max(1e-20)) as f32,
         air_db: db(bands[0], bands[1]),
         presence_db: db(bands[2], bands[3]),
+        floor_db: db(floor, floor_total),
     }
 }
 

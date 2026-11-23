@@ -145,7 +145,8 @@ impl BowVoice {
 
         let fc = 1000.0 + 2500.0 * b.brightness.clamp(0.0, 1.0);
         self.noise_lp.set_lowpass(self.sr, fc, 0.7);
-        let noise_target = 0.12 * b.loudness.max(0.0).powf(1.2) * b.noise;
+        // Level matched to clean cello recordings: ~−22 dB floor between overtones.
+        let noise_target = 0.3 * b.loudness.max(0.0).powf(1.2) * b.noise;
         let noise_step = (noise_target - self.noise_amp) * inv;
 
         let sr = self.sr as f64;

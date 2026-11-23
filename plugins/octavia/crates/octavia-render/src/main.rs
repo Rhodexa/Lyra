@@ -187,7 +187,7 @@ fn with_suffix(base: &Path, suffix: &str) -> PathBuf {
 fn octave_line(r: &analyze::Report) -> String {
     let names = ["63", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
     let cells: Vec<String> = names.iter().zip(r.octaves).map(|(n, v)| format!("{n}:{v:+.0}")).collect();
-    format!("  octaves (dB) {}", cells.join(" "))
+    format!("  octaves (dB) {} | noise floor {:+.1} dB", cells.join(" "), r.floor_db)
 }
 
 /// Measures a recording the same way renders are measured, and draws its spectrogram.

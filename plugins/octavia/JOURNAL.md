@@ -23,6 +23,10 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* v4: the staccato scale (0:05–0:09 of articulations) sounds like a fast-attack synth. Chippiness grows on higher cello notes. The very first note of articulations sounds awesome. Violin still great. Breath up to 1.0 is okay, higher is gritty-bad. From a real cello recording (`ext_sample/cello.wav`): ours is far too bright; the bow sounds like a pencil moving on paper; the fingers on the fingerboard are obvious, like fingertips tapping a wooden table; heavy reverb (room?).
   - Claude: measured the recording with the new `octavia analyze`. Ours was 10–15 dB too bright above 1 kHz. v5: steeper overtone slope and lower high cut (now within about 3 dB of the recording, octave by octave); bow noise darker and grainy ("paper texture"); **finger taps**, a new curve event (`tap,time,strength`), knocked through the wooden body, hardest when a finger hammers down mid-slur; releases ring on and darken instead of gating off (that was the synthy staccato); more cello low end. The violin also got darker (centroid 2500 → 1860 Hz): compare `violin-air-v4` and `-v5`, and if v4 was better I'll give the violin its own tone. Files: `renders/ab/*-v5.wav`.
 
+- [ ] *(Rhodexa, 2026-11-23)* v5 sounds much better. Found raw recordings (Iowa sample, anechoic Mozart cello): real cellos are much noisier than expected; the old breath-2.5 render was closer.
+  - Claude: added a "noise floor" measure (energy between the overtones). Clean references sit at −21 to −23 dB; our held note at breath 1 was −30. Bow noise is now 8 dB louder at the voice, so breath 1 measures −24 on a held note. Attack scrapes rose with it. Files: `renders/ab/*-v6.wav`.
+  - Possible training data later, licences to check before use: University of Iowa MIS samples (I believe they're free to use) and the Aalto anechoic orchestra recordings (terms unknown).
+
 ## Wishes
 
 - [ ]
