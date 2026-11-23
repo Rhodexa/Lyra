@@ -5,3 +5,5 @@
 Cargo.lock.bak
 # Reference recordings: private listening material, never committed or trained on.
 /ext_sample
+# MIDI files to play with: may be copyrighted, never committed.
+/midi

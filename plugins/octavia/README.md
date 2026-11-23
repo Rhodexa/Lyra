@@ -41,6 +41,17 @@ cargo run --release -- scores/prelude.roll -o renders/inferred
 cargo run --release -- scores/prelude.roll --pizz       # the pizzicato patch
 ```
 
+## MIDI files
+
+```sh
+cargo run --release -- midi-info song.mid               # which track is what
+cargo run --release -- song.mid --track 2               # one line from track 2
+cargo run --release -- song.mid --bottom --transpose -12
+```
+
+Chords collapse to their top note (`--bottom` for the lowest), small overlaps
+become slurs, and the line is shifted by octaves into the instrument's range.
+
 ## Score format
 
 ```text

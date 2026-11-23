@@ -1,6 +1,7 @@
 //! `octavia` — render a score (or hand-edited curves) to sound and pictures.
 
 mod analyze;
+mod midi;
 mod plot;
 mod reverb;
 
@@ -10,6 +11,7 @@ use std::time::Instant;
 
 const USAGE: &str = "\
 usage: octavia <score.txt | curves.csv>... [options]
+       octavia midi-info <file.mid>...    list a MIDI file's tracks
        octavia analyze <file.wav>...      measure any recording the same way
 
   -o DIR             where to write (default: renders/)
@@ -20,6 +22,10 @@ usage: octavia <score.txt | curves.csv>... [options]
   --breath X         steady bow noise under the tone (default 1; try 0.5 .. 3)
   --seed N           a different take of the same performance
   --pizz             the pizzicato patch: pluck every note
+  --track N          MIDI: which track (default: the busiest; see midi-info)
+  --channel N        MIDI: only this channel (1-16)
+  --bottom           MIDI: in chords, keep the lowest note (default: highest)
+  --transpose N      MIDI: shift by N semitones (default: fit the range by octaves)
   --dry              no room reverb
   --sr N             sample rate (default 48000)
 
@@ -39,6 +45,10 @@ struct Args {
     dry: bool,
     sr: f32,
     bright: f32,
+    track: Option<usize>,
+    channel: Option<u8>,
+    bottom: bool,
+    transpose: Option<i32>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -50,6 +60,10 @@ fn parse_args() -> Result<Args, String> {
         dry: false,
         sr: 48_000.0,
         bright: 0.0,
+        track: None,
+        channel: None,
+        bottom: false,
+        transpose: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -66,6 +80,13 @@ fn parse_args() -> Result<Args, String> {
             "--sr" => a.sr = val("--sr")?.parse().map_err(|_| "bad --sr")?,
             "--dry" => a.dry = true,
             "--pizz" => a.style.pizzicato = true,
+            "--bottom" => a.bottom = true,
+            "--track" => a.track = Some(val("--track")?.parse().map_err(|_| "bad --track")?),
+            "--channel" => {
+                let c: u8 = val("--channel")?.parse().map_err(|_| "bad --channel")?;
+                a.channel = Some(c.clamp(1, 16) - 1);
+            }
+            "--transpose" => a.transpose = Some(val("--transpose")?.parse().map_err(|_| "bad --transpose")?),
             s if s.starts_with('-') => return Err(format!("unknown option {s}")),
             s => a.inputs.push(s.into()),
         }
@@ -96,6 +117,19 @@ fn main() {
             if let Err(e) = result {
                 eprintln!("{p}: {e}");
                 failed = true;
+            }
+        }
+        std::process::exit(failed as i32);
+    }
+    if all.get(1).is_some_and(|a| a == "midi-info") {
+        let mut failed = false;
+        for p in &all[2..] {
+            match std::fs::read(p).map_err(|e| e.to_string()).and_then(|b| midi::parse(&b)) {
+                Ok(m) => print!("{p}\n{}", midi::describe(&m)),
+                Err(e) => {
+                    eprintln!("{p}: {e}");
+                    failed = true;
+                }
             }
         }
         std::process::exit(failed as i32);
@@ -141,7 +175,9 @@ fn main() {
 }
 
 fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
-    let text = std::fs::read_to_string(input).map_err(|e| e.to_string())?;
+    let ext = input.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let is_midi = ext == "mid" || ext == "midi";
+    let text = if is_midi { String::new() } else { std::fs::read_to_string(input).map_err(|e| e.to_string())? };
     let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("out").trim_end_matches(".curves").to_string();
     let is_curves = input.extension().is_some_and(|e| e == "csv");
 
@@ -151,8 +187,23 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
         let mono = render(&curves, inst, args.sr, args.style.seed, args.bright);
         (None, curves, mono)
     } else {
-        let is_roll = input.extension().is_some_and(|e| e == "roll");
-        let score = if is_roll { Score::parse_roll(&text)? } else { Score::parse(&text)? };
+        let score = if is_midi {
+            let file = midi::parse(&std::fs::read(input).map_err(|e| e.to_string())?)?;
+            let pick = midi::Pick {
+                track: args.track,
+                channel: args.channel,
+                voice: if args.bottom { midi::Voice::Bottom } else { midi::Voice::Top },
+                transpose: args.transpose,
+                range: (inst.open_strings[0], inst.open_strings[3] + 19.0),
+            };
+            let (score, what) = midi::to_line(&file, &pick)?;
+            println!("{stem}: {what}");
+            score
+        } else if ext == "roll" {
+            Score::parse_roll(&text)?
+        } else {
+            Score::parse(&text)?
+        };
         let (mono, curves) = render_score(&score, inst, &args.style, args.sr, args.bright);
         (Some(score), curves, mono)
     };
