@@ -31,10 +31,18 @@ lean up, string choice that stays put and avoids open strings on long notes.
 **Rules before learning.** A trained performer only replaces a rule when it
 beats it in a blind listen.
 
-**It needs to see ahead.** Phrase shape needs the whole phrase. Offline
-that's free. In Lyra, Octavia should get the clip's notes ahead of time,
-not just live note events (see "Lyra" below). Live playing from a keyboard
-gets a reduced, reactive rule set.
+**It sees exactly one second ahead** (`LOOKAHEAD`). Every decision uses only
+notes already started or starting within that window, so the result is the
+same offline, in Lyra (which can hand over upcoming notes), and in any other
+host (which would get one second of reported latency). Tests check this bit
+for bit.
+
+**It infers; hints overrule.** A note is start, length, pitch and dynamic.
+`articulation` and `slur` default to "auto": overlapping notes slur, fast
+touching runs slur four to a bow, short notes with gaps become staccato,
+clearly louder notes get accents. Score marks, and later Lyra's per-note
+data and automation, act as the conductor's hints. **Pizzicato is a patch**
+(`Style::pizzicato`), not an inference: a cellist doesn't decide to pluck.
 
 ## Instrument
 
@@ -53,19 +61,21 @@ gets a reduced, reactive rule set.
 
 Cost today: about 20× real time for one cello on one core, untuned.
 
-## Lyra
+## Hosting (Lyra, and maybe others)
 
-The core crate has no dependencies and no plugin format. Lyra would wrap it
-like Chrysalis or Fluttersine: `octavia-core` as a path or git dependency, plus
-a small adapter implementing Lyra's `Plugin` trait. Two things the adapter
-needs that Lyra's trait doesn't have yet:
+`Engine` is the whole instrument, streaming: `add_note`, then `process(block)`
+of any size. The offline renderer goes through the same engine.
 
-1. **Look-ahead**: the notes of the clip (or the next second or two of
-   them), not only this block's events. Either a new optional trait method
-   ("here is your upcoming score"), or Octavia reports latency and buffers.
-2. **Block-wise rendering**: today `render()` is offline. The voice already
-   works frame-pair by frame-pair, so a streaming engine is a refactor, not a
-   rewrite.
+**Lyra** would wrap it like Chrysalis or Fluttersine (`octavia-core` as a path
+or git dependency, plus a small adapter for Lyra's `Plugin` trait). It needs
+one thing Lyra's trait doesn't have yet: **upcoming notes**, at least one
+second ahead (an optional trait method, "here is what's coming"). Without
+it, the adapter would have to delay the sound by one second.
+
+**Other DAWs** (CLAP/VST3, e.g. via nih-plug) only send notes as they happen:
+the wrapper reports one second of latency, which hosts compensate for
+automatically during playback. Notes whose length is unknown until note-off
+("open notes", for live playing) aren't supported yet.
 
 ## Stages
 
@@ -73,7 +83,8 @@ needs that Lyra's trait doesn't have yet:
    measurements.
 2. Listen, tune rules and tone with Rhodexa's ears. Attack/transition layer
    (bow scratch, finger-noise on shifts), spiccato, ties, double stops.
-3. Streaming engine; Lyra adapter.
+3. ✅ Streaming engine with bounded look-ahead; inference from bare piano
+   rolls. Next: the Lyra adapter, which needs upcoming notes from Lyra.
 4. Timbre model trained on clean-licensed solo recordings (CC0/CC-BY, or a
    commissioned session). Small: curves in, overtone levels out. CPU inference
    written by hand.

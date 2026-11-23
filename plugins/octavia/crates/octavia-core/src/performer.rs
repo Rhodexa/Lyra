@@ -2,32 +2,38 @@
 //!
 //! Rules, no learning. Each rule is small, named, and loosely follows the
 //! KTH performance-rule research (Sundberg, Friberg et al.) and ordinary
-//! string-playing habits:
+//! string-playing habits.
 //!
-//! * **Phrases** are split at rests. Loudness arches over a phrase, peaking
-//!   a bit past the middle, and the last note fades.
-//! * **High-loud**: higher notes in a phrase are played a little louder.
+//! **It sees one second ahead, no more** ([`LOOKAHEAD`]). Every decision is
+//! made only from notes already started or starting within that window, so
+//! the same performer works offline, in Lyra (which can hand over upcoming
+//! notes) and in any other host (which would delay the sound by one second
+//! and get identical results).
+//!
+//! What it infers when the notes carry no hints:
+//! * **Slurs**: overlapping notes are slurred. Fast runs of touching notes
+//!   are slurred in groups of four, as a cellist would bow them. Other
+//!   touching notes get separate bows.
+//! * **Staccato**: short notes followed by a clear gap.
+//! * **Accents**: notes clearly louder than their neighbours.
+//!
+//! How it plays:
+//! * **Phrases** are split at rests. Loudness grows over the first couple of
+//!   seconds of a phrase and relaxes as the visible end approaches.
+//! * **High-loud**: higher notes are played a little louder.
 //! * **Short-soft**: very short notes are a little softer.
-//! * **Bow changes** between separate notes dip the loudness and add a
-//!   puff of bow noise; **slurred** notes keep the bow moving, only the
-//!   left hand changes (a quick pitch move, a tiny dip).
-//! * **Shifts**: big slurred leaps after a long note slide audibly. Every
-//!   other slurred change is a finger landing (~8 ms) or a string crossing,
-//!   with no slide; sliding them all sounds fake.
+//! * **Bow changes** dip the loudness and puff some bow noise; **slurred**
+//!   notes keep the bow moving: a finger lands in ~8 ms, a string crossing
+//!   is instant, and only big expressive shifts slide.
 //! * **Vibrato** starts a moment after the note, grows in, follows loudness,
-//!   is absent on short notes and on open strings.
+//!   and is absent on short notes and open strings.
 //! * **Intonation**: a few cents of human error that settles after the
 //!   attack; leading tones lean up toward the note they resolve to.
-//! * **Finger taps**: a finger landing on the fingerboard knocks the wood,
-//!   hardest when it hammers down mid-slur; lifting off makes a smaller one.
-//!   Open strings need no finger.
+//! * **Finger taps**: a finger landing knocks the fingerboard, hardest when
+//!   it hammers down mid-slur; lifting off makes a smaller one.
 //! * **Releases**: when the bow stops, the string rings on and darkens.
-//! * **String choice** stays on the current string while it can, and
-//!   avoids open strings on long notes (so they can have vibrato).
-//!
-//! The performer looks at the previous and next note and at the whole
-//! phrase, so it needs to see ahead. Offline that's free; inside a DAW the
-//! host can hand it the clip's notes (see docs/DESIGN.md).
+//! * **String choice** stays on the current string while it can and avoids
+//!   open strings on long notes (so they can have vibrato).
 
 use crate::curves::{Curves, Frame, Pluck, Tap, FRAME_RATE};
 use crate::dsp::smoothstep;
@@ -35,6 +41,9 @@ use crate::instrument::Instrument;
 use crate::rand::{hash_bipolar, Wander};
 use crate::score::{Articulation, Note, Score};
 use std::f64::consts::TAU;
+
+/// How far ahead the performer looks, in seconds.
+pub const LOOKAHEAD: f64 = 1.0;
 
 /// Knobs over the whole performance.
 #[derive(Clone, Debug)]
@@ -45,21 +54,38 @@ pub struct Style {
     pub vibrato: f32,
     /// Steady bow noise under the tone (rosin, hair). 1 = normal.
     pub breath: f32,
+    /// Pluck every note (the pizzicato patch).
+    pub pizzicato: bool,
     pub seed: u64,
 }
 
 impl Default for Style {
     fn default() -> Self {
-        Self { expression: 1.0, vibrato: 1.0, breath: 1.0, seed: 1 }
+        Self { expression: 1.0, vibrato: 1.0, breath: 1.0, pizzicato: false, seed: 1 }
     }
+}
+
+/// Something the instrument must do at an exact time, besides the frames.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Event {
+    Pluck(Pluck),
+    Tap(Tap),
 }
 
 /// Notes closer than this count as connected.
 const TOUCH: f64 = 0.03;
+/// A gap longer than this ends a phrase.
+const PHRASE_GAP: f64 = 0.15;
+/// Notes are planned this long before they start (before any glide or tap).
+const PLAN_LEAD: f64 = 0.12;
+/// Notes shorter than this are "fast" (bowed in slurred groups).
+const FAST: f64 = 0.23;
 /// Loudness the bow dips to at a bow change (fraction of the note's level).
 const BOW_CHANGE_FLOOR: f32 = 0.3;
 /// How long the bow-change dip takes, seconds.
 const BOW_CHANGE_TIME: f32 = 0.035;
+/// The phrase-end diminuendo happens over this many seconds (< LOOKAHEAD).
+const FADE_TIME: f64 = 0.85;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Entry {
@@ -84,12 +110,10 @@ struct Plan {
     pitch: f32,
     settle: f32,
     entry: Entry,
-    exit: Exit,
     attack: f32,
     accent: f32,
-    sound_end: f64,
+    staccato: bool,
     level: f32,
-    /// Level change over the note (hairpins inside it).
     ramp: f32,
     swell: f32,
     fade: f32,
@@ -99,175 +123,201 @@ struct Plan {
     string: u8,
     crossing: bool,
     pizz: bool,
+    phrase_start: f64,
 }
 
-struct Phrase {
-    start: f64,
-    len: f64,
-    mean_pitch: f32,
+/// A streaming performer. Feed it notes (in start order, ideally at least
+/// [`LOOKAHEAD`] before they start) and pull one frame at a time.
+pub struct Performer {
+    inst: Instrument,
+    style: Style,
+    notes: Vec<Note>,
+    plans: Vec<Plan>,
+    frame: u64,
+    owner: Option<usize>,
+    vib_phase: f64,
+    rate_wander: Wander,
+    smooth_loud: f32,
+    loud_keep: f32,
+    prev_string: Option<u8>,
 }
 
-pub fn perform(score: &Score, inst: &Instrument, style: &Style) -> Curves {
-    let notes = &score.notes;
-    if notes.is_empty() {
-        return Curves::default();
-    }
-    let plans = plan(notes, inst, style);
-    let dt = 1.0 / FRAME_RATE;
-    let frames_len = ((score.end() + 2.0) * FRAME_RATE).ceil() as usize;
-
-    let mut curves = Curves { frames: Vec::with_capacity(frames_len), ..Curves::default() };
-    for (n, p) in notes.iter().zip(&plans) {
-        if p.pizz {
-            curves.plucks.push(Pluck {
-                time: n.start,
-                pitch: p.pitch,
-                velocity: p.level,
-                brightness: (0.35 + 0.5 * p.level + inst.string_tone[p.string as usize]).clamp(0.0, 1.0),
-                string: p.string,
-            });
+impl Performer {
+    pub fn new(inst: &Instrument, style: &Style) -> Self {
+        Self {
+            inst: inst.clone(),
+            style: style.clone(),
+            notes: Vec::with_capacity(1024),
+            plans: Vec::with_capacity(1024),
+            frame: 0,
+            owner: None,
+            vib_phase: 0.0,
+            rate_wander: Wander::new(style.seed ^ 0x5EED, 0.8),
+            smooth_loud: 0.0,
+            // Loudness can't jump: the bow has mass. ~8 ms smoothing.
+            loud_keep: (-(1.0 / FRAME_RATE as f32) / 0.008).exp(),
+            prev_string: None,
         }
     }
 
-    curves.taps = finger_taps(notes, &plans, inst);
+    /// Adds a note. Notes already planned can't be moved, so a note arriving
+    /// out of order is placed after them.
+    pub fn add_note(&mut self, n: Note) {
+        let pos = self.notes.partition_point(|m| m.start <= n.start).max(self.plans.len());
+        self.notes.insert(pos, n);
+    }
 
-    let mut rate_wander = Wander::new(style.seed ^ 0x5EED, 0.8);
-    let mut vib_phase = 0.0f64;
-    let mut owner: Option<usize> = None;
-    let mut smooth_loud = 0.0f32;
-    // Loudness can't jump: the bow has mass. ~8 ms smoothing.
-    let loud_keep = (-(dt as f32) / 0.008).exp();
+    /// Seconds since the start, of the next frame.
+    pub fn time(&self) -> f64 {
+        self.frame as f64 / FRAME_RATE
+    }
 
-    for f in 0..frames_len {
-        let t = f as f64 * dt;
+    /// When the last known note has fully died away.
+    pub fn end(&self) -> f64 {
+        self.notes.iter().map(Note::end).fold(0.0, f64::max) + 2.0
+    }
+
+    /// The next frame. Pluck and tap events due soon are appended to `events`
+    /// (with their exact times, which are never in the past).
+    pub fn next_frame(&mut self, events: &mut Vec<Event>) -> Frame {
+        let t = self.time();
+        let dt = 1.0 / FRAME_RATE;
+        let visible = self.visible(t);
+        while self.plans.len() < visible && self.notes[self.plans.len()].start - PLAN_LEAD <= t {
+            self.plan(self.plans.len(), t, events);
+        }
         loop {
-            let next = owner.map_or(0, |o| o + 1);
-            if next < notes.len() && notes[next].start <= t {
-                owner = Some(next);
+            let next = self.owner.map_or(0, |o| o + 1);
+            if next < self.plans.len() && self.notes[next].start <= t {
+                self.owner = Some(next);
             } else {
                 break;
             }
         }
-        let rate = inst.vibrato_rate + 0.35 * rate_wander.next(dt as f32);
-        vib_phase = (vib_phase + TAU * rate as f64 * dt) % TAU;
+        let rate = self.inst.vibrato_rate + 0.35 * self.rate_wander.next(dt as f32);
+        self.vib_phase = (self.vib_phase + TAU * rate as f64 * dt) % TAU;
 
-        let mut frame = match owner {
-            None => Frame { pitch: plans[0].pitch, brightness: 0.4, string: plans[0].string, ..Frame::default() },
-            Some(i) => note_frame(notes, &plans, i, t, vib_phase as f32, inst, style.breath),
+        let mut frame = match self.owner {
+            None => Frame {
+                pitch: self.notes.first().map_or(48.0, |n| n.pitch),
+                brightness: 0.4,
+                ..Frame::default()
+            },
+            Some(i) => self.note_frame(i, t),
         };
-        smooth_loud = frame.loudness + loud_keep * (smooth_loud - frame.loudness);
-        frame.loudness = smooth_loud;
-        curves.frames.push(frame);
+        self.smooth_loud = frame.loudness + self.loud_keep * (self.smooth_loud - frame.loudness);
+        frame.loudness = self.smooth_loud;
+        self.frame += 1;
+        frame
     }
-    curves
-}
 
-fn note_frame(notes: &[Note], plans: &[Plan], i: usize, t: f64, vib_phase: f32, inst: &Instrument, breath: f32) -> Frame {
-    let n = &notes[i];
-    let p = &plans[i];
-    let since = (t - n.start) as f32;
+    // ── what can be seen ────────────────────────────────────────────────
 
-    // Bow envelope: how the attack rises…
-    let rise = match p.entry {
-        Entry::Legato => 1.0 - 0.06 * (-(since / 0.03).powi(2)).exp(),
-        Entry::BowChange => BOW_CHANGE_FLOOR + (1.0 - BOW_CHANGE_FLOOR) * smoothstep(since / p.attack),
-        Entry::Fresh => smoothstep(since / p.attack),
-    };
-    let bite = 1.0 + 0.35 * p.accent * (-since / 0.08).exp() * smoothstep(since / p.attack);
-    // …and how the note leaves.
-    let fall = match p.exit {
-        Exit::Legato => 1.0,
-        Exit::BowChange => {
-            let to_end = (p.sound_end - t) as f32;
-            1.0 - (1.0 - BOW_CHANGE_FLOOR) * smoothstep(1.0 - to_end / BOW_CHANGE_TIME)
+    /// How many notes start within the look-ahead window at time `t`.
+    fn visible(&self, t: f64) -> usize {
+        self.notes.partition_point(|n| n.start <= t + LOOKAHEAD)
+    }
+
+    fn next_visible(&self, i: usize, t: f64) -> Option<&Note> {
+        (i + 1 < self.visible(t)).then(|| &self.notes[i + 1])
+    }
+
+    fn is_pizz(&self, n: &Note) -> bool {
+        self.style.pizzicato || n.articulation == Articulation::Pizzicato
+    }
+
+    /// Is note `i` slurred into note `i + 1`? Needs `plans[i]`.
+    fn slurred(&self, i: usize) -> bool {
+        let (n, q) = (&self.notes[i], &self.notes[i + 1]);
+        if !touching(n, q) || self.is_pizz(n) || self.is_pizz(q) || self.plans[i].staccato {
+            return false;
         }
-        Exit::Decay(tau) => {
-            if t > p.sound_end {
-                (-((t - p.sound_end) as f32) / tau).exp()
+        if let Some(s) = n.slur {
+            return s;
+        }
+        if q.start < n.end() - 0.005 {
+            return true; // drawn overlapping
+        }
+        if n.dur < FAST && q.dur < FAST {
+            return self.run_index(i) % 4 != 3; // fast runs: four to a bow
+        }
+        false
+    }
+
+    /// Position of note `i` in its run of fast, touching notes.
+    fn run_index(&self, i: usize) -> usize {
+        let mut j = i;
+        while j > 0 {
+            let (a, b) = (&self.notes[j - 1], &self.notes[j]);
+            if touching(a, b) && a.dur < FAST && b.dur < FAST && a.slur.is_none() {
+                j -= 1;
             } else {
-                1.0
+                break;
             }
         }
-    };
-    let prog = (since / n.dur as f32).clamp(0.0, 1.0);
-    let shape = 1.0 + p.swell * (std::f32::consts::PI * prog).sin() - p.fade * prog;
-    let loudness = if p.pizz { 0.0 } else { ((p.level + p.ramp * prog) * shape).max(0.0) * rise * bite * fall };
+        i - j
+    }
 
-    // Left hand: settling intonation, vibrato, glides into the next note.
-    let mut pitch = p.pitch + p.settle * (-since / 0.05).exp();
-    let mut vib = p.vib_depth * smoothstep((since - p.vib_delay) / 0.3);
-    if let (Some(qn), Some(q)) = (notes.get(i + 1), plans.get(i + 1)) {
-        let to_next = (qn.start - t) as f32;
-        if q.glide > 0.0 && to_next < q.glide {
-            let s = smoothstep(1.0 - to_next / q.glide);
-            pitch += (q.pitch - pitch) * s;
-            vib *= 1.0 - s;
+    /// Where the phrase containing note `i` ends, if that's visible yet.
+    fn phrase_end(&self, i: usize, t: f64) -> Option<f64> {
+        let visible = self.visible(t);
+        let mut j = i;
+        loop {
+            let end = self.notes[j].end();
+            if j + 1 >= visible {
+                // Nothing more in sight: the phrase ends if the window
+                // reaches past this note's end plus a phrase gap.
+                return (end + PHRASE_GAP < t + LOOKAHEAD).then_some(end);
+            }
+            if self.notes[j + 1].start - end > PHRASE_GAP {
+                return Some(end);
+            }
+            j += 1;
         }
     }
-    pitch += vib * vib_phase.sin();
 
-    // Bow contact: louder and accented means closer to the bridge, brighter.
-    let tone = inst.string_tone[p.string as usize];
-    let attack_bite = if p.entry == Entry::Legato { 0.0 } else { (0.12 + 0.25 * p.accent) * (-since / 0.09).exp() };
-    // A free-ringing string (bow lifted or stopped) loses its highs first.
-    let release_dark = if matches!(p.exit, Exit::Decay(_)) && t > p.sound_end { 0.35 * (1.0 - fall) } else { 0.0 };
-    let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite - release_dark).clamp(0.0, 1.0);
-
-    let spike = match p.entry {
-        Entry::Legato if p.crossing => 0.15,
-        Entry::Legato => 0.08, // the finger landing
-        Entry::BowChange => 0.3,
-        Entry::Fresh => 0.35,
-    } + 0.4 * p.accent;
-    // A bowed string always breathes: a steady layer of rosin noise under the tone.
-    let noise = (0.3 * breath + spike * (-since / 0.035).exp() + if loudness < 0.25 { 0.08 } else { 0.0 }).min(1.0);
-
-    Frame { pitch, loudness, brightness, noise, string: p.string }
-}
-
-fn phrases(notes: &[Note]) -> (Vec<usize>, Vec<Phrase>) {
-    let mut ids = vec![0; notes.len()];
-    let mut id = 0;
-    for i in 1..notes.len() {
-        let gap = notes[i].start - notes[i - 1].end();
-        let pizz_change = (notes[i].articulation == Articulation::Pizzicato)
-            != (notes[i - 1].articulation == Articulation::Pizzicato);
-        if gap > 0.15 || pizz_change {
-            id += 1;
+    fn exit(&self, i: usize, t: f64) -> Exit {
+        let (n, p) = (&self.notes[i], &self.plans[i]);
+        if p.pizz {
+            return Exit::Decay(0.1);
         }
-        ids[i] = id;
+        let ring = if p.staccato { 0.07 } else { 0.3 };
+        match self.next_visible(i, t) {
+            Some(q) if touching(n, q) && !self.is_pizz(q) && !p.staccato => {
+                if self.slurred(i) {
+                    Exit::Legato
+                } else {
+                    Exit::BowChange
+                }
+            }
+            Some(q) if q.start - n.end() <= PHRASE_GAP => Exit::Decay(if p.staccato { 0.07 } else { 0.1 }),
+            _ => Exit::Decay(ring),
+        }
     }
-    let mut out: Vec<Phrase> = Vec::new();
-    for k in 0..=id {
-        let members: Vec<&Note> = notes.iter().zip(&ids).filter(|(_, &p)| p == k).map(|(n, _)| n).collect();
-        let start = members[0].start;
-        let end = members.iter().map(|n| n.end()).fold(start, f64::max);
-        // Weight by duration: long notes define the register more than passing ones.
-        let w: f64 = members.iter().map(|n| n.dur).sum();
-        let mean = members.iter().map(|n| n.pitch as f64 * n.dur).sum::<f64>() / w.max(1e-9);
-        out.push(Phrase { start, len: end - start, mean_pitch: mean as f32 });
+
+    /// When note `i` stops sounding (an overlapping next note cuts it).
+    fn sound_end(&self, i: usize, t: f64) -> f64 {
+        let n = &self.notes[i];
+        match self.next_visible(i, t) {
+            Some(q) if q.start < n.end() => q.start,
+            _ => n.end(),
+        }
     }
-    (ids, out)
-}
 
-fn plan(notes: &[Note], inst: &Instrument, style: &Style) -> Vec<Plan> {
-    let e = style.expression;
-    let (phrase_of, phrases) = phrases(notes);
-    let mut plans: Vec<Plan> = Vec::with_capacity(notes.len());
-    let mut prev_string: Option<u8> = None;
+    // ── planning a note, just before it starts ─────────────────────────
 
-    for (i, n) in notes.iter().enumerate() {
-        let prev = i.checked_sub(1).map(|j| &notes[j]);
-        let next = notes.get(i + 1);
-        let pizz = n.articulation == Articulation::Pizzicato;
-        let touch_prev = prev.is_some_and(|p| n.start - p.end() < TOUCH);
-        let touch_next = next.is_some_and(|q| q.start - n.end() < TOUCH);
-        let last_in_phrase = next.is_none() || phrase_of[i + 1] != phrase_of[i];
+    fn plan(&mut self, i: usize, t: f64, events: &mut Vec<Event>) {
+        let e = self.style.expression;
+        let inst = &self.inst;
+        let n = &self.notes[i];
+        let pizz = self.is_pizz(n);
+        let prev = i.checked_sub(1).map(|j| (&self.notes[j], &self.plans[j]));
+        let next = self.next_visible(i, t);
 
         let entry = match prev {
             _ if pizz => Entry::Fresh,
-            Some(p) if touch_prev && p.articulation != Articulation::Pizzicato && p.articulation != Articulation::Staccato => {
-                if p.slur {
+            Some((pn, pp)) if touching(pn, n) && !pp.pizz && !pp.staccato => {
+                if self.slurred(i - 1) {
                     Entry::Legato
                 } else {
                     Entry::BowChange
@@ -275,46 +325,54 @@ fn plan(notes: &[Note], inst: &Instrument, style: &Style) -> Vec<Plan> {
             }
             _ => Entry::Fresh,
         };
-        let exit = match next {
-            _ if pizz => Exit::Decay(0.1),
-            Some(q) if touch_next && q.articulation != Articulation::Pizzicato && n.articulation != Articulation::Staccato => {
-                if n.slur {
-                    Exit::Legato
-                } else {
-                    Exit::BowChange
+        let staccato = !pizz
+            && match n.articulation {
+                Articulation::Staccato => true,
+                Articulation::Auto => {
+                    n.dur < 0.3 && next.is_none_or(|q| q.start - n.end() >= (0.35 * n.dur).max(0.05))
                 }
-            }
-            _ => Exit::Decay(match n.articulation {
-                Articulation::Staccato => 0.07,
-                _ if last_in_phrase => 0.3,
-                _ => 0.1,
-            }),
-        };
+                _ => false,
+            };
 
-        // Which string.
-        let string = choose_string(n.pitch, prev_string, n.dur > 0.5 && !pizz, inst);
-        let crossing = prev_string.is_some_and(|s| s != string);
-        prev_string = Some(string);
-        let open = (n.pitch - inst.open_strings[string as usize]).abs() < 0.01;
-
-        // Loudness.
-        let ph = &phrases[phrase_of[i]];
-        let x = if ph.len > 0.0 { ((n.start + n.dur * 0.5 - ph.start) / ph.len) as f32 } else { 0.5 };
-        let arch = 0.16 * hump(x, 0.62) - 0.08;
-        let mut level = n.dynamic + e * (arch + 0.012 * (n.pitch - ph.mean_pitch));
-        if n.dur < 0.18 {
-            level -= e * 0.04;
+        // Neighbourhood: what's been and what's in sight.
+        let window = self.notes[..self.visible(t)].iter().filter(|m| m.start >= n.start - 4.0);
+        let (mut w, mut wp, mut wd, mut count) = (0.0f64, 0.0f64, 0.0f32, 0usize);
+        for m in window {
+            w += m.dur;
+            wp += m.pitch as f64 * m.dur;
+            wd += m.dynamic;
+            count += 1;
         }
-        let level = level.clamp(0.05, 1.0);
+        let mean_pitch = if w > 0.0 { (wp / w) as f32 } else { n.pitch };
+        let mean_dyn = if count > 0 { wd / count as f32 } else { n.dynamic };
+
         let accent = match n.articulation {
             Articulation::Accent => 1.0,
+            Articulation::Auto if n.dynamic > mean_dyn + 0.12 => 1.0,
             Articulation::Tenuto => 0.0,
             _ if entry == Entry::Fresh => 0.2,
             _ => 0.0,
         };
 
+        let string = choose_string(n.pitch, self.prev_string, n.dur > 0.5 && !pizz, inst);
+        let crossing = self.prev_string.is_some_and(|s| s != string);
+        let open = (n.pitch - inst.open_strings[string as usize]).abs() < 0.01;
+
+        // Phrase shape: grow into the phrase, relax toward its visible end.
+        let phrase_start = match prev {
+            Some((pn, pp)) if n.start - pn.end() <= PHRASE_GAP => pp.phrase_start,
+            _ => n.start,
+        };
+        let into = (n.start - phrase_start) as f32;
+        let arch = -0.04 + 0.08 * smoothstep(into / 2.0);
+        let mut level = n.dynamic + e * (arch + 0.012 * (n.pitch - mean_pitch));
+        if n.dur < 0.18 {
+            level -= e * 0.04;
+        }
+        let level = level.clamp(0.05, 1.0);
+
         // Intonation, in semitones.
-        let mut cents = 3.0 * e * hash_bipolar(style.seed, i);
+        let mut cents = 3.0 * e * hash_bipolar(self.style.seed, i);
         if let Some(q) = next {
             if (q.pitch - n.pitch - 1.0).abs() < 0.01 && n.dur > 0.15 {
                 cents += 7.0 * e; // leading tone leans up
@@ -323,22 +381,19 @@ fn plan(notes: &[Note], inst: &Instrument, style: &Style) -> Vec<Plan> {
         if open {
             cents = 0.0;
         }
-        let settle = if entry == Entry::Legato || open || pizz {
-            0.0
-        } else {
-            e * 0.05 * hash_bipolar(style.seed ^ 0xA77AC, i)
-        };
+        let settle =
+            if entry == Entry::Legato || open || pizz { 0.0 } else { e * 0.05 * hash_bipolar(self.style.seed ^ 0xA77AC, i) };
 
-        let vib_depth = if pizz || open || n.dur < 0.22 { 0.0 } else { (0.13 + 0.14 * level) * style.vibrato };
-        let prev_vibrated = plans.last().is_some_and(|p: &Plan| p.vib_depth > 0.0);
+        let vib_depth = if pizz || open || n.dur < 0.22 { 0.0 } else { (0.13 + 0.14 * level) * self.style.vibrato };
+        let prev_vibrated = prev.is_some_and(|(_, pp)| pp.vib_depth > 0.0);
         let vib_delay = if entry == Entry::Legato && prev_vibrated { 0.05 } else { 0.14 };
 
         let glide = match (entry, prev) {
-            (Entry::Legato, Some(p)) => {
-                let k = (n.pitch - p.pitch).abs();
+            (Entry::Legato, Some((pn, _))) => {
+                let k = (n.pitch - pn.pitch).abs();
                 if k < 0.5 {
                     0.0
-                } else if k >= 5.0 && p.dur > 0.3 {
+                } else if k >= 5.0 && pn.dur > 0.3 {
                     0.05 + 0.04 * e // an audible shift: the only slide
                 } else if crossing {
                     0.004 // another string: nothing to slide on
@@ -350,81 +405,180 @@ fn plan(notes: &[Note], inst: &Instrument, style: &Style) -> Vec<Plan> {
             _ => 0.0,
         };
 
-        let attack = match n.articulation {
-            Articulation::Accent => 0.025,
-            Articulation::Staccato => 0.02,
-            Articulation::Tenuto => 0.07,
-            Articulation::Pizzicato => 0.01,
-            Articulation::Detache => match entry {
-                Entry::BowChange => 0.045,
-                _ => 0.05 + 0.08 * (1.0 - n.dynamic), // soft starts are slower
-            },
+        let attack = if pizz {
+            0.01
+        } else if accent >= 1.0 {
+            0.025
+        } else if staccato {
+            0.02
+        } else if n.articulation == Articulation::Tenuto {
+            0.07
+        } else if entry == Entry::BowChange {
+            0.045
+        } else {
+            0.05 + 0.08 * (1.0 - n.dynamic) // soft starts are slower
         };
-        let sound_end = n.start + n.dur * if n.articulation == Articulation::Staccato { 0.45 } else { 1.0 };
 
-        plans.push(Plan {
+        let hairpin = n.dynamic_end != n.dynamic;
+        let plan = Plan {
             pitch: n.pitch + cents / 100.0,
             settle,
             entry,
-            exit,
             attack,
             accent,
-            sound_end,
+            staccato,
             level,
             ramp: n.dynamic_end - n.dynamic,
-            // A written hairpin overrides the automatic swell and fade.
-            swell: if n.dur > 0.9 && !pizz && n.dynamic_end == n.dynamic { 0.07 * e } else { 0.0 },
-            fade: if last_in_phrase && !pizz && n.dynamic_end <= n.dynamic { 0.25 * e } else { 0.0 },
+            swell: if n.dur > 0.9 && !pizz && !hairpin { 0.07 * e } else { 0.0 },
+            fade: if pizz || n.dynamic_end > n.dynamic { 0.0 } else { 0.25 * e },
             vib_depth,
             vib_delay,
             glide,
             string,
             crossing,
             pizz,
-        });
-    }
-    plans
-}
+            phrase_start,
+        };
 
-fn finger_taps(notes: &[Note], plans: &[Plan], inst: &Instrument) -> Vec<Tap> {
-    let mut taps = Vec::new();
-    for (i, (n, p)) in notes.iter().zip(plans).enumerate() {
-        if p.pizz {
-            continue;
+        // Events.
+        if pizz {
+            events.push(Event::Pluck(Pluck {
+                time: n.start,
+                pitch: plan.pitch,
+                velocity: level,
+                brightness: (0.35 + 0.5 * level + inst.string_tone[string as usize]).clamp(0.0, 1.0),
+                string,
+            }));
+        } else if let Some(strength) = tap_strength(entry, prev.map(|(pn, pp)| (pn, pp.string)), n, string, open) {
+            let lead = if entry == Entry::Legato { glide as f64 } else { 0.015 };
+            events.push(Event::Tap(Tap { time: (n.start - lead).max(t), strength }));
         }
-        let open = (n.pitch - inst.open_strings[p.string as usize]).abs() < 0.01;
-        let prev = i.checked_sub(1).map(|j| (&notes[j], &plans[j]));
-        let strength = match (p.entry, prev) {
-            // Mid-slur on the same string: hammer down, or lift off.
-            (Entry::Legato, Some((pn, pp))) if pp.string == p.string => {
-                if n.pitch > pn.pitch {
-                    0.7
-                } else if open {
-                    0.45
+
+        self.prev_string = Some(string);
+        self.plans.push(plan);
+    }
+
+    // ── one frame of a sounding note ────────────────────────────────────
+
+    fn note_frame(&self, i: usize, t: f64) -> Frame {
+        let n = &self.notes[i];
+        let p = &self.plans[i];
+        let since = (t - n.start) as f32;
+        let sound_end = self.sound_end(i, t);
+        let exit = self.exit(i, t);
+
+        // Bow envelope: how the attack rises…
+        let rise = match p.entry {
+            Entry::Legato => 1.0 - 0.06 * (-(since / 0.03).powi(2)).exp(),
+            Entry::BowChange => BOW_CHANGE_FLOOR + (1.0 - BOW_CHANGE_FLOOR) * smoothstep(since / p.attack),
+            Entry::Fresh => smoothstep(since / p.attack),
+        };
+        let bite = 1.0 + 0.35 * p.accent * (-since / 0.08).exp() * smoothstep(since / p.attack);
+        // …and how the note leaves.
+        let fall = match exit {
+            Exit::Legato => 1.0,
+            Exit::BowChange => {
+                let to_end = (sound_end - t) as f32;
+                1.0 - (1.0 - BOW_CHANGE_FLOOR) * smoothstep(1.0 - to_end / BOW_CHANGE_TIME)
+            }
+            Exit::Decay(tau) => {
+                if t > sound_end {
+                    (-((t - sound_end) as f32) / tau).exp()
                 } else {
-                    0.3
+                    1.0
                 }
             }
-            (Entry::Legato, Some(_)) if !open => 0.25,
-            (Entry::Legato, _) => 0.0,
-            // A new bow: the finger went down just before it.
-            (_, Some((pn, _))) if (pn.pitch - n.pitch).abs() > 0.01 && !open => 0.3,
-            (_, None) if !open => 0.3,
+        };
+        let prog = (since / n.dur as f32).clamp(0.0, 1.0);
+        // Relax into the end of the phrase, once it's in sight.
+        let fade = match self.phrase_end(i, t) {
+            Some(end) if end <= n.end() + 1e-9 => p.fade * smoothstep(1.0 - ((end - t) / FADE_TIME) as f32),
             _ => 0.0,
         };
-        if strength > 0.0 {
-            let lead = if p.entry == Entry::Legato { p.glide as f64 } else { 0.015 };
-            taps.push(Tap { time: (n.start - lead).max(0.0), strength });
+        let shape = 1.0 + p.swell * (std::f32::consts::PI * prog).sin() - fade;
+        let loudness = if p.pizz { 0.0 } else { ((p.level + p.ramp * prog) * shape).max(0.0) * rise * bite * fall };
+
+        // Left hand: settling intonation, vibrato, moving into the next note.
+        let mut pitch = p.pitch + p.settle * (-since / 0.05).exp();
+        let mut vib = p.vib_depth * smoothstep((since - p.vib_delay) / 0.3);
+        if let (Some(qn), Some(q)) = (self.next_visible(i, t), self.plans.get(i + 1)) {
+            let to_next = (qn.start - t) as f32;
+            if q.glide > 0.0 && to_next < q.glide {
+                let s = smoothstep(1.0 - to_next / q.glide);
+                pitch += (q.pitch - pitch) * s;
+                vib *= 1.0 - s;
+            }
         }
+        pitch += vib * (self.vib_phase as f32).sin();
+
+        // Bow contact: louder and accented means closer to the bridge, brighter.
+        let tone = self.inst.string_tone[p.string as usize];
+        let attack_bite = if p.entry == Entry::Legato { 0.0 } else { (0.12 + 0.25 * p.accent) * (-since / 0.09).exp() };
+        // A free-ringing string (bow lifted or stopped) loses its highs first.
+        let release_dark = if matches!(exit, Exit::Decay(_)) && t > sound_end { 0.35 * (1.0 - fall) } else { 0.0 };
+        let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite - release_dark).clamp(0.0, 1.0);
+
+        let spike = match p.entry {
+            Entry::Legato if p.crossing => 0.15,
+            Entry::Legato => 0.08, // the finger landing
+            Entry::BowChange => 0.3,
+            Entry::Fresh => 0.35,
+        } + 0.4 * p.accent;
+        // A bowed string always breathes: a steady layer of rosin noise under the tone.
+        let noise = (0.3 * self.style.breath + spike * (-since / 0.035).exp() + if loudness < 0.25 { 0.08 } else { 0.0 })
+            .min(1.0);
+
+        Frame { pitch, loudness, brightness, noise, string: p.string }
     }
-    taps
 }
 
-/// 0 at the ends, 1 at `peak`.
-fn hump(x: f32, peak: f32) -> f32 {
-    let x = x.clamp(0.0, 1.0);
-    let u = if x < peak { x / peak } else { (1.0 - x) / (1.0 - peak) };
-    (std::f32::consts::FRAC_PI_2 * u).sin()
+fn touching(a: &Note, b: &Note) -> bool {
+    b.start - a.end() < TOUCH
+}
+
+/// How hard a finger knocks the fingerboard for this note, if at all.
+fn tap_strength(entry: Entry, prev: Option<(&Note, u8)>, n: &Note, string: u8, open: bool) -> Option<f32> {
+    let s = match (entry, prev) {
+        // Mid-slur on the same string: hammer down, or lift off.
+        (Entry::Legato, Some((pn, ps))) if ps == string => {
+            if n.pitch > pn.pitch {
+                0.7
+            } else if open {
+                0.45
+            } else {
+                0.3
+            }
+        }
+        (Entry::Legato, Some(_)) if !open => 0.25,
+        (Entry::Legato, _) => 0.0,
+        // A new bow: the finger went down just before it.
+        (_, Some((pn, _))) if (pn.pitch - n.pitch).abs() > 0.01 && !open => 0.3,
+        (_, None) if !open => 0.3,
+        _ => 0.0,
+    };
+    (s > 0.0).then_some(s)
+}
+
+/// Performs a whole score offline. Exactly what the streaming performer does,
+/// with every note known up front.
+pub fn perform(score: &Score, inst: &Instrument, style: &Style) -> Curves {
+    let mut p = Performer::new(inst, style);
+    for n in &score.notes {
+        p.add_note(n.clone());
+    }
+    let frames = (p.end() * FRAME_RATE).ceil() as usize;
+    let mut curves = Curves { frames: Vec::with_capacity(frames), ..Curves::default() };
+    let mut events = Vec::new();
+    for _ in 0..frames {
+        curves.frames.push(p.next_frame(&mut events));
+        for e in events.drain(..) {
+            match e {
+                Event::Pluck(x) => curves.plucks.push(x),
+                Event::Tap(x) => curves.taps.push(x),
+            }
+        }
+    }
+    curves
 }
 
 /// Stay on the current string while the note is in reach; otherwise take the
@@ -441,8 +595,8 @@ fn choose_string(pitch: f32, prev: Option<u8>, avoid_open: bool, inst: &Instrume
         }
     }
     let mut best = 0;
-    for s in 0..4 {
-        if pitch >= os[s] - 0.01 && (s == 3 || pitch <= os[s] + 7.01) {
+    for (s, &o) in os.iter().enumerate() {
+        if pitch >= o - 0.01 && (s == 3 || pitch <= o + 7.01) {
             best = s;
         }
     }
@@ -461,13 +615,16 @@ mod tests {
         c.frames[(t * FRAME_RATE) as usize]
     }
 
+    fn roll(text: &str) -> Score {
+        Score::parse_roll(&format!("tempo 60\n{text}")).unwrap()
+    }
+
     #[test]
     fn silence_before_and_sound_during() {
         let s = Score::parse("tempo 60\nr:q mf C3:q D3").unwrap();
         let c = perform(&s, &cello(), &Style::default());
         assert!(frame_at(&c, 0.5).loudness < 1e-4);
         assert!(frame_at(&c, 1.5).loudness > 0.3);
-        // Two seconds of tail after the last note, then nothing.
         assert!(c.frames.last().unwrap().loudness < 1e-3);
     }
 
@@ -476,11 +633,43 @@ mod tests {
         let inst = cello();
         let slurred = perform(&Score::parse("tempo 60\n(C3:q D3)").unwrap(), &inst, &Style::default());
         let separate = perform(&Score::parse("tempo 60\nC3:q D3").unwrap(), &inst, &Style::default());
-        let min_around = |c: &Curves| {
-            (240..262).map(|f| c.frames[f].loudness).fold(f32::MAX, f32::min) // 0.96 s .. 1.05 s
-        };
+        let min_around = |c: &Curves| (240..262).map(|f| c.frames[f].loudness).fold(f32::MAX, f32::min);
         assert!(min_around(&slurred) > 0.4, "slur dipped to {}", min_around(&slurred));
         assert!(min_around(&separate) < 0.3, "bow change only dipped to {}", min_around(&separate));
+    }
+
+    #[test]
+    fn infers_slurs_from_overlap_and_fast_runs() {
+        let inst = cello();
+        // Overlapping quarter notes: slurred, though nothing says so.
+        let c = perform(&roll("0 1.05 C3 0.6\n1 1 D3 0.6"), &inst, &Style::default());
+        let dip = (240..262).map(|f| c.frames[f].loudness).fold(f32::MAX, f32::min);
+        assert!(dip > 0.4, "overlap should slur, dipped to {dip}");
+        // Eight touching notes of 0.125 s are "fast" (under 0.23 s)
+        // and get slurred four to a bow: the only bow
+        // change is between notes 4 and 5.
+        let mut text = String::new();
+        for k in 0..8 {
+            text += &format!("{} 0.125 {} 0.6\n", k as f64 * 0.125, ["C3", "D3", "E3", "F3"][k % 4]);
+        }
+        let c = perform(&roll(&text), &inst, &Style::default());
+        let dip_at = |k: f64| {
+            let f = (k * 0.125 * FRAME_RATE) as usize;
+            (f - 6..f + 6).map(|f| c.frames[f].loudness).fold(f32::MAX, f32::min)
+        };
+        assert!(dip_at(2.0) > 0.35, "inside a slur: {}", dip_at(2.0));
+        assert!(dip_at(4.0) < dip_at(2.0) - 0.1, "bow change at 4: {} vs {}", dip_at(4.0), dip_at(2.0));
+    }
+
+    #[test]
+    fn infers_staccato_and_accents() {
+        let inst = cello();
+        // Short notes with gaps: staccato (fast decay, sharp attack).
+        let c = perform(&roll("0 0.1 C3 0.6\n0.5 0.1 D3 0.6\n1 0.1 E3 0.6\n1.5 1 F3 0.9\n2.5 1 G3 0.6"), &inst, &Style::default());
+        assert!(frame_at(&c, 0.3).loudness < 0.05, "staccato should be gone by 0.3 s");
+        // The loud F3 is accented: its noise spike is bigger than the plain G3's.
+        let spike = |t: f64| frame_at(&c, t + 0.008).noise;
+        assert!(spike(1.5) > spike(2.5) + 0.2, "{} vs {}", spike(1.5), spike(2.5));
     }
 
     #[test]
@@ -488,20 +677,39 @@ mod tests {
         let inst = cello();
         let s = Score::parse("tempo 60\nE3:s F3 G3 A3 B3 C4 D4 E4 F3:h").unwrap();
         let c = perform(&s, &inst, &Style::default());
-        // Middle of the 4th sixteenth (A3 = 57, an open string on cello).
         let f = frame_at(&c, 0.875);
         assert!((f.pitch - 57.0).abs() < 0.08, "pitch {}", f.pitch);
-        // The long F3 has vibrato after it settles.
         let late: Vec<f32> = (0..50).map(|k| frame_at(&c, 3.0 + k as f64 * 0.004).pitch).collect();
         let swing = late.iter().cloned().fold(f32::MIN, f32::max) - late.iter().cloned().fold(f32::MAX, f32::min);
         assert!(swing > 0.15, "vibrato swing {swing}");
     }
 
     #[test]
+    fn streaming_matches_offline() {
+        let inst = cello();
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../scores/lament.txt")).unwrap();
+        let score = Score::parse(&text).unwrap();
+        let style = Style::default();
+        let offline = perform(&score, &inst, &style);
+        // Live: each note arrives exactly LOOKAHEAD before it starts.
+        let mut p = Performer::new(&inst, &style);
+        let mut next = 0;
+        let mut events = Vec::new();
+        for (f, want) in offline.frames.iter().enumerate() {
+            let t = f as f64 / FRAME_RATE;
+            while next < score.notes.len() && score.notes[next].start - LOOKAHEAD <= t {
+                p.add_note(score.notes[next].clone());
+                next += 1;
+            }
+            assert_eq!(&p.next_frame(&mut events), want, "frame {f}");
+        }
+    }
+
+    #[test]
     fn long_open_string_notes_move_to_a_lower_string() {
         let inst = cello();
-        assert_eq!(choose_string(50.0, None, false, &inst), 2); // D3, open D
-        assert_eq!(choose_string(50.0, None, true, &inst), 1); // D3 on the G string
+        assert_eq!(choose_string(50.0, None, false, &inst), 2);
+        assert_eq!(choose_string(50.0, None, true, &inst), 1);
     }
 
     #[test]
@@ -521,5 +729,8 @@ mod tests {
         let c = perform(&s, &cello(), &Style::default());
         assert_eq!(c.plucks.len(), 2);
         assert!(c.frames.iter().all(|f| f.loudness < 1e-4));
+        let patch = Style { pizzicato: true, ..Style::default() };
+        let c = perform(&Score::parse("C3:q D3 E3").unwrap(), &cello(), &patch);
+        assert_eq!(c.plucks.len(), 3);
     }
 }

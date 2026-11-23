@@ -1,6 +1,10 @@
-//! What the performer reads: notes with articulations, in seconds.
+//! What the performer reads: notes in seconds, with optional *hints*.
 //!
-//! Also a small text format for writing test phrases by hand:
+//! A note from a piano roll is just start, length, pitch and loudness. The
+//! performer infers the rest (slurs, staccato, accents). Hints overrule it:
+//! `articulation` other than `Auto`, or `slur: Some(..)`.
+//!
+//! Two text formats for testing. A **score**, with hints written in:
 //!
 //! ```text
 //! # comment
@@ -12,12 +16,24 @@
 //! ```
 //!
 //! Durations: `w h q e s t` (whole … 32nd), `3` after the letter for a
-//! triplet, dots for dotted. Marks before a note: `^` accent, `'` staccato,
-//! `-` tenuto. Dynamics: `pp p mp mf f ff`. `r` is a rest.
+//! triplet, dots for dotted. Marks before a note: `^` accent, `'` staccato
+//! (the note is shortened, as if drawn short), `-` tenuto. Dynamics:
+//! `pp p mp mf f ff`. `r` is a rest. Unmarked notes are left to the performer.
+//!
+//! And a **roll**, exactly what a piano roll holds, nothing more:
+//!
+//! ```text
+//! tempo 72
+//! # beat  length  key  velocity(0..1)
+//! 0       0.25    G2   0.7
+//! 0.25    0.25    D3   0.65
+//! ```
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Articulation {
-    /// Ordinary separate bow (the default).
+    /// Let the performer decide (the default).
+    Auto,
+    /// Ordinary separate bow.
     Detache,
     Staccato,
     Accent,
@@ -38,8 +54,9 @@ pub struct Note {
     /// …and at its end (different under a hairpin).
     pub dynamic_end: f32,
     pub articulation: Articulation,
-    /// Slurred into the next note (same bow, no re-attack).
-    pub slur: bool,
+    /// Slurred into the next note (same bow, no re-attack)? `None` = let the
+    /// performer decide (it slurs overlapping notes and fast runs).
+    pub slur: Option<bool>,
 }
 
 impl Note {
@@ -48,8 +65,8 @@ impl Note {
     }
 }
 
-/// One line of melody: notes sorted by start, not overlapping (Octavia plays
-/// one string at a time for now).
+/// One line of melody, sorted by start. Overlapping notes mean "slur into
+/// the next one" (Octavia plays one string at a time for now).
 #[derive(Clone, Debug, Default)]
 pub struct Score {
     pub notes: Vec<Note>,
@@ -60,17 +77,63 @@ impl Score {
         self.notes.iter().map(Note::end).fold(0.0, f64::max)
     }
 
-    /// Sorts, and trims overlaps (an overlapping note means "legato").
     pub fn tidy(&mut self) {
         self.notes.sort_by(|a, b| a.start.total_cmp(&b.start));
-        for i in 1..self.notes.len() {
-            let start = self.notes[i].start;
-            let prev = &mut self.notes[i - 1];
-            if prev.end() > start {
-                prev.dur = (start - prev.start).max(0.01);
-                prev.slur = true;
+    }
+
+    /// Reads a roll: `tempo N` lines, then `beat length key velocity` lines.
+    pub fn parse_roll(text: &str) -> Result<Score, String> {
+        let mut beat = 60.0 / 90.0;
+        let mut notes = Vec::new();
+        for (ln, line) in text.lines().enumerate() {
+            let line = line.split(" #").next().unwrap_or("").trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
             }
+            let err = || format!("line {}: expected `beat length key velocity`, got {line:?}", ln + 1);
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols[0] == "tempo" {
+                let bpm: f64 = cols.get(1).and_then(|v| v.parse().ok()).ok_or_else(err)?;
+                beat = 60.0 / bpm.max(1.0);
+                continue;
+            }
+            if cols.len() < 4 {
+                return Err(err());
+            }
+            let at: f64 = cols[0].parse().map_err(|_| err())?;
+            let len: f64 = cols[1].parse().map_err(|_| err())?;
+            let pitch = parse_pitch(cols[2]).ok_or_else(err)?;
+            let vel: f32 = cols[3].parse().map_err(|_| err())?;
+            let dynamic = velocity_to_dynamic(vel);
+            notes.push(Note {
+                start: at * beat,
+                dur: len * beat,
+                pitch,
+                dynamic,
+                dynamic_end: dynamic,
+                articulation: Articulation::Auto,
+                slur: None,
+            });
         }
+        let mut s = Score { notes };
+        s.tidy();
+        Ok(s)
+    }
+
+    /// Writes the notes as a piano roll would hold them: timing, pitch and
+    /// velocity only. Every hint is lost, which is the point: it shows what
+    /// the performer infers on its own.
+    pub fn to_roll(&self, tempo: f64) -> String {
+        let beat = 60.0 / tempo;
+        let mut s = format!("tempo {tempo}\n# beat  length  key  velocity\n");
+        for n in &self.notes {
+            let mut vel = dynamic_to_velocity(n.dynamic);
+            if n.articulation == Articulation::Accent {
+                vel = (vel + 0.2).min(1.0);
+            }
+            s += &format!("{:.4} {:.4} {} {:.2}\n", n.start / beat, n.dur / beat, pitch_name(n.pitch), vel);
+        }
+        s
     }
 
     pub fn parse(text: &str) -> Result<Score, String> {
@@ -137,7 +200,7 @@ impl Score {
                     }
                     continue;
                 }
-                let mut art = if pizz { Articulation::Pizzicato } else { Articulation::Detache };
+                let mut art = if pizz { Articulation::Pizzicato } else { Articulation::Auto };
                 loop {
                     if let Some(r) = t.strip_prefix('^') {
                         art = Articulation::Accent;
@@ -167,14 +230,16 @@ impl Score {
                     time += secs;
                 } else {
                     let pitch = parse_pitch(name).ok_or_else(|| err("bad note name"))?;
+                    // Staccato is played short: write it as if drawn short.
+                    let dur = if art == Articulation::Staccato { secs * 0.45 } else { secs };
                     notes.push(Note {
                         start: time,
-                        dur: secs,
+                        dur,
                         pitch,
                         dynamic,
                         dynamic_end: dynamic,
                         articulation: art,
-                        slur: in_slur,
+                        slur: if in_slur { Some(true) } else { None },
                     });
                     time += secs;
                 }
@@ -191,7 +256,7 @@ impl Score {
 
 fn end_slur(notes: &mut [Note], in_slur: &mut bool) {
     if let Some(n) = notes.last_mut() {
-        n.slur = false;
+        n.slur = Some(false);
     }
     *in_slur = false;
 }
@@ -206,6 +271,22 @@ fn dyn_value(tok: &str) -> Option<f32> {
         "ff" => 0.86,
         _ => return None,
     })
+}
+
+/// Piano-roll velocity (0..1) to the performer's dynamic (pp ≈ 0.2 … ff ≈ 0.86).
+pub fn velocity_to_dynamic(v: f32) -> f32 {
+    0.12 + 0.78 * v.clamp(0.0, 1.0)
+}
+
+fn dynamic_to_velocity(d: f32) -> f32 {
+    ((d - 0.12) / 0.78).clamp(0.0, 1.0)
+}
+
+/// 60 → `C4`.
+pub fn pitch_name(p: f32) -> String {
+    const NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    let k = p.round() as i32;
+    format!("{}{}", NAMES[k.rem_euclid(12) as usize], k.div_euclid(12) - 1)
 }
 
 /// `q`, `e.`, `e3`, `h..` → beats.
@@ -292,13 +373,28 @@ mod tests {
         let s = Score::parse("# a comment\ntempo 60 # another\n(C3:e D3 E3) ^F3:q 'G3 r A3").unwrap();
         let n = &s.notes;
         assert_eq!(n.len(), 6);
-        assert!(n[0].slur && n[1].slur && !n[2].slur);
+        assert_eq!((n[0].slur, n[1].slur, n[2].slur), (Some(true), Some(true), Some(false)));
+        assert_eq!(n[3].slur, None);
         assert_eq!(n[3].articulation, Articulation::Accent);
         assert_eq!(n[4].articulation, Articulation::Staccato);
+        assert!((n[4].dur - 0.45).abs() < 1e-9, "staccato is written short");
         assert!((n[2].dur - 0.5).abs() < 1e-9);
         assert!((n[3].dur - 1.0).abs() < 1e-9);
         // The rest is a quarter: A3 starts at 0.5*3 + 1 + 1 + 1.
         assert!((n[5].start - 4.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rolls_round_trip_without_hints() {
+        let s = Score::parse("tempo 60\nmf (C3:e D3) ^E3:q").unwrap();
+        let roll = s.to_roll(60.0);
+        let back = Score::parse_roll(&roll).unwrap();
+        assert_eq!(back.notes.len(), 3);
+        assert!((back.notes[2].start - 1.0).abs() < 1e-3);
+        assert_eq!(back.notes[1].pitch, 50.0);
+        assert!(back.notes.iter().all(|n| n.slur.is_none() && n.articulation == Articulation::Auto));
+        assert!(back.notes[2].dynamic > back.notes[0].dynamic, "accent became velocity");
+        assert_eq!(pitch_name(61.0), "C#4");
     }
 
     #[test]

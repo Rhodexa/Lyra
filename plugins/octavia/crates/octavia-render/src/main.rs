@@ -4,7 +4,7 @@ mod analyze;
 mod plot;
 mod reverb;
 
-use octavia_core::{perform, render, Curves, Instrument, Score, Style};
+use octavia_core::{render, render_score, Curves, Instrument, Score, Style};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -19,11 +19,17 @@ usage: octavia <score.txt | curves.csv>... [options]
   --bright X         character: 0 = natural cello (default), 1 = bright and powerful
   --breath X         steady bow noise under the tone (default 1; try 0.5 .. 3)
   --seed N           a different take of the same performance
+  --pizz             the pizzicato patch: pluck every note
   --dry              no room reverb
   --sr N             sample rate (default 48000)
 
 writes NAME.wav, NAME.curves.csv, NAME.curves.png, NAME.spec.png
-a .csv input skips the performer and plays the curves as written";
+a .roll input is a bare piano roll (start, length, key, velocity): Octavia
+infers every articulation. a .csv input skips the performer and plays the
+curves as written.
+
+       octavia roll <score.txt>...        write NAME.roll next to each score:
+                                          the same notes with every hint removed";
 
 struct Args {
     inputs: Vec<PathBuf>,
@@ -59,6 +65,7 @@ fn parse_args() -> Result<Args, String> {
             "--seed" => a.style.seed = val("--seed")?.parse().map_err(|_| "bad --seed")?,
             "--sr" => a.sr = val("--sr")?.parse().map_err(|_| "bad --sr")?,
             "--dry" => a.dry = true,
+            "--pizz" => a.style.pizzicato = true,
             s if s.starts_with('-') => return Err(format!("unknown option {s}")),
             s => a.inputs.push(s.into()),
         }
@@ -71,6 +78,28 @@ fn parse_args() -> Result<Args, String> {
 
 fn main() {
     let all: Vec<String> = std::env::args().collect();
+    if all.get(1).is_some_and(|a| a == "roll") {
+        let mut failed = false;
+        for p in &all[2..] {
+            let path = Path::new(p);
+            let result = std::fs::read_to_string(path).map_err(|e| e.to_string()).and_then(|text| {
+                let tempo = text
+                    .lines()
+                    .find_map(|l| l.trim().strip_prefix("tempo ").and_then(|v| v.split_whitespace().next()?.parse().ok()))
+                    .unwrap_or(90.0);
+                let roll = Score::parse(&text)?.to_roll(tempo);
+                let out = path.with_extension("roll");
+                std::fs::write(&out, roll).map_err(|e| e.to_string())?;
+                println!("{}", out.display());
+                Ok(())
+            });
+            if let Err(e) = result {
+                eprintln!("{p}: {e}");
+                failed = true;
+            }
+        }
+        std::process::exit(failed as i32);
+    }
     if all.get(1).is_some_and(|a| a == "analyze") {
         let mut failed = false;
         for p in &all[2..] {
@@ -117,17 +146,17 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
     let is_curves = input.extension().is_some_and(|e| e == "csv");
 
     let t0 = Instant::now();
-    let (score, curves) = if is_curves {
-        (None, Curves::from_csv(&text)?)
+    let (score, curves, mono) = if is_curves {
+        let curves = Curves::from_csv(&text)?;
+        let mono = render(&curves, inst, args.sr, args.style.seed, args.bright);
+        (None, curves, mono)
     } else {
-        let score = Score::parse(&text)?;
-        let curves = perform(&score, inst, &args.style);
-        (Some(score), curves)
+        let is_roll = input.extension().is_some_and(|e| e == "roll");
+        let score = if is_roll { Score::parse_roll(&text)? } else { Score::parse(&text)? };
+        let (mono, curves) = render_score(&score, inst, &args.style, args.sr, args.bright);
+        (Some(score), curves, mono)
     };
-    let t_perform = t0.elapsed();
-    let t1 = Instant::now();
-    let mono = render(&curves, inst, args.sr, args.style.seed, args.bright);
-    let t_render = t1.elapsed();
+    let t_render = t0.elapsed();
 
     // Room, then a fixed gain so loudness differences between renders are real.
     let mut left = Vec::with_capacity(mono.len());
@@ -166,10 +195,9 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
     let r = analyze::report(&mono, args.sr);
     println!("{}", octave_line(&r));
     println!(
-        "{stem}: {secs:.1} s, {} notes | perform {:.1} ms, sound {:.0} ms = {:.0}x real time | \
+        "{stem}: {secs:.1} s, {} notes | sound {:.0} ms = {:.0}x real time | \
          dry peak {:+.1} dBFS, rms {:+.1} dB{} | centroid {:.0} Hz, presence(2-5k/0.1-1k) {:+.1} dB, air(8-16k/1-4k) {:+.1} dB",
         score.as_ref().map_or(0, |s| s.notes.len()),
-        t_perform.as_secs_f64() * 1e3,
         t_render.as_secs_f64() * 1e3,
         secs / t_render.as_secs_f64().max(1e-9),
         r.peak_db,

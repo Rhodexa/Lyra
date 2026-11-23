@@ -30,6 +30,17 @@ To compare with a real recording (kept in `ext_sample/`, never committed):
 cargo run --release -- analyze ext_sample/cello.wav   # same numbers + spectrogram
 ```
 
+## Piano rolls
+
+A `.roll` is just what a piano roll holds (start, length, key, velocity), and
+Octavia infers every articulation from it:
+
+```sh
+cargo run --release -- roll scores/prelude.txt          # strip a score's marks into prelude.roll
+cargo run --release -- scores/prelude.roll -o renders/inferred
+cargo run --release -- scores/prelude.roll --pizz       # the pizzicato patch
+```
+
 ## Score format
 
 ```text

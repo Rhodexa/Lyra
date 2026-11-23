@@ -46,10 +46,13 @@ Claude reads this before choosing what to work on.
 - [ ] Attacks are only curves (a noise puff plus a brightness bite). There's no real bow-scratch transient or finger thump on shifts yet. This is the next big realism step.
 - [ ] One line only: no double stops, no ties (two slurred notes of the same pitch don't re-articulate, but there's no `~` tie mark), no spiccato or sul ponticello yet.
 - [ ] The violin body is a rough guess; the cello got more care.
-- [ ] Offline only. Streaming and the Lyra adapter are stage 3 (docs/DESIGN.md).
+- [ ] Streaming works (2026-11-23); the Lyra adapter is next and needs Lyra to hand over upcoming notes.
+- [ ] Inferred accents only fire when a note is 0.12 louder than its neighbourhood average, so a run of accents in a row dilutes itself (only the first one in `articulations.roll` gets accented).
+- [ ] No "open notes" yet (length unknown until note-off), so live keyboard playing isn't supported.
 - [ ] About 20× real time per cello, untuned. Fine for now.
 
 ---
 
 ## Done
+- 2026-11-23: Performer sees one second ahead, streaming engine, inference from bare piano rolls (`.roll`), pizzicato as a patch. The inferred Bach prelude bows exactly like the hand-marked one.
 - 2026-11-23: First version: rules performer, recipe voice, plucks, sympathetic strings, body, renderer with plots and measurements.

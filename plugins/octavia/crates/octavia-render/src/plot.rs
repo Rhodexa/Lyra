@@ -100,7 +100,7 @@ pub fn curves_png(curves: &Curves, score: Option<&Score>, path: &Path) -> std::i
     if let Some(s) = score {
         for n in &s.notes {
             let y = y_of_pitch(n.pitch);
-            let col = if n.slur { [70, 60, 120] } else { [60, 80, 90] };
+            let col = if n.slur == Some(true) { [70, 60, 120] } else { [60, 80, 90] };
             c.rect(x_of(n.start), y - 3, x_of(n.end()) - 2, y + 3, col);
         }
     }
