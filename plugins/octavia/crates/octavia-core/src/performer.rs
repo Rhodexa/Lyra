@@ -72,6 +72,21 @@ impl Default for Style {
     }
 }
 
+/// How the performer decided to play a note (for plots and debugging).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Played {
+    /// Bow starts from silence.
+    Fresh,
+    /// A new bow stroke right after the previous note.
+    NewBow,
+    /// Same bow as the previous note.
+    Slurred,
+    Staccato,
+    /// Bounced bow (spiccato).
+    Bounced,
+    Plucked,
+}
+
 /// Something the instrument must do at an exact time, besides the frames.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
@@ -180,6 +195,29 @@ impl Performer {
     pub fn add_note(&mut self, n: Note) {
         let pos = self.notes.partition_point(|m| m.start <= n.start).max(self.plans.len());
         self.notes.insert(pos, n);
+    }
+
+    /// How each note planned so far is being played, in note order.
+    pub fn decisions(&self) -> Vec<(Played, bool)> {
+        self.plans
+            .iter()
+            .map(|p| {
+                let how = if p.pizz {
+                    Played::Plucked
+                } else if p.spiccato {
+                    Played::Bounced
+                } else if p.staccato {
+                    Played::Staccato
+                } else {
+                    match p.entry {
+                        Entry::Fresh => Played::Fresh,
+                        Entry::BowChange => Played::NewBow,
+                        Entry::Legato => Played::Slurred,
+                    }
+                };
+                (how, p.double.is_some())
+            })
+            .collect()
     }
 
     /// Seconds since the start, of the next frame.
@@ -342,6 +380,8 @@ impl Performer {
 
         let entry = match prev {
             _ if pizz => Entry::Fresh,
+            // After a bounce the bow is already moving: a normal new stroke.
+            Some((pn, pp)) if n.start - pn.end() < PHRASE_GAP && pp.spiccato && !pizz => Entry::BowChange,
             Some((pn, pp)) if touching(pn, n) && !pp.pizz && !pp.staccato && !pp.spiccato => {
                 if self.slurred(i - 1) {
                     Entry::Legato
@@ -366,7 +406,8 @@ impl Performer {
         let spiccato = !pizz
             && match n.articulation {
                 Articulation::Spiccato => true,
-                Articulation::Auto => fast && !staccato && entry != Entry::Legato && !slur_out,
+                // Only short notes bounce: a long note after a fast run is bowed.
+                Articulation::Auto => n.dur < FAST + 0.02 && fast && !staccato && entry != Entry::Legato && !slur_out,
                 _ => false,
             };
 
@@ -463,8 +504,10 @@ impl Performer {
             0.07
         } else if entry == Entry::BowChange {
             0.045
+        } else if prev.is_some_and(|(pn, _)| n.start - pn.end() <= PHRASE_GAP) {
+            0.03 // the bow only lifted for a moment: a crisp new start
         } else {
-            0.05 + 0.08 * (1.0 - n.dynamic) // soft starts are slower
+            0.05 + 0.08 * (1.0 - n.dynamic) // from real silence; soft starts are slower
         };
 
         let hairpin = n.dynamic_end != n.dynamic;
@@ -831,6 +874,25 @@ mod tests {
             let peak = (0..10).map(|j| frame_at(&c, at + j as f64 * 0.004).loudness).fold(0.0, f32::max);
             assert!(peak > before * 2.0, "note {k} should bounce: {before} -> {peak}");
         }
+    }
+
+    #[test]
+    fn long_notes_after_a_fast_run_are_bowed_and_follow_on_with_a_new_stroke() {
+        let inst = cello();
+        // Three repeated (so bounced) 16ths, a long note, then a quarter.
+        let text = "0 0.12 C4 0.6\n0.13 0.12 C4 0.6\n0.26 0.12 C4 0.6\n0.39 1.0 F4 0.6\n1.4 0.5 G4 0.6";
+        let mut p = Performer::new(&inst, &Style::default());
+        for n in roll(text).notes {
+            p.add_note(n);
+        }
+        let mut ev = Vec::new();
+        for _ in 0..(3.0 * FRAME_RATE) as usize {
+            p.next_frame(&mut ev);
+        }
+        let d: Vec<Played> = p.decisions().iter().map(|d| d.0).collect();
+        assert_eq!(d[1], Played::Bounced);
+        assert_ne!(d[3], Played::Bounced, "a 1 s note doesn't bounce");
+        assert_eq!(d[3], Played::NewBow, "the bow is already moving after a bounce");
     }
 
     #[test]

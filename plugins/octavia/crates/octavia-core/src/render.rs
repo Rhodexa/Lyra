@@ -18,7 +18,7 @@ use crate::body::{Body, BodyResponse};
 use crate::curves::{Curves, Frame, FRAME_RATE};
 use crate::dsp::OnePole;
 use crate::instrument::Instrument;
-use crate::performer::{Event, Performer, Style};
+use crate::performer::{Event, Performer, Played, Style};
 use crate::pluck::Plucks;
 use crate::ring::Rings;
 use crate::rand::Rng;
@@ -309,9 +309,16 @@ impl Engine {
     }
 }
 
+/// A whole score performed and played.
+pub struct Rendered {
+    pub audio: Vec<f32>,
+    pub curves: Curves,
+    /// How each note was played (and whether as a double stop), in note order.
+    pub decisions: Vec<(Played, bool)>,
+}
+
 /// Performs and plays a whole score through the streaming engine.
-/// Returns the audio and the curves it played.
-pub fn render_score(score: &Score, inst: &Instrument, style: &Style, sr: f32, bright: f32) -> (Vec<f32>, Curves) {
+pub fn render_score(score: &Score, inst: &Instrument, style: &Style, sr: f32, bright: f32) -> Rendered {
     let mut engine = Engine::new(inst, style, sr, bright, true);
     for n in &score.notes {
         engine.add_note(n.clone());
@@ -322,7 +329,7 @@ pub fn render_score(score: &Score, inst: &Instrument, style: &Style, sr: f32, br
         engine.process(block);
     }
     let curves = engine.record.take().unwrap_or_default();
-    (out, curves)
+    Rendered { audio: out, curves, decisions: engine.perf.decisions() }
 }
 
 /// Finger knocks: a click and a few milliseconds of dull noise. The body's
@@ -366,7 +373,7 @@ mod tests {
     fn renders_clean_audible_audio() {
         let inst = cello();
         let s = Score::parse("tempo 80\n(G2:e D3 B3) A3 B3 D3 B3 D3 pizz G2:q D3 arco C3:h").unwrap();
-        let (out, _) = render_score(&s, &inst, &Style::default(), 48_000.0, 0.0);
+        let out = render_score(&s, &inst, &Style::default(), 48_000.0, 0.0).audio;
         assert!(out.iter().all(|v| v.is_finite()));
         let peak = out.iter().fold(0.0f32, |m, v| m.max(v.abs()));
         assert!(peak > 0.01 && peak < 4.0, "peak {peak}");
@@ -389,7 +396,7 @@ mod tests {
         let s = Score::parse("tempo 90\n(G2:e D3 B3) A3 'B3 D3 pizz G2:q arco ^C3:h").unwrap();
         let style = Style::default();
         for sr in [48_000.0, 44_100.0] {
-            let (streamed, curves) = render_score(&s, &inst, &style, sr, 0.3);
+            let Rendered { audio: streamed, curves, .. } = render_score(&s, &inst, &style, sr, 0.3);
             assert_eq!(curves.frames, perform(&s, &inst, &style).frames);
             assert_eq!(streamed, render(&curves, &inst, sr, style.seed, 0.3), "at {sr} Hz");
         }
@@ -400,7 +407,7 @@ mod tests {
         let inst = cello();
         let s = Score::parse("tempo 100\n(C3:e D3 E3 F3) G3:q A3 B3:h").unwrap();
         let style = Style::default();
-        let (offline, _) = render_score(&s, &inst, &style, 48_000.0, 0.0);
+        let offline = render_score(&s, &inst, &style, 48_000.0, 0.0).audio;
         let mut e = Engine::new(&inst, &style, 48_000.0, 0.0, false);
         let mut live = vec![0.0f32; offline.len()];
         let mut next = 0;

@@ -42,6 +42,9 @@ Claude reads this before choosing what to work on.
   - Claude: done. A note can carry a second, lower pitch (`D3+A3` in scores; two notes starting together in a roll; a held chord note in MIDI). The performer only plays it if one hand can reach both notes on neighbouring strings and the note is at least 0.25 s long; otherwise it plays the top note alone. A second bowed voice shares the body and the vibrato. Pizzicato double stops pluck both notes, rolled by 12 ms. In marmalade, 21.75–28.5 s is now a run of double stops; octaves get refused (too wide for the hand). `--no-doubles` turns it off for MIDI.
 - [ ] Octave double stops need a stretched hand (or thumb position), which isn't modelled; for now they're played as single notes.
 
+- [ ] *(Rhodexa, 2026-11-23)* Bug in what it does after a spiccato (`midi/angel.mid --track 8 --bright 0.5`). Would love to see it side by side with the MIDI.
+  - Claude: three bugs. (1) Long notes ending a fast run were bounced (A#4 0.78 s, D#5 2.6 s: a drop, then two seconds of free ringing), so now only short notes bounce. (2) The note after a bounce started "from silence" with a slow, soft attack; now it's a new stroke. (3) Any note after a short lift (bounce or staccato) got the slow start; now only real rests do. For side by side: the curves plot colours each written note by how it was played, and `--explain` lists it.
+
 ## Wishes
 
 - [ ]

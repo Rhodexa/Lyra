@@ -27,6 +27,7 @@ usage: octavia <score.txt | curves.csv>... [options]
   --bottom           MIDI: in chords, keep the lowest note (default: highest)
   --transpose N      MIDI: shift by N semitones (default: fit the range by octaves)
   --no-doubles       MIDI: never keep a second chord note as a double stop
+  --explain          print how each note was played
   --dry              no room reverb
   --sr N             sample rate (default 48000)
 
@@ -51,6 +52,7 @@ struct Args {
     bottom: bool,
     transpose: Option<i32>,
     doubles: bool,
+    explain: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -67,6 +69,7 @@ fn parse_args() -> Result<Args, String> {
         bottom: false,
         transpose: None,
         doubles: true,
+        explain: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -85,6 +88,7 @@ fn parse_args() -> Result<Args, String> {
             "--pizz" => a.style.pizzicato = true,
             "--bottom" => a.bottom = true,
             "--no-doubles" => a.doubles = false,
+            "--explain" => a.explain = true,
             "--track" => a.track = Some(val("--track")?.parse().map_err(|_| "bad --track")?),
             "--channel" => {
                 let c: u8 = val("--channel")?.parse().map_err(|_| "bad --channel")?;
@@ -186,10 +190,10 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
     let is_curves = input.extension().is_some_and(|e| e == "csv");
 
     let t0 = Instant::now();
-    let (score, curves, mono) = if is_curves {
+    let (score, curves, mono, decisions) = if is_curves {
         let curves = Curves::from_csv(&text)?;
         let mono = render(&curves, inst, args.sr, args.style.seed, args.bright);
-        (None, curves, mono)
+        (None, curves, mono, Vec::new())
     } else {
         let score = if is_midi {
             let file = midi::parse(&std::fs::read(input).map_err(|e| e.to_string())?)?;
@@ -212,10 +216,23 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
         } else {
             Score::parse(&text)?
         };
-        let (mono, curves) = render_score(&score, inst, &args.style, args.sr, args.bright);
-        (Some(score), curves, mono)
+        let r = render_score(&score, inst, &args.style, args.sr, args.bright);
+        (Some(score), r.curves, r.audio, r.decisions)
     };
     let t_render = t0.elapsed();
+    if let (true, Some(s)) = (args.explain, &score) {
+        for (n, (how, double)) in s.notes.iter().zip(&decisions) {
+            let d = if *double { n.double.map_or(String::new(), |d| format!(" + {}", octavia_core::score::pitch_name(d))) } else { String::new() };
+            println!(
+                "  {:7.3}s {:>5.3}s  {:<4}{:<6} {:?}",
+                n.start,
+                n.dur,
+                octavia_core::score::pitch_name(n.pitch),
+                d,
+                how
+            );
+        }
+    }
 
     // Room, then a fixed gain so loudness differences between renders are real.
     let mut left = Vec::with_capacity(mono.len());
@@ -247,7 +264,7 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
     if !is_curves {
         std::fs::write(with_suffix(&base, ".curves.csv"), curves.to_csv()).map_err(|e| e.to_string())?;
     }
-    plot::curves_png(&curves, score.as_ref(), &with_suffix(&base, ".curves.png")).map_err(|e| e.to_string())?;
+    plot::curves_png(&curves, score.as_ref(), &decisions, &with_suffix(&base, ".curves.png")).map_err(|e| e.to_string())?;
     plot::spectrogram_png(&mono, args.sr, &with_suffix(&base, ".spec.png")).map_err(|e| e.to_string())?;
 
     let secs = mono.len() as f64 / args.sr as f64;

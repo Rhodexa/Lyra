@@ -30,8 +30,8 @@ pub mod voice;
 
 pub use curves::{Curves, Frame, Pluck, Ring, Tap, FRAME_RATE};
 pub use instrument::Instrument;
-pub use performer::{perform, Event, Performer, Style, LOOKAHEAD};
-pub use render::{render, render_score, Engine, Sound};
+pub use performer::{perform, Event, Performer, Played, Style, LOOKAHEAD};
+pub use render::{render, render_score, Engine, Rendered, Sound};
 pub use score::{Articulation, Note, Score};
 
 /// MIDI note number (fractional allowed) to Hz. A4 = 69 = 440 Hz.

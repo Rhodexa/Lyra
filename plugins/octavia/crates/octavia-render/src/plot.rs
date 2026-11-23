@@ -1,7 +1,7 @@
 //! Just enough raster drawing to see curves and spectrograms. No fonts:
 //! the lanes are always in the same order (see the README).
 
-use octavia_core::{Curves, Score, FRAME_RATE};
+use octavia_core::{Curves, Played, Score, FRAME_RATE};
 use std::path::Path;
 
 pub struct Canvas {
@@ -61,9 +61,23 @@ impl Canvas {
     }
 }
 
-/// Four lanes, top to bottom: pitch (with the written notes behind it),
-/// loudness, brightness, noise. One vertical grid line per second.
-pub fn curves_png(curves: &Curves, score: Option<&Score>, path: &Path) -> std::io::Result<()> {
+/// Colour of a written note by how it was played.
+fn played_colour(p: Option<Played>) -> [u8; 3] {
+    match p {
+        Some(Played::Fresh) => [70, 90, 140],     // blue: bow starts from silence
+        Some(Played::NewBow) => [40, 120, 120],   // teal: a new bow stroke
+        Some(Played::Slurred) => [110, 70, 160],  // purple: same bow (slur)
+        Some(Played::Staccato) => [170, 60, 60],  // red: staccato
+        Some(Played::Bounced) => [200, 130, 40],  // orange: spiccato
+        Some(Played::Plucked) => [60, 150, 80],   // green: pizzicato
+        None => [70, 70, 80],
+    }
+}
+
+/// Four lanes, top to bottom: pitch (with the written notes behind it,
+/// coloured by how each was played), loudness, brightness, noise. One
+/// vertical grid line per second.
+pub fn curves_png(curves: &Curves, score: Option<&Score>, decisions: &[(Played, bool)], path: &Path) -> std::io::Result<()> {
     let secs = curves.duration();
     let w = ((secs * 160.0) as usize).clamp(800, 6000);
     let lane = 140usize;
@@ -98,10 +112,15 @@ pub fn curves_png(curves: &Curves, score: Option<&Score>, path: &Path) -> std::i
         }
     }
     if let Some(s) = score {
-        for n in &s.notes {
+        for (i, n) in s.notes.iter().enumerate() {
             let y = y_of_pitch(n.pitch);
-            let col = if n.slur == Some(true) { [70, 60, 120] } else { [60, 80, 90] };
+            let (how, double) = decisions.get(i).map_or((None, false), |d| (Some(d.0), d.1));
+            let col = played_colour(how);
             c.rect(x_of(n.start), y - 3, x_of(n.end()) - 2, y + 3, col);
+            if let (Some(d), true) = (n.double, double) {
+                let y2 = y_of_pitch(d);
+                c.rect(x_of(n.start), y2 - 3, x_of(n.end()) - 2, y2 + 3, col);
+            }
         }
     }
     let lanes: [(usize, [u8; 3]); 3] = [(2, [240, 180, 90]), (3, [140, 200, 255]), (4, [200, 140, 220])];
