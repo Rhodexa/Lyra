@@ -192,15 +192,16 @@ fn folder(ui: &mut Ui, f: &Folder, depth: usize, p: &mut Project, h: &mut Histor
     let id = ui.id().with(("folder", &f.path));
     let mut open: bool = ui.data(|d| d.get_temp(id)).unwrap_or(depth == 0);
     let indent = depth as f32 * 12.0;
-    let r = row(ui, &f.name, None, false, indent + 12.0, 30.0);
+    let (rr, r) = ui.allocate_exact_size(vec2(ui.available_width(), theme::m().control_h), Sense::click());
+    paint_row(ui, rr, &r, &f.name, None, false, indent + 12.0, 30.0, true);
     chevron(ui.painter(), pos2(r.rect.left() + indent + 10.0, r.rect.center().y), open, theme::TEXT_DIM);
     let count = count_files(f);
     ui.painter().text(
         r.rect.right_center() - vec2(6.0, 0.0),
         Align2::RIGHT_CENTER,
         count.to_string(),
-        FontId::monospace(theme::m().text_small),
-        theme::TEXT_DIM,
+        FontId::monospace(12.0),
+        theme::INK_DIM,
     );
     if r.clicked() {
         open ^= true;
@@ -226,10 +227,11 @@ fn file_row(ui: &mut Ui, file: &Path, indent: f32, p: &mut Project, h: &mut Hist
     let name = samples::name_for(file);
     let shown = samples::display_name(&name);
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click_and_drag());
-    paint_row(ui, r, &resp, &shown, None, st.previewing.as_deref() == Some(name.as_str()), indent, 58.0);
+    // The name starts after the speaker mark.
+    paint_row(ui, r, &resp, &shown, None, st.previewing.as_deref() == Some(name.as_str()), indent + 10.0, 58.0, false);
     // A small speaker mark: "click to hear".
     let c = pos2(r.left() + indent + 6.0, r.center().y);
-    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+    let ink = if resp.hovered() { theme::INK } else { theme::INK_DIM };
     ui.painter().add(egui::Shape::convex_polygon(
         vec![
             c + vec2(-3.0, -2.0),
@@ -256,8 +258,8 @@ fn file_row(ui: &mut Ui, file: &Path, indent: f32, p: &mut Project, h: &mut Hist
             r.right_center() - vec2(6.0, 0.0),
             Align2::RIGHT_CENTER,
             text,
-            FontId::monospace(m.text_small),
-            theme::TEXT_DIM,
+            FontId::monospace(12.0),
+            theme::INK_DIM,
         );
     }
     if resp.drag_started() {
@@ -283,7 +285,7 @@ fn midi_row(ui: &mut Ui, file: &Path, indent: f32, st: &mut UiState) {
     let m = theme::m();
     let shown = file.file_stem().map_or_else(String::new, |s| s.to_string_lossy().into_owned());
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click_and_drag());
-    paint_row(ui, r, &resp, &shown, None, false, indent, 58.0);
+    paint_row(ui, r, &resp, &shown, None, false, indent + 10.0, 58.0, false);
     // A note mark: "this is notes, not sound".
     let c = pos2(r.left() + indent + 6.0, r.center().y);
     let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
@@ -349,7 +351,7 @@ fn add_instrument(p: &mut Project, h: &mut History, st: &mut UiState, name: &str
 fn row(ui: &mut Ui, name: &str, light: Option<theme::Light>, chosen: bool, indent: f32, reserve: f32) -> Response {
     let m = theme::m();
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click());
-    paint_row(ui, r, &resp, name, light, chosen, indent, reserve);
+    paint_row(ui, r, &resp, name, light, chosen, indent, reserve, false);
     resp
 }
 
@@ -358,7 +360,7 @@ fn row(ui: &mut Ui, name: &str, light: Option<theme::Light>, chosen: bool, inden
 fn row_with_arrow(ui: &mut Ui, name: &str, has_arrow: bool, open: bool) -> (Response, bool) {
     let m = theme::m();
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click());
-    paint_row(ui, r, &resp, name, None, false, 0.0, m.control_h);
+    paint_row(ui, r, &resp, name, None, false, 0.0, m.control_h, false);
     if !has_arrow {
         return (resp, false);
     }
@@ -372,8 +374,11 @@ fn row_with_arrow(ui: &mut Ui, name: &str, has_arrow: bool, open: bool) -> (Resp
     (resp.on_hover_text("Presets: the arrow"), clicked)
 }
 
-/// `reserve`: points kept free at the right (for a count or a length); the
-/// name is cut off before them.
+/// A list row (catalog-next.html, settled): flat, a soft lift under the
+/// mouse; names in the reading font as written, cut with "…"; folder names
+/// (`caps`) in the label font. `playing`: the sample being previewed, its name
+/// lit and a small light pulsing. `reserve`: points kept free at the right (for
+/// a count or a length).
 #[allow(clippy::too_many_arguments)]
 fn paint_row(
     ui: &Ui,
@@ -381,29 +386,53 @@ fn paint_row(
     resp: &Response,
     name: &str,
     light: Option<theme::Light>,
-    chosen: bool,
+    playing: bool,
     indent: f32,
     reserve: f32,
+    caps: bool,
 ) {
-    let m = theme::m();
     let p = ui.painter();
-    if chosen || resp.hovered() {
-        p.rect_filled(r, cr(3), if chosen { theme::PANEL_HI } else { theme::mix(theme::PANEL, theme::PANEL_HI, 0.6) });
+    if resp.hovered() {
+        p.rect_filled(r, cr(2), ROW_HOVER);
     }
     let mut x = r.left() + 10.0 + indent;
     if let Some(l) = light {
         p.circle_filled(pos2(x + 3.0, r.center().y), 3.5, l.mid);
         x += 14.0;
     }
-    let room = Rect::from_min_max(r.min, pos2(r.right() - reserve, r.bottom()));
-    p.with_clip_rect(room.intersect(p.clip_rect())).text(
-        pos2(x, r.center().y),
-        Align2::LEFT_CENTER,
-        name,
-        FontId::proportional(m.text),
-        if chosen { theme::TEXT } else { theme::mix(theme::TEXT, theme::TEXT_DIM, 0.35) },
-    );
+    let ink = if playing { theme::L_MINT.hi } else { theme::INK };
+    let max_w = (r.right() - reserve - x - 4.0).max(10.0);
+    let galley = if caps {
+        let job = egui::text::LayoutJob::single_section(
+            name.to_uppercase(),
+            egui::TextFormat { font_id: theme::label(12.0), color: ink, extra_letter_spacing: 0.6, ..Default::default() },
+        );
+        ui.fonts(|f| f.layout_job(fit(job, max_w)))
+    } else {
+        let job = egui::text::LayoutJob::single_section(
+            name.to_string(),
+            egui::TextFormat { font_id: theme::read(13.0), color: ink, ..Default::default() },
+        );
+        ui.fonts(|f| f.layout_job(fit(job, max_w)))
+    };
+    p.galley(pos2(x, r.center().y - galley.size().y * 0.5), galley, ink);
+    if playing {
+        // A small light that pulses while the preview plays, left of the details.
+        let t = ui.input(|i| i.time);
+        let a = 0.35 + 0.65 * (0.5 + 0.5 * (t * std::f64::consts::TAU * 1.1).sin()) as f32;
+        p.circle_filled(pos2(r.right() - reserve - 4.0, r.center().y), 3.0, theme::L_MINT.mid.gamma_multiply(a));
+        ui.ctx().request_repaint();
+    }
 }
+
+/// One line, cut with "…" at `max_w`.
+fn fit(mut job: egui::text::LayoutJob, max_w: f32) -> egui::text::LayoutJob {
+    job.wrap = egui::text::TextWrapping { max_width: max_w, max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+    job
+}
+
+/// A row under the mouse lifts a little (no fill otherwise: flat rows).
+const ROW_HOVER: egui::Color32 = egui::Color32::from_rgb(0x32, 0x32, 0x32);
 
 /// A small open/closed arrow.
 fn chevron(p: &egui::Painter, c: egui::Pos2, open: bool, color: egui::Color32) {
