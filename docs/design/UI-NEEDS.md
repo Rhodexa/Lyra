@@ -64,6 +64,9 @@ should follow the same three sizes, so a row of mixed widgets lines up:
    line between them), the others sit a step back and darker.
 4. **Dropdown**: the editor picker, made general (any list, optional icons),
    in S / M / L. It replaces all 12 plain dropdowns and the mixer's number well.
+   *Settled in catalog-next (D3): a dark well closed, an LCD-coloured drawer open.
+   DAW lists get crowded: drawers must never just grow downwards: they wrap
+   into columns with category headings (big drawer, draft 1).*
 5. **Number picker**: the BPM LCD's behaviour (hover a digit to choose how fine,
    drag or wheel, double-click to type) as a widget of its own, with an LCD
    look and a plain look, in S / M / L. For tempo, swing, lengths,

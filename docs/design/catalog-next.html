@@ -214,6 +214,14 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .dd.dd-lcd .dd-row:hover{background:#cacaca;color:var(--lcd-ink)}
 .dd.dd-lcd .dd-row.on,.pop-sel .dd.dd-lcd .dd-row.on{background:#bdbdbd;color:#1e1e1e;box-shadow:none;font-weight:700}
 .dd.dd-lcd .dd-sep{background:#b0b0b0}
+/* the big drawer: never taller than --rows rows; wraps into columns; categories get headings;
+   a category too long for one column continues in the next (heading marked "cont.") */
+.dd-pop.cols{display:none;gap:0;padding:4px 2px;width:max-content}
+.dd.open .dd-pop.cols,.dd.static .dd-pop.cols{display:flex}
+.dd-col{display:flex;flex-direction:column;min-width:130px;padding:0 2px}
+.dd-col+.dd-col{border-left:2px solid #c4c4c4}
+.dd-head{height:22px;display:flex;align-items:flex-end;padding:0 8px 3px;font:700 10px/1 var(--btn-font);letter-spacing:.1em;text-transform:uppercase;color:var(--lcd-dim)}
+.dd-head i{font-style:normal;font-weight:400;margin-left:4px}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -338,11 +346,16 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ DROPDOWN ═════════════════════════ -->
-<h2>Dropdown <span class="draft">UI-NEEDS 4 · DRAFT 3</span></h2>
-<p>Today's area picker, on the new foundations: the 2 px outline in its own colour, the label font in caps, S · M · L. <b>D1 · well</b>: a sunken well, like the track (it shows a value). <b>D2 · plate</b>: a button with a chevron (it reads as "press me"). The popup is a panel of rows; the chosen row is either <b>lit</b> (backlit, like "on") or <b>sel</b> (the foundations' selected: lifted, with a lit edge). <b>D3 · well + LCD drawer</b> (Rhodexa's idea, the favourite): closed it's the dark well; open, the drawer is the opposite colour, the LCD's pale panel with dark ink, the chosen row slightly grey, so the list you're reading can't blend into the UI behind it. The first three are drawn open; the rest open on click.</p>
+<h2>Dropdown <span class="draft">UI-NEEDS 4 · SETTLED: D3</span></h2>
+<p>Today's area picker, on the new foundations: the 2 px outline in its own colour, the label font in caps, S · M · L. <b>D1 · well</b>: a sunken well, like the track (it shows a value). <b>D2 · plate</b>: a button with a chevron (it reads as "press me"). The popup is a panel of rows; the chosen row is either <b>lit</b> (backlit, like "on") or <b>sel</b> (the foundations' selected: lifted, with a lit edge). <b>Settled: D3 · well + LCD drawer</b> (Rhodexa's idea): closed it's the dark well; open, the drawer is the opposite colour, the LCD's pale panel with dark ink, the chosen row slightly grey, so the list you're reading can't blend into the UI behind it. The first three are drawn open; the rest open on click.</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Chosen row</span><span id="pop-style"></span></div>
   <div class="dd-grid" id="dd-grid"></div>
+</div>
+<div class="card">
+  <h3>The big drawer <span class="draft">DRAFT 1</span></h3>
+  <p style="margin-top:0">For long lists: it never grows taller than 8 rows; it wraps into columns side by side, each category under a heading, and a category too long for one column continues in the next. Drawn open; the one beside it opens on click.</p>
+  <div class="row" style="align-items:flex-start;gap:40px" id="dd-big"></div>
 </div>
 <div class="card">
   <h3>In context</h3>
@@ -604,6 +617,28 @@ function tabsT2(size, labels, chosen = 0, body = '') {
 
 // ── dropdown ──
 const CHEV = '<svg class="chev" viewBox="0 0 10 10"><path d="M1.5 3.5L5 7l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+// A big drawer: groups = [[heading, [labels…]], …]; at most `rows` rows per column.
+function bigDropdown(size, groups, chosen = [0, 0], o = {}) {
+  const rows = o.rows || 8;
+  const dd = h('div', 'dd dd-lcd ' + size + (o.static ? ' static' : ''));
+  if (o.width) dd.style.width = o.width;
+  const closed = h('div', 'dd-closed', dd), pop = h('div', 'dd-pop cols', dd);
+  const paint = () => { closed.innerHTML = `<span class="name">${groups[chosen[0]][1][chosen[1]]}</span>` + CHEV; };
+  let col = null, used = rows;
+  const rowsEls = [];
+  groups.forEach(([head, items], g) => {
+    items.forEach((label, i) => {
+      const needHead = i === 0;
+      if (used + (needHead ? 2 : 1) > rows) { col = h('div', 'dd-col', pop); used = 0; if (!needHead) { h('div', 'dd-head', col, `${head}<i>cont.</i>`); used++; } }
+      if (needHead) { h('div', 'dd-head', col, head); used++; }
+      const r = h('div', 'dd-row' + (g === chosen[0] && i === chosen[1] ? ' on' : ''), col, `<span>${label}</span>`); used++;
+      rowsEls.push(r);
+      r.onclick = e => { e.stopPropagation(); chosen = [g, i]; rowsEls.forEach(x => x.classList.remove('on')); r.classList.add('on'); paint(); dd.classList.remove('open'); };
+    });
+  });
+  closed.onclick = e => { e.stopPropagation(); const was = dd.classList.contains('open'); document.querySelectorAll('.dd.open').forEach(x => x.classList.remove('open')); if (!was && !o.static) dd.classList.add('open'); };
+  paint(); return dd;
+}
 function dropdown(size, items, chosen = 0, o = {}) {   // items: [label, icon?] or '-' for a separator
   const dd = h('div', 'dd ' + size + (o.plate ? ' dd-plate' : '') + (o.lcd ? ' dd-lcd' : '') + (o.static ? ' static' : ''));
   if (o.width) dd.style.width = o.width;
@@ -641,6 +676,14 @@ document.addEventListener('click', () => document.querySelectorAll('.dd.open').f
     host.append(button('M', 'plus', {push: true}), modeSwitch('B', 'M', [['pointer'], ['pencil'], ['slice']], 0));
   };
   ctxRow($('#dd-ctx'), false); ctxRow($('#dd-ctx-lcd'), true);
+  const plugins = [['Instruments', ['Chrysalis', 'Fluttersine', 'Sampler', 'Drum kit', 'Sine', 'Noise']],
+    ['Effects', ['Reverb', 'Delay', 'Chorus', 'Flanger', 'Phaser', 'Compressor', 'Limiter', 'Gate', 'EQ', 'Filter', 'Distortion', 'Bitcrusher', 'Stereo width']],
+    ['Utility', ['Gain', 'Pan', 'Meter', 'Spectrum']]];
+  const chords = [['Triads', ['Major', 'Minor', 'Dim', 'Aug', 'Sus2', 'Sus4']], ['Sevenths', ['Maj7', 'Min7', 'Dom7', 'Min7b5', 'Dim7', 'MinMaj7']], ['Extended', ['Add9', '6', 'Min6', '6/9', 'Maj9', 'Min9', '9', '11', '13']]];
+  const big = $('#dd-big');
+  const bc = (label, n) => { const c = h('div', '', big); h('div', 'caps', c, label).style.marginBottom = '8px'; c.append(n); };
+  bc('Add plugin · drawn open', bigDropdown('M', plugins, [1, 0], {static: true, width: '170px'}));
+  bc('Chord stamp · click', bigDropdown('M', chords, [1, 0], {width: '120px'}));
   document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
