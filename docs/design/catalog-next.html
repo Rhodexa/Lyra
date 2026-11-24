@@ -49,6 +49,8 @@
   --btn-case:uppercase;
   --legend:#b0b0b0;        /* idle legend */
   /* No gradients. Ever. */
+  /* ── LCD (theme::lcd_panel): a pale backlit panel with dark ink ── */
+  --lcd:#dadada; --lcd-ink:#2f2f2f; --lcd-dim:#5e5e5e;
   /* ── type ── */
   --t-caps:600 10px/1 system-ui,sans-serif;   /* labels, letter-spaced */
   --t-small:11px; --t-body:14px;
@@ -206,6 +208,15 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .pop-sel .dd-row.on{background:var(--surface-sel);color:var(--ink);box-shadow:inset 3px 0 0 var(--mid);font-weight:var(--btn-fw)}
 .dd-sep{height:2px;margin:2px 4px;background:color-mix(in srgb,var(--surface),black var(--btn-ol))}
 .dd-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;align-items:start}
+/* D3 · LCD: the dropdown in the LCD's colours, light with dark ink; the chosen row slightly grey */
+.dd.dd-lcd .dd-closed{--b:var(--lcd);color:var(--lcd-ink)}
+.dd.dd-lcd .chev{color:var(--lcd-dim)}
+.dd.dd-lcd:hover .dd-closed{--b:#e6e6e6}
+.dd.dd-lcd .dd-pop{background:var(--lcd);border-color:color-mix(in srgb,var(--lcd),black var(--btn-ol))}
+.dd.dd-lcd .dd-row{color:var(--lcd-ink)}
+.dd.dd-lcd .dd-row:hover{background:#cacaca;color:var(--lcd-ink)}
+.dd.dd-lcd .dd-row.on,.pop-sel .dd.dd-lcd .dd-row.on{background:#bdbdbd;color:#1e1e1e;box-shadow:none;font-weight:700}
+.dd.dd-lcd .dd-sep{background:#b0b0b0}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -263,6 +274,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
     <tr><td>small · body</td><td>11 · 14 px</td><td>details · names and reading text</td></tr>
     <tr><td>numbers</td><td><span style="font-family:var(--t-num)">120.00 · −6.0 dB</span></td><td>monospace, only for numbers</td></tr>
     <tr><td>r-tile · r-ctl · r-well</td><td>2 · 4 (at M) · 6 px</td><td>clips, steps, rows · controls · wells and LCDs</td></tr>
+    <tr><td>alignment</td><td>row · column</td><td>things in one row share a height; things in one column share a width</td></tr>
     <tr><td>gap-join · gap-in · gap-out</td><td>2 · 4 · 8 px</td><td>joined parts, seams · inside a group · between groups</td></tr>
   </table>
 </div>
@@ -329,16 +341,19 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ DROPDOWN ═════════════════════════ -->
-<h2>Dropdown <span class="draft">UI-NEEDS 4 · DRAFT 1</span></h2>
-<p>Today's area picker, on the new foundations: the 2 px outline in its own colour, the label font in caps, S · M · L. <b>D1 · well</b>: a sunken well, like the track (it shows a value). <b>D2 · plate</b>: a button with a chevron (it reads as "press me"). The popup is a panel of rows; the chosen row is either <b>lit</b> (backlit, like "on") or <b>sel</b> (the foundations' selected: lifted, with a lit edge). The left column is drawn open so you can compare; the others open on click.</p>
+<h2>Dropdown <span class="draft">UI-NEEDS 4 · DRAFT 2</span></h2>
+<p>Today's area picker, on the new foundations: the 2 px outline in its own colour, the label font in caps, S · M · L. <b>D1 · well</b>: a sunken well, like the track (it shows a value). <b>D2 · plate</b>: a button with a chevron (it reads as "press me"). The popup is a panel of rows; the chosen row is either <b>lit</b> (backlit, like "on") or <b>sel</b> (the foundations' selected: lifted, with a lit edge). <b>D3 · LCD</b> (Rhodexa's idea): the LCD's pale colours with dark ink, the chosen row slightly grey: a dropdown can't be mistaken for the UI around it, and it joins the BPM display as "a value you can change". The first three are drawn open; the rest open on click.</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Chosen row</span><span id="pop-style"></span></div>
   <div class="dd-grid" id="dd-grid"></div>
 </div>
 <div class="card">
   <h3>In context</h3>
+  <div class="caps" style="margin-bottom:6px">D1 · well</div>
   <div class="plate" id="dd-ctx" style="height:56px"></div>
-  <p>Left to right: the area picker (M, icon), snap (M), the mixer's insert (S, numbers: replaces the number well), a long list (chord stamp).</p>
+  <div class="caps" style="margin:14px 0 6px">D3 · LCD</div>
+  <div class="plate" id="dd-ctx-lcd" style="height:56px"></div>
+  <p>One row, one height: everything here is M (40). Left to right: the area picker, snap, the mixer's insert (numbers: replaces the number well), a long list (chord stamp), then a button and a mode switch for scale.</p>
 </div>
 </main>
 
@@ -593,7 +608,7 @@ function tabsT2(size, labels, chosen = 0, body = '') {
 // ── dropdown ──
 const CHEV = '<svg class="chev" viewBox="0 0 10 10"><path d="M1.5 3.5L5 7l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
 function dropdown(size, items, chosen = 0, o = {}) {   // items: [label, icon?] or '-' for a separator
-  const dd = h('div', 'dd ' + size + (o.plate ? ' dd-plate' : '') + (o.static ? ' static' : ''));
+  const dd = h('div', 'dd ' + size + (o.plate ? ' dd-plate' : '') + (o.lcd ? ' dd-lcd' : '') + (o.static ? ' static' : ''));
   if (o.width) dd.style.width = o.width;
   const closed = h('div', 'dd-closed', dd), pop = h('div', 'dd-pop', dd);
   const real = items.filter(x => x !== '-');
@@ -613,18 +628,23 @@ document.addEventListener('click', () => document.querySelectorAll('.dd.open').f
   const editors = [['Arrangement', 'arr'], ['Piano roll', 'roll'], ['Mixer', 'mixer'], ['Recorder', 'tape']];
   const g = $('#dd-grid');
   const col = (title, make) => { const c = h('div', '', g); h('div', 'caps', c, title).style.marginBottom = '8px'; make(c); };
-  col('D1 · well · M · drawn open', c => c.append(dropdown('M', editors, 0, {static: true, width: '200px'})));
-  col('D2 · plate · M · drawn open', c => c.append(dropdown('M', editors, 0, {static: true, plate: true, width: '200px'})));
-  col('D1 · well · S · L', c => { c.append(dropdown('S', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], '-', ['None']], 0, {width: '120px'})); h('div', '', c).style.height = '10px'; c.append(dropdown('L', editors, 1, {width: '220px'})); });
-  col('D2 · plate · S · L', c => { c.append(dropdown('S', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], '-', ['None']], 0, {plate: true, width: '120px'})); h('div', '', c).style.height = '10px'; c.append(dropdown('L', editors, 1, {plate: true, width: '220px'})); });
+  col('D1 · well · drawn open', c => c.append(dropdown('M', editors, 0, {static: true, width: '200px'})));
+  col('D3 · LCD · drawn open', c => c.append(dropdown('M', editors, 0, {static: true, lcd: true, width: '200px'})));
+  col('D2 · plate · drawn open', c => c.append(dropdown('M', editors, 0, {static: true, plate: true, width: '200px'})));
+  col('D1 · D3 at S and L', c => { c.append(dropdown('S', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], '-', ['None']], 0, {width: '120px'})); h('div', '', c).style.height = '8px';
+    c.append(dropdown('S', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], '-', ['None']], 0, {width: '120px', lcd: true})); h('div', '', c).style.height = '8px';
+    c.append(dropdown('L', editors, 1, {width: '220px'})); h('div', '', c).style.height = '8px'; c.append(dropdown('L', editors, 1, {width: '220px', lcd: true})); });
   const sw = modeSwitch('B', 'S', [['Lit'], ['Sel']], 0);
   sw.addEventListener('click', () => setTimeout(() => document.body.classList.toggle('pop-sel', sw.querySelectorAll('.btn')[1].classList.contains('on'))));
   $('#pop-style').append(sw);
-  const ctx = $('#dd-ctx');
-  ctx.append(dropdown('M', editors, 0, {width: '190px'}));
-  ctx.append(dropdown('M', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], ['1/8 beat'], '-', ['None']], 0, {width: '110px'}));
-  ctx.append(dropdown('S', [['M'], ...Array.from({length: 16}, (_, i) => [String(i + 1)])], 3, {width: '56px', popWidth: '56px'}));
-  ctx.append(dropdown('M', [['Major'], ['Minor'], ['Sus2'], ['Sus4'], ['Maj7'], ['Min7'], ['Dom7'], ['Dim'], ['Aug'], ['Add9'], ['6/9']], 4, {width: '120px'}));
+  const ctxRow = (host, lcd) => {
+    host.append(dropdown('M', editors, 0, {width: '190px', lcd}));
+    host.append(dropdown('M', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], ['1/8 beat'], '-', ['None']], 0, {width: '120px', lcd}));
+    host.append(dropdown('M', [['M'], ...Array.from({length: 16}, (_, i) => [String(i + 1)])], 3, {width: '64px', popWidth: '64px', lcd}));
+    host.append(dropdown('M', [['Major'], ['Minor'], ['Sus2'], ['Sus4'], ['Maj7'], ['Min7'], ['Dom7'], ['Dim'], ['Aug'], ['Add9'], ['6/9']], 4, {width: '120px', lcd}));
+    host.append(button('M', 'plus', {push: true}), modeSwitch('B', 'M', [['pointer'], ['pencil'], ['slice']], 0));
+  };
+  ctxRow($('#dd-ctx'), false); ctxRow($('#dd-ctx-lcd'), true);
   document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
