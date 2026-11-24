@@ -104,6 +104,15 @@ pub struct AudioEditor {
     framed: Option<AudioId>,
     drag: Drag,
     clicks: timeline::Clicks,
+    /// Which tab shows: the clip (Editor) or the scratch tape (Recorder).
+    pub tab: AudioTab,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum AudioTab {
+    #[default]
+    Editor,
+    Recorder,
 }
 
 impl Default for AudioEditor {
@@ -115,12 +124,13 @@ impl Default for AudioEditor {
             framed: None,
             drag: Drag::None,
             clicks: timeline::Clicks::default(),
+            tab: AudioTab::Editor,
         }
     }
 }
 
 /// Which audio clip the editor shows: the current one, or the first.
-fn current(p: &Project, st: &mut UiState) -> Option<usize> {
+pub fn current(p: &Project, st: &mut UiState) -> Option<usize> {
     let i = st.audio.and_then(|id| p.audio_index(id)).or(if p.audio.is_empty() { None } else { Some(0) })?;
     st.audio = Some(p.audio[i].id);
     Some(i)
@@ -278,6 +288,20 @@ fn hover(v: &View, p: &Project, a: &lyra_model::Audio, frame: Option<&Frame>, po
 impl AudioEditor {
     /// The editor's header row: the clip's name and how many copies play it.
     pub fn toolbar(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
+        // Two stages, two tabs: the clip open here, and the scratch tape.
+        let tabs =
+            [(widgets::Legend::Text("EDITOR"), theme::L_MINT), (widgets::Legend::Text("RECORDER"), theme::L_PINK)];
+        let chosen = self.tab as usize;
+        let size = vec2(76.0, theme::m().control_h);
+        if let Some(t) =
+            widgets::radio_keys(ui, size, &tabs, chosen, "Editor: the open clip · Recorder: a scratch tape")
+        {
+            self.tab = if t == 0 { AudioTab::Editor } else { AudioTab::Recorder };
+        }
+        ui.add_space(8.0);
+        if self.tab == AudioTab::Recorder {
+            return;
+        }
         let Some(i) = current(p, st) else { return };
         let a = &p.audio[i];
         let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());

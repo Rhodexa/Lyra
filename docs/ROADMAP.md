@@ -46,6 +46,8 @@ built before the line it depends on.
 - [x] The browser in tabs (Files, Instruments, Effects): search every folder by name, add any folder (your animation project's voice folder), each file's length
 - [x] Audio stored with the project: sounds in the song's folder or the one above saved relative to the song; Collect copies the rest into `audio/`, then the destructive editor and recording below
 - [x] MIDI: export selected notes / a span of bars / a pattern / a loop of the song; import a file (each part an instrument and pattern), or drop one on the piano roll or a track; loop regions (Alt+drag a ruler); the context bar and F3
+- [x] The Recorder: a scratch tape (record / pause / clear, wait for sound with pre-roll, input device), send to the arranger or append to the open clip as a new version; recordings land in the song's `audio/`
+- [ ] Hear the recorder through a mixer track (with its effects) while recording; sent takes play through it
 - More waveform editing: split at the playhead, normalize, reverse; clips that follow tempo changes
 - The audio-clip editor as a small *destructive* recording editor (Rhodexa's idea; non-destructive editing is the arrangement's job): New, Save, Record (always appends to the end of the audio), select a range, then Silence it (clears the samples) or Collapse it (closes the gap: everything after moves up, so cutting from the start shifts the rest to the beginning); Invert selection. A few tools, on the sample data itself
 - Sample browser: drag files in from the file manager (needs window drag-and-drop on Wayland)

@@ -24,6 +24,7 @@ mod piano_roll;
 mod playlist;
 mod pool;
 mod rack;
+mod recorder;
 mod render;
 mod report;
 mod samples;

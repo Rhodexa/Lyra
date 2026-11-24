@@ -86,6 +86,67 @@ pub fn collect(project: &mut Project, song: &Path) -> Result<(usize, usize), Str
     Ok((copied, missing))
 }
 
+/// Where recordings kept from a song that was never saved wait (the first
+/// save moves them into the song's `audio/`, see `adopt_recordings`).
+pub fn temp_recordings() -> PathBuf {
+    data_dir().join("recordings")
+}
+
+/// Moves the recordings the song uses from the temporary folder into its
+/// own `audio/` (next to `song`), and points the song at them.
+pub fn adopt_recordings(project: &mut Project, song: &Path) -> Result<(), String> {
+    adopt_from(project, song, &temp_recordings())
+}
+
+fn adopt_from(project: &mut Project, song: &Path, temp: &Path) -> Result<(), String> {
+    let audio = folder_of(song).join("audio");
+    for name in project.file_names_mut() {
+        let from = PathBuf::from(name.as_str());
+        if !from.starts_with(temp) || !from.is_file() {
+            continue;
+        }
+        std::fs::create_dir_all(&audio).map_err(|e| format!("can't create {}: {e}", audio.display()))?;
+        let to = free_name(&audio, &from);
+        if std::fs::rename(&from, &to).is_err() {
+            // Another disk: copy, then let go of the temporary one.
+            std::fs::copy(&from, &to).map_err(|e| format!("can't move {}: {e}", from.display()))?;
+            let _ = std::fs::remove_file(&from);
+        }
+        *name = to.to_string_lossy().into_owned();
+    }
+    Ok(())
+}
+
+/// `folder/base.ext`, or `base 2.ext`, `base 3.ext`… if that's taken.
+pub fn free_path(folder: &Path, base: &str, ext: &str) -> PathBuf {
+    (1..)
+        .map(|n| folder.join(if n == 1 { format!("{base}.{ext}") } else { format!("{base} {n}.{ext}") }))
+        .find(|p| !p.exists())
+        .expect("some number is free")
+}
+
+/// The next version of a file: `stem v2.ext`, `v3`… (a stem that already
+/// ends in ` vN` counts on from N).
+pub fn next_version(folder: &Path, stem: &str, ext: &str) -> PathBuf {
+    let (base, from) = match stem.rsplit_once(" v") {
+        Some((b, n)) if n.parse::<u32>().is_ok() => (b, n.parse::<u32>().unwrap_or(1) + 1),
+        _ => (stem, 2),
+    };
+    (from..).map(|n| folder.join(format!("{base} v{n}.{ext}"))).find(|p| !p.exists()).expect("some number is free")
+}
+
+/// The local date and time as "2026-11-23 21.04" (for file names).
+pub fn now_stamp() -> String {
+    let secs =
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()) as libc::time_t;
+    // SAFETY: localtime_r writes only into `tm`, which we own; `secs` is a valid time_t.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&secs, &mut tm) }.is_null() {
+        return format!("{secs}");
+    }
+    format!("{}-{:02}-{:02} {:02}.{:02}", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min)
+}
+
 /// Where `file` goes in `folder`: its own name, or "name 2", "name 3"… if a
 /// different file already has it (the same file again is reused).
 fn free_name(folder: &Path, file: &Path) -> PathBuf {
@@ -253,6 +314,42 @@ pub fn display_name(path: Option<&Path>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_for_kept_takes_and_versions() {
+        let dir = std::env::temp_dir().join(format!("lyra-names-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(free_path(&dir, "Take", "wav"), dir.join("Take.wav"));
+        std::fs::write(dir.join("Take.wav"), b"x").unwrap();
+        assert_eq!(free_path(&dir, "Take", "wav"), dir.join("Take 2.wav"), "taken: a number");
+        assert_eq!(next_version(&dir, "line", "wav"), dir.join("line v2.wav"));
+        std::fs::write(dir.join("line v2.wav"), b"x").unwrap();
+        assert_eq!(next_version(&dir, "line", "wav"), dir.join("line v3.wav"));
+        assert_eq!(next_version(&dir, "line v2", "wav"), dir.join("line v3.wav"), "a version counts on");
+        let stamp = now_stamp();
+        assert_eq!(stamp.len(), "2026-11-23 21.04".len(), "{stamp}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_first_save_moves_temporary_recordings_in() {
+        let root = std::env::temp_dir().join(format!("lyra-adopt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let temp = root.join("recordings"); // stands in for Lyra's own folder
+        std::fs::create_dir_all(&temp).unwrap();
+        let take = temp.join("take.wav");
+        std::fs::write(&take, b"take").unwrap();
+        let mut p = Project::default();
+        p.add_audio("take", &take.to_string_lossy(), 1.0);
+        p.add_audio("elsewhere", "/nowhere/else.wav", 1.0);
+        let song = root.join("Song/Song.lyra");
+        adopt_from(&mut p, &song, &temp).unwrap();
+        let moved = root.join("Song/audio").join(take.file_name().unwrap());
+        assert_eq!(p.audio[0].sample, moved.to_string_lossy());
+        assert!(moved.is_file() && !take.exists(), "moved, not copied");
+        assert_eq!(p.audio[1].sample, "/nowhere/else.wav", "other files stay");
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     #[test]
     fn collect_copies_outside_files_in_and_the_song_moves_with_them() {

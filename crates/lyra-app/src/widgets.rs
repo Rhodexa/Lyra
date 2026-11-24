@@ -258,6 +258,9 @@ pub fn led(ui: &mut Ui, on: bool, light: theme::Light, hint: &str) -> Response {
 pub enum Icon {
     Play,
     Stop,
+    /// The recorder's keys.
+    Record,
+    Pause,
     Prev,
     Next,
     Plus,
@@ -293,6 +296,14 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, _bg: Col
         }
         Icon::Stop => {
             p.rect_filled(Rect::from_center_size(c, vec2(9.0, 9.0) * u), cr(2), ink);
+        }
+        Icon::Record => {
+            p.circle_filled(c, 5.0 * u, ink);
+        }
+        Icon::Pause => {
+            for x in [-2.6, 2.6] {
+                p.rect_filled(Rect::from_center_size(c + vec2(x, 0.0) * u, vec2(3.0, 10.0) * u), cr(1), ink);
+            }
         }
         Icon::Prev | Icon::Next => {
             let s = if matches!(icon, Icon::Prev) { -1.0 } else { 1.0 };

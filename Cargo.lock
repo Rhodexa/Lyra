@@ -1418,6 +1418,7 @@ dependencies = [
  "eframe",
  "egui",
  "hound",
+ "libc",
  "lyra-catalog",
  "lyra-chrysalis",
  "lyra-dsp",
@@ -1430,6 +1431,7 @@ dependencies = [
  "midly",
  "png",
  "rfd",
+ "rtrb",
  "serde",
  "serde_json",
 ]
