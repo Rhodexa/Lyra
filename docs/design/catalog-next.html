@@ -492,6 +492,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .sl.sl1 .cap::after{content:'';position:absolute;left:50%;top:5px;bottom:5px;width:1px;margin-left:-.5px;background:#767676}
 .sl.sl2 .cap{--b:var(--btn-body);width:14px;height:24px;border-radius:3px;background:var(--b);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol))}
 .sl .trk:hover .cap{filter:brightness(1.1)}
+.sl .ro{min-width:4.2em;font:12px var(--t-num);color:var(--ink-dim);text-align:right;white-space:nowrap}   /* a quiet number, fixed width */
+.sl:hover .ro{color:var(--ink)}
 .cs-grid{display:grid;grid-template-columns:170px 1fr 1fr;gap:12px 24px;align-items:center}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
@@ -743,8 +745,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 <div class="veil" id="veil"></div>
 
 <!-- ═════════════════════════ CHECKBOX + SLIDER ═════════════════════════ -->
-<h2>Checkbox · slider <span class="draft">UI-NEEDS 12 · 22 · DRAFT 1</span></h2>
-<p><b>Checkbox</b>: the toggle button, small and square: off = empty, on = backlit with a dark tick. C1 is a plate like a button; C2 is a sunken well. The whole row (box and label) is the target, at least 28 px tall. <b>Slider</b> (settings, the F12 panel): a recessed track lit by the light up to the thumb. SL1's thumb is a small fader cap (the kept fader, sideways); SL2's is a button plate. Drag (Shift = fine), scroll, double-click resets; an LCD readout can sit at the end.</p>
+<h2>Checkbox · slider <span class="draft">UI-NEEDS 12 · 22 · SETTLED: C2 + SL1</span></h2>
+<p><b>Settled: C2 (the well) and SL1 (the fader cap); the readout is a quiet flat number.</b> <b>Checkbox</b>: the toggle button, small and square: off = empty, on = backlit with a dark tick. C1 is a plate like a button; C2 is a sunken well. The whole row (box and label) is the target, at least 28 px tall. <b>Slider</b> (settings, the F12 panel): a recessed track lit by the light up to the thumb. SL1's thumb is a small fader cap (the kept fader, sideways); SL2's is a button plate. Drag (Shift = fine), scroll, double-click resets; an LCD readout can sit at the end.</p>
 <div class="card">
   <div class="cs-grid" id="cs-grid"></div>
 </div>
@@ -1651,7 +1653,7 @@ function dialog(kind, o) {
 // ── checkbox and slider ──
 const TICK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>';
 function checkbox(label, on = false, o = {}) {
-  const c = h('label', 'cb ' + (o.kind || 'c1') + (on ? ' on' : '') + (o.disabled ? ' dis' : ''));
+  const c = h('label', 'cb ' + (o.kind || 'c2') + (on ? ' on' : '') + (o.disabled ? ' dis' : ''));
   h('span', 'box', c, TICK); if (label) h('span', '', c, label); setLight(c, o.light || light);
   if (!o.disabled) c.addEventListener('click', e => { e.preventDefault(); c.classList.toggle('on'); });
   return c;
@@ -1659,19 +1661,19 @@ function checkbox(label, on = false, o = {}) {
 function slider(kind, o = {}) {
   const w = h('div', 'sl ' + kind); if (o.width) w.style.setProperty('--sw', o.width); setLight(w, o.light || light);
   const t = h('div', 'trk', w), fill = h('div', 'fill', t), cap = h('div', 'cap', t);
-  const ro = o.readout ? numPicker('lcd', 'S', {value: 0, min: 0, max: 0, readonly: true, text: '0', unit: o.unit}) : null; if (ro) w.append(ro);
+  const ro = o.readout ? h('span', 'ro', w) : null;
   const draw = v => { const W = t.clientWidth, x = 7 + v * (W - 14); cap.style.left = x + 'px'; fill.style.width = Math.max(0, x - 2) + 'px';
-    if (ro) { const n = ro.querySelector('.num'); n.innerHTML = ''; String(o.fmt ? o.fmt(v) : Math.round(v * 100)).split('').forEach(ch => h('span', '', n, ch)); } };
+    if (ro) ro.textContent = (o.fmt ? o.fmt(v) : Math.round(v * 100)) + (o.unit ? ' ' + o.unit : ''); };
   const d = bindDial(t, {value: o.value ?? .6, def: o.def ?? o.value ?? .6, axis: 'x', span: 200, draw});
   requestAnimationFrame(() => d.set(o.value ?? .6));
   return w;
 }
 (() => {
   const g = $('#cs-grid');
-  ['', 'C1 · plate', 'C2 · well'].forEach(t => h('div', 'caps', g, t));
+  ['', 'C1 · plate', 'C2 · well (SETTLED)'].forEach(t => h('div', 'caps', g, t));
   for (const [lab, on, dis] of [['off', false], ['on', true], ['disabled', false, true]]) {
     h('div', 'caps', g, lab); for (const k of ['c1', 'c2']) { const c = h('div', '', g); c.append(checkbox('Highlight scale', on, {kind: k, disabled: dis})); } }
-  ['', 'SL1 · fader cap', 'SL2 · plate'].forEach(t => h('div', 'caps', g, t));
+  ['', 'SL1 · fader cap (SETTLED)', 'SL2 · plate'].forEach(t => h('div', 'caps', g, t));
   h('div', 'caps', g, 'plain'); for (const k of ['sl1', 'sl2']) { const c = h('div', '', g); c.append(slider(k, {value: .4})); }
   h('div', 'caps', g, 'with a readout'); for (const k of ['sl1', 'sl2']) { const c = h('div', '', g); c.append(slider(k, {value: .7, readout: true, unit: '%'})); }
   // settings plate
