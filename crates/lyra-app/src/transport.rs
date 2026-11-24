@@ -36,12 +36,15 @@ pub fn show(
         let big = widgets::toolbar_key();
         let tk = theme::m().tool_key;
         let small = theme::m().control_h;
+        // Small keys still react across the toolbar's whole height.
+        let reach = theme::m().toolbar_h;
         let gap = 4.0;
 
         // The File menu: everything about the song as a file.
         module(ui, |ui| {
             // A bare button: no plate, the legend in caps (catalog-next, settled).
-            let resp = widgets::bare_button(ui, "FILE", false, "New, open, save, import, export");
+            // As tall as the toolbar's keys: a big target.
+            let resp = widgets::bare_button_tall(ui, "FILE", big, false, "New, open, save, import, export");
             file_menu(ui, &resp, actions);
         });
 
@@ -106,7 +109,7 @@ pub fn show(
         // Where the typing keyboard plays.
         module(ui, |ui| {
             ui.spacing_mut().item_spacing.x = gap;
-            if widgets::button_sized(ui, vec2(small, small), Legend::Icon(Icon::Minus), None, "Octave down  ( - )")
+            if widgets::button_reach(ui, vec2(small, small), reach, Legend::Icon(Icon::Minus), None, "Octave down  ( - )")
                 .clicked()
             {
                 actions.push(Action::Octave(-1));
@@ -116,7 +119,7 @@ pub fn show(
             if let Some(d) = widgets::keyboard_map(ui, first, last) {
                 actions.push(Action::Octave(d));
             }
-            if widgets::button_sized(ui, vec2(small, small), Legend::Icon(Icon::Plus), None, "Octave up  ( = )")
+            if widgets::button_reach(ui, vec2(small, small), reach, Legend::Icon(Icon::Plus), None, "Octave up  ( = )")
                 .clicked()
             {
                 actions.push(Action::Octave(1));

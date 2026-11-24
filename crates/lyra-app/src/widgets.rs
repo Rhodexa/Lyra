@@ -947,9 +947,14 @@ fn paint_legend(ui: &Ui, r: Rect, legend: Legend, ink: Color32, body: Color32, b
 /// buttons (FILE) and quiet actions (a dialog's "Don't save"). `on_lcd`: it
 /// sits on an LCD panel (dark legend, a grey plate under the mouse).
 pub fn bare_button(ui: &mut Ui, text: &str, on_lcd: bool, hint: &str) -> Response {
+    bare_button_tall(ui, text, theme::m().control_h, on_lcd, hint)
+}
+
+/// A [`bare_button`] `h` tall (FILE fills the toolbar's height).
+pub fn bare_button_tall(ui: &mut Ui, text: &str, h: f32, on_lcd: bool, hint: &str) -> Response {
     let m = theme::m();
-    let w = (legend_galley(ui, text, legend_size(m.control_h), false, Color32::WHITE).size().x + m.control_h * 0.8).max(m.control_h);
-    let (r, resp) = ui.allocate_exact_size(vec2(w, m.control_h), Sense::click());
+    let w = (legend_galley(ui, text, legend_size(m.control_h), false, Color32::WHITE).size().x + m.control_h * 0.8).max(h);
+    let (r, resp) = ui.allocate_exact_size(vec2(w, h), Sense::click());
     let p = ui.painter();
     let (hover_fill, ink, ink_hot) = if on_lcd {
         (theme::mix(theme::LCD, Color32::BLACK, 0.12), theme::LCD_INK, theme::LCD_INK)
@@ -960,7 +965,7 @@ pub fn bare_button(ui: &mut Ui, text: &str, on_lcd: bool, hint: &str) -> Respons
         let f = if resp.is_pointer_button_down_on() { theme::mix(hover_fill, Color32::BLACK, 0.12) } else { hover_fill };
         p.rect_filled(r, cr(3), f);
     }
-    let g = legend_galley(ui, text, legend_size(r.height()), false, if resp.hovered() { ink_hot } else { ink });
+    let g = legend_galley(ui, text, legend_size(m.control_h), false, if resp.hovered() { ink_hot } else { ink });
     p.galley(r.center() - g.size() * 0.5, g, ink);
     if hint.is_empty() {
         resp
@@ -987,6 +992,18 @@ pub fn button(ui: &mut Ui, legend: Legend, lit: Option<theme::Light>, hint: &str
 pub fn button_sized(ui: &mut Ui, size: egui::Vec2, legend: Legend, lit: Option<theme::Light>, hint: &str) -> Response {
     let (r, resp) = ui.allocate_exact_size(size, Sense::click());
     paint_button(ui, r, &resp, legend, lit);
+    if hint.is_empty() {
+        resp
+    } else {
+        resp.hint(hint)
+    }
+}
+
+/// A button drawn at `size` that reacts across `reach` height (centred on it):
+/// small keys in a tall toolbar are still big targets.
+pub fn button_reach(ui: &mut Ui, size: egui::Vec2, reach: f32, legend: Legend, lit: Option<theme::Light>, hint: &str) -> Response {
+    let (full, resp) = ui.allocate_exact_size(vec2(size.x, reach.max(size.y)), Sense::click());
+    paint_button(ui, Rect::from_center_size(full.center(), size), &resp, legend, lit);
     if hint.is_empty() {
         resp
     } else {
