@@ -131,8 +131,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .seg.vert .hit:first-child .btn{border-radius:calc(var(--btn-r) * var(--k)) calc(var(--btn-r) * var(--k)) 0 0}
 .seg.vert .hit:last-child .btn{border-radius:0 0 calc(var(--btn-r) * var(--k)) calc(var(--btn-r) * var(--k))}
 .seg.vert .btn{width:100%}
-.track{--k:1;position:relative;display:inline-flex;align-items:stretch;gap:0;padding:2px;height:var(--h);background:var(--sunken);
-  border:var(--btn-bw) solid color-mix(in srgb,var(--sunken),black var(--btn-ol));border-radius:calc((var(--btn-r) + 2px) * var(--k))}
+.track{--k:1;position:relative;display:inline-flex;align-items:stretch;gap:0;padding:0;height:var(--h);background:var(--sunken);
+  border:var(--btn-bw) solid color-mix(in srgb,var(--sunken),black var(--btn-ol));border-radius:calc(var(--btn-r) * var(--k))}
 .track .hit{min-height:0;align-self:stretch;position:relative;z-index:1}      /* each option reacts across its whole share of the track */
 .track .btn{height:100%;--b:transparent;border-color:transparent;color:var(--ink-dim)}
 .track .hit:hover .btn{--b:transparent;color:var(--ink)}
@@ -143,8 +143,9 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .track:has(.hit:hover .btn.on) .ind{background:var(--mid);border-color:color-mix(in srgb,var(--mid),black var(--btn-ol))}
 @media (prefers-reduced-motion:reduce){.track .ind{transition:none}}
 .track.S{--h:var(--s);--k:.75} .track.M{--h:var(--m)} .track.L{--h:var(--l);--k:1.25}
-.track.vert{flex-direction:column;height:auto;width:var(--h)}
-.track.vert .btn{width:100%;height:calc(var(--h) - 8px)}
+.track.vert{flex-direction:column;height:auto;width:calc(var(--h) + 2 * var(--btn-bw))}
+.track.vert .hit{display:flex}
+.track.vert .btn{flex:1;min-width:0;width:auto;height:calc(var(--h) - 4px);padding:0}
 .ms-grid{display:grid;grid-template-columns:150px 1fr 1fr 1fr;gap:16px 20px;align-items:center}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
@@ -244,8 +245,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ MODE SWITCH ═════════════════════════ -->
-<h2>Mode switch <span class="draft">UI-NEEDS 2 · DRAFT 2</span></h2>
-<p>One choice among a few: a radio group, joined into one object so it reads as "pick one" before you click. Two options <b>toggle</b> when you click either one (SONG / PAT, as you like it); three or more behave as a radio. The chosen option is backlit, like a button that's on. <b>Draft 2:</b> B (the track) is the favourite: it reads best and matches the dropdowns. Its padding is tighter, each option reacts across its whole share of the track, and one lit plate slides to the choice. A (joined) stays as the alternative for tool palettes. C is rejected.</p>
+<h2>Mode switch <span class="draft">UI-NEEDS 2 · DRAFT 3</span></h2>
+<p>One choice among a few: a radio group, joined into one object so it reads as "pick one" before you click. Two options <b>toggle</b> when you click either one (SONG / PAT, as you like it); three or more behave as a radio. The chosen option is backlit, like a button that's on. <b>Draft 3:</b> B (the track) is the favourite: it reads best and matches the dropdowns. The lit plate now meets the track's outline (no padding), each option reacts across its whole share of the track, and one lit plate slides to the choice. A (joined) stays as the alternative for tool palettes. C is rejected.</p>
 <div class="card">
   <div class="ms-grid" id="ms-matrix"></div>
 </div>
@@ -437,7 +438,7 @@ function modeSwitch(kind, size, opts, chosen = 0, o = {}) {
     Object.assign(ind.style, {left: t.offsetLeft + 'px', top: t.offsetTop + 'px', width: t.offsetWidth + 'px', height: t.offsetHeight + 'px'});
     box.style.setProperty('--low', ind.style.getPropertyValue('--low')); box.style.setProperty('--mid', ind.style.getPropertyValue('--mid')); };
   const pick = i => { chosen = i; hits.forEach((x, k) => x.querySelector('.btn').classList.toggle('on', k === chosen)); place(); };
-  if (ind) { requestAnimationFrame(place); document.fonts && document.fonts.ready.then(place); addEventListener('resize', place);
+  if (ind) { requestAnimationFrame(place); new ResizeObserver(place).observe(box); hits.forEach(x => new ResizeObserver(place).observe(x));
     if (opts.length === 2) { box.style.cursor = 'pointer'; box.addEventListener('click', e => { if (!e.target.closest('.hit')) pick(1 - chosen); }); } }
   hits.forEach((x, i) => x.addEventListener('click', () => pick(opts.length === 2 ? 1 - chosen : i)));
   return box;
