@@ -6,7 +6,7 @@
 //! hero; text is soft white, never mint (mint text reads like a VFD).
 //! No wood, no chrome.
 
-use egui::{Color32, ColorImage, Context, FontId, Painter, Rect, Stroke, TextStyle, TextureHandle};
+use egui::{Color32, Context, FontId, Painter, Rect, Stroke, TextStyle};
 
 // ── Two levels: background and surface, both neutral charcoal ──
 // The keys from the studies are neutral greys, so every surface is too: a
@@ -231,120 +231,6 @@ pub fn apply(ctx: &Context) {
 /// Image.LANCZOS).tobytes()` (and 256 as `icon_256.png` for
 /// `lyra --install-desktop`).
 pub const ICON_128: &[u8] = include_bytes!("../assets/icon_128.rgba");
-
-// ── The Fluttersine logo ─────────────────────────────────────────────────────
-//
-// Plugin artwork by the user: `assets/fluttersine_logo.png` (the wordmark)
-// and `assets/chrysalis_emblem.png`. Both are built into the app, and while
-// Lyra runs from the source tree it also watches the files: export over one
-// (from Krita, say) and the editor shows it within a second, no restart.
-// Transparent margins are trimmed, so draw freely.
-
-const FLUTTERSINE_LOGO_PNG: &[u8] = include_bytes!("../assets/fluttersine_logo.png");
-const FLUTTERSINE_LOGO_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fluttersine_logo.png");
-const CHRYSALIS_EMBLEM_PNG: &[u8] = include_bytes!("../assets/chrysalis_emblem.png");
-const CHRYSALIS_EMBLEM_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/chrysalis_emblem.png");
-/// Artwork is scaled down to at most this tall (about twice what the editors show).
-const LOGO_MAX_H: usize = 220;
-
-#[derive(Clone)]
-struct LogoCache {
-    handle: TextureHandle,
-    size: [usize; 2],
-    modified: Option<std::time::SystemTime>,
-    checked: std::time::Instant,
-}
-
-/// The Fluttersine logo texture and its pixel size (for the aspect ratio).
-pub fn fluttersine_logo(ctx: &Context) -> (egui::TextureId, [usize; 2]) {
-    live_logo(ctx, "fluttersine-logo", FLUTTERSINE_LOGO_PNG, FLUTTERSINE_LOGO_FILE)
-}
-
-/// The Chrysalis emblem texture and its pixel size.
-pub fn chrysalis_emblem(ctx: &Context) -> (egui::TextureId, [usize; 2]) {
-    live_logo(ctx, "chrysalis-emblem", CHRYSALIS_EMBLEM_PNG, CHRYSALIS_EMBLEM_FILE)
-}
-
-/// A piece of artwork: `file` if it is there (re-read when it changes), else `built_in`.
-fn live_logo(ctx: &Context, name: &str, built_in: &[u8], file: &str) -> (egui::TextureId, [usize; 2]) {
-    let id = egui::Id::new(name);
-    // Copy the cache out first: egui's context lock is not re-entrant.
-    let cached = ctx.data(|d| d.get_temp::<LogoCache>(id));
-    let now = std::time::Instant::now();
-    if let Some(c) = &cached {
-        if now.duration_since(c.checked) < std::time::Duration::from_secs(1) {
-            return (c.handle.id(), c.size);
-        }
-    }
-    ctx.request_repaint_after(std::time::Duration::from_secs(1));
-    let modified = std::fs::metadata(file).and_then(|m| m.modified()).ok();
-    if let Some(c) = cached.clone().filter(|c| c.modified == modified) {
-        ctx.data_mut(|d| d.insert_temp(id, LogoCache { checked: now, ..c.clone() }));
-        return (c.handle.id(), c.size);
-    }
-    // New or changed: decode the file if it's there (and readable), else the built-in copy.
-    let from_file = modified.and_then(|_| std::fs::read(file).ok()).and_then(|b| decode_logo(&b));
-    let image =
-        from_file.or_else(|| decode_logo(built_in)).unwrap_or_else(|| ColorImage::new([1, 1], Color32::TRANSPARENT));
-    let size = image.size;
-    let handle = match cached {
-        Some(mut c) => {
-            c.handle.set(image, egui::TextureOptions::LINEAR);
-            c.handle
-        }
-        None => ctx.load_texture(name, image, egui::TextureOptions::LINEAR),
-    };
-    ctx.data_mut(|d| d.insert_temp(id, LogoCache { handle: handle.clone(), size, modified, checked: now }));
-    (handle.id(), size)
-}
-
-/// PNG → RGBA, trimmed to its visible pixels and scaled down to `LOGO_MAX_H`.
-fn decode_logo(bytes: &[u8]) -> Option<ColorImage> {
-    let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
-    decoder.set_transformations(png::Transformations::normalize_to_color8());
-    let mut reader = decoder.read_info().ok()?;
-    let mut buf = vec![0; reader.output_buffer_size()?];
-    let info = reader.next_frame(&mut buf).ok()?;
-    let (w, h) = (info.width as usize, info.height as usize);
-    let px: Vec<[u8; 4]> = match info.color_type {
-        png::ColorType::Rgba => buf.as_chunks::<4>().0.to_vec(),
-        png::ColorType::Rgb => buf.as_chunks::<3>().0.iter().map(|&[r, g, b]| [r, g, b, 255]).collect(),
-        png::ColorType::GrayscaleAlpha => buf.as_chunks::<2>().0.iter().map(|&[g, a]| [g, g, g, a]).collect(),
-        png::ColorType::Grayscale => buf.iter().map(|&g| [g, g, g, 255]).collect(),
-        png::ColorType::Indexed => return None,
-    };
-    let px = &px[..w * h];
-    // Trim transparent margins.
-    let visible = |x: usize, y: usize| px[y * w + x][3] > 8;
-    let rows: Vec<usize> = (0..h).filter(|&y| (0..w).any(|x| visible(x, y))).collect();
-    let cols: Vec<usize> = (0..w).filter(|&x| (0..h).any(|y| visible(x, y))).collect();
-    let (&y0, &y1, &x0, &x1) = (rows.first()?, rows.last()?, cols.first()?, cols.last()?);
-    let (cw, ch) = (x1 - x0 + 1, y1 - y0 + 1);
-    // Area-average down to LOGO_MAX_H (premultiplied, so edges don't go dark).
-    let (tw, th) = if ch > LOGO_MAX_H { ((cw * LOGO_MAX_H / ch).max(1), LOGO_MAX_H) } else { (cw, ch) };
-    let mut out = Vec::with_capacity(tw * th * 4);
-    for ty in 0..th {
-        let (sy0, sy1) = (y0 + ty * ch / th, y0 + ((ty + 1) * ch / th).max(ty * ch / th + 1));
-        for tx in 0..tw {
-            let (sx0, sx1) = (x0 + tx * cw / tw, x0 + ((tx + 1) * cw / tw).max(tx * cw / tw + 1));
-            let mut acc = [0u32; 4];
-            for y in sy0..sy1 {
-                for x in sx0..sx1 {
-                    let [r, g, b, a] = px[y * w + x];
-                    let a32 = a as u32;
-                    acc[0] += r as u32 * a32;
-                    acc[1] += g as u32 * a32;
-                    acc[2] += b as u32 * a32;
-                    acc[3] += a32;
-                }
-            }
-            let n = ((sx1 - sx0) * (sy1 - sy0)) as u32;
-            let a = acc[3].max(1);
-            out.extend_from_slice(&[(acc[0] / a) as u8, (acc[1] / a) as u8, (acc[2] / a) as u8, (acc[3] / n) as u8]);
-        }
-    }
-    Some(ColorImage::from_rgba_unmultiplied([tw, th], &out))
-}
 
 // ── Material: the control library ───────────────────────────────────────────
 //

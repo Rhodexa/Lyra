@@ -37,23 +37,6 @@ pub fn knob_at(ui: &mut Ui, id: egui::Id, rect: Rect, value: &mut f32, info: &Pa
     knob_with(ui, resp, rect, value, info, color)
 }
 
-/// A knob that feels exactly like [`knob`] but is drawn by `paint(painter,
-/// rect, value, hot)`, with no tooltip: for instruments with their own look
-/// (Chrysalis), which show the value themselves.
-pub fn knob_painted(
-    ui: &mut Ui,
-    value: &mut f32,
-    info: &ParamInfo,
-    diameter: f32,
-    paint: impl FnOnce(&egui::Painter, Rect, f32, bool),
-) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(diameter, diameter), Sense::click_and_drag());
-    let (resp, hot) = knob_turn(ui, resp, value, info);
-    paint(ui.painter(), rect, *value, hot);
-    // No tooltip: an editor with its own look shows the value its own way.
-    resp
-}
-
 fn knob_with(ui: &mut Ui, resp: Response, rect: Rect, value: &mut f32, info: &ParamInfo, color: Color32) -> Response {
     let (resp, hot) = knob_turn(ui, resp, value, info);
     paint_knob(ui.painter(), rect, info, *value, color, hot);

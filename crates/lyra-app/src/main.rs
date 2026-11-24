@@ -22,6 +22,7 @@ mod midi;
 mod mixer;
 mod piano_roll;
 mod playlist;
+mod plugin_look;
 mod pool;
 mod rack;
 mod recorder;

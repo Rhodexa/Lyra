@@ -34,10 +34,10 @@ mod studio;
 use crate::flex::{self, Grow, Px};
 use crate::fm_editor::wheel_step;
 use crate::rack::tracked;
-use crate::theme::{self, cr, stroke};
+use crate::plugin_look::{self as look, cr, stroke};
 use egui::text::LayoutJob;
 use egui::{
-    pos2, vec2, Align, Align2, Color32, FontId, Id, Layout, Pos2, Rect, Response, Sense, Shape, Ui, UiBuilder, Vec2,
+    pos2, vec2, Align, Align2, Color32, Id, Layout, Pos2, Rect, Response, Sense, Shape, Ui, UiBuilder, Vec2,
 };
 use lyra_chrysalis::curve::{self, Point, MAX_POINTS, SHAPES};
 use lyra_chrysalis::params::{ft, warp};
@@ -51,7 +51,7 @@ use std::sync::Arc;
 // ───────────────────────────────────────────────────────────── the look
 
 const fn hex(v: u32) -> Color32 {
-    theme::hex(v)
+    look::hex(v)
 }
 
 /// Behind everything: teal-black, with violet glowing in at the corners.
@@ -157,7 +157,15 @@ const KEY_H: f32 = 24.0;
 /// The one line of text under a knob.
 const LABEL_H: f32 = 15.0;
 
+/// The editor, in the synths' frozen style (see plugin_look.rs).
 pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Option<crate::bridge::Live>) {
+    ui.scope(|ui| {
+        look::freeze(ui);
+        show_inner(ui, p, h, ch, live);
+    });
+}
+
+fn show_inner(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Option<crate::bridge::Live>) {
     let live = live.and_then(|l| l.downcast::<Telemetry>().ok()).map(|t| t.snapshot());
     // The backlight follows the output: up at once, down gently.
     let glow_id = Id::new(("chrys-glow", ch));
@@ -285,7 +293,7 @@ fn breathe(p: &egui::Painter, r: Rect, color: Color32, glow: f32) {
     if glow > 0.01 {
         let at = r.center_bottom();
         let stops = [(0.0, alpha(color, 0.16 * glow)), (1.0, Color32::TRANSPARENT)];
-        theme::radial_circle(p, at, r.width().max(r.height()) * 0.7, at, &stops);
+        look::radial_circle(p, at, r.width().max(r.height()) * 0.7, at, &stops);
     }
 }
 
@@ -325,7 +333,7 @@ fn readout_display(ui: &Ui, r: Rect) {
         // The editor calls the oscillators A and B; the saved names say 1 and 2.
         let name = ro.name.replace("Osc 1", "Osc A").replace("Osc 2", "Osc B");
         caps(p, inner.left_top() + vec2(0.0, 6.0), &name, TEXT_DIM, Align2::LEFT_CENTER);
-        p.text(inner.left_bottom(), Align2::LEFT_BOTTOM, ro.value, FontId::proportional(16.0), ro.color);
+        p.text(inner.left_bottom(), Align2::LEFT_BOTTOM, ro.value, look::font(16.0), ro.color);
     }
 }
 
@@ -344,7 +352,7 @@ fn knob_in(ui: &mut Ui, ed: &mut Ed, r: Rect, id: usize, label: &str, color: Col
     place(ui, kr.union(lr), ("chrys-knob", id), enabled, |ui| {
         let mut v = ed.v(id);
         let live = if enabled { modulated(ed, id) } else { None };
-        let resp = crate::widgets::knob_painted(ui, &mut v, info, d, |p, rect, v, hot| {
+        let resp = crate::plugin_look::knob_painted(ui, &mut v, info, d, |p, rect, v, hot| {
             paint_knob_live(p, rect, info, v, color, hot, live)
         });
         if enabled {
@@ -356,7 +364,7 @@ fn knob_in(ui: &mut Ui, ed: &mut Ed, r: Rect, id: usize, label: &str, color: Col
             readout(ui, info.name, value.clone(), color);
         }
         let (text, ink) = if hot { (value, color) } else { (label.to_string(), TEXT_DIM) };
-        ui.painter().text(lr.center(), Align2::CENTER_CENTER, text, FontId::proportional(10.5), ink);
+        ui.painter().text(lr.center(), Align2::CENTER_CENTER, text, look::font(10.5), ink);
     });
 }
 
@@ -396,7 +404,7 @@ fn key(ui: &mut Ui, text: &str, size: Vec2, lit: bool, color: Color32, hint: &st
 
 fn paint_key(p: &egui::Painter, r: Rect, text: &str, lit: bool, hot: bool, color: Color32, ink: Color32) {
     if lit {
-        p.rect_filled(r, cr(3), if hot { theme::shade(color, 1.08) } else { color });
+        p.rect_filled(r, cr(3), if hot { look::shade(color, 1.08) } else { color });
         caps_style(p, r.center(), text, INK_ON, Align2::CENTER_CENTER, 1.0, true);
     } else {
         p.rect_filled(r, cr(3), if hot { HOVER } else { SCREEN });
@@ -422,7 +430,7 @@ fn well(ui: &mut Ui, ed: &mut Ed, id: usize, size: Vec2, color: Color32, hint: &
     let p = ui.painter();
     p.rect_filled(r, cr(3), if resp.hovered() { HOVER } else { SCREEN });
     let ink = if at == 0 { TEXT_DIM } else { TEXT };
-    p.text(r.left_center() + vec2(8.0, 0.0), Align2::LEFT_CENTER, info.labels[at], FontId::proportional(12.0), ink);
+    p.text(r.left_center() + vec2(8.0, 0.0), Align2::LEFT_CENTER, info.labels[at], look::font(12.0), ink);
     chevron(p, r.right_center() - vec2(10.0, 1.0), 3.0, alpha(color, 0.7));
     if resp.hovered() {
         readout(ui, info.name, info.labels[at].to_string(), color);
@@ -437,6 +445,7 @@ fn well(ui: &mut Ui, ed: &mut Ed, id: usize, size: Vec2, color: Color32, hint: &
     let resp = resp.on_hover_text(hint);
     let mut pick = None;
     egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
+        look::freeze(ui);
         ui.set_min_width(size.x);
         egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
             for (k, label) in info.labels.iter().enumerate() {
@@ -460,7 +469,7 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     // out along the bar like the wings' trails.
     let c = r.center();
     let glow = [(0.0, alpha(TURQ, 0.18)), (0.5, alpha(TURQ, 0.05)), (1.0, Color32::TRANSPARENT)];
-    theme::radial_circle(p, c, 190.0, c, &glow);
+    look::radial_circle(p, c, 190.0, c, &glow);
     for side in [-1.0f32, 1.0] {
         let n = 24;
         for k in 0..n {
@@ -471,7 +480,7 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
             p.line_segment([pos2(x(t0), y(t0)), pos2(x(t1), y(t1))], stroke(1.2, alpha(TURQ, 0.5 * a)));
         }
     }
-    let (tex, [w, h]) = theme::chrysalis_emblem(ui.ctx());
+    let (tex, [w, h]) = look::chrysalis_emblem(ui.ctx());
     // A badge: a little taller than the bar, so it breaks out of it.
     let eh = r.height() + 18.0;
     let img = Rect::from_center_size(c, vec2(eh * w as f32 / h as f32, eh));
@@ -571,9 +580,9 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     let text_area =
         Rect::from_min_max(pos2(cap.right() + 10.0, field.top()), pos2(field.right() - 24.0, field.bottom()));
     let tp = ui.painter_at(text_area);
-    let t = tp.text(text_area.left_center(), Align2::LEFT_CENTER, &name, FontId::proportional(15.0), TEXT);
+    let t = tp.text(text_area.left_center(), Align2::LEFT_CENTER, &name, look::font(15.0), TEXT);
     if edited {
-        tp.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", FontId::proportional(10.5), TEXT_DIM);
+        tp.text(t.right_center() + vec2(8.0, 1.0), Align2::LEFT_CENTER, "edited", look::font(10.5), TEXT_DIM);
     }
     chevron(p, field.right_center() - vec2(11.0, 1.0), 3.5, TURQ);
     if let Some(step) = wheel_step(ui, field) {
@@ -588,6 +597,7 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list (and to save yours)");
     let params = ed.p.channels[ed.ch].params.clone();
     egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+        look::freeze(ui);
         let (picked, close) = crate::user_presets::menu(ui, PLUGIN, &params, field.width());
         if picked.is_some() {
             pick = picked;
@@ -640,7 +650,7 @@ fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
     }
     if is_import {
         let text = ed.p.channels[ed.ch].sample.as_deref().map_or("no WAV loaded".into(), crate::samples::display_name);
-        ui.painter_at(name).text(name.left_center(), Align2::LEFT_CENTER, text, FontId::proportional(11.0), TEXT_DIM);
+        ui.painter_at(name).text(name.left_center(), Align2::LEFT_CENTER, text, look::font(11.0), TEXT_DIM);
     }
     caps(ui.painter(), warp_cap.right_center(), "warp", TEXT_FAINT, Align2::RIGHT_CENTER);
     place(ui, warp_r, ("chrys-osc-warp", o), true, |ui| {
@@ -929,7 +939,7 @@ fn lfo_trace(ui: &mut Ui, ed: &Ed, l: usize, rect: Rect) {
     if let Some(&last) = pts.last() {
         glow_fill(&painter, &pts, inner.bottom(), VIOLET);
         glow_line(&painter, pts, VIOLET, 1.6);
-        let bright = theme::mix(VIOLET, Color32::WHITE, 0.6);
+        let bright = look::mix(VIOLET, Color32::WHITE, 0.6);
         painter.circle_filled(last, 9.0, alpha(VIOLET, 0.25));
         painter.circle_filled(last, 4.0, bright);
     } else {
@@ -969,7 +979,7 @@ fn matrix_view(ui: &mut Ui, ed: &mut Ed, inner: Rect) {
                     note.left_center() + vec2(8.0, 0.0),
                     Align2::LEFT_CENTER,
                     t,
-                    FontId::proportional(11.5),
+                    look::font(11.5),
                     TEXT_FAINT,
                 );
             }
@@ -1002,7 +1012,7 @@ fn slot_row(ui: &mut Ui, ed: &mut Ed, k: usize, r: Rect) {
         num.center(),
         Align2::CENTER_CENTER,
         format!("{}", k + 1),
-        FontId::proportional(11.0),
+        look::font(11.0),
         if live { VIOLET } else { TEXT_FAINT },
     );
     let (y, x0, x1) = (arrow.center().y, arrow.left(), arrow.right());
@@ -1014,7 +1024,7 @@ fn slot_row(ui: &mut Ui, ed: &mut Ed, k: usize, r: Rect) {
         value.right_center(),
         Align2::RIGHT_CENTER,
         amount,
-        FontId::proportional(12.0),
+        look::font(12.0),
         if live { TEXT } else { TEXT_FAINT },
     );
     caps(p, via_cap.right_center(), "via", TEXT_FAINT, Align2::RIGHT_CENTER);
@@ -1114,7 +1124,7 @@ fn backdrop(ui: &Ui, r: Rect) {
     let p = ui.painter();
     p.rect_filled(r.expand(4.0), cr(4), VOID);
     for (at, radius) in [(r.left_bottom() + vec2(60.0, -40.0), 380.0), (r.right_top() + vec2(-80.0, 60.0), 300.0)] {
-        theme::radial_circle(p, at, radius, at, &[(0.0, VIOLET_GLOW), (1.0, Color32::TRANSPARENT)]);
+        look::radial_circle(p, at, radius, at, &[(0.0, VIOLET_GLOW), (1.0, Color32::TRANSPARENT)]);
     }
 }
 
@@ -1168,7 +1178,7 @@ fn caps_style(
     bold: bool,
 ) -> Rect {
     let mut job = LayoutJob::default();
-    let font_id = FontId::proportional(if bold { 10.5 } else { 10.0 });
+    let font_id = look::font(if bold { 10.5 } else { 10.0 });
     job.append(
         &text.to_uppercase(),
         0.0,
@@ -1239,7 +1249,7 @@ fn paint_knob_live(
     );
     if let Some(m) = live {
         let to = start + sweep * info.to_normalized(m);
-        let bright = theme::mix(color, Color32::WHITE, 0.55);
+        let bright = look::mix(color, Color32::WHITE, 0.55);
         p.add(Shape::line(arc(angle.min(to), angle.max(to), ring), stroke(2.0, bright)));
         let at = c + Vec2::angled(to) * ring;
         p.circle_filled(at, 4.5, alpha(bright, 0.25));
@@ -1637,7 +1647,7 @@ fn filter_graph(ui: &mut Ui, ed: &mut Ed, rect: Rect) {
             pos2(fx(hz) + 3.0, inner.bottom()),
             Align2::LEFT_BOTTOM,
             label,
-            FontId::proportional(9.5),
+            look::font(9.5),
             TEXT_FAINT,
         );
     }
@@ -1809,7 +1819,7 @@ fn envelope(ui: &mut Ui, ed: &mut Ed, e: usize, rect: Rect) {
         };
         if x.is_finite() {
             let at = pos2(x, y(level.clamp(0.0, 1.0)));
-            let bright = theme::mix(VIOLET, Color32::WHITE, 0.6);
+            let bright = look::mix(VIOLET, Color32::WHITE, 0.6);
             painter.circle_filled(at, 9.0, alpha(VIOLET, 0.25));
             painter.circle_filled(at, 4.0, bright);
         }
@@ -1973,7 +1983,7 @@ fn lfo_editor(ui: &mut Ui, ed: &mut Ed, l: usize, rect: Rect) {
     if let Some(live) = ed.live.filter(|lv| free || lv.voices > 0) {
         let (ph, val) = (live.lfo_phase[l].clamp(0.0, 1.0), live.lfo_value[l].clamp(0.0, 1.0));
         let x = sx(ph);
-        let bright = theme::mix(VIOLET, Color32::WHITE, 0.6);
+        let bright = look::mix(VIOLET, Color32::WHITE, 0.6);
         painter.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], stroke(5.0, alpha(VIOLET, 0.12)));
         painter.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], stroke(1.2, alpha(bright, 0.7)));
         let at = pos2(x, sy(val));

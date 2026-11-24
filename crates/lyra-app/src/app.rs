@@ -248,7 +248,10 @@ struct Export {
 
 impl LyraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        crate::plugin_look::install_fonts(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx);
+        // The synths keep today's look whatever Lyra's style becomes (plugin_look.rs).
+        crate::plugin_look::capture_style(&cc.egui_ctx);
         // Sizes live in theme::Metrics (tunable live with F12). Zoom on top of that
         // stays available: Ctrl +/- at runtime, LYRA_ZOOM for the starting value.
         let zoom = std::env::var("LYRA_ZOOM").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0f32);

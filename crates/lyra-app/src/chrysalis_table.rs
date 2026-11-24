@@ -134,7 +134,7 @@ fn studio(ui: &mut Ui, ed: &mut Ed, doc: &mut Doc, all: Rect) {
     if let Some(note) = &doc.note {
         // Clipped to its gap: never over the keys beside it.
         let p = ui.painter_at(note_r);
-        p.text(note_r.left_center() + vec2(4.0, 0.0), Align2::LEFT_CENTER, note, FontId::proportional(11.0), TEXT_DIM);
+        p.text(note_r.left_center() + vec2(4.0, 0.0), Align2::LEFT_CENTER, note, look::font(11.0), TEXT_DIM);
     }
     let hint = "Live: every stroke and tool is saved and heard at once";
     if place(ui, live_r, "studio-live", true, |ui| key(ui, "live", live_r.size(), doc.live, color, hint).clicked()) {
@@ -398,7 +398,7 @@ fn harmonics(ui: &mut Ui, doc: &mut Doc, r: Rect, color: Color32) -> bool {
                 pos2(x0 + bar_w * 0.5, inner.bottom() + 1.0),
                 Align2::CENTER_TOP,
                 h.to_string(),
-                FontId::proportional(8.5),
+                look::font(8.5),
                 TEXT_FAINT,
             );
         }

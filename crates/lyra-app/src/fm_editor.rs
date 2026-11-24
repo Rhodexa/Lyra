@@ -28,9 +28,8 @@
 
 use crate::flex::{self, Grow, Px};
 use crate::rack::tracked;
-use crate::theme::{self, cr, stroke, Light};
-use crate::widgets::{self, Icon};
-use egui::{pos2, vec2, Align, Align2, Color32, FontId, Id, Layout, Rect, Response, RichText, Sense, Shape, Ui};
+use crate::plugin_look::{self as look, cr, stroke, Icon, Light};
+use egui::{pos2, vec2, Align, Align2, Color32, Id, Layout, Rect, Response, RichText, Sense, Shape, Ui};
 use egui::{UiBuilder, Vec2};
 use lyra_fluttersine::{apply_algorithm, macro_factor, matching_algorithm, p, Algorithm, ALGORITHMS, FM_PARAMS};
 use lyra_model::{History, Project};
@@ -40,10 +39,10 @@ use std::f32::consts::TAU;
 /// One light per operator: a rainbow, so an operator is easy to follow from
 /// its tab to its matrix row and its knobs.
 const OP_LIGHTS: [Light; OPS] =
-    [theme::L_PINK, theme::L_PEACH, theme::L_AMBER, theme::L_MINT, theme::L_BLUE, theme::L_LAVENDER];
-const FILTER_LIGHT: Light = theme::L_CYAN;
-const LFO_LIGHT: Light = theme::L_LIME;
-const VOICE_LIGHT: Light = theme::L_MINT;
+    [look::L_PINK, look::L_PEACH, look::L_AMBER, look::L_MINT, look::L_BLUE, look::L_LAVENDER];
+const FILTER_LIGHT: Light = look::L_CYAN;
+const LFO_LIGHT: Light = look::L_LIME;
+const VOICE_LIGHT: Light = look::L_MINT;
 /// The MOD page and the matrix share the voice's light: they're about the whole patch.
 const MOD_LIGHT: Light = VOICE_LIGHT;
 
@@ -142,7 +141,7 @@ impl Ed<'_> {
     }
 }
 
-/// Every size, derived from the theme's metrics so F12 still drives them. The
+/// Every size, derived from the synths' frozen sizes (plugin_look::m()). The
 /// plates have fixed sizes: switching pages never resizes the window.
 struct Sizes {
     cell_w: f32,
@@ -171,7 +170,7 @@ struct Sizes {
 }
 
 fn sizes() -> Sizes {
-    let m = theme::m();
+    let m = look::m();
     let label_h = m.text_small + 4.0;
     let cell_w = m.knob_large + 22.0;
     let cell_h = m.knob_large + label_h + 8.0;
@@ -201,10 +200,18 @@ fn sizes() -> Sizes {
     }
 }
 
+/// The editor, in the synths' frozen style (see plugin_look.rs).
 pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
+    ui.scope(|ui| {
+        look::freeze(ui);
+        show_inner(ui, p, h, ch);
+    });
+}
+
+fn show_inner(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     let mut ed = Ed { p, h, ch };
     let s = sizes();
-    let seam = theme::SEAM;
+    let seam = look::SEAM;
     let page_id = Id::new(("fm-page", ch));
     let side_id = Id::new(("fm-side", ch));
     let (stored, side) = ui.ctx().data(|d| (d.get_temp::<usize>(page_id), d.get_temp::<usize>(side_id)));
@@ -218,7 +225,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     let size =
         vec2(seam + lw + seam + rw + seam, seam + outer(s.header_h) + seam + s.tab_h + seam + outer(s.page_h) + seam);
     let (rack, _) = ui.allocate_exact_size(size, Sense::hover());
-    ui.painter().rect_filled(rack, cr(3), theme::BG);
+    ui.painter().rect_filled(rack, cr(3), look::BG);
     let [header_r, body] = flex::col(rack.shrink(seam), [Px(outer(s.header_h)), Grow(1.0)], seam);
     let [left, right] = flex::row(body, [Px(lw), Grow(1.0)], seam);
     let [left_tabs, page_r] = flex::col(left, [Px(s.tab_h), Grow(1.0)], seam);
@@ -240,7 +247,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     if let Some(k) = tab_strip(ui, right_tabs, "fm-side-tabs", &side_names, &[MOD_LIGHT, MOD_LIGHT], side) {
         side = k;
     }
-    ui.painter().rect_filled(side_r, cr(0), theme::PANEL);
+    ui.painter().rect_filled(side_r, cr(0), look::PANEL);
     let inner = side_r.shrink(PAD);
     if side == 0 {
         matrix(ui, &mut ed, inner, &mut page, &used);
@@ -254,9 +261,9 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
     });
 }
 
-/// A flat plate (`theme::PANEL`) filling `r`, with its contents laid out inside the padding.
+/// A flat plate (`look::PANEL`) filling `r`, with its contents laid out inside the padding.
 fn plate<R>(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash, add: impl FnOnce(&mut Ui) -> R) -> R {
-    ui.painter().rect_filled(r, cr(0), theme::PANEL);
+    ui.painter().rect_filled(r, cr(0), look::PANEL);
     let mut child =
         ui.new_child(UiBuilder::new().id_salt(salt).max_rect(r.shrink(PAD)).layout(Layout::top_down(Align::Min)));
     child.spacing_mut().item_spacing = vec2(5.0, 6.0);
@@ -278,7 +285,7 @@ fn place<R>(ui: &mut Ui, r: Rect, salt: impl std::hash::Hash, enabled: bool, add
 /// the four knobs that shape any patch, and the voice switches.
 fn header(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     let s = sizes();
-    ui.painter().rect_filled(r, cr(0), theme::PANEL);
+    ui.painter().rect_filled(r, cr(0), look::PANEL);
     let inner = r.shrink2(vec2(PAD + 2.0, PAD));
     let knob_w = 54.0;
     let seg_w = 2.0 * SEG_W;
@@ -289,7 +296,7 @@ fn header(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     logo(ui, logo_r);
     let c = VOICE_LIGHT.mid;
     let cells = flex::even_row(knobs, 4, 0.0);
-    let max_d = theme::m().knob_large - 2.0;
+    let max_d = look::m().knob_large - 2.0;
     knob_in(ui, ed, cells[0], p::TONE, "Tone", c, true, max_d);
     knob_in(ui, ed, cells[1], p::TIME, "Time", c, true, max_d);
     knob_in(ui, ed, cells[2], p::VOLUME, "Volume", c, true, max_d);
@@ -316,7 +323,7 @@ fn header(ui: &mut Ui, ed: &mut Ed, r: Rect) {
 
 /// The Fluttersine wordmark, part of the header (no frame of its own).
 fn logo(ui: &mut Ui, r: Rect) {
-    let (tex, [w, h]) = theme::fluttersine_logo(ui.ctx());
+    let (tex, [w, h]) = look::fluttersine_logo(ui.ctx());
     let scale = (r.width() / w as f32).min(r.height() / h as f32);
     let img = Rect::from_center_size(r.center(), vec2(w as f32, h as f32) * scale);
     ui.painter().image(tex, img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
@@ -342,7 +349,7 @@ fn readout(ui: &Ui, name: String, value: String) {
 
 fn readout_display(ui: &Ui, r: Rect) {
     let p = ui.painter_at(r);
-    theme::lcd_panel(&p, r);
+    look::lcd_panel(&p, r);
     let shown = ui.ctx().data(|d| d.get_temp::<Readout>(readout_id()));
     let inner = r.shrink2(vec2(9.0, 6.0));
     if let Some(ro) = shown {
@@ -351,10 +358,10 @@ fn readout_display(ui: &Ui, r: Rect) {
             inner.left_top(),
             Align2::LEFT_TOP,
             ro.name,
-            FontId::proportional(theme::m().text_small),
-            theme::LCD_INK_DIM,
+            look::font(look::m().text_small),
+            look::LCD_INK_DIM,
         );
-        p.text(inner.left_bottom(), Align2::LEFT_BOTTOM, ro.value, FontId::proportional(16.0), theme::LCD_INK);
+        p.text(inner.left_bottom(), Align2::LEFT_BOTTOM, ro.value, look::font(16.0), look::LCD_INK);
     }
 }
 
@@ -397,27 +404,27 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     }
     let resp = ui.interact(field, Id::new(("fm-preset-field", ed.ch)), Sense::click());
     let painter = ui.painter_at(field);
-    theme::well(&painter, field);
-    let m = theme::m();
+    look::well(&painter, field);
+    let m = look::m();
     let text = painter.text(
         field.left_center() + vec2(10.0, 0.0),
         Align2::LEFT_CENTER,
         &name,
-        FontId::proportional(m.text),
-        theme::TEXT,
+        look::font(m.text),
+        look::TEXT,
     );
     if edited {
         painter.text(
             text.right_center() + vec2(8.0, 1.0),
             Align2::LEFT_CENTER,
             "edited",
-            FontId::proportional(m.text_small),
-            theme::TEXT_DIM,
+            look::font(m.text_small),
+            look::TEXT_DIM,
         );
     }
     let c = field.right_center() - vec2(13.0, 1.5);
     let chevron = vec![c + vec2(-3.5, -1.5), c + vec2(0.0, 2.0), c + vec2(3.5, -1.5)];
-    painter.add(Shape::line(chevron, stroke(1.6, theme::TEXT_DIM)));
+    painter.add(Shape::line(chevron, stroke(1.6, look::TEXT_DIM)));
     if let Some(step) = wheel_step(ui, field) {
         if n > 0 {
             pick = Some(all[(at as i32 + step).rem_euclid(n as i32) as usize].clone());
@@ -430,6 +437,7 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list (and to save yours)");
     let params = ed.p.channels[ed.ch].params.clone();
     egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+        look::freeze(ui);
         let (picked, close) = crate::user_presets::menu(ui, PLUGIN, &params, field.width().max(220.0));
         if picked.is_some() {
             pick = picked;
@@ -476,24 +484,24 @@ fn used_ops(ed: &Ed) -> [bool; OPS] {
 /// plate with a thin line of its light on top. The wheel steps through them.
 /// Returns the tab picked this frame.
 fn tab_strip(ui: &mut Ui, r: Rect, salt: &str, names: &[String], lights: &[Light], open: usize) -> Option<usize> {
-    let font = FontId::proportional(theme::m().text_small + 1.0);
+    let font = look::font(look::m().text_small + 1.0);
     let mut picked = None;
-    for (k, b) in flex::even_row(r, names.len(), theme::SEAM).into_iter().enumerate() {
+    for (k, b) in flex::even_row(r, names.len(), look::SEAM).into_iter().enumerate() {
         let resp = ui.interact(b, Id::new((salt, k)), Sense::click());
         let is_open = k == open;
         let painter = ui.painter();
         let fill = if is_open {
-            theme::PANEL_HI
+            look::PANEL_HI
         } else if resp.hovered() {
-            theme::mix(theme::PANEL, theme::PANEL_HI, 0.5)
+            look::mix(look::PANEL, look::PANEL_HI, 0.5)
         } else {
-            theme::PANEL
+            look::PANEL
         };
         painter.rect_filled(b, cr(0), fill);
         if is_open {
             painter.rect_filled(Rect::from_min_size(b.min, vec2(b.width(), 2.0)), cr(0), lights[k].mid);
         }
-        let ink = if is_open || resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+        let ink = if is_open || resp.hovered() { look::TEXT } else { look::TEXT_DIM };
         painter.text(b.center() + vec2(0.0, 1.0), Align2::CENTER_CENTER, &names[k], font.clone(), ink);
         if resp.clicked() {
             picked = Some(k);
@@ -543,19 +551,19 @@ fn switch(ui: &mut Ui, labels: &[&str], chosen: usize, light: Light, hint: &str)
     let s = sizes();
     let (r, resp) = ui.allocate_exact_size(vec2(SEG_W * labels.len() as f32, s.key_h), Sense::click());
     let p = ui.painter();
-    p.rect_filled(r, cr(3), theme::INSET);
+    p.rect_filled(r, cr(3), look::INSET);
     let hover = resp.hover_pos().map(|pos| (((pos.x - r.left()) / SEG_W) as usize).min(labels.len() - 1));
-    let font = FontId::proportional(theme::m().text_small);
+    let font = look::font(look::m().text_small);
     for (i, label) in labels.iter().enumerate() {
         let seg = Rect::from_min_size(pos2(r.left() + i as f32 * SEG_W, r.top()), vec2(SEG_W, r.height())).shrink(2.0);
         let ink = if i == chosen {
-            p.rect_filled(seg, cr(2), if hover == Some(i) { theme::shade(light.mid, 1.06) } else { light.mid });
-            theme::key_ink(true)
+            p.rect_filled(seg, cr(2), if hover == Some(i) { look::shade(light.mid, 1.06) } else { light.mid });
+            look::key_ink(true)
         } else if hover == Some(i) {
-            p.rect_filled(seg, cr(2), theme::mix(theme::INSET, theme::PANEL_HI, 0.55));
-            theme::TEXT
+            p.rect_filled(seg, cr(2), look::mix(look::INSET, look::PANEL_HI, 0.55));
+            look::TEXT
         } else {
-            theme::TEXT_DIM
+            look::TEXT_DIM
         };
         p.text(seg.center(), Align2::CENTER_CENTER, *label, font.clone(), ink);
     }
@@ -612,7 +620,7 @@ fn op_page(ui: &mut Ui, ed: &mut Ed, i: usize) {
         let (pw, spread, sides) = (ed.v(at(p::OP_PW)), ed.v(at(p::OP_SPREAD)), ed.v(at(p::OP_SS_MIX)));
         let (rect, _) = ui.allocate_exact_size(vec2(half, s.display_h), Sense::hover());
         let painter = ui.painter_at(rect);
-        theme::lcd_panel(&painter, rect);
+        look::lcd_panel(&painter, rect);
         let inner = rect.shrink2(vec2(10.0, 14.0));
         painter.line_segment([inner.left_center(), inner.right_center()], stroke(1.0, lcd_grid()));
         draw_curve(
@@ -620,7 +628,7 @@ fn op_page(ui: &mut Ui, ed: &mut Ed, i: usize) {
             inner,
             &|t| wave_at(wave, t, pw, spread, sides),
             2.0,
-            theme::LCD_INK,
+            look::LCD_INK,
             1.8,
             Some(inner.center().y),
         );
@@ -768,12 +776,12 @@ fn filter_graph(ui: &mut Ui, ed: &mut Ed, size: Vec2) {
     }
 
     let painter = ui.painter_at(rect);
-    theme::lcd_panel(&painter, rect);
-    let small = FontId::proportional(theme::m().text_small - 1.0);
+    look::lcd_panel(&painter, rect);
+    let small = look::font(look::m().text_small - 1.0);
     for (f, label) in [(100.0, "100"), (1000.0, "1k"), (10_000.0, "10k")] {
         let x = fx(f);
         painter.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], stroke(1.0, lcd_grid()));
-        painter.text(pos2(x + 3.0, inner.bottom()), Align2::LEFT_BOTTOM, label, small.clone(), theme::LCD_INK_DIM);
+        painter.text(pos2(x + 3.0, inner.bottom()), Align2::LEFT_BOTTOM, label, small.clone(), look::LCD_INK_DIM);
     }
     painter.line_segment([pos2(inner.left(), fy(0.0)), pos2(inner.right(), fy(0.0))], stroke(1.0, lcd_grid()));
 
@@ -794,7 +802,7 @@ fn filter_graph(ui: &mut Ui, ed: &mut Ed, size: Vec2) {
         }
         g
     };
-    let ink = if lp || hp { theme::LCD_INK } else { theme::LCD_INK_DIM };
+    let ink = if lp || hp { look::LCD_INK } else { look::LCD_INK_DIM };
     let n = inner.width() as usize;
     let pts: Vec<_> = (0..=n)
         .map(|k| {
@@ -805,7 +813,7 @@ fn filter_graph(ui: &mut Ui, ed: &mut Ed, size: Vec2) {
     fill_under(&painter, &pts, inner.bottom(), lcd_fill());
     painter.add(Shape::line(pts, stroke(1.8, ink)));
     if !lp && !hp {
-        painter.text(inner.center(), Align2::CENTER_CENTER, "filters off", small, theme::LCD_INK_DIM);
+        painter.text(inner.center(), Align2::CENTER_CENTER, "filters off", small, look::LCD_INK_DIM);
     }
     for (k, (on, cut_id, reso_id, is_lp)) in
         [(lp, p::CUTOFF, p::RESO, true), (hp, p::HP_CUTOFF, p::HP_RESO, false)].into_iter().enumerate()
@@ -868,17 +876,17 @@ fn lfo_page(ui: &mut Ui, ed: &mut Ed) {
     let rate = if synced { ed.p.bpm as f32 / 60.0 / beats } else { ed.v(rate_id) };
     let (rect, _) = ui.allocate_exact_size(vec2(s.left_w, s.display_h - 12.0), Sense::hover());
     let painter = ui.painter_at(rect);
-    theme::lcd_panel(&painter, rect);
+    look::lcd_panel(&painter, rect);
     let inner = rect.shrink2(vec2(10.0, 14.0));
     painter.line_segment([inner.left_center(), inner.right_center()], stroke(1.0, lcd_grid()));
-    draw_curve(&painter, inner, &|t| lfo_at(shape, t), rate, theme::LCD_INK, 1.8, Some(inner.center().y));
+    draw_curve(&painter, inner, &|t| lfo_at(shape, t), rate, look::LCD_INK, 1.8, Some(inner.center().y));
     let caption = if synced { format!("1 second at {:.0} BPM", ed.p.bpm) } else { "1 second".into() };
     painter.text(
         rect.right_bottom() - vec2(9.0, 3.0),
         Align2::RIGHT_BOTTOM,
         caption,
-        FontId::proportional(theme::m().text_small - 1.0),
-        theme::LCD_INK_DIM,
+        look::font(look::m().text_small - 1.0),
+        look::LCD_INK_DIM,
     );
 
     ui.horizontal(|ui| {
@@ -930,7 +938,7 @@ fn mod_page(ui: &mut Ui, ed: &mut Ed) {
                 let live = ed.choice(mod_src(k)) != 0 && ed.choice(mod_dest(k)) != 0;
                 ui.allocate_ui_with_layout(vec2(slots_w, s.slot_h), Layout::left_to_right(Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
-                    let ink = if live { theme::TEXT } else { theme::TEXT_DIM };
+                    let ink = if live { look::TEXT } else { look::TEXT_DIM };
                     ui.add_sized(
                         vec2(14.0, s.key_h),
                         egui::Label::new(RichText::new(format!("{}", k + 1)).small().color(ink)),
@@ -939,13 +947,13 @@ fn mod_page(ui: &mut Ui, ed: &mut Ed) {
                     // An arrow, drawn (the UI font has no "→").
                     let (ar, _) = ui.allocate_exact_size(vec2(14.0, s.key_h), Sense::hover());
                     let (y, x0, x1) = (ar.center().y, ar.left() + 1.0, ar.right() - 1.0);
-                    let arrow = stroke(1.4, theme::TEXT_DIM);
+                    let arrow = stroke(1.4, look::TEXT_DIM);
                     ui.painter().line_segment([pos2(x0, y), pos2(x1, y)], arrow);
                     ui.painter()
                         .add(Shape::line(vec![pos2(x1 - 4.0, y - 3.5), pos2(x1, y), pos2(x1 - 4.0, y + 3.5)], arrow));
                     choice_well(ui, ed, mod_dest(k), 150.0, "Destination: what it moves");
                     let info = &FM_PARAMS[mod_amt(k)];
-                    bare_knob(ui, ed, mod_amt(k), theme::m().knob_small, if live { c } else { theme::TEXT_DIM }, true);
+                    bare_knob(ui, ed, mod_amt(k), look::m().knob_small, if live { c } else { look::TEXT_DIM }, true);
                     ui.label(RichText::new(info.format(ed.v(mod_amt(k)))).small().color(ink));
                 });
             }
@@ -963,24 +971,24 @@ fn mod_page(ui: &mut Ui, ed: &mut Ed) {
 /// A dropdown well for a choice parameter: click for the list, wheel to step.
 fn choice_well(ui: &mut Ui, ed: &mut Ed, id: usize, width: f32, hint: &str) {
     let s = sizes();
-    let m = theme::m();
+    let m = look::m();
     let info = &FM_PARAMS[id];
     let n = info.labels.len();
     let at = ed.choice(id).min(n - 1);
     let (r, resp) = ui.allocate_exact_size(vec2(width, s.key_h), Sense::click());
     let painter = ui.painter();
-    theme::well(painter, r);
-    let ink = if at == 0 { theme::TEXT_DIM } else { theme::TEXT };
+    look::well(painter, r);
+    let ink = if at == 0 { look::TEXT_DIM } else { look::TEXT };
     painter.text(
         r.left_center() + vec2(8.0, 0.0),
         Align2::LEFT_CENTER,
         info.labels[at],
-        FontId::proportional(m.text_small + 1.0),
+        look::font(m.text_small + 1.0),
         ink,
     );
     let c = r.right_center() - vec2(10.0, 1.0);
     let chevron = vec![c + vec2(-3.0, -1.2), c + vec2(0.0, 1.8), c + vec2(3.0, -1.2)];
-    painter.add(Shape::line(chevron, stroke(1.4, theme::TEXT_DIM)));
+    painter.add(Shape::line(chevron, stroke(1.4, look::TEXT_DIM)));
     if let Some(step) = wheel_step(ui, r) {
         ed.set(id, (at as i32 + step).clamp(0, n as i32 - 1) as f32);
     }
@@ -991,6 +999,7 @@ fn choice_well(ui: &mut Ui, ed: &mut Ed, id: usize, width: f32, hint: &str) {
     let resp = resp.on_hover_text(hint);
     let mut pick = None;
     egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
+        look::freeze(ui);
         ui.set_min_width(width);
         for (k, label) in info.labels.iter().enumerate() {
             if ui.selectable_label(k == at, *label).clicked() {
@@ -1010,7 +1019,7 @@ fn choice_well(ui: &mut Ui, ed: &mut Ed, id: usize, width: f32, hint: &str) {
 /// so the routing that's actually there stands out.
 fn matrix(ui: &mut Ui, ed: &mut Ed, r: Rect, page: &mut Page, used: &[bool; OPS]) {
     let s = sizes();
-    let small = FontId::proportional(theme::m().text_small);
+    let small = look::font(look::m().text_small);
     // Square cells, packed edge to edge, centred in the plate.
     let width = s.mlabel_w + (OPS + 2) as f32 * s.mcell + OUT_GAP;
     let origin = pos2(r.center().x - width * 0.5, r.top());
@@ -1023,9 +1032,9 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, r: Rect, page: &mut Page, used: &[bool; OPS]
             c => (c + 1).to_string(),
         };
         let at = pos2(col_x(col) + s.mcell * 0.5, origin.y + HEADS_H * 0.45);
-        ui.painter().text(at, Align2::CENTER_CENTER, text, small.clone(), theme::TEXT_DIM);
+        ui.painter().text(at, Align2::CENTER_CENTER, text, small.clone(), look::TEXT_DIM);
     }
-    let d = (s.mcell - 10.0).min(theme::m().knob_large - 4.0);
+    let d = (s.mcell - 10.0).min(look::m().knob_large - 4.0);
     for row in 0..OPS {
         let lt = OP_LIGHTS[row];
         // Row name: the operator's LED (lit = it can be heard) and its number;
@@ -1035,15 +1044,15 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, r: Rect, page: &mut Page, used: &[bool; OPS]
         let open = *page == Page::Op(row);
         let painter = ui.painter();
         if open || resp.hovered() {
-            let fill = if open { theme::PANEL_HI } else { theme::mix(theme::PANEL, theme::PANEL_HI, 0.5) };
+            let fill = if open { look::PANEL_HI } else { look::mix(look::PANEL, look::PANEL_HI, 0.5) };
             painter.rect_filled(name_r, cr(2), fill);
         }
         if open {
             painter.rect_filled(Rect::from_min_size(name_r.min, vec2(2.0, name_r.height())), cr(0), lt.mid);
         }
         let led_c = pos2(name_r.left() + 9.0, name_r.center().y);
-        theme::led(painter, led_c, 10.0, used[row].then_some(lt), false);
-        let ink = if open || resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+        look::led(painter, led_c, 10.0, used[row].then_some(lt), false);
+        let ink = if open || resp.hovered() { look::TEXT } else { look::TEXT_DIM };
         painter.text(led_c + vec2(8.0, 0.0), Align2::LEFT_CENTER, (row + 1).to_string(), small.clone(), ink);
         if resp.hovered() {
             readout(ui, format!("Operator {}", row + 1), "click to open".into());
@@ -1060,7 +1069,7 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, r: Rect, page: &mut Page, used: &[bool; OPS]
             let cell = Rect::from_min_size(pos2(col_x(col), row_y(row)), Vec2::splat(s.mcell));
             if col == row {
                 // Feedback: the diagonal sits in a faint, square recess.
-                ui.painter().rect_filled(cell, cr(0), theme::mix(theme::PANEL, theme::BG, 0.3));
+                ui.painter().rect_filled(cell, cr(0), look::mix(look::PANEL, look::BG, 0.3));
             }
             let at_default = ed.v(id) == FM_PARAMS[id].default;
             let faded = at_default && !ui.rect_contains_pointer(cell);
@@ -1081,7 +1090,7 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, r: Rect, page: &mut Page, used: &[bool; OPS]
 fn algorithms(ui: &mut Ui, ed: &mut Ed, r: Rect) {
     let current = matching_algorithm(&ed.p.channels[ed.ch].params);
     let mut pick = None;
-    let font = FontId::proportional(theme::m().text_small);
+    let font = look::font(look::m().text_small);
     let rows = flex::even_col(r, 3, 6.0);
     for (k, alg) in ALGORITHMS.iter().enumerate() {
         let key = flex::even_row(rows[k / 3], 3, 6.0)[k % 3];
@@ -1171,7 +1180,7 @@ fn bare_knob(ui: &mut Ui, ed: &mut Ed, id: usize, d: f32, color: Color32, enable
     let info = &FM_PARAMS[id];
     let mut v = ed.v(id);
     let resp =
-        widgets::knob_painted(ui, &mut v, info, d, |p, rect, v, hot| widgets::paint_knob(p, rect, info, v, color, hot));
+        look::knob_painted(ui, &mut v, info, d, |p, rect, v, hot| look::paint_knob(p, rect, info, v, color, hot));
     if enabled {
         ed.track(&resp, id, v);
     }
@@ -1194,13 +1203,13 @@ fn knob_in(ui: &mut Ui, ed: &mut Ed, r: Rect, id: usize, label: &str, color: Col
     place(ui, kr, ("fm-knob", id), enabled, |ui| {
         let hot = bare_knob(ui, ed, id, d, color, enabled);
         let (text, ink) =
-            if hot { (format_value(id, ed.v(id)), theme::TEXT) } else { (label.to_string(), theme::TEXT_DIM) };
+            if hot { (format_value(id, ed.v(id)), look::TEXT) } else { (label.to_string(), look::TEXT_DIM) };
         // The child's painter, so a disabled knob's name fades with it.
         ui.painter().with_clip_rect(lr.expand(2.0)).text(
             lr.center(),
             Align2::CENTER_CENTER,
             text,
-            FontId::proportional(theme::m().text_small),
+            look::font(look::m().text_small),
             ink,
         );
     });
@@ -1210,29 +1219,29 @@ fn knob_in(ui: &mut Ui, ed: &mut Ed, r: Rect, id: usize, label: &str, color: Col
 fn knob_cell(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, enabled: bool) {
     let s = sizes();
     let (r, _) = ui.allocate_exact_size(vec2(s.cell_w, s.cell_h), Sense::hover());
-    knob_in(ui, ed, r, id, label, color, enabled, theme::m().knob_large);
+    knob_in(ui, ed, r, id, label, color, enabled, look::m().knob_large);
 }
 
 /// A smaller knob cell, for rows that need more than seven knobs.
 fn small_cell(ui: &mut Ui, ed: &mut Ed, id: usize, label: &str, color: Color32, enabled: bool) {
     let s = sizes();
     let (r, _) = ui.allocate_exact_size(vec2(s.small_cell_w, s.small_cell_h), Sense::hover());
-    knob_in(ui, ed, r, id, label, color, enabled, theme::m().knob_small);
+    knob_in(ui, ed, r, id, label, color, enabled, look::m().knob_small);
 }
 
 /// Paint a flat key: a dark recess, or solid light when lit. Returns the ink for its legend.
 fn flat(p: &egui::Painter, r: Rect, lit: Option<Light>, hot: bool) -> Color32 {
     match lit {
         Some(l) => {
-            p.rect_filled(r, cr(3), if hot { theme::shade(l.mid, 1.06) } else { l.mid });
-            theme::key_ink(true)
+            p.rect_filled(r, cr(3), if hot { look::shade(l.mid, 1.06) } else { l.mid });
+            look::key_ink(true)
         }
         None => {
-            p.rect_filled(r, cr(3), if hot { theme::mix(theme::INSET, theme::PANEL_HI, 0.55) } else { theme::INSET });
+            p.rect_filled(r, cr(3), if hot { look::mix(look::INSET, look::PANEL_HI, 0.55) } else { look::INSET });
             if hot {
-                theme::TEXT
+                look::TEXT
             } else {
-                theme::TEXT_DIM
+                look::TEXT_DIM
             }
         }
     }
@@ -1242,7 +1251,7 @@ fn flat(p: &egui::Painter, r: Rect, lit: Option<Light>, hot: bool) -> Color32 {
 fn text_key(ui: &mut Ui, size: Vec2, text: &str, lit: Option<Light>, hint: &str) -> Response {
     let (r, resp) = ui.allocate_exact_size(size, Sense::click());
     let ink = flat(ui.painter(), r, lit, resp.hovered());
-    ui.painter().text(r.center(), Align2::CENTER_CENTER, text, FontId::proportional(theme::m().text_small), ink);
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, text, look::font(look::m().text_small), ink);
     resp.on_hover_text(hint)
 }
 
@@ -1250,7 +1259,7 @@ fn text_key(ui: &mut Ui, size: Vec2, text: &str, lit: Option<Light>, hint: &str)
 fn icon_key(ui: &mut Ui, r: Rect, salt: &str, icon: Icon) -> Response {
     let resp = ui.interact(r, Id::new(salt), Sense::click());
     let ink = flat(ui.painter(), r, None, resp.hovered());
-    widgets::paint_icon(ui.painter(), r.shrink(r.height() * 0.28), icon, ink, theme::INSET);
+    look::paint_icon(ui.painter(), r.shrink(r.height() * 0.28), icon, ink, look::INSET);
     resp
 }
 
@@ -1279,29 +1288,29 @@ fn divider(ui: &mut Ui, h: f32) {
     ui.painter().rect_filled(
         Rect::from_min_max(pos2(x - 1.0, r.top() + 8.0), pos2(x + 1.0, r.bottom() - 8.0)),
         cr(0),
-        theme::BG,
+        look::BG,
     );
 }
 
 /// Faint LCD grid lines.
 fn lcd_grid() -> Color32 {
-    theme::mix(theme::LCD, theme::LCD_INK, 0.13)
+    look::mix(look::LCD, look::LCD_INK, 0.13)
 }
 /// The shading under a curve on an LCD.
 fn lcd_fill() -> Color32 {
-    theme::LCD_INK.gamma_multiply(0.09)
+    look::LCD_INK.gamma_multiply(0.09)
 }
 
 /// A draggable point on an LCD: dark ink; `solid` = filled, else a ring.
 fn dot(painter: &egui::Painter, at: egui::Pos2, solid: bool, hot: bool) {
     if hot {
-        painter.circle_stroke(at, 8.5, stroke(1.2, theme::LCD_INK_DIM));
+        painter.circle_stroke(at, 8.5, stroke(1.2, look::LCD_INK_DIM));
     }
     if solid {
-        painter.circle_filled(at, 4.5, theme::LCD_INK);
+        painter.circle_filled(at, 4.5, look::LCD_INK);
     } else {
-        painter.circle_filled(at, 4.5, theme::LCD);
-        painter.circle_stroke(at, 4.0, stroke(1.8, theme::LCD_INK));
+        painter.circle_filled(at, 4.5, look::LCD);
+        painter.circle_stroke(at, 4.0, stroke(1.8, look::LCD_INK));
     }
 }
 
@@ -1518,8 +1527,8 @@ fn envelope(ui: &mut Ui, ed: &mut Ed, ids: [usize; 4], size: Vec2, salt: impl st
     // Paint with this frame's values.
     let (xa, xd, xs, xr, s) = points(ed);
     let painter = ui.painter_at(rect);
-    theme::lcd_panel(&painter, rect);
-    let ink = if enabled { theme::LCD_INK } else { theme::LCD_INK_DIM };
+    look::lcd_panel(&painter, rect);
+    let ink = if enabled { look::LCD_INK } else { look::LCD_INK_DIM };
     for x in [inner.left() + lane, inner.left() + 2.0 * lane, xs] {
         painter.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], stroke(1.0, lcd_grid()));
     }
