@@ -419,3 +419,64 @@ pub fn paint_playhead(painter: &Painter, x: f32, ruler: Rect, lines: egui::Range
     let line = if playing { theme::MINT } else { theme::MINT.gamma_multiply(0.35) };
     painter.vline(x, lines, stroke(1.0, line));
 }
+
+// ── Loop regions ──
+//
+// Drawn on purpose only: Alt+drag along a ruler, snapped to the grid. Alt+click
+// on the ruler (or the context bar's "Clear loop") takes it away. A plain click
+// on the ruler always means "play from here". While one is set, playback stays
+// inside it. Not saved with the song.
+
+/// The loop drawn from `anchor` to `at` (ticks), both ends on the grid, at
+/// least one grid step long.
+pub fn loop_span(anchor: f32, at: f32, step: u32) -> (u32, u32) {
+    let step = step.max(1);
+    let a = snap(anchor.min(at), step).max(0.0) as u32;
+    let b = snap(anchor.max(at), step).max(0.0) as u32;
+    (a, b.max(a + step))
+}
+
+/// A loop region: a band on the ruler, its edges down the grid.
+pub fn paint_loop(painter: &Painter, v: &TimeView, ruler: Rect, grid: Rect, (a, b): (u32, u32)) {
+    let (x0, x1) = (v.x(ruler, a as f32), v.x(ruler, b as f32));
+    let band = Rect::from_min_max(pos2(x0, ruler.top() + 1.0), pos2(x1, ruler.bottom() - 1.0)).intersect(ruler);
+    if band.width() > 0.0 {
+        painter.rect_filled(band, cr(2), theme::LAVENDER.gamma_multiply(0.30));
+    }
+    let lines = grid.y_range();
+    for x in [x0, x1] {
+        if ruler.x_range().contains(x) {
+            painter.vline(
+                x,
+                egui::Rangef::new(ruler.top(), lines.max),
+                stroke(1.0, theme::LAVENDER.gamma_multiply(0.6)),
+            );
+        }
+    }
+    let inside = Rect::from_min_max(pos2(x0, grid.top()), pos2(x1, grid.bottom())).intersect(grid);
+    if inside.width() > 0.0 {
+        painter.rect_filled(inside, cr(0), theme::LAVENDER.gamma_multiply(0.04));
+    }
+}
+
+/// A faint line where the mouse is, down the ruler and the grid, so you can
+/// see what lines up before you click.
+pub fn paint_cursor(painter: &Painter, x: f32, ruler: Rect, grid: Rect) {
+    if grid.x_range().contains(x) {
+        painter.vline(
+            x,
+            egui::Rangef::new(ruler.top(), grid.bottom()),
+            stroke(1.0, egui::Color32::from_white_alpha(28)),
+        );
+    }
+}
+
+#[cfg(test)]
+mod loop_tests {
+    #[test]
+    fn a_loop_lands_on_the_grid_and_is_never_empty() {
+        assert_eq!(super::loop_span(390.0, 1150.0, 384), (384, 1152));
+        assert_eq!(super::loop_span(1150.0, 390.0, 384), (384, 1152), "either direction");
+        assert_eq!(super::loop_span(400.0, 410.0, 384), (384, 768), "at least a step");
+    }
+}

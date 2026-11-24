@@ -18,6 +18,7 @@ mod files;
 mod flex;
 mod fm_editor;
 mod keys;
+mod midi;
 mod mixer;
 mod piano_roll;
 mod playlist;

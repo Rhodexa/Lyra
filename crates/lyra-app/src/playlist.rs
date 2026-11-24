@@ -114,6 +114,12 @@ enum Drag {
     },
     Erase,
     Seek,
+    /// Alt+drag on the ruler: drawing a loop region from `anchor` (ticks).
+    /// `moved` false at release = it was an Alt+click, which clears the loop.
+    Loop {
+        anchor: f32,
+        moved: bool,
+    },
     Hand {
         last: Pos2,
     },
@@ -129,6 +135,8 @@ pub struct Playlist {
     track_h: f32,
     pub snap: u32,
     selection: Vec<usize>,
+    /// The loop region (song ticks), if one is drawn; see `timeline::loop_span`.
+    pub looped: Option<(u32, u32)>,
     drag: Drag,
     clicks: timeline::Clicks,
     pub tool: Tool,
@@ -142,6 +150,7 @@ impl Default for Playlist {
             track_h: 52.0,
             snap: TICKS_PER_BAR,
             selection: Vec::new(),
+            looped: None,
             drag: Drag::None,
             clicks: timeline::Clicks::default(),
             tool: Tool::default(),
@@ -575,6 +584,8 @@ impl Playlist {
                     let mut rv = self.rows(grid, p.tracks.len());
                     self.drag = Drag::VBar(vbar.press(&mut rv, pos));
                     self.set_rows(rv, grid);
+                } else if ruler.contains(pos) && pressed_p && mods.alt {
+                    self.drag = Drag::Loop { anchor: view.tick(pos.x), moved: false };
                 } else if ruler.contains(pos) && pressed_p {
                     out.push(Action::SongMode(true));
                     out.push(Action::Seek(view.tick(pos.x).clamp(0.0, song_len - 1.0) as f64));
@@ -616,6 +627,9 @@ impl Playlist {
                 self.drag_to(pos, mods, &view, (&overview, &vbar), p, song_len, out);
             }
         } else {
+            if matches!(self.drag, Drag::Loop { moved: false, .. }) {
+                self.looped = None; // Alt+click: no loop
+            }
             self.drag = Drag::None;
         }
 
@@ -709,6 +723,12 @@ impl Playlist {
             );
         }
         timeline::paint_ruler(&painter, &self.time, ruler, song_len, Some((playhead as f32, playing)), grid);
+        if let Some(range) = self.looped {
+            timeline::paint_loop(&painter, &self.time, ruler, grid, range);
+        }
+        if let Some(pos) = pos.filter(|p| hovering && (grid.contains(*p) || ruler.contains(*p))) {
+            timeline::paint_cursor(&painter, pos.x, ruler, grid);
+        }
     }
 
     /// The arrangement's controls; the area draws them on its header row.
@@ -1067,6 +1087,13 @@ impl Playlist {
                 }
             }
             Drag::Seek => out.push(Action::Seek(v.tick(pos.x).clamp(0.0, song_len - 1.0) as f64)),
+            Drag::Loop { anchor, moved } => {
+                let tick = v.tick(pos.x).max(0.0);
+                *moved |= (tick - *anchor).abs() * v.time.ppt >= 3.0;
+                if *moved {
+                    self.looped = Some(timeline::loop_span(*anchor, tick, self.snap));
+                }
+            }
             Drag::Hand { last } => {
                 let d = pos - *last;
                 self.time.scroll = (self.time.scroll - d.x / self.time.ppt).max(0.0);

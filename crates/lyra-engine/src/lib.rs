@@ -375,6 +375,8 @@ pub enum Command {
     SetSwing(f32),
     SetMasterVolume(f32),
     SetSequence(Box<Sequence>),
+    /// Play only this part (ticks, start..end) over and over; None = all of it.
+    SetLoop(Option<(f64, f64)>),
     AddChannel(Box<ChannelSlot>),
     /// The channel list changed (added, removed, reordered, swapped): the
     /// engine keeps the channels it still has, so their tails ring on, and
@@ -581,6 +583,8 @@ pub struct Engine {
     automation: Box<Automation>,
 
     playing: bool,
+    /// A loop region inside the sequence (see `Command::SetLoop`).
+    looped: Option<(f64, f64)>,
     /// Position inside the loop, in ticks.
     pos: f64,
     /// Where Play starts and Stop returns to (set by Seek).
@@ -616,6 +620,7 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
         audio: Box::default(),
         automation: Box::default(),
         playing: false,
+        looped: None,
         pos: 0.0,
         start_marker: 0.0,
         tempo: 124.0,
@@ -681,6 +686,7 @@ impl Engine {
                     self.playing = true;
                     self.pos = self.start_marker;
                 }
+                Command::SetLoop(range) => self.looped = range,
                 Command::Seek(tick) => {
                     let len = self.seq.length.max(1) as f64;
                     self.start_marker = tick.clamp(0.0, len - 1.0);
@@ -985,7 +991,12 @@ impl Engine {
     /// Turn the notes that fall inside this block into sample-accurate events.
     fn schedule(&mut self, n: usize) {
         let ticks_per_sample = self.tempo * PPQ as f64 / 60.0 / self.sr as f64;
-        let len = self.seq.length as f64;
+        // What plays round and round: the loop region, or the whole sequence.
+        let (from, to) = self.span();
+        let len = to - from;
+        if !(from..to).contains(&self.pos) {
+            self.pos = from; // started (or moved) outside the loop: go to its start
+        }
         let start = self.pos;
         let end = start + ticks_per_sample * n as f64;
         let block_ticks = end - start;
@@ -1014,6 +1025,9 @@ impl Engine {
         // A tick `t` in the loop sounds in this block if `t` or `t + len`
         // (after wrapping around the loop end) lies in [start, end).
         let offset_of = |t: f64| -> Option<u32> {
+            if !(from..to).contains(&t) {
+                return None;
+            }
             [t, t + len]
                 .into_iter()
                 .find(|&c| c >= start && c < end)
@@ -1050,7 +1064,16 @@ impl Engine {
             }
         }
 
-        self.pos = end % len;
+        self.pos = from + (end - from) % len;
+    }
+
+    /// The part of the sequence that plays round and round.
+    fn span(&self) -> (f64, f64) {
+        let len = self.seq.length.max(1) as f64;
+        match self.looped {
+            Some((a, b)) if a < len && b > a => (a.max(0.0), b.min(len)),
+            _ => (0.0, len),
+        }
     }
 
     /// Set an automated control. REAL-TIME (plain stores and `set_param`).
@@ -1201,6 +1224,27 @@ mod tests {
         assert!((23_900..=24_100).contains(&off), "96 ticks ≈ 24000 samples, got {off}");
         assert!(other.lock().unwrap().is_empty(), "the new channel heard nothing");
         h.collect_garbage();
+    }
+
+    #[test]
+    fn a_loop_region_plays_only_its_part_round_and_round() {
+        let (mut eng, mut h, log) = setup();
+        // A note on each beat; loop the second beat only (ticks 96..192).
+        let notes = (0..4).map(|b| SeqNote { key: 60 + b as u8, ..note(b * 96, 24) }).collect();
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes })));
+        h.send(Command::SetLoop(Some((96.0, 192.0))));
+        h.send(Command::Play);
+        run(&mut eng, 3 * 96 * 250 - 1000); // just under three passes (96 ticks = 24 000 samples)
+        let log = log.lock().unwrap();
+        let ons: Vec<(u64, u8)> = log
+            .iter()
+            .filter_map(|(at, e)| match e {
+                Event::NoteOn { key, .. } => Some((*at, *key)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ons.iter().map(|o| o.1).collect::<Vec<_>>(), vec![61, 61, 61], "only the looped beat");
+        assert!((23_900..=24_100).contains(&(ons[1].0 - ons[0].0)), "once per pass: {ons:?}");
     }
 
     #[test]

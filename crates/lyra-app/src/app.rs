@@ -178,6 +178,8 @@ pub struct LyraApp {
     /// switched pattern/song mode, the new sequence must reach the engine
     /// first, or the seek is clamped to the old length (and then reset to 0).
     pending_seek: Option<f64>,
+    /// The loop region the engine has (song or pattern ticks).
+    sent_loop: Option<(u32, u32)>,
     /// Where the project lives on disk (None = never saved).
     path: Option<std::path::PathBuf>,
     /// The project as last saved/opened: differs from `project` = unsaved changes.
@@ -290,6 +292,7 @@ impl LyraApp {
             frame_count: 0,
             raising: None,
             pending_seek: None,
+            sent_loop: None,
             path,
             saved: project_for_saved,
             backed_up: project_for_backup,
@@ -1061,6 +1064,18 @@ impl eframe::App for LyraApp {
             }
             if let Some(tick) = self.pending_seek.take() {
                 e.send(Command::Seek(tick));
+            }
+            // The loop region: the arrangement's in song mode, the piano roll's in pattern mode.
+            // (Only from areas on screen: a loop you can't see mustn't hold playback.)
+            let shown = if self.bottom_open { 2 } else { 1 };
+            let looped = self.areas[..shown].iter().find_map(|a| match a.editor {
+                Editor::Arrangement if self.ui.song_mode => a.playlist.looped,
+                Editor::PianoRoll if !self.ui.song_mode => a.piano.looped,
+                _ => None,
+            });
+            if looped != self.sent_loop {
+                e.send(Command::SetLoop(looped.map(|(a, b)| (a as f64, b as f64))));
+                self.sent_loop = looped;
             }
         }
 

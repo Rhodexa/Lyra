@@ -103,27 +103,22 @@ fn percussive(p: &Project, channel: usize, notes: &[(usize, u32, u32, u8, f32)])
 
 // ─────────────────────────────── MIDI ───────────────────────────────────
 
-/// A type-1 standard MIDI file: a tempo track, then one track per channel
-/// that plays. 96 ticks per quarter note = Lyra's own ticks.
+/// The song as a MIDI file: one track per channel that plays (drums on
+/// General MIDI's channel 10, so other programs show them as drums).
 fn midi(p: &Project, title: &str) -> Vec<u8> {
     let notes = song_notes(p);
     let mut tracks = Vec::new();
-    // Tempo track: name, tempo, 4/4.
-    let mut t0 = Vec::new();
-    meta(&mut t0, 0, 0x03, title.as_bytes());
-    let us = (60_000_000.0 / p.bpm.max(1.0)).round() as u32;
-    meta(&mut t0, 0, 0x51, &us.to_be_bytes()[1..]);
-    meta(&mut t0, 0, 0x58, &[4, 2, 24, 8]);
-    meta(&mut t0, p.song_length(), 0x2F, &[]);
-    tracks.push(t0);
-
     let mut next_channel = 0u8;
     for i in 0..p.channels.len() {
-        let mine: Vec<_> = notes.iter().filter(|n| n.0 == i).collect();
+        let mine: Vec<lyra_model::Note> = notes
+            .iter()
+            .filter(|n| n.0 == i)
+            .map(|n| lyra_model::Note { start: n.1, len: n.2, key: n.3, velocity: n.4 })
+            .collect();
         if mine.is_empty() {
             continue;
         }
-        let midi_ch = if percussive(p, i, &notes) {
+        let channel = if percussive(p, i, &notes) {
             9
         } else {
             let c = next_channel;
@@ -134,54 +129,9 @@ fn midi(p: &Project, title: &str) -> Vec<u8> {
                 c
             }
         };
-        // (tick, is_on, key, velocity): offs sort before ons at the same tick.
-        let mut ev: Vec<(u32, bool, u8, u8)> = Vec::new();
-        for n in &mine {
-            let vel = (n.4 * 127.0).round().clamp(1.0, 127.0) as u8;
-            ev.push((n.1, true, n.3, vel));
-            ev.push((n.1 + n.2, false, n.3, 0));
-        }
-        ev.sort_by_key(|e| (e.0, e.1, e.2));
-        let mut t = Vec::new();
-        meta(&mut t, 0, 0x03, channel_label(p, i).as_bytes());
-        let mut last = 0;
-        for (tick, on, key, vel) in ev {
-            varlen(&mut t, tick - last);
-            last = tick;
-            t.extend_from_slice(&[if on { 0x90 } else { 0x80 } | midi_ch, key.min(127), vel]);
-        }
-        meta(&mut t, 0, 0x2F, &[]);
-        tracks.push(t);
+        tracks.push(crate::midi::TrackOut { name: channel_label(p, i), channel, notes: mine });
     }
-
-    let mut out = b"MThd".to_vec();
-    out.extend_from_slice(&6u32.to_be_bytes());
-    out.extend_from_slice(&1u16.to_be_bytes());
-    out.extend_from_slice(&(tracks.len() as u16).to_be_bytes());
-    out.extend_from_slice(&(BEAT as u16).to_be_bytes());
-    for t in tracks {
-        out.extend_from_slice(b"MTrk");
-        out.extend_from_slice(&(t.len() as u32).to_be_bytes());
-        out.extend_from_slice(&t);
-    }
-    out
-}
-
-fn meta(t: &mut Vec<u8>, delta: u32, kind: u8, data: &[u8]) {
-    varlen(t, delta);
-    t.extend_from_slice(&[0xFF, kind]);
-    varlen(t, data.len() as u32);
-    t.extend_from_slice(data);
-}
-
-fn varlen(t: &mut Vec<u8>, mut v: u32) {
-    let mut bytes = vec![(v & 0x7F) as u8];
-    v >>= 7;
-    while v > 0 {
-        bytes.push((v & 0x7F) as u8 | 0x80);
-        v >>= 7;
-    }
-    t.extend(bytes.iter().rev());
+    crate::midi::write(title, p.bpm, p.song_length(), &tracks)
 }
 
 // ─────────────────────────────── song.md ────────────────────────────────
@@ -1104,19 +1054,6 @@ mod tests {
         assert!(m.windows(6).any(|w| w == [0xFF, 0x51, 3, 0x07, 0xA1, 0x20]));
         // Three note-ons on channel 0.
         assert_eq!(m.windows(2).filter(|w| w[0] == 0x90 && [60, 64, 67].contains(&w[1])).count(), 3);
-    }
-
-    #[test]
-    fn varlen_matches_the_spec() {
-        let enc = |v| {
-            let mut t = Vec::new();
-            varlen(&mut t, v);
-            t
-        };
-        assert_eq!(enc(0), [0x00]);
-        assert_eq!(enc(0x7F), [0x7F]);
-        assert_eq!(enc(0x80), [0x81, 0x00]);
-        assert_eq!(enc(0x0FFF_FFFF), [0xFF, 0xFF, 0xFF, 0x7F]);
     }
 
     #[test]

@@ -58,6 +58,12 @@ enum Drag {
     Erase,
     Velocity,
     Seek,
+    /// Alt+drag on the ruler: drawing a loop region from `anchor` (ticks).
+    /// `moved` false at release = it was an Alt+click, which clears the loop.
+    Loop {
+        anchor: f32,
+        moved: bool,
+    },
     Audition,
     /// The overview bar (pan or zoom), shared with the playlist.
     Overview(OverviewDrag),
@@ -80,6 +86,8 @@ pub struct PianoRoll {
     pub show_scale: bool,
     pub show_ghosts: bool,
     selection: Vec<usize>,
+    /// The loop region (pattern ticks), if one is drawn; see `timeline::loop_span`.
+    pub looped: Option<(u32, u32)>,
     /// Default lengths for new notes: [drum channels, melodic channels].
     last_len: [u32; 2],
     last_vel: f32,
@@ -107,6 +115,7 @@ impl Default for PianoRoll {
             show_scale: true,
             show_ghosts: true,
             selection: Vec::new(),
+            looped: None,
             last_len: [TICKS_PER_STEP, TICKS_PER_STEP * 2],
             last_vel: 0.8,
             clipboard: Vec::new(),
@@ -177,6 +186,9 @@ impl PianoRoll {
 
     fn sanitize(&mut self, pat: usize, ch: ChannelId, len: usize, melodic: bool) {
         if self.editing != Some((pat, ch)) {
+            if self.editing.is_some_and(|(was, _)| was != pat) {
+                self.looped = None; // a loop belongs to its pattern
+            }
             self.editing = Some((pat, ch));
             self.selection.clear();
             self.drag = Drag::None;
@@ -446,6 +458,9 @@ impl PianoRoll {
             if let Some(k) = self.audition.take() {
                 out.push(Action::NoteOff(k));
             }
+            if matches!(self.drag, Drag::Loop { moved: false, .. }) {
+                self.looped = None; // Alt+click: no loop
+            }
             self.drag = Drag::None;
         }
 
@@ -495,6 +510,12 @@ impl PianoRoll {
         vbar.paint(&painter, &self.rows(grid), matches!(self.drag, Drag::VBar(_)));
         // Playhead: a bright line while playing, a dim marker (where Play starts) when stopped.
         timeline::paint_ruler(&painter, &self.time, ruler, pattern_ticks, Some((play, playing)), grid);
+        if let Some(range) = self.looped {
+            timeline::paint_loop(&painter, &self.time, ruler, grid, range);
+        }
+        if let Some(pos) = pos.filter(|p| hovering && (grid.contains(*p) || ruler.contains(*p))) {
+            timeline::paint_cursor(&painter, pos.x, ruler, grid);
+        }
         let sounding: Vec<u8> = if playing {
             p.patterns[pat]
                 .notes(ch_id)
@@ -686,6 +707,8 @@ impl PianoRoll {
             let mut rv = self.rows(view.grid);
             self.drag = Drag::VBar(vbar.press(&mut rv, pos));
             self.set_rows(rv, view.grid);
+        } else if ruler.contains(pos) && primary && mods.alt {
+            self.drag = Drag::Loop { anchor: view.tick(pos.x), moved: false };
         } else if ruler.contains(pos) && primary {
             // The piano roll's ruler is about *this pattern*: hear it from here.
             // (In song mode the app finds where this pattern plays in the song.)
@@ -796,6 +819,13 @@ impl PianoRoll {
                 self.last_vel = v;
             }
             Drag::Seek => out.push(Action::SeekPattern(view.tick(pos.x).clamp(0.0, pattern_ticks - 1.0) as f64)),
+            Drag::Loop { anchor, moved } => {
+                let tick = view.tick(pos.x).clamp(0.0, pattern_ticks);
+                *moved |= (tick - *anchor).abs() * view.ppt >= 3.0;
+                if *moved {
+                    self.looped = Some(timeline::loop_span(*anchor, tick, self.snap));
+                }
+            }
             Drag::Audition => {
                 let key = view.key(pos.y).clamp(0, 127) as u8;
                 self.audition(key, out);
