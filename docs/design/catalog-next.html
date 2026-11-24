@@ -438,7 +438,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .vp .win .end:hover::after{background:var(--ink)}
 .vp .win .end.l{left:0} .vp .win .end.r{right:0}
 /* the vertical viewport bar: the same window and handles, no miniature */
-.vp.v{width:var(--sct);height:auto}
+.vp.v{width:calc(var(--sct) + 14px);height:auto}   /* exactly as wide as the horizontal one is tall: consistency, predictability */
 .vp.v .win{top:auto;bottom:auto;left:-2px;right:-2px}
 .vp.v .win .end{left:0;right:0;width:auto;height:14px;cursor:ns-resize}
 .vp.v .win .end::after{left:28%;right:28%;top:6px;bottom:auto;width:auto;height:2px}
@@ -666,8 +666,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 <div class="scroll" style="overflow-x:auto"><div class="mock" id="mock"></div></div>
 
 <!-- ═════════════════════════ SCROLLBARS ═════════════════════════ -->
-<h2>Scrollbars <span class="draft">UI-NEEDS 6 · DRAFT 2</span></h2>
-<p><b>Draft 2:</b> 20 px; one family. The <b>viewport</b> bar keeps its miniature and gets wide (14 px) zoom handles; the <b>vertical viewport</b> bar is the same window and handles without a miniature (rows: drag to scroll, drag its ends to zoom the rows); the <b>plain</b> bar is the viewport's window alone, no miniature, no handles. One look, two kinds. <b>Plain</b> (lists, the browser, the mixer): a sunken track, the thumb a button plate (lighter on hover, pressed while dragging, never shorter than 28 px), always visible, never flashing. Click the track to jump a page toward the click; the wheel scrolls (over the mixer, a vertical wheel scrolls sideways). <b>Viewport</b> (the editors' overview bar): the same track with a miniature of the content inside; the thumb is a window over it: drag it to move, drag its ends to zoom. The mock screen's mixer now has a plain bar and its arrangement a viewport bar.</p>
+<h2>Scrollbars <span class="draft">UI-NEEDS 6 · SETTLED</span></h2>
+<p><b>Draft 2:</b> 20 px; one family. The <b>viewport</b> bar keeps its miniature and gets wide (14 px) zoom handles; the <b>vertical viewport</b> bar is exactly as wide as the horizontal one is tall (34 px), the same window and handles without a miniature (rows: drag to scroll, drag its ends to zoom the rows); the <b>plain</b> bar is the viewport's window alone, no miniature, no handles. One look, two kinds. <b>Plain</b> (lists, the browser, the mixer): a sunken track, the thumb a button plate (lighter on hover, pressed while dragging, never shorter than 28 px), always visible, never flashing. Click the track to jump a page toward the click; the wheel scrolls (over the mixer, a vertical wheel scrolls sideways). <b>Viewport</b> (the editors' overview bar): the same track with a miniature of the content inside; the thumb is a window over it: drag it to move, drag its ends to zoom. The mock screen's mixer now has a plain bar and its arrangement a viewport bar.</p>
 <div class="card">
   <div class="sc-demo">
     <div><div class="caps" style="margin-bottom:6px">Plain · vertical · a long list</div><div id="sc-list"></div></div>
@@ -1504,7 +1504,7 @@ function viewportBar(onChange, minis, axis = 'h') {
     const me = stdMeter('v', 120, 40 + t); me.style.cssText = 'position:absolute;left:44px;top:8px'; st.append(me); const n = h('div', 'caps', st, t ? 'Insert ' + t : 'Master'); n.style.cssText = 'position:absolute;left:6px;bottom:6px'; }
   $('#sc-mixer').append(plainScroll(strips, 'h', {height: '170px', width: '100%'}));
   // viewport
-  const stage = h('div', ''); stage.style.cssText = 'display:grid;grid-template-columns:1fr var(--sct);gap:4px;margin-top:4px';
+  const stage = h('div', ''); stage.style.cssText = 'display:grid;grid-template-columns:1fr calc(var(--sct) + 14px);gap:4px;margin-top:4px';
   const box = h('div', '', stage); box.style.cssText = 'height:150px;overflow:hidden;position:relative;background:var(--surface);border:2px solid var(--ground)';
   const lane = h('div', '', box); lane.style.cssText = 'position:absolute;top:0;left:0;height:100%';
   const clips = [[.05, .2, 0, 'mint'], [.3, .4, 0, 'mint'], [0, .25, 1, 'pink'], [.25, .5, 1, 'pink'], [.1, .3, 2, 'blue'], [.45, .2, 2, 'lavender'], [.6, .35, 3, 'amber'], [.2, .15, 4, 'cyan'], [.7, .25, 4, 'cyan']];
