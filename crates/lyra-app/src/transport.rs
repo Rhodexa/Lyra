@@ -148,7 +148,7 @@ pub fn show(
             module(ui, |ui| {
                 // right_to_left: the meter is added first so it lands on the right.
                 let (r, _) = ui.allocate_exact_size(vec2(big * 3.6, big * 0.42), Sense::hover());
-                widgets::meter_stereo_h(ui.painter(), r, st.master_meter);
+                widgets::meter(ui, ui.id().with("master-meter"), r, &st.master_meter, false);
                 let mut master = p.master_volume;
                 if tracked(&widgets::knob(ui, &mut master, &MASTER, big, theme::MINT), h, p) {
                     p.master_volume = master;

@@ -542,7 +542,7 @@ pub fn bar(ui: &mut Ui, r: Rect, rec: &mut Recorder) {
 pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
     let m = theme::m();
     ui.painter().rect_filled(r, theme::cr(0), theme::PANEL);
-    let meter = Rect::from_min_max(pos2(r.right() - 14.0, r.top() + 8.0), pos2(r.right() - 8.0, r.bottom() - 8.0));
+    let meter = Rect::from_min_max(pos2(r.right() - 22.0, r.top() + 8.0), pos2(r.right() - 8.0, r.bottom() - 8.0));
     let body = Rect::from_min_max(r.min + vec2(8.0, 6.0), pos2(meter.left() - 8.0, r.bottom() - 6.0));
     let (has_tape, running, level, threshold, wait) = {
         let s = rec.shared.lock().unwrap_or_else(|e| e.into_inner());
@@ -613,10 +613,9 @@ pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
     } else {
         rec.shown_level * 0.94
     };
+    // Eased (calm), drawn as the standard meter with one bar (the input is mono).
     let frac = widgets::meter_fraction(rec.shown_level);
-    ui.painter().rect_filled(meter, theme::cr(2), theme::WELL);
-    let lit = Rect::from_min_max(pos2(meter.left(), meter.bottom() - frac * meter.height()), meter.max);
-    ui.painter().rect_filled(lit, theme::cr(2), theme::MINT_DEEP);
+    widgets::meter(ui, ui.id().with("input-meter"), meter, &[rec.shown_level], true);
     if frac > 0.0 {
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(40));
     }

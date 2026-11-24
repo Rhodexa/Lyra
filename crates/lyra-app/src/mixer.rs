@@ -45,15 +45,20 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
         // window crept back open after you shrank it.)
         ui.spacing_mut().item_spacing.x = 0.0;
         let strips_w = (ui.available_width() - seam - RACK_W - 2.0 * RACK_PAD).max(STRIP_W);
+        // Strips fit the height they're given (the bottom area can be resized):
+        // the fader keeps its size, the lower part takes what's left, so the
+        // names, anchored at the bottom, always end inside the strip.
+        let gutter = ui.spacing().scroll.bar_width + ui.spacing().scroll.bar_inner_margin + ui.spacing().scroll.bar_outer_margin;
+        let strip_h = (ui.available_height() - gutter).clamp(8.0 + FADER_H + 6.0 + 110.0, STRIP_H);
         egui::ScrollArea::horizontal().id_salt("mixer-strips").max_width(strips_w).show(ui, |ui| {
             // The window's own background is the rack frame; strips are
             // plates on it, a seam apart.
             let n = p.mixer.len();
             let width = n as f32 * (STRIP_W + seam) - seam;
-            let (rack, _) = ui.allocate_exact_size(vec2(width, STRIP_H), Sense::hover());
+            let (rack, _) = ui.allocate_exact_size(vec2(width, strip_h), Sense::hover());
             for t in 0..n {
                 let x = rack.left() + t as f32 * (STRIP_W + seam);
-                strip(ui, Rect::from_min_size(pos2(x, rack.top()), vec2(STRIP_W, STRIP_H)), p, h, st, t);
+                strip(ui, Rect::from_min_size(pos2(x, rack.top()), vec2(STRIP_W, strip_h)), p, h, st, t);
             }
         });
         ui.add_space(seam);
@@ -287,42 +292,12 @@ fn db_text(v: f32) -> String {
     }
 }
 
-/// The study's stereo meter: a dark well, two bars in a fixed full-scale
-/// gradient (-60 … 0 dB), and a pale peak-hold line that waits, then falls.
+/// The strip's meter: the standard one, standing beside the fader, its bars
+/// as tall as the fader's travel.
 fn meter(ui: &Ui, id: egui::Id, rect: Rect, fader: Rect, levels: [f32; 2]) {
-    let p = ui.painter();
     let (y0, y1) = (fader.top() + 10.0, fader.bottom() - 9.0);
-    let well = Rect::from_min_max(pos2(rect.left() + 1.0, y0 - 2.0), pos2(rect.right() - 1.0, y1 + 2.0));
-    p.rect_filled(well, cr(2), hex(0x151515));
-    let inner = well.shrink(2.0);
-    p.rect_filled(inner, cr(1), hex(0x1f1f1f));
-    let now = ui.input(|i| i.time);
-    let bar_w = (inner.width() - 6.0) / 2.0;
-    for (k, level) in levels.into_iter().enumerate() {
-        let bar = Rect::from_min_size(
-            pos2(inner.left() + 2.0 + k as f32 * (bar_w + 2.0), inner.top() + 2.0),
-            vec2(bar_w, inner.height() - 4.0),
-        );
-        let frac = widgets::meter_fraction(level);
-        widgets::meter_bar(p, bar, frac, true);
-        // Peak hold: (fraction, time it was set).
-        let hold_id = id.with(k);
-        let (mut held, mut since): (f32, f64) = ui.data(|d| d.get_temp(hold_id)).unwrap_or((0.0, 0.0));
-        if frac >= held {
-            (held, since) = (frac, now);
-        } else if now - since > 0.4 {
-            held = (held - 0.2 * ui.input(|i| i.stable_dt).min(0.1)).max(frac);
-        }
-        ui.data_mut(|d| d.insert_temp(hold_id, (held, since)));
-        if held > 0.02 {
-            let y = bar.bottom() - held * bar.height();
-            p.rect_filled(
-                Rect::from_min_size(pos2(bar.left(), y - 1.0), vec2(bar.width(), 2.0)),
-                cr(0),
-                hex(0xe5e9b7).gamma_multiply(0.9),
-            );
-        }
-    }
+    let well = Rect::from_min_max(pos2(rect.left() + 1.0, y0 - 4.0), pos2(rect.right() - 1.0, y1 + 4.0));
+    widgets::meter(ui, id, well, &levels, true);
 }
 
 /// The selected track's effect rack: always eight slots, in signal order,

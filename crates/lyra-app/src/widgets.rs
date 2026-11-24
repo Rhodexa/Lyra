@@ -644,14 +644,46 @@ pub fn meter_bar(p: &egui::Painter, r: Rect, frac: f32, vertical: bool) {
     p.add(Shape::mesh(mesh));
 }
 
-/// A horizontal stereo meter in its well (`levels` are linear amplitudes).
-pub fn meter_stereo_h(p: &egui::Painter, r: Rect, levels: [f32; 2]) {
-    p.rect_filled(r, cr(2), Color32::from_rgb(0x15, 0x15, 0x15));
-    let inner = r.shrink(2.0);
-    let h = (inner.height() - 2.0) / 2.0;
-    for (k, level) in levels.into_iter().enumerate() {
-        let bar = Rect::from_min_size(pos2(inner.left(), inner.top() + k as f32 * (h + 2.0)), vec2(inner.width(), h));
-        meter_bar(p, bar, meter_fraction(level), false);
+/// The standard meter (catalog-next, settled), vertical or horizontal: a dark
+/// well with an inner bed, one bar per channel in the fixed full-scale
+/// gradient (-60 … 0 dB), and a pale peak line that waits 0.4 s, then falls.
+/// `levels` are linear amplitudes; `well` is the whole meter.
+pub fn meter(ui: &Ui, id: egui::Id, well: Rect, levels: &[f32], vertical: bool) {
+    let p = ui.painter();
+    p.rect_filled(well, cr(2), Color32::from_rgb(0x15, 0x15, 0x15));
+    let inner = well.shrink(2.0);
+    p.rect_filled(inner, cr(1), Color32::from_rgb(0x1f, 0x1f, 0x1f));
+    let n = levels.len().max(1) as f32;
+    let bed = inner.shrink(2.0);
+    let across = if vertical { bed.width() } else { bed.height() };
+    let thick = ((across - 2.0 * (n - 1.0)) / n).max(1.0);
+    let now = ui.input(|i| i.time);
+    for (k, &level) in levels.iter().enumerate() {
+        let off = k as f32 * (thick + 2.0);
+        let bar = if vertical {
+            Rect::from_min_size(pos2(bed.left() + off, bed.top()), vec2(thick, bed.height()))
+        } else {
+            Rect::from_min_size(pos2(bed.left(), bed.top() + off), vec2(bed.width(), thick))
+        };
+        let frac = meter_fraction(level);
+        meter_bar(p, bar, frac, vertical);
+        // Peak hold: (fraction, time it was set).
+        let hold_id = id.with(("peak", k));
+        let (mut held, mut since): (f32, f64) = ui.data(|d| d.get_temp(hold_id)).unwrap_or((0.0, 0.0));
+        if frac >= held {
+            (held, since) = (frac, now);
+        } else if now - since > 0.4 {
+            held = (held - 0.2 * ui.input(|i| i.stable_dt).min(0.1)).max(frac);
+        }
+        ui.data_mut(|d| d.insert_temp(hold_id, (held, since)));
+        if held > 0.02 {
+            let peak = if vertical {
+                Rect::from_min_size(pos2(bar.left(), bar.bottom() - held * bar.height() - 1.0), vec2(bar.width(), 2.0))
+            } else {
+                Rect::from_min_size(pos2(bar.left() + held * bar.width() - 1.0, bar.top()), vec2(2.0, bar.height()))
+            };
+            p.rect_filled(peak, cr(0), Color32::from_rgb(0xe5, 0xe9, 0xb7).gamma_multiply(0.9));
+        }
     }
 }
 
