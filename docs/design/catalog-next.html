@@ -222,6 +222,44 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .dd-col+.dd-col{border-left:2px solid #c4c4c4}
 .dd-head{height:22px;display:flex;align-items:flex-end;padding:0 8px 3px;font:700 10px/1 var(--btn-font);letter-spacing:.1em;text-transform:uppercase;color:var(--lcd-dim)}
 .dd-head i{font-style:normal;font-weight:400;margin-left:4px}
+/* ═════════ LIST ROW (draft 1) ═════════
+   Dark (browsers live in their own panels). 28 px rows (the minimum size).
+   Names in the reading font, as written (file names keep their case); details in mono, dim, right-aligned.
+   Rows: flat · plated · striped (class on .lst). Selected: edge · backlit · lifted (class on .lst). */
+.lst{width:300px;user-select:none}
+.lst .search{display:flex;align-items:center;gap:8px;height:var(--s);margin:6px;padding:0 8px;background:var(--sunken);border:var(--btn-bw) solid color-mix(in srgb,var(--sunken),black var(--btn-ol));border-radius:var(--btn-r);color:var(--ink-faint);font-size:13px}
+.lst .search svg{width:14px;height:14px}
+.lst .rows{padding:2px 4px 6px;display:flex;flex-direction:column}
+.lr{--b:transparent;height:var(--s);display:flex;align-items:center;gap:6px;padding:0 8px 0 calc(6px + var(--ind,0) * 14px);cursor:pointer;
+  background:var(--b);border-radius:var(--r-tile);color:var(--ink);font:13px/1 var(--read-font);white-space:nowrap;position:relative}
+.lr .nm{flex:1;overflow:hidden;text-overflow:ellipsis}
+.lr .dt{font:12px var(--t-num);color:var(--ink-dim)}
+.lr svg{width:14px;height:14px;flex:none;color:var(--ink-dim)}
+.lr .tw{width:10px;height:10px;transition:transform .08s}
+.lr.folder .nm{font:var(--btn-fw) 12px/1 var(--btn-font);letter-spacing:.05em;text-transform:uppercase;color:var(--ink)}
+.lr.folder.closed .tw{transform:rotate(-90deg)}
+.lr:hover{--b:#323232}
+/* selected */
+.lr.sel{--b:var(--surface-sel);box-shadow:inset 3px 0 0 var(--mid)}
+.sel-backlit .lr.sel{--b:var(--low);box-shadow:none;color:color-mix(in srgb,var(--rim),black 68%)}
+.sel-backlit .lr.sel .dt,.sel-backlit .lr.sel svg{color:color-mix(in srgb,var(--rim),black 50%)}
+.sel-lifted .lr.sel{--b:#3d3d3d;box-shadow:none}
+/* playing (previewing): the name lights up, a small light pulses */
+.lr.playing .nm{color:var(--hi)}
+.lr.playing::after{content:'';position:absolute;right:58px;width:6px;height:6px;border-radius:50%;background:var(--mid);animation:pulse .5s ease-in-out infinite alternate}
+@keyframes pulse{from{opacity:.35}to{opacity:1}}
+.lr.dragging{opacity:.4}
+.lr.missing .nm{color:var(--ink-faint);text-decoration:line-through}
+.ghost{position:fixed;z-index:50;pointer-events:none;padding:6px 10px;background:var(--btn-body);border:var(--btn-bw) solid color-mix(in srgb,var(--btn-body),black var(--btn-ol));border-radius:var(--btn-r);color:var(--ink);font:13px var(--read-font)}
+/* row styles */
+.rows-plated .lr{--b:#2e2e2e;border:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol));margin-top:-2px}
+.rows-plated .lr:hover{--b:#363636}
+.rows-striped .lr:nth-child(even){--b:#2d2d2d}
+.rows-striped .lr:hover{--b:#353535}
+.rows-plated .lr.sel,.rows-striped .lr.sel{--b:var(--surface-sel)}
+.sel-backlit.rows-plated .lr.sel,.sel-backlit.rows-striped .lr.sel{--b:var(--low)}
+.sel-lifted.rows-plated .lr.sel,.sel-lifted.rows-striped .lr.sel{--b:#3d3d3d}
+.lst-legend{display:grid;grid-template-columns:120px 300px;gap:2px 16px;align-items:center}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -365,6 +403,20 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <div class="plate" id="dd-ctx-lcd" style="height:56px"></div>
   <p>One row, one height: everything here is M (40). Left to right: the area picker, snap, the mixer's insert (numbers: replaces the number well), a long list (chord stamp), then a button and a mode switch for scale.</p>
 </div>
+
+<!-- ═════════════════════════ LIST ROW ═════════════════════════ -->
+<h2>List row <span class="draft">UI-NEEDS 20 · DRAFT 1</span></h2>
+<p>The browser, files, presets, the Patterns tab. <b>Dark</b>: lists live in their own panels (the LCD drawer is only for things that pop up over the UI). 28 px rows; names in the reading font as written (file names keep their case), folder names in the label font, details in mono, dim, on the right. Click to select (Ctrl-click: several), double-click to preview (the <i>playing</i> state), drag a row; click a folder to open or close it. Compare the switches.</p>
+<div class="card">
+  <div class="row" style="gap:24px;margin-bottom:14px">
+    <span class="row" style="gap:6px"><span class="caps">Rows</span><span id="lst-rows"></span></span>
+    <span class="row" style="gap:6px"><span class="caps">Selected</span><span id="lst-sel"></span></span>
+  </div>
+  <div class="row" style="align-items:flex-start;gap:40px">
+    <div id="lst-browser"></div>
+    <div><div class="caps" style="margin-bottom:8px">Every state</div><div class="lst-legend" id="lst-legend"></div></div>
+  </div>
+</div>
 </main>
 
 <script>
@@ -392,6 +444,9 @@ const ICON = {
   roll:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M5 2.5v6M8 2.5v6M11 2.5v6"/></svg>',
   mixer:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2v12M8 2v12M12 2v12"/><rect x="2.5" y="9" width="3" height="2" fill="currentColor"/><rect x="6.5" y="4" width="3" height="2" fill="currentColor"/><rect x="10.5" y="7" width="3" height="2" fill="currentColor"/></svg>',
   tape:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="4.5" cy="8" r="2.5"/><circle cx="11.5" cy="8" r="2.5"/><path d="M4.5 10.5h7"/></svg>',
+  wave:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h1.5M5 5v6M8 3v10M11 6v4M14 8h-1"/></svg>',
+  search:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>',
+  tw:'<svg class="tw" viewBox="0 0 10 10"><path d="M1.5 3L5 7 8.5 3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
   snap:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 3v10M8 3v10M13 3v10"/></svg>',
 };
 // A button: size S/M/L, legend (text or icon name), toggles on click unless `push`.
@@ -684,6 +739,64 @@ document.addEventListener('click', () => document.querySelectorAll('.dd.open').f
   const bc = (label, n) => { const c = h('div', '', big); h('div', 'caps', c, label).style.marginBottom = '8px'; c.append(n); };
   bc('Add plugin · drawn open', bigDropdown('M', plugins, [1, 0], {static: true, width: '170px'}));
   bc('Chord stamp · click', bigDropdown('M', chords, [1, 0], {width: '120px'}));
+  document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
+})();
+
+// ── list row ──
+const FS = [
+  ['Lyra', 65, [['Starter Kit', 65, [['kick_round', '0.41 s'], ['snare_tight', '0.38 s'], ['hat_closed', '0.12 s']]]]],
+  ['Your library', 22, [['voice_sample_1', '3.03 s'], ['voice_sample_10', '16.0 s'], ['voice_sample_11', '16.0 s'], ['voice_sample_12', '16.0 s'], ['a very long file name that will not fit here.wav', '4.01 s'], ['voice_sample_2', '3.03 s'], ['missing_take.wav', '—', 'missing']]],
+  ['voices', 0, []],
+];
+function browserList() {
+  const lst = h('div', 'lst'); setLight(lst, light);
+  lst.append(h('div', 'search', null, ICON.search + 'Search samples'));
+  const rows = h('div', 'rows', lst);
+  const all = [];
+  const add = (item, depth, parentKids) => {
+    const [name, a, b] = item, folder = Array.isArray(b);
+    const r = h('div', 'lr' + (folder ? ' folder' : '') + (b === 'missing' ? ' missing' : ''), parentKids || rows,
+      folder ? `${ICON.tw}<span class="nm">${name}</span><span class="dt">${a}</span>` : `${ICON.wave}<span class="nm">${name}</span><span class="dt">${a}</span>`);
+    r.style.setProperty('--ind', depth); r.title = name; all.push(r);
+    if (folder) {
+      const kids = h('div', '', parentKids || rows); kids.style.display = 'contents';
+      b.forEach(k => add(k, depth + 1, kids));
+      r.onclick = () => { r.classList.toggle('closed'); kids.style.display = r.classList.contains('closed') ? 'none' : 'contents'; };
+    } else {
+      r.onclick = e => { if (!(e.ctrlKey || e.metaKey)) all.forEach(x => x.classList.remove('sel')); r.classList.toggle('sel'); };
+      r.ondblclick = () => { const on = !r.classList.contains('playing'); all.forEach(x => x.classList.remove('playing')); r.classList.toggle('playing', on); };
+      r.addEventListener('pointerdown', e => {
+        const x0 = e.clientX, y0 = e.clientY; let ghost = null;
+        const move = ev => { if (!ghost && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 5) { ghost = h('div', 'ghost', document.body, name); r.classList.add('dragging'); }
+          if (ghost) { ghost.style.left = ev.clientX + 12 + 'px'; ghost.style.top = ev.clientY + 8 + 'px'; } };
+        const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); if (ghost) { ghost.remove(); r.classList.remove('dragging'); } };
+        addEventListener('pointermove', move); addEventListener('pointerup', up);
+      });
+    }
+  };
+  FS.forEach(f => add(f, 0));
+  all[2].classList.add('sel'); all[6].classList.add('playing');
+  return lst;
+}
+(() => {
+  const host = $('#lst-browser');
+  host.append(tabsT2('S', ['Files', 'Instruments', 'Effects'], 0, ''));
+  const body = host.querySelector('.body'); body.style.padding = '0'; body.append(browserList());
+  const lst = host.querySelector('.lst');
+  const setRows = v => ['flat', 'plated', 'striped'].forEach(k => lst.classList.toggle('rows-' + k, k === v));
+  const setSel = v => ['edge', 'backlit', 'lifted'].forEach(k => lst.classList.toggle('sel-' + k, k === v));
+  const sw = (host, names, set) => { const m = modeSwitch('B', 'S', names.map(n => [n]), 0); m.addEventListener('click', () => setTimeout(() => {
+    const i = [...m.querySelectorAll('.btn')].findIndex(b => b.classList.contains('on')); set(names[i].toLowerCase()); })); $(host).append(m); };
+  sw('#lst-rows', ['Flat', 'Plated', 'Striped'], setRows); sw('#lst-sel', ['Edge', 'Backlit', 'Lifted'], setSel);
+  // the legend: one row per state, drawn statically
+  const lg = $('#lst-legend');
+  const st = (label, cls, extra = '') => { h('div', 'caps', lg, label); const w = h('div', 'lst', lg); w.classList.add('legend-row'); setLight(w, light);
+    const r = h('div', 'lr ' + cls, w, `${ICON.wave}<span class="nm">voice_sample_${label.length}</span><span class="dt">3.03 s</span>`); if (extra) r.style.cssText += extra; };
+  st('idle', ''); st('hover', '', ';--b:#323232'); st('selected', 'sel'); st('playing', 'playing'); st('dragging', 'dragging'); st('missing file', 'missing');
+  const fr = h('div', 'caps', lg, 'folder'); const fw = h('div', 'lst', lg); h('div', 'lr folder', fw, `${ICON.tw}<span class="nm">Your library</span><span class="dt">22</span>`);
+  // keep the legend in step with the switches
+  const sync = () => lg.querySelectorAll('.lst').forEach(w => { w.className = lst.className; });
+  ['#lst-rows', '#lst-sel'].forEach(id => $(id).addEventListener('click', () => setTimeout(sync, 10)));
   document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
