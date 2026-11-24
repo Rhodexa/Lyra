@@ -23,6 +23,7 @@
 //! Ctrl+D or Ctrl+B (duplicate after), Ctrl+Q (quantize), ↑↓ semitone,
 //! Ctrl+↑↓ octave, ←→ nudge by snap, Ctrl+←→ by a beat, Esc.
 
+use crate::widgets;
 use crate::keys::Action;
 use crate::theme::{self, cr, stroke};
 use crate::timeline::{self, Input, Overview, OverviewDrag, RowView, TimeView, VBar, VDrag, Wheel};
@@ -643,23 +644,20 @@ impl PianoRoll {
 
             ui.label(egui::RichText::new("snap").small().color(theme::TEXT_DIM));
             let snap_name = SNAPS.iter().find(|s| s.1 == self.snap).map_or("?", |s| s.0);
-            egui::ComboBox::from_id_salt("pr-snap").width(64.0).selected_text(snap_name).show_ui(ui, |ui| {
-                for (name, ticks) in SNAPS {
-                    ui.selectable_value(&mut self.snap, ticks, name);
-                }
-            });
+            let _ = snap_name;
+            let rows: Vec<_> = SNAPS.iter().map(|(n, _)| widgets::DropRow::text(*n)).collect();
+            let at = SNAPS.iter().position(|s| s.1 == self.snap).unwrap_or(0);
+            if let Some(i) = widgets::dropdown(ui, "pr-snap", 96.0, &rows, at, false, "") {
+                self.snap = SNAPS[i].1;
+            }
 
             ui.label(egui::RichText::new("stamp").small().color(theme::TEXT_DIM));
-            egui::ComboBox::from_id_salt("pr-chord")
-                .width(104.0)
-                .selected_text(self.chord.name())
-                .show_ui(ui, |ui| {
-                    for c in Chord::ALL {
-                        ui.selectable_value(&mut self.chord, c, c.name());
-                    }
-                })
-                .response
-                .on_hover_text("What one click places. 'In key' chords always fit the song's key.");
+            let rows: Vec<_> = Chord::ALL.iter().map(|c| widgets::DropRow::text(c.name())).collect();
+            let at = Chord::ALL.iter().position(|c| *c == self.chord).unwrap_or(0);
+            let hint = "What one click places. 'In key' chords always fit the song's key.";
+            if let Some(i) = widgets::dropdown(ui, "pr-chord", 130.0, &rows, at, false, hint) {
+                self.chord = Chord::ALL[i];
+            }
 
             // Key + view options live in one menu, out of the way.
             let key_label = format!("{} {}", theory::NOTE_NAMES[p.key_root as usize], p.scale.name().to_lowercase());

@@ -42,11 +42,10 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
         ui.label(RichText::new("mixer").small().color(theme::TEXT_DIM));
         let mut route = p.channels[ch].mixer;
         let name = |t: usize| p.mixer.get(t).map_or("?".to_string(), |m| m.name.clone());
-        egui::ComboBox::from_id_salt(("route", ch)).width(90.0).selected_text(name(route)).show_ui(ui, |ui| {
-            for t in 0..p.mixer.len() {
-                ui.selectable_value(&mut route, t, name(t));
-            }
-        });
+        let rows: Vec<_> = (0..p.mixer.len()).map(|t| widgets::DropRow::text(name(t))).collect();
+        if let Some(i) = widgets::dropdown(ui, ("route", ch), 120.0, &rows, route, true, "The mixer insert this channel plays into") {
+            route = i;
+        }
         if route != p.channels[ch].mixer {
             h.checkpoint(p);
             p.channels[ch].mixer = route;
@@ -72,17 +71,12 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
             ui.label(RichText::new("choke").small().color(theme::TEXT_DIM));
             let mut choke = p.channels[ch].choke;
             let text = if choke == 0 { "off".to_string() } else { format!("group {choke}") };
-            egui::ComboBox::from_id_salt(("choke", ch))
-                .width(70.0)
-                .selected_text(text)
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut choke, 0, "off");
-                    for g in 1..=4 {
-                        ui.selectable_value(&mut choke, g, format!("group {g}"));
-                    }
-                })
-                .response
-                .on_hover_text("Channels in the same group cut each other off (closed hat stops open hat).");
+            let _ = text;
+            let rows: Vec<_> = (0..=4).map(|g| widgets::DropRow::text(if g == 0 { "off".to_string() } else { format!("group {g}") })).collect();
+            let hint = "Channels in the same group cut each other off (closed hat stops open hat).";
+            if let Some(i) = widgets::dropdown(ui, ("choke", ch), 100.0, &rows, choke as usize, false, hint) {
+                choke = i as _;
+            }
             if choke != p.channels[ch].choke {
                 h.checkpoint(p);
                 p.channels[ch].choke = choke;
@@ -181,14 +175,10 @@ fn param_cell(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, info: &P
             if info.is_choice() {
                 ui.add_space(4.0);
                 let mut idx = v.round() as usize;
-                egui::ComboBox::from_id_salt(("param", ch, id))
-                    .width(cell_w - 4.0)
-                    .selected_text(info.labels[idx.min(info.labels.len() - 1)])
-                    .show_ui(ui, |ui| {
-                        for (i, label) in info.labels.iter().enumerate() {
-                            ui.selectable_value(&mut idx, i, *label);
-                        }
-                    });
+                let rows: Vec<_> = info.labels.iter().map(|l| widgets::DropRow::text(*l)).collect();
+                if let Some(i) = widgets::dropdown(ui, ("param", ch, id), cell_w - 4.0, &rows, idx.min(rows.len().saturating_sub(1)), false, "") {
+                    idx = i;
+                }
                 if idx as f32 != v.round() {
                     h.checkpoint(p);
                     p.channels[ch].params[id] = idx as f32;

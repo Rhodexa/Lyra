@@ -17,9 +17,9 @@ use crate::audio_editor::AudioEditor;
 use crate::automation_editor::AutomationEditor;
 use crate::piano_roll::PianoRoll;
 use crate::playlist::Playlist;
-use crate::theme::{self, cr};
-use crate::widgets::{paint_icon, Icon};
-use egui::{pos2, vec2, Align2, FontId, Rect, Sense, Ui};
+use crate::theme;
+use crate::widgets::{self, Icon};
+use egui::Ui;
 
 /// What an area can show.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -123,57 +123,13 @@ pub fn picker(ui: &mut Ui, area: &mut Area) {
 }
 
 fn picker_list(ui: &mut Ui, editor: &mut Editor) {
-    let m = theme::m();
-    let h = m.control_h;
-    let (r, resp) = ui.allocate_exact_size(vec2(h * 5.6, h), Sense::click());
-    let p = ui.painter();
-    theme::well(p, r);
-    let icon = Rect::from_center_size(pos2(r.left() + h * 0.55, r.center().y), vec2(h * 0.7, h * 0.7));
-    let ink = if resp.hovered() { theme::TEXT } else { theme::mix(theme::TEXT, theme::TEXT_DIM, 0.3) };
-    paint_icon(p, icon, editor.icon(), ink, theme::WELL);
-    p.text(
-        pos2(r.left() + h * 1.05, r.center().y),
-        Align2::LEFT_CENTER,
-        editor.name(),
-        FontId::proportional(m.text),
-        ink,
-    );
-    let c = r.right_center() - vec2(11.0, 1.0);
-    let chevron = vec![c + vec2(-3.5, -1.5), c + vec2(0.0, 2.0), c + vec2(3.5, -1.5)];
-    p.add(egui::Shape::line(chevron, theme::stroke(1.5, theme::TEXT_DIM)));
-
-    let popup = ui.make_persistent_id("editor-picker");
-    if resp.clicked() {
-        ui.memory_mut(|mem| mem.toggle_popup(popup));
+    let h = theme::m().control_h;
+    let rows: Vec<widgets::DropRow> = Editor::ALL
+        .iter()
+        .map(|e| widgets::DropRow { label: e.name().into(), icon: Some(e.icon()), detail: e.key().into() })
+        .collect();
+    let chosen = Editor::ALL.iter().position(|e| e == editor).unwrap_or(0);
+    if let Some(i) = widgets::dropdown(ui, "editor-picker", h * 5.6, &rows, chosen, false, "Which editor this area shows") {
+        *editor = Editor::ALL[i];
     }
-    let resp = resp.on_hover_text("Which editor this area shows");
-    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
-        ui.set_min_width(r.width());
-        for e in Editor::ALL {
-            let (row, item) = ui.allocate_exact_size(vec2(r.width(), h), Sense::click());
-            let chosen = *editor == e;
-            if chosen || item.hovered() {
-                ui.painter().rect_filled(row, cr(3), if chosen { theme::PANEL_HI } else { theme::RAISED });
-            }
-            let icon = Rect::from_center_size(pos2(row.left() + h * 0.55, row.center().y), vec2(h * 0.7, h * 0.7));
-            paint_icon(ui.painter(), icon, e.icon(), theme::TEXT, theme::PANEL);
-            ui.painter().text(
-                pos2(row.left() + h * 1.05, row.center().y),
-                Align2::LEFT_CENTER,
-                e.name(),
-                FontId::proportional(m.text),
-                theme::TEXT,
-            );
-            ui.painter().text(
-                row.right_center() - vec2(8.0, 0.0),
-                Align2::RIGHT_CENTER,
-                e.key(),
-                FontId::monospace(m.text_small),
-                theme::TEXT_DIM,
-            );
-            if item.clicked() {
-                *editor = e;
-            }
-        }
-    });
 }

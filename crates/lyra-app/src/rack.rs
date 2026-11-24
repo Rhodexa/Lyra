@@ -179,16 +179,13 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
         let len = p.patterns[pat].min_length;
         let mut new_len = len;
         let bars = |n: u32| format!("{} bar{}", n / 16, if n > 16 { "s" } else { "" });
-        egui::ComboBox::from_id_salt("pattern-length")
-            .width(64.0)
-            .selected_text(bars(len))
-            .show_ui(ui, |ui| {
-                for n in [16, 32, 48, 64] {
-                    ui.selectable_value(&mut new_len, n, bars(n));
-                }
-            })
-            .response
-            .on_hover_text("Shortest length. The pattern grows by itself to fit its notes.");
+        let lens = [16, 32, 48, 64];
+        let rows: Vec<_> = lens.iter().map(|&n| widgets::DropRow::text(bars(n))).collect();
+        let at = lens.iter().position(|&n| n == len).unwrap_or(0);
+        let hint = "Shortest length. The pattern grows by itself to fit its notes.";
+        if let Some(i) = widgets::dropdown(ui, "pattern-length", 96.0, &rows, at, false, hint) {
+            new_len = lens[i];
+        }
         if new_len != len {
             h.checkpoint(p);
             p.patterns[pat].min_length = new_len;

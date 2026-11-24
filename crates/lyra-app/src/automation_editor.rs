@@ -269,11 +269,12 @@ impl AutomationEditor {
         ui.add_space(10.0);
         ui.label(RichText::new("snap").small().color(theme::TEXT_DIM));
         let name = SNAPS.iter().find(|s| s.1 == self.snap).map_or("?", |s| s.0);
-        egui::ComboBox::from_id_salt("auto-snap").width(64.0).selected_text(name).show_ui(ui, |ui| {
-            for (n, t) in SNAPS {
-                ui.selectable_value(&mut self.snap, t, n);
-            }
-        });
+        let _ = name;
+        let rows: Vec<_> = SNAPS.iter().map(|(n, _)| widgets::DropRow::text(*n)).collect();
+        let at = SNAPS.iter().position(|s| s.1 == self.snap).unwrap_or(0);
+        if let Some(i) = widgets::dropdown(ui, "auto-snap", 96.0, &rows, at, false, "") {
+            self.snap = SNAPS[i].1;
+        }
     }
 
     pub fn show(

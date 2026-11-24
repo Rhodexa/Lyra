@@ -980,6 +980,163 @@ pub fn choice(
     clicked
 }
 
+/// One row of a [`dropdown`].
+#[derive(Clone, Default)]
+pub struct DropRow {
+    pub label: String,
+    pub icon: Option<Icon>,
+    /// Shown dim on the right (a shortcut, a count).
+    pub detail: String,
+}
+
+impl DropRow {
+    pub fn text(label: impl Into<String>) -> Self {
+        DropRow { label: label.into(), ..Default::default() }
+    }
+}
+
+/// Rows per column before a drawer wraps into the next column.
+const DRAWER_ROWS: usize = 12;
+
+/// The dropdown (catalog-next.html, settled): closed, a dark well with an
+/// optional icon, the chosen label and a chevron; open, a drawer in the LCD's
+/// colours (rows S tall, the chosen one slightly grey and bold) that wraps into
+/// columns past 12 rows. `names`: labels are names (tracks, devices, files) and
+/// keep their case in the reading font; otherwise they're caps labels.
+/// Returns the row picked.
+pub fn dropdown(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash,
+    width: f32,
+    rows: &[DropRow],
+    chosen: usize,
+    names: bool,
+    hint: &str,
+) -> Option<usize> {
+    let h = theme::m().control_h;
+    let (r, resp) = ui.allocate_exact_size(vec2(width, h), Sense::click());
+    let id = ui.make_persistent_id(("dropdown", id_salt));
+    let enabled = ui.is_enabled();
+    let open = ui.memory(|mem| mem.is_popup_open(id));
+    let p = ui.painter();
+    let body = if resp.hovered() && enabled { theme::mix(theme::SUNKEN, Color32::WHITE, 0.03) } else { theme::SUNKEN };
+    let k = h / theme::SIZE_M;
+    theme::outlined(p, r, (theme::CORNER * k).clamp(3.0, 5.0), body);
+    let ink = if !enabled { theme::INK_FAINT } else if resp.hovered() || open { Color32::WHITE } else { theme::INK };
+    let row = rows.get(chosen.min(rows.len().saturating_sub(1)));
+    let mut x = r.left() + 9.0;
+    if let Some(icon) = row.and_then(|r| r.icon) {
+        let ir = Rect::from_center_size(pos2(x + h * 0.25, r.center().y), vec2(h * 0.6, h * 0.6));
+        paint_icon(p, ir, icon, ink, body);
+        x += h * 0.5 + 6.0;
+    }
+    let max_w = r.right() - 22.0 - x;
+    if let Some(row) = row {
+        let g = drop_label(ui, &row.label, names, false, max_w, ink);
+        ui.painter().galley(pos2(x, r.center().y - g.size().y * 0.5), g, ink);
+    }
+    let c = r.right_center() - vec2(12.0, 0.0);
+    let (a, b) = if open { (1.5, -2.0) } else { (-1.5, 2.0) };
+    let chevron = vec![c + vec2(-3.5, a), c + vec2(0.0, b), c + vec2(3.5, a)];
+    ui.painter().add(Shape::line(chevron, stroke(1.6, if enabled { theme::INK_DIM } else { theme::INK_FAINT })));
+    let resp = if hint.is_empty() { resp } else { resp.on_hover_text(hint) };
+    if resp.clicked() && enabled {
+        ui.memory_mut(|mem| mem.toggle_popup(id));
+    }
+    if !ui.memory(|mem| mem.is_popup_open(id)) {
+        return None;
+    }
+    // The drawer.
+    let mut picked = None;
+    let cols = rows.len().div_ceil(DRAWER_ROWS).max(1);
+    let per_col = rows.len().div_ceil(cols).max(1);
+    let col_w = if cols == 1 { width.max(120.0) } else { (width * 0.8).max(130.0) };
+    let area = egui::Area::new(id.with("drawer"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(r.left_bottom() + vec2(0.0, 3.0))
+        .show(ui.ctx(), |ui| {
+            let pad = theme::OUTLINE_W + 2.0;
+            let bg = ui.painter().add(Shape::Noop);
+            let top = ui.cursor().min + vec2(pad, pad);
+            for (i, row) in rows.iter().enumerate() {
+                let (c, k) = (i / per_col, i % per_col);
+                let rr = Rect::from_min_size(top + vec2(c as f32 * col_w, k as f32 * h), vec2(col_w, h));
+                let it = ui.interact(rr, id.with(("row", i)), Sense::click());
+                let on = i == chosen;
+                let fill = if on {
+                    Some(theme::mix(theme::LCD_DIM, Color32::BLACK, 0.12))
+                } else if it.hovered() {
+                    Some(theme::mix(theme::LCD_DIM, Color32::BLACK, 0.06))
+                } else {
+                    None
+                };
+                if let Some(f) = fill {
+                    ui.painter().rect_filled(rr, cr(3), f);
+                }
+                let mut tx = rr.left() + 8.0;
+                if let Some(icon) = row.icon {
+                    let ir = Rect::from_center_size(pos2(tx + h * 0.25, rr.center().y), vec2(h * 0.55, h * 0.55));
+                    paint_icon(ui.painter(), ir, icon, theme::LCD_INK, theme::LCD_DIM);
+                    tx += h * 0.5 + 6.0;
+                }
+                let dw = if row.detail.is_empty() {
+                    0.0
+                } else {
+                    let g = ui.fonts(|f| {
+                        f.layout_no_wrap(row.detail.clone(), egui::FontId::monospace(11.0), theme::LCD_INK_DIM)
+                    });
+                    let w = g.size().x;
+                    ui.painter().galley(pos2(rr.right() - 8.0 - w, rr.center().y - g.size().y * 0.5), g, theme::LCD_INK_DIM);
+                    w + 10.0
+                };
+                let g = drop_label(ui, &row.label, names, on, rr.right() - 8.0 - dw - tx, theme::LCD_INK);
+                ui.painter().galley(pos2(tx, rr.center().y - g.size().y * 0.5), g, theme::LCD_INK);
+                if it.clicked() {
+                    picked = Some(i);
+                }
+            }
+            let inner = Rect::from_min_size(top, vec2(cols as f32 * col_w, per_col as f32 * h));
+            ui.allocate_rect(inner.expand(pad), Sense::hover());
+            let outer = inner.expand(pad);
+            // Outline first, then the fill inside it; dividers between columns.
+            let mut shapes = vec![
+                Shape::rect_filled(outer.translate(vec2(0.0, 4.0)).expand(2.0), cr(7), Color32::from_black_alpha(70)),
+                Shape::rect_filled(outer, cr(5), theme::mix(theme::LCD_INK, Color32::BLACK, 0.5)),
+                Shape::rect_filled(outer.shrink(theme::OUTLINE_W), cr(3), theme::LCD_DIM),
+            ];
+            for c in 1..cols {
+                let x = inner.left() + c as f32 * col_w;
+                shapes.push(Shape::line_segment(
+                    [pos2(x, inner.top() + 4.0), pos2(x, inner.bottom() - 4.0)],
+                    stroke(2.0, theme::mix(theme::LCD_DIM, Color32::BLACK, 0.15)),
+                ));
+            }
+            ui.painter().set(bg, Shape::Vec(shapes));
+        });
+    // Close: on a pick, on Esc, or on a click outside the drawer and the well.
+    let outside = ui.input(|i| i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|p| !area.response.rect.contains(p) && !r.contains(p)));
+    if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        ui.memory_mut(|mem| mem.close_popup());
+    }
+    picked
+}
+
+/// A dropdown label: a name as written (reading font) or caps (label font),
+/// cut with "…" to fit `max_w`.
+fn drop_label(ui: &Ui, text: &str, names: bool, bold: bool, max_w: f32, color: Color32) -> std::sync::Arc<egui::Galley> {
+    if !names {
+        return if bold {
+            legend_galley(ui, text, 12.0, true, color)
+        } else {
+            fitted_caps(ui, text, 12.0, max_w.max(10.0), color)
+        };
+    }
+    let font = if bold { theme::read_bold(13.0) } else { theme::read(13.0) };
+    let mut job = egui::text::LayoutJob::single_section(text.to_string(), egui::TextFormat { font_id: font, color, ..Default::default() });
+    job.wrap = egui::text::TextWrapping { max_width: max_w.max(10.0), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+    ui.fonts(|f| f.layout_job(job))
+}
+
 /// A big key across the whole width (a rack's "+ New …"): easy to hit.
 pub fn wide_key(ui: &mut Ui, label: &str, hint: &str) -> Response {
     let m = theme::m();

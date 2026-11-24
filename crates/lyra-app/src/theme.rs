@@ -177,13 +177,11 @@ pub const INK_DIM: Color32 = TEXT_DIM;
 /// Idle legends on plates.
 pub const LEGEND: Color32 = Color32::from_rgb(0xb0, 0xb0, 0xb0);
 /// Disabled.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const INK_FAINT: Color32 = Color32::from_rgb(0x5c, 0x5c, 0x5c);
 /// Text on a lit body or an LCD.
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const INK_ON_LIGHT: Color32 = Color32::from_rgb(0x2c, 0x2c, 0x2c);
 /// The dim LCD (settled): pale panel, dark ink.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const LCD_DIM: Color32 = Color32::from_rgb(0xbc, 0xbc, 0xbc);
 
 /// Sizes: S · M · L. 28 is the floor for anything drawn or clicked.
@@ -229,13 +227,11 @@ pub fn label_bold(size: f32) -> FontId {
 }
 
 /// Reading text (Roboto).
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub fn read(size: f32) -> FontId {
     FontId::proportional(size)
 }
 
 /// Bold reading text (Roboto SemiBold).
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub fn read_bold(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name(READ_BOLD.into()))
 }

@@ -567,19 +567,16 @@ pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
         inside(ui, f, "device", |ui| {
             let shown = rec.device.clone().unwrap_or_else(|| "The system's input".to_string());
             ui.add_enabled_ui(!has_tape && !running, |ui| {
-                egui::ComboBox::from_id_salt("recorder-device").width(f.width() - 8.0).selected_text(shown).show_ui(ui, |ui| {
-                    if ui.selectable_label(rec.device.is_none(), "The system's input").clicked() {
-                        rec.set_device(None);
-                    }
-                    for name in rec.device_list.get_or_insert_with(Recorder::devices).clone() {
-                        if ui.selectable_label(rec.device.as_deref() == Some(name.as_str()), &name).clicked() {
-                            rec.set_device(Some(name));
-                        }
-                    }
-                });
-            })
-            .response
-            .on_hover_text("Where the tape listens: the system's input is whatever your desktop's sound settings pick (clear the tape to change it)");
+                let _ = shown;
+                let list = rec.device_list.get_or_insert_with(Recorder::devices).clone();
+                let mut rows = vec![widgets::DropRow::text("The system's input")];
+                rows.extend(list.iter().map(|n| widgets::DropRow::text(n.as_str())));
+                let at = rec.device.as_ref().and_then(|d| list.iter().position(|n| n == d)).map_or(0, |i| i + 1);
+                let hint = "Where the tape listens: the system's input is whatever your desktop's sound settings pick (clear the tape to change it)";
+                if let Some(i) = widgets::dropdown(ui, "recorder-device", f.width() - 8.0, &rows, at, true, hint) {
+                    rec.set_device(if i == 0 { None } else { Some(list[i - 1].clone()) });
+                }
+            });
         });
     }
     y += row;
@@ -590,18 +587,11 @@ pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
         let f = field(y);
         inside(ui, f, "track", |ui| {
             let name = |t: usize| tracks.get(t).cloned().unwrap_or_else(|| widgets::insert_label(t));
-            egui::ComboBox::from_id_salt("recorder-track")
-                .width(f.width() - 8.0)
-                .selected_text(name(rec.track))
-                .show_ui(ui, |ui| {
-                    for t in 0..tracks.len() {
-                        if ui.selectable_label(rec.track == t, name(t)).clicked() {
-                            rec.track = t;
-                        }
-                    }
-                })
-                .response
-                .on_hover_text("The mixer insert you hear the tape through (its effects too); a sent take plays there");
+            let rows: Vec<_> = (0..tracks.len()).map(|t| widgets::DropRow::text(name(t))).collect();
+            let hint = "The mixer insert you hear the tape through (its effects too); a sent take plays there";
+            if let Some(i) = widgets::dropdown(ui, "recorder-track", f.width() - 8.0, &rows, rec.track, true, hint) {
+                rec.track = i;
+            }
         });
     }
     y += row + 4.0;
