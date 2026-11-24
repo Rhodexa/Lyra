@@ -54,6 +54,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* beethoven2.mid (Beethoven Virus) track 5, 0:51–1:04: lots of string crossing, yet it slurs.
   - Claude: 0.09 s sixteenths hit "very fast runs four to a bow", but those are zig-zag figures rocking across strings (D2–A2–D2–G2…, a pedal note against a moving one), which players bow note by note. Now fast runs slur only where the line flows (steps, or leaps continuing the same direction); a leap reversing against a neighbouring interval is bowed separately, and short notes bounce. 0:51–1:04 now: sweeping arpeggios slurred, rocking figures bounced. Rendered as `midi/beethoven2.wav`.
 
+- [ ] *(Rhodexa, 2026-11-23)* What happens when the player releases a stopped (non-open) string while it's still decaying?
+  - Claude: the finger lifting turns the string back into the open string: the stopped note is choked, the leftover energy rings faintly at the open pitch, plus a tiny pluck from the finger leaving. Modelled now: before a rest, once a stopped note has died to about a quarter (as players wait), the finger lifts. Not for open strings, plucks, double stops, or when the next note is close. Demo: `scores/lifts.txt` → `renders/lifts.wav`.
+
 ## Wishes
 
 - [ ]

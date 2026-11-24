@@ -1,0 +1,11 @@
+# Stopped notes ringing into rests: listen at each rest for the finger
+# lifting off (the note stops, the open string rings faintly underneath).
+tempo 66
+mf
+E3:q r:h          # finger on the D string: the open D ghosts after
+F3:q r:h
+B2:q r:h          # on the G string: the open G
+f
+^E4:e r:q.        # on the A string: the open A
+p
+C#3:h r:h         # quiet: a quiet ghost

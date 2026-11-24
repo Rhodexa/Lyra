@@ -37,6 +37,9 @@
 //!   it hammers down mid-slur; lifting off makes a smaller one. After a rest
 //!   the finger is placed silently. A bounced bow knocks as it lands.
 //! * **Releases**: when the bow stops, the string rings on and darkens.
+//!   Before a rest, once a stopped note has nearly died, the finger lifts:
+//!   the note is choked and the open string rings on faintly, with a tiny
+//!   pluck of the finger leaving.
 //!   When the bow crosses to another string, the one it left rings on by
 //!   itself (open strings for long).
 //! * **Fingering**: a left hand covering a few semitones on all strings at
@@ -124,6 +127,9 @@ const FAST: f64 = 0.23;
 const BOW_CHANGE_FLOOR: f32 = 0.3;
 /// How long the bow-change dip takes, seconds.
 const BOW_CHANGE_TIME: f32 = 0.035;
+/// The finger lifts off a ringing stopped note once it has died to this
+/// fraction of its level.
+const LIFT_AT: f32 = 0.25;
 /// The phrase-end diminuendo happens over this many seconds (< LOOKAHEAD).
 const FADE_TIME: f64 = 0.85;
 
@@ -186,6 +192,8 @@ pub struct Performer {
     smooth_loud: f32,
     loud_keep: f32,
     prev_string: Option<u8>,
+    /// The last note whose finger has lifted off (see [`Performer::lift_at`]).
+    lifted: Option<usize>,
     /// Where the left hand sits (see [`choose_fingering`]).
     hand: f32,
 }
@@ -206,6 +214,7 @@ impl Performer {
             loud_keep: (-(1.0 / FRAME_RATE as f32) / 0.008).exp(),
             prev_string: None,
             hand: 1.0,
+            lifted: None,
         }
     }
 
@@ -275,7 +284,26 @@ impl Performer {
                 brightness: 0.4,
                 ..Frame::default()
             },
-            Some(i) => self.note_frame(i, t),
+            Some(i) => {
+                let f = self.note_frame(i, t);
+                // The finger lifts: the open string takes over what's left.
+                if let Some(lift) = self.lift_at(i, t) {
+                    if t >= lift && self.lifted != Some(i) {
+                        self.lifted = Some(i);
+                        let p = &self.plans[i];
+                        let residual = p.level * LIFT_AT;
+                        events.push(Event::Ring(Ring {
+                            time: t,
+                            pitch: self.inst.open_strings[p.string as usize],
+                            level: residual * 0.7,
+                            string: p.string,
+                            open: true,
+                        }));
+                        events.push(Event::Tap(Tap { time: t, strength: 0.12 }));
+                    }
+                }
+                f
+            }
         };
         self.smooth_loud = frame.loudness + self.loud_keep * (self.smooth_loud - frame.loudness);
         frame.loudness = self.smooth_loud;
@@ -634,6 +662,23 @@ impl Performer {
         self.plans.push(plan);
     }
 
+    /// When the finger lets go of a stopped note ringing into a rest: once
+    /// the ring has died to about a quarter, if the next note isn't coming
+    /// soon. `None` for open strings, plucks and notes that run on.
+    fn lift_at(&self, i: usize, t: f64) -> Option<f64> {
+        let (n, p) = (&self.notes[i], &self.plans[i]);
+        let open = (n.pitch - self.inst.open_strings[p.string as usize]).abs() < 0.01;
+        if p.pizz || open || p.double.is_some() {
+            return None;
+        }
+        let Exit::Decay(tau) = self.exit(i, t) else { return None };
+        let lift = self.sound_end(i, t) + (tau * (1.0 / LIFT_AT).ln()) as f64;
+        match self.next_visible(i, t) {
+            Some(q) if q.start < lift + 0.05 => None,
+            _ => Some(lift),
+        }
+    }
+
     // ── one frame of a sounding note ────────────────────────────────────
 
     fn note_frame(&self, i: usize, t: f64) -> Frame {
@@ -675,13 +720,17 @@ impl Performer {
         // A bounce: the bow drops, grips for a moment and lifts off; the
         // string keeps ringing until the next drop.
         let bounce = 0.18 + 0.82 * smoothstep(since / 0.01) * (-(since - 0.01).max(0.0) / 0.065).exp();
-        let loudness = if p.pizz {
-            0.0
-        } else if p.spiccato {
-            (p.level * (1.0 + 0.25 * p.accent)).max(0.0) * bounce * fall
-        } else {
-            ((p.level + p.ramp * prog) * shape).max(0.0) * rise * bite * fall
-        };
+        // Once the finger lifts, the stopped note is choked (the open string
+        // carries on as a separate ring).
+        let lifted = self.lift_at(i, t).map_or(1.0, |lift| if t > lift { (-((t - lift) as f32) / 0.008).exp() } else { 1.0 });
+        let loudness = lifted
+            * if p.pizz {
+                0.0
+            } else if p.spiccato {
+                (p.level * (1.0 + 0.25 * p.accent)).max(0.0) * bounce * fall
+            } else {
+                ((p.level + p.ramp * prog) * shape).max(0.0) * rise * bite * fall
+            };
 
         // Left hand: settling intonation, vibrato, moving into the next note.
         let settle = p.settle * (-since / 0.05).exp();
@@ -975,6 +1024,18 @@ mod tests {
         // A scale flows: slurred.
         let scale = run(&["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4"]);
         assert!(scale.iter().filter(|p| **p == Played::Slurred).count() >= 4, "{scale:?}");
+    }
+
+    #[test]
+    fn the_finger_lifts_before_a_rest_and_the_open_string_takes_over() {
+        let inst = cello();
+        // E3 (stopped, D string) then a long rest; a short D3 (open) then a rest.
+        let c = perform(&Score::parse("tempo 60\nE3:q r:h D3:e r:h").unwrap(), &inst, &Style::default());
+        let rings: Vec<_> = c.rings.iter().filter(|r| r.open && r.time > 1.0 && r.time < 2.0).collect();
+        assert_eq!(rings.len(), 1, "one lift after E3: {:?}", c.rings);
+        assert_eq!(rings[0].pitch, 50.0, "the open D rings");
+        assert!(frame_at(&c, rings[0].time + 0.06).loudness < 0.01, "the stopped note is choked");
+        assert!(!c.rings.iter().any(|r| r.time > 3.0), "no lift for an open string: {:?}", c.rings);
     }
 
     #[test]
