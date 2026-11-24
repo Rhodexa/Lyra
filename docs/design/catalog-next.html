@@ -344,16 +344,17 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
    A sunken well like the closed dropdown; typed text in the reading font, as typed.
    While typing (no rings, no glows): E1 it becomes an LCD (light, dark text) · E2 it stays
    dark, a step lighter, the caret in the light colour.                                   */
-.tf{--h:var(--m);--k:1;--b:var(--sunken);height:var(--h);display:inline-flex;align-items:center;gap:7px;padding:0 6px 0 9px;vertical-align:top;
+.tf{--h:var(--m);--k:1;--b:var(--sunken);height:var(--h);display:inline-flex;align-items:center;gap:7px;padding:0 0 0 9px;vertical-align:top;
   background:var(--b);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-radius:calc(var(--btn-r) * var(--k));
   color:var(--ink);cursor:text}
-.tf.S{--h:var(--s);--k:.75;padding:0 4px 0 7px} .tf.L{--h:var(--l);--k:1.25}
-.tf input{flex:1;min-width:0;background:transparent;border:0;outline:0;padding:0;color:inherit;font:13px/1 var(--read-font);caret-color:var(--mid)}
+.tf.S{--h:var(--s);--k:.75;padding:0 0 0 7px} .tf.L{--h:var(--l);--k:1.25}
+.tf input{flex:1;margin-right:8px;min-width:0;background:transparent;border:0;outline:0;padding:0;color:inherit;font:13px/1 var(--read-font);caret-color:var(--mid)}
 .tf.L input{font-size:15px}
 .tf input::placeholder{color:var(--ink-faint)}
 .tf input::selection{background:var(--low);color:var(--ink-on-light)}
 .tf svg{width:14px;height:14px;flex:none;color:var(--ink-dim)}
-.tf .clr{display:none;width:20px;height:20px;border:0;border-radius:3px;background:transparent;color:var(--ink-dim);cursor:pointer;padding:0;place-items:center}
+/* the clear button: the field's whole height, square (easy to hit); the × stays small */
+.tf .clr{display:none;align-self:stretch;aspect-ratio:1;margin-left:-8px;border:0;border-radius:0 calc(var(--btn-r) * var(--k) - var(--btn-bw)) calc(var(--btn-r) * var(--k) - var(--btn-bw)) 0;background:transparent;color:var(--ink-dim);cursor:pointer;padding:0;place-items:center}
 .tf .clr:hover{background:var(--btn-body);color:var(--ink)}
 .tf.has .clr{display:grid}
 .tf:hover{--b:#1e1e1e}
@@ -560,8 +561,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ TEXT FIELD ═════════════════════════ -->
-<h2>Text field <span class="draft">UI-NEEDS 11 · DRAFT 1</span></h2>
-<p>Search and names. A sunken well like the closed dropdown; what you type is in the reading font, as typed. There are no focus rings, so while you type: <b>E1</b> the field becomes an LCD (light, dark text: like the open drawer, "the thing you're working with now"), or <b>E2</b> it stays dark, a step lighter, the caret in the light colour. Click into them. A search shows a clear × once it has text. Renaming a list row happens in place: double-click a name below.</p>
+<h2>Text field <span class="draft">UI-NEEDS 11 · SETTLED: E1</span></h2>
+<p>Search and names. A sunken well like the closed dropdown; what you type is in the reading font, as typed. There are no focus rings, so while you type <b>(settled: E1)</b>: <b>E1</b> the field becomes an LCD (light, dark text: like the open drawer, "the thing you're working with now"), or <b>E2</b> it stays dark, a step lighter, the caret in the light colour. Click into them. A search shows a clear × once it has text. Renaming a list row happens in place: double-click a name below.</p>
 <div class="card">
   <div class="tf-grid" id="tf-grid"></div>
 </div>
