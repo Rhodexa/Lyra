@@ -1171,6 +1171,36 @@ pub fn field_label(ui: &Ui, at: Pos2, text: &str) {
     ui.painter().galley(at, g, theme::INK_DIM);
 }
 
+/// The checkbox (catalog-next, settled: C2): a sunken box, backlit with a dark
+/// tick when on; the label in Roboto beside it; the whole row (box and label,
+/// S tall) is the target. Returns the response (`changed()` when flipped).
+pub fn checkbox(ui: &mut Ui, on: &mut bool, label: &str) -> Response {
+    let h = theme::m().control_h;
+    let g = ui.fonts(|f| f.layout_no_wrap(label.to_string(), theme::read(13.0), theme::INK));
+    let (r, mut resp) = ui.allocate_exact_size(vec2(20.0 + 8.0 + g.size().x + 4.0, h), Sense::click());
+    if resp.clicked() {
+        *on = !*on;
+        resp.mark_changed();
+    }
+    let light = theme::L_MINT;
+    let b = Rect::from_min_size(pos2(r.left(), r.center().y - 10.0), vec2(20.0, 20.0));
+    let body = match (*on, resp.hovered()) {
+        (true, true) => light.mid,
+        (true, false) => light.low,
+        (false, true) => theme::mix(theme::SUNKEN, Color32::WHITE, 0.05),
+        (false, false) => theme::SUNKEN,
+    };
+    theme::outlined(ui.painter(), b, 4.0, body);
+    if *on {
+        let ink = theme::mix(light.rim, Color32::BLACK, 0.68);
+        let c = b.center();
+        let tick = vec![c + vec2(-4.5, 0.5), c + vec2(-1.5, 3.5), c + vec2(4.5, -3.5)];
+        ui.painter().add(Shape::line(tick, stroke(2.4, ink)));
+    }
+    ui.painter().galley(pos2(b.right() + 8.0, r.center().y - g.size().y * 0.5), g, theme::INK);
+    resp
+}
+
 /// One row of a [`dropdown`].
 #[derive(Clone, Default)]
 pub struct DropRow {
@@ -1230,14 +1260,22 @@ pub fn dropdown(
     let (a, b) = if open { (1.5, -2.0) } else { (-1.5, 2.0) };
     let chevron = vec![c + vec2(-3.5, a), c + vec2(0.0, b), c + vec2(3.5, a)];
     ui.painter().add(Shape::line(chevron, stroke(1.6, if enabled { theme::INK_DIM } else { theme::INK_FAINT })));
-    let resp = if hint.is_empty() { resp } else { resp.hint(hint) };
+    // No hint while its own drawer is open (it would cover the list).
+    let resp = if hint.is_empty() || open { resp } else { resp.hint(hint) };
     if resp.clicked() && enabled {
         ui.memory_mut(|mem| mem.toggle_popup(id));
     }
+    drawer(ui, id, r, width, rows, chosen, names)
+}
+
+/// A dropdown's drawer (the LCD's colours), open while `id`'s popup is open,
+/// under `anchor`. Returns the row picked.
+fn drawer(ui: &mut Ui, id: egui::Id, anchor: Rect, width: f32, rows: &[DropRow], chosen: usize, names: bool) -> Option<usize> {
     if !ui.memory(|mem| mem.is_popup_open(id)) {
         return None;
     }
-    // The drawer.
+    let h = theme::m().control_h;
+    let r = anchor;
     let mut picked = None;
     let cols = rows.len().div_ceil(DRAWER_ROWS).max(1);
     let per_col = rows.len().div_ceil(cols).max(1);
@@ -1304,12 +1342,66 @@ pub fn dropdown(
             }
             ui.painter().set(bg, Shape::Vec(shapes));
         });
-    // Close: on a pick, on Esc, or on a click outside the drawer and the well.
-    let outside = ui.input(|i| i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|p| !area.response.rect.contains(p) && !r.contains(p)));
+    // Close: on a pick, on Esc, or on a click outside the drawer and its well.
+    let outside = ui.input(|i| {
+        i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|p| !area.response.rect.contains(p) && !r.contains(p))
+    });
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         ui.memory_mut(|mem| mem.close_popup());
     }
     picked
+}
+
+/// A compact dropdown for a short value in a tight row (a mixer insert): a
+/// small well with the value; the wheel and an up/down drag step through the
+/// rows, a click opens the drawer. Returns the row chosen (by any of them).
+pub fn dropdown_compact(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash,
+    size: egui::Vec2,
+    rows: &[DropRow],
+    chosen: usize,
+    drawer_w: f32,
+) -> (Response, Option<usize>) {
+    let (r, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
+    let id = ui.make_persistent_id(("dropdown-compact", id_salt));
+    let n = rows.len().max(1);
+    let mut next = None;
+    if resp.dragged() {
+        let acc_id = id.with("acc");
+        let mut acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0);
+        acc -= resp.drag_delta().y / 10.0;
+        let k = acc.trunc();
+        acc -= k;
+        ui.data_mut(|d| d.insert_temp(acc_id, acc));
+        if k != 0.0 {
+            next = Some((chosen as i64 + k as i64).clamp(0, n as i64 - 1) as usize);
+        }
+    }
+    if resp.hovered() {
+        let wheel = ui.input(|i| i.raw_scroll_delta.y);
+        if wheel != 0.0 {
+            next = Some((chosen as i64 + wheel.signum() as i64).clamp(0, n as i64 - 1) as usize);
+        }
+    }
+    let open = ui.memory(|mem| mem.is_popup_open(id));
+    let hot = resp.hovered() || resp.dragged() || open;
+    let body = if hot { theme::mix(theme::SUNKEN, Color32::WHITE, 0.03) } else { theme::SUNKEN };
+    theme::outlined(ui.painter(), r, 3.0, body);
+    let shown = next.unwrap_or(chosen).min(n - 1);
+    let ink = if hot { Color32::WHITE } else { theme::INK };
+    if let Some(row) = rows.get(shown) {
+        let g = legend_galley(ui, &row.label, 12.0, false, ink);
+        ui.painter().galley(r.center() - g.size() * 0.5 - vec2(2.0, 0.0), g, ink);
+    }
+    // A tiny chevron in the corner: "there's a list".
+    let c = pos2(r.right() - 6.0, r.bottom() - 6.0);
+    ui.painter().add(Shape::convex_polygon(vec![c + vec2(-3.0, -1.5), c + vec2(3.0, -1.5), c + vec2(0.0, 2.0)], theme::INK_DIM, egui::Stroke::NONE));
+    if resp.clicked() {
+        ui.memory_mut(|mem| mem.toggle_popup(id));
+    }
+    let picked = drawer(ui, id, r, drawer_w, rows, shown, false);
+    (resp, picked.or(next))
 }
 
 /// A dropdown label: a name as written (reading font) or caps (label font),
@@ -1442,50 +1534,3 @@ pub fn name_field(ui: &mut Ui, current: &str, width: f32) -> Option<Renamed> {
     Some(Renamed { text, first })
 }
 
-/// A small number in a well: drag up/down or scroll to change it,
-/// double-click for `default`. `label` turns the value into text.
-pub fn number_well(
-    ui: &mut Ui,
-    value: &mut usize,
-    range: std::ops::RangeInclusive<usize>,
-    default: usize,
-    size: egui::Vec2,
-    label: impl Fn(usize) -> String,
-) -> Response {
-    let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
-    let before = *value;
-    let mut v = *value as i64;
-    if resp.dragged() {
-        let acc_id = resp.id.with("acc");
-        let mut acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0);
-        acc -= resp.drag_delta().y / 10.0;
-        let n = acc.trunc();
-        acc -= n;
-        ui.data_mut(|d| d.insert_temp(acc_id, acc));
-        v += n as i64;
-    }
-    if resp.hovered() {
-        let wheel = ui.input(|i| i.raw_scroll_delta.y);
-        if wheel != 0.0 {
-            v += wheel.signum() as i64;
-        }
-    }
-    if resp.double_clicked() {
-        v = default as i64;
-    }
-    *value = (v.max(*range.start() as i64) as usize).min(*range.end());
-    if *value != before {
-        resp.mark_changed();
-    }
-    let p = ui.painter();
-    theme::well(p, rect);
-    let hot = resp.hovered() || resp.dragged();
-    p.text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        label(*value),
-        egui::FontId::monospace(theme::m().text_small + 1.0),
-        if hot { theme::TEXT } else { theme::TEXT_DIM },
-    );
-    resp
-}

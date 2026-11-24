@@ -247,9 +247,16 @@ pub fn audio(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pl
             // Its mixer insert, like an instrument's.
             let mut insert = p.audio[i].mixer;
             let inserts = p.mixer.len().saturating_sub(1);
-            let r =
-                widgets::number_well(ui, &mut insert, 0..=inserts, 0, vec2(m.step_h, m.step_h), widgets::insert_label)
-                    .hint("The mixer insert it plays into (M = master)");
+            let rows: Vec<_> = (0..=inserts)
+                .map(|t| widgets::DropRow { label: widgets::insert_label(t), icon: None, detail: p.mixer[t].name.clone() })
+                .collect();
+            let (mut r, picked) =
+                widgets::dropdown_compact(ui, ("audio-insert", i), vec2(m.step_h, m.step_h), &rows, insert, 200.0);
+            if let Some(t) = picked.filter(|&t| t != insert) {
+                insert = t;
+                r.mark_changed();
+            }
+            let r = if ui.memory(|m| m.any_popup_open()) { r } else { r.hint("The mixer insert it plays into (M = master)") };
             if crate::rack::tracked(&r, h, p) {
                 p.audio[i].mixer = insert;
             }

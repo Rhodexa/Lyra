@@ -688,8 +688,8 @@ impl PianoRoll {
                     p.scale = scale;
                 }
                 ui.separator();
-                ui.checkbox(&mut self.show_scale, "Shade notes outside the key");
-                ui.checkbox(&mut self.show_ghosts, "Show other channels (ghost notes)");
+                widgets::checkbox(ui, &mut self.show_scale, "Shade notes outside the key");
+                widgets::checkbox(ui, &mut self.show_ghosts, "Show other channels (ghost notes)");
             });
         });
     }

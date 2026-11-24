@@ -422,12 +422,21 @@ fn row(
         // Which mixer insert this instrument plays into (M = master).
         let mut insert = p.channels[ci].mixer;
         let inserts = p.mixer.len().saturating_sub(1);
-        let r =
-            widgets::number_well(ui, &mut insert, 0..=inserts, ci + 1, vec2(m.step_h, m.step_h), widgets::insert_label);
-        if tracked(&r, h, p) {
+        let rows: Vec<_> = (0..=inserts)
+            .map(|t| widgets::DropRow { label: widgets::insert_label(t), icon: None, detail: p.mixer[t].name.clone() })
+            .collect();
+        let (mut resp, picked) =
+            widgets::dropdown_compact(ui, ("insert", ci), vec2(m.step_h, m.step_h), &rows, insert, 200.0);
+        if let Some(t) = picked.filter(|&t| t != insert) {
+            insert = t;
+            resp.mark_changed();
+        }
+        if tracked(&resp, h, p) {
             p.channels[ci].mixer = insert;
         }
-        r.hint("Mixer insert: drag or scroll to route (M = master)");
+        if !ui.memory(|m| m.any_popup_open()) {
+            resp.hint("Mixer insert: click for the list, or drag / scroll to route (M = master)");
+        }
         if !steps {
             return;
         }
