@@ -20,8 +20,10 @@
 //!   **Ctrl+wheel** — sideways · **Alt+wheel** — waveform height ·
 //!   **middle-drag** — pan · double-click a knob — back to its default
 
-use crate::app::UiState;
+use crate::app::{Listening, UiState};
+use crate::flex::{self, Grow, Px};
 use crate::keys::Action;
+use crate::recorder::Recorder;
 use crate::samples::{Peaks, Samples};
 use crate::theme::{self, cr, stroke};
 use crate::timeline::{self, Wheel};
@@ -104,6 +106,9 @@ pub struct AudioEditor {
     framed: Option<AudioId>,
     drag: Drag,
     clicks: timeline::Clicks,
+    /// The tape's view (seconds at the left edge, points per second).
+    tape_scroll: f64,
+    tape_pps: f64,
     /// Which tab shows: the clip (Editor) or the scratch tape (Recorder).
     pub tab: AudioTab,
 }
@@ -125,6 +130,8 @@ impl Default for AudioEditor {
             drag: Drag::None,
             clicks: timeline::Clicks::default(),
             tab: AudioTab::Editor,
+            tape_scroll: 0.0,
+            tape_pps: 0.0,
         }
     }
 }
@@ -287,20 +294,10 @@ fn hover(v: &View, p: &Project, a: &lyra_model::Audio, frame: Option<&Frame>, po
 
 impl AudioEditor {
     /// The editor's header row: the clip's name and how many copies play it.
-    pub fn toolbar(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
-        // Two stages, two tabs: the clip open here, and the scratch tape.
-        let tabs =
-            [(widgets::Legend::Text("EDITOR"), theme::L_MINT), (widgets::Legend::Text("RECORDER"), theme::L_PINK)];
-        let chosen = self.tab as usize;
-        let size = vec2(76.0, theme::m().control_h);
-        if let Some(t) =
-            widgets::radio_keys(ui, size, &tabs, chosen, "Editor: the open clip · Recorder: a scratch tape")
-        {
-            self.tab = if t == 0 { AudioTab::Editor } else { AudioTab::Recorder };
-        }
-        ui.add_space(8.0);
+    pub fn toolbar(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, rec: &mut Recorder) {
         if self.tab == AudioTab::Recorder {
-            return;
+            let can_append = current(p, st).is_some();
+            return crate::recorder::header(ui, rec, can_append);
         }
         let Some(i) = current(p, st) else { return };
         let a = &p.audio[i];
@@ -319,6 +316,8 @@ impl AudioEditor {
             .on_hover_text(file.display().to_string());
     }
 
+    /// The editor: at the left the tabs, the transport row (▶ ■ stay put in
+    /// both tabs) and the tab's plate; at the right the waveform view.
     #[allow(clippy::too_many_arguments)]
     pub fn show(
         &mut self,
@@ -329,17 +328,118 @@ impl AudioEditor {
         samples: &mut Samples,
         playhead: Option<f64>,
         out: &mut Vec<Action>,
+        rec: &mut Recorder,
+    ) {
+        let m = theme::m();
+        let size = ui.available_size().max(vec2(420.0, 120.0));
+        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+        let [left, canvas] = flex::row(rect, [Px(PLATE_W + theme::SEAM + SOURCE_W), Grow(1.0)], theme::SEAM);
+        let [tabs_r, bar_r, plates] = flex::col(left, [Px(m.control_h + 4.0), Px(m.control_h + 8.0), Grow(1.0)], 0.0);
+        let tabs = ["Editor", "Recorder"];
+        if let Some(t) = widgets::tab_row(ui, tabs_r, &tabs, self.tab as usize, ui.id().with("audio-tabs")) {
+            self.tab = if t == 0 { AudioTab::Editor } else { AudioTab::Recorder };
+        }
+        // The transport row: ▶ ■ for what this tab shows, then the tab's own keys.
+        ui.painter().rect_filled(bar_r, cr(0), theme::PANEL);
+        let b = m.control_h;
+        let play_r = Rect::from_min_size(pos2(bar_r.left() + 8.0, bar_r.center().y - b * 0.5), vec2(b, b));
+        let stop_r = play_r.translate(vec2(b + 4.0, 0.0));
+        let what = match self.tab {
+            AudioTab::Recorder => Some(Listening::Tape),
+            AudioTab::Editor => current(p, st).map(|i| Listening::Clip(p.audio[i].id)),
+        };
+        let heard = st.listening.filter(|(w, _)| Some(*w) == what).map(|(_, at)| at);
+        let lit = heard.is_some().then_some(theme::L_MINT);
+        let recorder = self.tab == AudioTab::Recorder;
+        let hint = if recorder { "Hear the tape" } else { "Hear this clip (its window), through its insert" };
+        let play = widgets::Legend::Icon(widgets::Icon::Play);
+        if widgets::button_at(ui, play_r, ui.id().with("listen"), play, lit, hint).clicked() {
+            out.push(if recorder { Action::ListenTape } else { Action::ListenClip });
+        }
+        let stop = widgets::Legend::Icon(widgets::Icon::Stop);
+        if widgets::button_at(ui, stop_r, ui.id().with("stop"), stop, None, "Stop").clicked() {
+            out.push(Action::StopListening);
+        }
+        let rest = Rect::from_min_max(pos2(stop_r.right() + 10.0, bar_r.top()), bar_r.max);
+        if recorder {
+            crate::recorder::bar(ui, rest, rec);
+            let tracks: Vec<String> = p.mixer.iter().map(|t| t.name.clone()).collect();
+            crate::recorder::plate(ui, plates, rec, &tracks);
+            self.show_tape(ui, canvas, rec, heard);
+            return;
+        }
+        self.show_clip(ui, plates, canvas, p, h, st, samples, playhead, heard, out);
+    }
+
+    /// The tape in the waveform view: the same ruler and zoom as a clip.
+    fn show_tape(&mut self, ui: &mut Ui, canvas: Rect, rec: &Recorder, heard: Option<f64>) {
+        let m = theme::m();
+        let ruler = Rect::from_min_max(canvas.min, pos2(canvas.right(), canvas.top() + m.ruler_h));
+        let wave = Rect::from_min_max(pos2(canvas.left(), ruler.bottom()), canvas.max);
+        let secs = crate::recorder::tape_seconds(rec);
+        // At least ten seconds across; while it grows past the right edge, follow it.
+        let fit = wave.width() as f64 / (secs.max(10.0) * 1.04);
+        if self.tape_pps <= 0.0 {
+            self.tape_pps = fit;
+        }
+        let input = timeline::Input::read(ui, canvas);
+        if input.hovering {
+            match timeline::wheel(&input, ruler) {
+                Wheel::ZoomTime { factor, at } => {
+                    let anchor = self.tape_scroll + (at - wave.left()) as f64 / self.tape_pps;
+                    self.tape_pps = (self.tape_pps * factor as f64).clamp(fit * 0.25, 48_000.0);
+                    self.tape_scroll = anchor - (at - wave.left()) as f64 / self.tape_pps;
+                }
+                Wheel::Scroll { x, .. } => self.tape_scroll += x as f64 / self.tape_pps,
+                _ => {}
+            }
+        }
+        let visible = wave.width() as f64 / self.tape_pps;
+        if secs > self.tape_scroll + visible && secs - visible < self.tape_scroll + visible {
+            self.tape_scroll = secs - visible * 0.9; // recording past the edge: keep up
+        }
+        self.tape_scroll = self.tape_scroll.clamp(0.0, (secs - visible * 0.5).max(0.0));
+        let v = View { wave, scroll: self.tape_scroll, pps: self.tape_pps };
+        theme::well(ui.painter(), wave);
+        paint_seconds(ui.painter(), &v, ruler, secs);
+        crate::recorder::paint_tape(ui, wave.shrink2(vec2(0.0, 4.0)), rec, |t| v.x(t), |x| v.secs(x));
+        if let Some(at) = heard {
+            let x = v.x(at);
+            if wave.x_range().contains(x) {
+                timeline::paint_playhead(ui.painter(), x, ruler, wave.y_range(), true);
+            }
+        }
+    }
+
+    /// The Editor tab: the clip's plates (this clip, every copy) in `plates`,
+    /// its file in `canvas`.
+    #[allow(clippy::too_many_arguments)]
+    fn show_clip(
+        &mut self,
+        ui: &mut Ui,
+        plates: Rect,
+        canvas: Rect,
+        p: &mut Project,
+        h: &mut History,
+        st: &mut UiState,
+        samples: &mut Samples,
+        playhead: Option<f64>,
+        heard: Option<f64>,
+        out: &mut Vec<Action>,
     ) {
         let m = theme::m();
         let Some(ai) = current(p, st) else {
-            ui.label(
-                RichText::new("Drop a sample from the browser onto an arrangement track to make an audio clip.")
-                    .color(theme::TEXT_DIM),
+            ui.painter().rect_filled(plates, cr(0), theme::PANEL);
+            ui.painter().text(
+                canvas.center(),
+                Align2::CENTER_CENTER,
+                "Drop a sample from the browser onto an arrangement track to make an audio clip.",
+                FontId::proportional(m.text),
+                theme::TEXT_DIM,
             );
             return;
         };
-        let size = ui.available_size().max(vec2(420.0, 160.0));
-        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+        let rect = plates;
 
         // ── Knobs at the left: this clip's (when one is picked), then every copy's ──
         let id = p.audio[ai].id;
@@ -361,16 +461,10 @@ impl AudioEditor {
             let key = Rect::from_min_size(at, vec2(PLATE_W - 16.0, m.control_h));
             if key.bottom() <= plate.bottom() {
                 let on = p.clips[ci].reverse;
-                let r = ui.put(key, |ui: &mut Ui| {
-                    widgets::key(
-                        ui,
-                        key.size(),
-                        widgets::Legend::Text("Reverse"),
-                        on,
-                        theme::L_MINT,
-                        "Play this clip's window backwards",
-                    )
-                });
+                let hint = "Play this clip's window backwards";
+                let lit = on.then_some(theme::L_MINT);
+                let r =
+                    widgets::button_at(ui, key, ui.id().with("reverse"), widgets::Legend::Text("Reverse"), lit, hint);
                 if r.clicked() {
                     h.checkpoint(p);
                     p.clips[ci].reverse = !on;
@@ -388,7 +482,6 @@ impl AudioEditor {
         }
 
         // ── The waveform ──
-        let canvas = Rect::from_min_max(pos2(plate.right() + theme::SEAM, rect.top()), rect.max);
         let ruler = Rect::from_min_max(canvas.min, pos2(canvas.right(), canvas.top() + m.ruler_h));
         let wave = Rect::from_min_max(pos2(canvas.left(), ruler.bottom()), canvas.max);
         let Some(peaks) = samples.peaks(&p.audio[ai].sample) else {
@@ -647,7 +740,8 @@ impl AudioEditor {
         }
         paint_seconds(&painter, &v, ruler, file_secs);
         // Where the song is in this audio, while a copy of it plays.
-        if let Some(t) = playhead.and_then(|ph| file_position(p, id, ph, spt)) {
+        // …or where it is while you listen to it on its own.
+        if let Some(t) = heard.or_else(|| playhead.and_then(|ph| file_position(p, id, ph, spt))) {
             let x = v.x(t);
             if wave.x_range().contains(x) {
                 timeline::paint_playhead(&painter, x, ruler, wave.y_range(), true);

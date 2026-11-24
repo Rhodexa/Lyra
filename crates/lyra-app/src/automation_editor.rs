@@ -247,9 +247,7 @@ fn outputs_rack(
             Some((_, _, name)) => format!("This curve moves {name} too (the control you changed last)"),
             None => "Change a control, then Link: this curve moves it too".to_string(),
         };
-        let resp = ui.put(key, |ui: &mut Ui| {
-            widgets::key(ui, key.size(), widgets::Legend::Text("+ Link"), false, theme::L_MINT, &hint)
-        });
+        let resp = widgets::button_at(ui, key, ui.id().with("link"), widgets::Legend::Text("+ Link"), None, &hint);
         if resp.clicked() {
             out.push(Action::LinkTweaked);
         }

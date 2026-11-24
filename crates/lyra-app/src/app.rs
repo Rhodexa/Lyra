@@ -97,6 +97,9 @@ pub struct UiState {
     pub search: String,
     /// A MIDI file to bring in whole (double-clicked in the browser).
     pub import_midi: Option<std::path::PathBuf>,
+    /// What plays on its own right now (see `Action::ListenClip`), and where
+    /// it is (seconds into the sound): the editors draw a playhead on it.
+    pub listening: Option<(Listening, f64)>,
     /// Sample lengths in seconds, read from file headers as rows show up.
     pub lengths: std::collections::HashMap<std::path::PathBuf, Option<f64>>,
     /// The control changed last, anywhere: what "Automate" automates.
@@ -144,6 +147,7 @@ impl Default for UiState {
             search: String::new(),
             import_midi: None,
             lengths: std::collections::HashMap::new(),
+            listening: None,
             last_tweaked: None,
             last_pattern: 0,
         }
@@ -185,6 +189,8 @@ pub struct LyraApp {
     sent_loop: Option<(u32, u32)>,
     /// The scratch tape (the audio-clip editor's Recorder tab).
     recorder: crate::recorder::Recorder,
+    /// What was last sent to play on its own (the engine says where it is).
+    listening_to: Option<Listening>,
     /// Where the context menu (F3) is open, if it is.
     context_menu: Option<egui::Pos2>,
     /// Where the project lives on disk (None = never saved).
@@ -301,6 +307,7 @@ impl LyraApp {
             pending_seek: None,
             sent_loop: None,
             context_menu: None,
+            listening_to: None,
             recorder: crate::recorder::Recorder::default(),
             path,
             saved: project_for_saved,
@@ -557,6 +564,45 @@ impl LyraApp {
         }
     }
 
+    /// Play `data` from `from` to `to` seconds into mixer `track`, on its own.
+    fn listen(
+        &mut self,
+        what: Listening,
+        data: std::sync::Arc<lyra_plugin::SampleData>,
+        from: f64,
+        to: f64,
+        track: usize,
+        gain: f32,
+    ) {
+        let listen = lyra_engine::Listen { data, from, to, track, gain };
+        self.send(Command::Listen(Some(Box::new(listen))));
+        self.listening_to = Some(what);
+    }
+
+    /// Hear the open audio clip: the window of the clip last clicked (with
+    /// its gain), or the whole trimmed sound, through its mixer insert.
+    fn listen_clip(&mut self) {
+        let Some(ai) = crate::audio_editor::current(&self.project, &mut self.ui) else { return };
+        let a = &self.project.audio[ai];
+        let Ok(data) = self.samples.get(&a.sample) else { return };
+        let spt = self.project.seconds_per_tick();
+        let clip = self
+            .ui
+            .clip
+            .and_then(|c| self.project.clip_index(c))
+            .filter(|&c| self.project.clips[c].audio() == Some(a.id));
+        let (from, to, gain) = match clip {
+            Some(c) => {
+                let c = &self.project.clips[c];
+                let from = a.start + c.offset as f64 * spt;
+                ((from), (from + c.len as f64 * spt).min(a.end), a.volume * lyra_plugin::db_to_gain(c.gain))
+            }
+            None => (a.start, a.end, a.volume),
+        };
+        let (id, track) = (a.id, a.mixer);
+        self.listen(Listening::Clip(id), data, from, to, track, gain);
+    }
+
     /// Where kept recordings go: the song's `audio/`, or (a song never saved)
     /// Lyra's own recordings folder, until the first save moves them in.
     fn recordings_dir(&self) -> std::path::PathBuf {
@@ -590,6 +636,7 @@ impl LyraApp {
                 self.history.checkpoint(&self.project);
                 let name = path.file_stem().map_or_else(|| base.clone(), |s| s.to_string_lossy().into_owned());
                 let i = self.project.add_audio(&name, &path.to_string_lossy(), tape.seconds() as f64);
+                self.project.audio[i].mixer = self.recorder.track; // it plays where you heard it
                 let id = self.project.audio[i].id;
                 // At the playhead, on the open clip's track (or the first empty one).
                 let track = self
@@ -872,6 +919,12 @@ impl LyraApp {
         let Some(e) = &mut self.engine else { return };
         e.collect_garbage();
         let shared = e.shared();
+        // What plays on its own, and where (its end clears it).
+        let at = shared.listening();
+        if at.is_none() {
+            self.listening_to = None;
+        }
+        self.ui.listening = self.listening_to.zip(at);
         for i in 0..n {
             let t = shared.trigger_count(i);
             if t != self.ui.last_triggers[i] {
@@ -1083,6 +1136,21 @@ impl LyraApp {
             Action::ExportWav | Action::ExportStems => self.export(a == Action::ExportStems),
             Action::ExportData => self.export_data(),
             Action::ExportNotesMidi | Action::ExportBarsMidi | Action::ExportPatternMidi => self.export_midi(a),
+            Action::ListenClip => self.listen_clip(),
+            Action::ListenTape => {
+                let (data, secs) = {
+                    let s = self.recorder.shared.lock().unwrap_or_else(|e| e.into_inner());
+                    (std::sync::Arc::new(s.tape.sample()), s.tape.seconds())
+                };
+                if secs > 0.0 {
+                    let track = self.recorder.track;
+                    self.listen(Listening::Tape, data, 0.0, secs, track, 1.0);
+                }
+            }
+            Action::StopListening => {
+                self.send(Command::Listen(None));
+                self.listening_to = None;
+            }
             Action::ImportMidi => {
                 if let Some(path) = files::pick_open_midi() {
                     let row = crate::midi::free_track(&self.project);
@@ -1525,7 +1593,7 @@ impl LyraApp {
                 ui.add_space(6.0);
                 match area.editor {
                     Editor::Arrangement => area.playlist.toolbar(ui, p, st, actions),
-                    Editor::Audio => area.audio.toolbar(ui, p, h, st),
+                    Editor::Audio => area.audio.toolbar(ui, p, h, st, recorder),
                     Editor::Automation => area.automation.toolbar(ui, p, h, st),
                     Editor::PianoRoll if has_channel => {
                         let color = theme::channel_color(p.channels[ch].color);
@@ -1541,13 +1609,9 @@ impl LyraApp {
                     let song_playing = playing && st.song_mode;
                     area.playlist.show(ui, p, h, st, song_playhead, song_playing, samples, actions);
                 }
-                Editor::Audio if area.audio.tab == crate::audio_editor::AudioTab::Recorder => {
-                    let can_append = crate::audio_editor::current(p, st).is_some();
-                    crate::recorder::show(ui, recorder, can_append);
-                }
                 Editor::Audio => {
                     let song_playhead = st.song_mode.then_some(playhead);
-                    area.audio.show(ui, p, h, st, samples, song_playhead, actions);
+                    area.audio.show(ui, p, h, st, samples, song_playhead, actions, recorder);
                 }
                 Editor::Automation => {
                     let song_playhead = st.song_mode.then_some(playhead);
@@ -1717,6 +1781,13 @@ impl LyraApp {
                 });
             });
     }
+}
+
+/// What's being listened to on its own.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Listening {
+    Clip(lyra_model::AudioId),
+    Tape,
 }
 
 /// Where an imported MIDI file goes.

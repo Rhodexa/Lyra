@@ -99,6 +99,12 @@ pub enum Action {
     ClearLoop,
     /// Read a MIDI file into the song.
     ImportMidi,
+    /// Hear the open audio clip (its window, or the trimmed file) on its own.
+    ListenClip,
+    /// Hear the recorder's tape.
+    ListenTape,
+    /// Stop what's being listened to.
+    StopListening,
 }
 
 #[derive(Default)]

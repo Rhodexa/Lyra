@@ -786,7 +786,7 @@ impl Playlist {
             let chosen = tools.iter().position(|&t| t == self.tool).unwrap_or(0);
             let hint =
                 "Edit: place, move, resize · Cut: click a clip to split it · Slide: drag what plays inside a clip";
-            if let Some(i) = widgets::radio_keys(ui, vec2(h * 1.2, h), &options, chosen, hint) {
+            if let Some(i) = widgets::choice(ui, vec2(h, h), &options, chosen, hint) {
                 self.tool = tools[i];
             }
             ui.add_space(6.0);
@@ -795,7 +795,7 @@ impl Playlist {
                 None => "Automate the control you change next: move a knob first".to_string(),
             };
             let key = widgets::Legend::Icon(widgets::Icon::Curve);
-            if widgets::key(ui, vec2(h * 1.2, h), key, false, theme::L_MINT, &hint).clicked() {
+            if widgets::button_sized(ui, vec2(h, h), key, None, &hint).clicked() {
                 out.push(Action::Automate);
             }
             ui.add_space(10.0);

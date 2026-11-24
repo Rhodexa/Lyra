@@ -33,7 +33,8 @@ pub fn show(
     ui.spacing_mut().item_spacing.x = theme::SEAM;
     ui.horizontal_centered(|ui| {
         let big = widgets::toolbar_key();
-        let small = (big * 0.9).round();
+        let tk = theme::m().tool_key;
+        let small = theme::m().control_h;
         let gap = 4.0;
 
         // The File menu: everything about the song as a file.
@@ -55,24 +56,17 @@ pub fn show(
             let options = [(Legend::Text("SONG"), theme::L_MINT), (Legend::Text("PAT"), theme::L_AMBER)];
             let hint = "Click to switch: SONG plays the playlist, PAT the current pattern  ( L )";
             let chosen = if st.song_mode { 0 } else { 1 };
-            if widgets::radio_keys(ui, vec2(big * 1.3, big), &options, chosen, hint).is_some() {
+            if widgets::choice(ui, vec2(tk * 1.4, tk), &options, chosen, hint).is_some() {
                 actions.push(Action::SongMode(!st.song_mode));
             }
             ui.add_space(gap);
-            if widgets::key(
-                ui,
-                vec2(big * 1.2, big),
-                Legend::Icon(Icon::Play),
-                playing,
-                theme::L_MINT,
-                "Play / stop  (Space)",
-            )
-            .clicked()
+            let lit = playing.then_some(theme::L_MINT);
+            if widgets::button_sized(ui, vec2(tk, tk), Legend::Icon(Icon::Play), lit, "Play / stop  (Space)").clicked()
             {
                 actions.push(Action::TogglePlay);
             }
             let hint = "Stop: back to the start marker";
-            if widgets::key(ui, vec2(big * 1.2, big), Legend::Icon(Icon::Stop), false, theme::L_MINT, hint).clicked() {
+            if widgets::button_sized(ui, vec2(tk, tk), Legend::Icon(Icon::Stop), None, hint).clicked() {
                 actions.push(Action::Stop);
             }
             ui.add_space(gap);
@@ -114,15 +108,8 @@ pub fn show(
         // Where the typing keyboard plays.
         module(ui, |ui| {
             ui.spacing_mut().item_spacing.x = gap;
-            if widgets::key(
-                ui,
-                vec2(small, small),
-                Legend::Icon(Icon::Minus),
-                false,
-                theme::L_MINT,
-                "Octave down  ( - )",
-            )
-            .clicked()
+            if widgets::button_sized(ui, vec2(small, small), Legend::Icon(Icon::Minus), None, "Octave down  ( - )")
+                .clicked()
             {
                 actions.push(Action::Octave(-1));
             }
@@ -131,7 +118,7 @@ pub fn show(
             if let Some(d) = widgets::keyboard_map(ui, first, last) {
                 actions.push(Action::Octave(d));
             }
-            if widgets::key(ui, vec2(small, small), Legend::Icon(Icon::Plus), false, theme::L_MINT, "Octave up  ( = )")
+            if widgets::button_sized(ui, vec2(small, small), Legend::Icon(Icon::Plus), None, "Octave up  ( = )")
                 .clicked()
             {
                 actions.push(Action::Octave(1));
@@ -147,7 +134,9 @@ pub fn show(
                 (Icon::PanelBottom, st.bottom_open, "Bottom area  (F5)", Action::ToggleBottom),
                 (Icon::PanelRight, st.show_plugins, "Right panel: racks  (F6)", Action::ToggleRack),
             ] {
-                if widgets::key(ui, vec2(big, big), Legend::Icon(icon), open, theme::L_MINT, hint).clicked() {
+                if widgets::button_sized(ui, vec2(tk, tk), Legend::Icon(icon), open.then_some(theme::L_MINT), hint)
+                    .clicked()
+                {
                     actions.push(action);
                 }
             }

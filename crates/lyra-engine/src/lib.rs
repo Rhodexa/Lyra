@@ -324,6 +324,17 @@ impl Arrangement {
     }
 }
 
+/// A sound played on its own (see `Command::Listen`): `data` from `from` to
+/// `to` seconds, into mixer track `track`, at `gain`. Independent of the
+/// song: it plays whether the song does or not.
+pub struct Listen {
+    pub data: Arc<SampleData>,
+    pub from: f64,
+    pub to: f64,
+    pub track: usize,
+    pub gain: f32,
+}
+
 /// One mixer track's effects, in order. Built and activated on the UI thread,
 /// then swapped into the engine whole (the old chain comes back as trash).
 pub struct FxChain {
@@ -435,6 +446,9 @@ pub enum Command {
     },
     /// Fade the preview out.
     StopPreview,
+    /// Play a sound on its own, outside the song (the recorder's tape, an
+    /// audio clip being edited), into a mixer track; None stops it.
+    Listen(Option<Box<Listen>>),
     /// Replace the audio clips the song plays.
     SetAudio(Box<AudioLane>),
     /// Replace the automation the song plays.
@@ -442,6 +456,7 @@ pub enum Command {
 }
 
 enum Trash {
+    Listen(#[allow(dead_code)] Box<Listen>),
     Arrangement(#[allow(dead_code)] Box<Arrangement>),
     Audio(#[allow(dead_code)] Box<AudioLane>),
     Automation(#[allow(dead_code)] Box<Automation>),
@@ -456,6 +471,8 @@ enum Trash {
 pub struct Shared {
     playhead: AtomicU64,
     playing: AtomicBool,
+    /// Where the listened-to sound is, in seconds (negative: nothing playing).
+    listen_at: AtomicU64,
     peaks: Vec<AtomicU32>,
     triggers: Vec<AtomicU32>,
     master_peak: [AtomicU32; 2],
@@ -468,6 +485,7 @@ impl Shared {
         Self {
             playhead: AtomicU64::new(0f64.to_bits()),
             playing: AtomicBool::new(false),
+            listen_at: AtomicU64::new((-1f64).to_bits()),
             peaks: (0..MAX_CHANNELS).map(|_| AtomicU32::new(0)).collect(),
             triggers: (0..MAX_CHANNELS).map(|_| AtomicU32::new(0)).collect(),
             master_peak: [AtomicU32::new(0), AtomicU32::new(0)],
@@ -482,6 +500,11 @@ impl Shared {
 
     pub fn is_playing(&self) -> bool {
         self.playing.load(Relaxed)
+    }
+
+    /// Where the sound being listened to is (seconds into it), if one plays.
+    pub fn listening(&self) -> Option<f64> {
+        Some(f64::from_bits(self.listen_at.load(Relaxed))).filter(|t| *t >= 0.0)
     }
 
     /// Loudest sample on a channel since the last call (resets it).
@@ -599,6 +622,9 @@ pub struct Engine {
     mix_r: Vec<f32>,
     /// What the browser is auditioning (see `Command::Preview`).
     preview: Option<Box<ChannelSlot>>,
+    /// A sound played on its own, and where it is (seconds).
+    listen: Option<Box<Listen>>,
+    listen_pos: f64,
     /// (sample offset, choke group, source channel) collected while scheduling.
     chokes: Vec<(u32, u8, usize)>,
 }
@@ -642,6 +668,8 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
         mix_l: vec![0.0; BLOCK],
         mix_r: vec![0.0; BLOCK],
         preview: None,
+        listen: None,
+        listen_pos: 0.0,
         chokes: Vec::with_capacity(64),
     };
     let handle = EngineHandle { tx, trash: trash_rx, shared, sample_rate, backlog: Default::default() };
@@ -806,6 +834,15 @@ impl Engine {
                     }
                     self.discard(Trash::Automation(old));
                 }
+                Command::Listen(next) => {
+                    self.listen_pos = next.as_ref().map_or(0.0, |l| l.from);
+                    if let Some(old) = std::mem::replace(&mut self.listen, next) {
+                        self.discard(Trash::Listen(old));
+                    }
+                    if self.listen.is_none() {
+                        self.shared.listen_at.store((-1f64).to_bits(), Relaxed);
+                    }
+                }
                 Command::StopPreview => {
                     if let Some(p) = &mut self.preview {
                         if p.pending.len() < p.pending.capacity() {
@@ -909,6 +946,9 @@ impl Engine {
                 );
             }
         }
+
+        // 2c. A sound played on its own, into its mixer track.
+        self.render_listen(n);
 
         // 3. Mixer: inserts 1..N run their effects, then volume/pan/mute, into
         //    the master (track 0), which runs its own effects last.
@@ -1065,6 +1105,38 @@ impl Engine {
         }
 
         self.pos = from + (end - from) % len;
+    }
+
+    /// Mix the listened-to sound's next `n` samples into its track. REAL-TIME.
+    fn render_listen(&mut self, n: usize) {
+        let Some(l) = &self.listen else { return };
+        let track = &mut self.mixer[l.track.min(MIXER_TRACKS - 1)];
+        let data = &*l.data;
+        let frames = data.left.len().min(data.right.len());
+        let step = 1.0 / self.sr as f64;
+        for s in 0..n {
+            let t = self.listen_pos + s as f64 * step;
+            if t >= l.to {
+                break;
+            }
+            let at = t * data.sample_rate as f64;
+            let i = at as usize;
+            if i + 1 >= frames {
+                break;
+            }
+            let f = (at - i as f64) as f32;
+            track.buf_l[s] += (data.left[i] + (data.left[i + 1] - data.left[i]) * f) * l.gain;
+            track.buf_r[s] += (data.right[i] + (data.right[i + 1] - data.right[i]) * f) * l.gain;
+        }
+        self.listen_pos += n as f64 * step;
+        let end = l.to.min(frames as f64 / data.sample_rate as f64);
+        if self.listen_pos >= end {
+            let done = self.listen.take().expect("checked above");
+            self.discard(Trash::Listen(done));
+            self.shared.listen_at.store((-1f64).to_bits(), Relaxed);
+        } else {
+            self.shared.listen_at.store(self.listen_pos.to_bits(), Relaxed);
+        }
     }
 
     /// The part of the sequence that plays round and round.
@@ -1245,6 +1317,24 @@ mod tests {
             .collect();
         assert_eq!(ons.iter().map(|o| o.1).collect::<Vec<_>>(), vec![61, 61, 61], "only the looped beat");
         assert!((23_900..=24_100).contains(&(ons[1].0 - ons[0].0)), "once per pass: {ons:?}");
+    }
+
+    #[test]
+    fn listening_plays_on_its_own_and_ends() {
+        let (mut eng, mut h, _log) = setup();
+        let data = Arc::new(SampleData { sample_rate: 48_000.0, left: vec![0.5; 48_000], right: vec![0.5; 48_000] });
+        // Half a second of it, from 0.25 s, into the master; the song is stopped.
+        h.send(Command::Listen(Some(Box::new(Listen { data, from: 0.25, to: 0.75, track: 0, gain: 1.0 }))));
+        let mut out = vec![0.0; 2 * 4800];
+        eng.process(&mut out, 2);
+        assert!(out.iter().any(|x| x.abs() > 0.1), "it sounds without the song");
+        let at = h.shared().listening().unwrap();
+        assert!((at - 0.35).abs() < 0.01, "0.1 s in, from 0.25: {at}");
+        for _ in 0..5 {
+            eng.process(&mut out, 2);
+        }
+        assert_eq!(h.shared().listening(), None, "and stops by itself at the end");
+        h.collect_garbage();
     }
 
     #[test]

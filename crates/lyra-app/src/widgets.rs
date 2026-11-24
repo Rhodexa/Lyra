@@ -440,58 +440,6 @@ pub enum Legend<'a> {
     Text(&'a str),
 }
 
-fn paint_legend(p: &egui::Painter, face: Rect, legend: Legend, lit: Option<theme::Light>) {
-    let ink = theme::key_ink(lit.is_some());
-    match legend {
-        Legend::Icon(icon) => {
-            let bg = lit.map_or(theme::KEY_FACE, |l| l.mid);
-            paint_icon(p, face.shrink(face.height() * 0.12), icon, ink, bg);
-        }
-        Legend::Text(t) => {
-            let size = (face.height() * 0.42).clamp(9.0, 13.0);
-            p.text(face.center(), egui::Align2::CENTER_CENTER, t, egui::FontId::monospace(size), ink);
-        }
-    }
-}
-
-/// A silicone key that lights in `light` when `on`.
-pub fn key(ui: &mut Ui, size: egui::Vec2, legend: Legend, on: bool, light: theme::Light, hint: &str) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let p = ui.painter();
-    let pressed = resp.is_pointer_button_down_on();
-    let lit = on.then_some(light);
-    theme::key(p, rect, lit, resp.hovered() && !pressed, if pressed { 0.9 } else { 1.0 });
-    paint_legend(p, theme::key_face(rect), legend, lit);
-    resp.on_hover_text(hint)
-}
-
-/// Radio keys: one recess holding several faces; the chosen one is lit in
-/// its own light. Returns the index clicked this frame.
-pub fn radio_keys(
-    ui: &mut Ui,
-    size: egui::Vec2,
-    options: &[(Legend, theme::Light)],
-    chosen: usize,
-    hint: &str,
-) -> Option<usize> {
-    let total = vec2(size.x * options.len() as f32, size.y);
-    let (rect, resp) = ui.allocate_exact_size(total, Sense::click());
-    let p = ui.painter();
-    let hover = resp.hover_pos().map(|pos| (((pos.x - rect.left()) / size.x) as usize).min(options.len() - 1));
-    let pressed = resp.is_pointer_button_down_on();
-    let faces = theme::radio_keys(p, rect, options.len(), |i| {
-        let lit = (i == chosen).then_some(options[i].1);
-        let hot = hover == Some(i) && !pressed;
-        (lit, hot)
-    });
-    for (i, face) in faces.into_iter().enumerate() {
-        paint_legend(p, face, options[i].0, (i == chosen).then_some(options[i].1));
-    }
-    let clicked = resp.clicked().then_some(()).and(hover);
-    resp.on_hover_text(hint);
-    clicked
-}
-
 /// LCD text, laid out tight like the studies (letter-spacing -0.06em).
 fn lcd_galley(ui: &Ui, text: &str, size: f32) -> std::sync::Arc<egui::Galley> {
     let job = egui::text::LayoutJob::single_section(
@@ -797,8 +745,25 @@ pub fn panel_header(
     };
     let id = ui.id().with(("panel-header", tabs.first().copied().unwrap_or("")));
     let off = theme::mix(theme::BG, theme::PANEL, 0.55);
+    let clicked = tab_row(ui, rest, tabs, chosen, id);
+    let resp = ui.interact(fold, id.with("fold"), Sense::click());
+    ui.painter().rect_filled(fold, cr(0), if resp.hovered() { theme::mix(off, theme::PANEL, 0.5) } else { off });
+    let icon = if fold_on_left { Icon::Next } else { Icon::Prev };
+    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+    paint_icon(ui.painter(), fold.shrink(h * 0.22), icon, ink, off);
+    let folded = resp.on_hover_text(fold_hint).clicked();
+    (clicked, folded)
+}
+
+/// Tabs: equal cells across `r`, the chosen one in the panel's colour (it
+/// joins what's below it), the others recessed. The one tab look, for panel
+/// headers and for any view's own tabs. Returns the tab clicked.
+pub fn tab_row(ui: &mut Ui, r: Rect, tabs: &[&str], chosen: usize, id: egui::Id) -> Option<usize> {
+    let m = theme::m();
+    ui.painter().rect_filled(r, cr(0), theme::BG);
+    let off = theme::mix(theme::BG, theme::PANEL, 0.55);
     let mut clicked = None;
-    for (i, cell) in crate::flex::even_row(rest, tabs.len(), theme::SEAM).into_iter().enumerate() {
+    for (i, cell) in crate::flex::even_row(r, tabs.len(), theme::SEAM).into_iter().enumerate() {
         let resp = ui.interact(cell, id.with(i), Sense::click());
         let on = i == chosen;
         let fill = if on {
@@ -821,19 +786,126 @@ pub fn panel_header(
             clicked = Some(i);
         }
     }
-    let resp = ui.interact(fold, id.with("fold"), Sense::click());
-    ui.painter().rect_filled(fold, cr(0), if resp.hovered() { theme::mix(off, theme::PANEL, 0.5) } else { off });
-    let icon = if fold_on_left { Icon::Next } else { Icon::Prev };
-    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
-    paint_icon(ui.painter(), fold.shrink(h * 0.22), icon, ink, off);
-    let folded = resp.on_hover_text(fold_hint).clicked();
-    (clicked, folded)
+    clicked
+}
+
+// ── Buttons ──
+//
+// Lyra's one button: a flat plate in the knobs' greys, a shade lighter than
+// what it sits on, a dark rim. Lighter under the mouse, darker while
+// pressed. A button that is *on* shows its legend in its light's colour.
+// Sizes come from `theme::m()`: `control_h` tall (square for an icon),
+// `tool_key` in the toolbar. (The big silicone keys, `key` and
+// `radio_keys`, are Fluttersine's and Chrysalis's own now.)
+
+const BUTTON: Color32 = Color32::from_rgb(0x3b, 0x3b, 0x3b);
+const BUTTON_RIM: Color32 = Color32::from_rgb(0x1c, 0x1c, 0x1c);
+
+/// Paints a button's plate and legend in `r` for its response.
+fn paint_button(ui: &Ui, r: Rect, resp: &Response, legend: Legend, lit: Option<theme::Light>) {
+    let m = theme::m();
+    let p = ui.painter();
+    let pressed = resp.is_pointer_button_down_on();
+    let body = if pressed {
+        theme::shade(BUTTON, 0.85)
+    } else if resp.hovered() {
+        theme::shade(BUTTON, 1.12)
+    } else {
+        BUTTON
+    };
+    p.rect_filled(r, cr(4), BUTTON_RIM);
+    p.rect_filled(r.shrink(1.0), cr(3), body);
+    let ink = match lit {
+        Some(l) => l.hi,
+        None if resp.hovered() => theme::TEXT,
+        None => theme::TEXT_DIM,
+    };
+    match legend {
+        Legend::Icon(icon) => {
+            let side = r.height().min(r.width());
+            paint_icon(p, Rect::from_center_size(r.center(), vec2(side, side)).shrink(side * 0.18), icon, ink, body);
+        }
+        Legend::Text(t) => {
+            p.with_clip_rect(r).text(
+                r.center(),
+                egui::Align2::CENTER_CENTER,
+                t,
+                egui::FontId::proportional(m.text_small + 1.0),
+                ink,
+            );
+        }
+    }
+}
+
+/// A button sized to its legend: square for an icon, the text plus room
+/// for words. `lit`: it is on (shown in that light).
+pub fn button(ui: &mut Ui, legend: Legend, lit: Option<theme::Light>, hint: &str) -> Response {
+    let m = theme::m();
+    let w = match legend {
+        Legend::Icon(_) => m.control_h,
+        Legend::Text(t) => {
+            let font = egui::FontId::proportional(m.text_small + 1.0);
+            let text_w = ui.fonts(|f| f.layout_no_wrap(t.to_string(), font, Color32::WHITE).size().x);
+            (text_w + 20.0).max(m.control_h)
+        }
+    };
+    button_sized(ui, vec2(w, m.control_h), legend, lit, hint)
+}
+
+/// A button of an exact size (toolbar keys, a row's full width).
+pub fn button_sized(ui: &mut Ui, size: egui::Vec2, legend: Legend, lit: Option<theme::Light>, hint: &str) -> Response {
+    let (r, resp) = ui.allocate_exact_size(size, Sense::click());
+    paint_button(ui, r, &resp, legend, lit);
+    if hint.is_empty() {
+        resp
+    } else {
+        resp.on_hover_text(hint)
+    }
+}
+
+/// A button in a rectangle laid out elsewhere (flex): no allocation.
+pub fn button_at(
+    ui: &mut Ui,
+    r: Rect,
+    id: egui::Id,
+    legend: Legend,
+    lit: Option<theme::Light>,
+    hint: &str,
+) -> Response {
+    let resp = ui.interact(r, id, Sense::click());
+    paint_button(ui, r, &resp, legend, lit);
+    if hint.is_empty() {
+        resp
+    } else {
+        resp.on_hover_text(hint)
+    }
+}
+
+/// Buttons side by side where exactly one is chosen (SONG / PAT): the
+/// chosen one lit in its light. Returns the one clicked.
+pub fn choice(
+    ui: &mut Ui,
+    size: egui::Vec2,
+    options: &[(Legend, theme::Light)],
+    chosen: usize,
+    hint: &str,
+) -> Option<usize> {
+    let mut clicked = None;
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for (i, (legend, light)) in options.iter().enumerate() {
+            if button_sized(ui, size, *legend, (i == chosen).then_some(*light), hint).clicked() {
+                clicked = Some(i);
+            }
+        }
+    });
+    clicked
 }
 
 /// A big key across the whole width (a rack's "+ New …"): easy to hit.
 pub fn wide_key(ui: &mut Ui, label: &str, hint: &str) -> Response {
     let m = theme::m();
-    key(ui, vec2(ui.available_width(), (m.step_h * 1.4).round()), Legend::Text(label), false, theme::L_MINT, hint)
+    button_sized(ui, vec2(ui.available_width(), m.control_h + 4.0), Legend::Text(label), None, hint)
 }
 
 /// How a mixer insert is written in a number well: M for the master.

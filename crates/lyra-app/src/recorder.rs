@@ -206,6 +206,11 @@ pub struct Recorder {
     pub ask: Option<Ask>,
     /// The input devices, listed once (asking the system is slow).
     device_list: Option<Vec<String>>,
+    /// The mixer insert the tape plays into (0 = master): what you hear it
+    /// through, and where a sent take plays.
+    pub track: usize,
+    /// The meter as drawn: eased, so it reads calmly.
+    shown_level: f32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -226,6 +231,8 @@ impl Default for Recorder {
             prefix: "Recording".to_string(),
             ask: None,
             device_list: None,
+            track: 0,
+            shown_level: 0.0,
         }
     }
 }
@@ -434,11 +441,15 @@ where
 }
 
 // ── The Recorder tab ──
+//
+// It lives in the audio-clip editor, on the editor's own layout: the tabs
+// and ▶ ■ at the top left stay put, the plate below them holds the
+// recorder's controls, the waveform view shows the tape. The header carries
+// what you do with a take: its name, Append, Send.
 
-use crate::flex::{self, Grow, Px};
 use crate::theme;
 use crate::widgets::{self, Icon, Legend};
-use egui::{vec2, Align, Align2, FontId, Layout, Rect, Sense, Ui, UiBuilder};
+use egui::{pos2, vec2, Align, Align2, FontId, Layout, Rect, Sense, Ui, UiBuilder};
 
 /// A child ui laid out left to right inside `r`.
 fn inside<R>(ui: &mut Ui, r: Rect, salt: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
@@ -448,82 +459,116 @@ fn inside<R>(ui: &mut Ui, r: Rect, salt: &str, add: impl FnOnce(&mut Ui) -> R) -
 }
 
 /// "1:04.3"
-fn clock(secs: f64) -> String {
+pub fn clock(secs: f64) -> String {
     format!("{}:{:04.1}", (secs / 60.0) as u32, secs % 60.0)
 }
 
-/// The Recorder tab. `can_append`: an audio clip is open to append to.
-pub fn show(ui: &mut Ui, rec: &mut Recorder, can_append: bool) {
+/// The header row: the take's name, how long the tape is and what it's
+/// doing, and keeping it (Append to the open clip, Send to the arranger).
+pub fn header(ui: &mut Ui, rec: &mut Recorder, can_append: bool) {
     let m = theme::m();
-    let size = ui.available_size().max(vec2(420.0, 160.0));
-    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-    let key = (m.step_h * 1.6).round();
-    let [top, meter_r, wave_r, bottom] = flex::col(rect, [Px(key), Px(12.0), Grow(1.0), Px(key)], 6.0);
+    let (secs, state, has_tape) = {
+        let s = rec.shared.lock().unwrap_or_else(|e| e.into_inner());
+        (s.tape.seconds(), s.state, s.tape.frames() > 0)
+    };
+    ui.add(egui::TextEdit::singleline(&mut rec.prefix).desired_width(160.0))
+        .on_hover_text("A kept take is called this, plus the date and time");
+    let status = match state {
+        State::Recording => "recording",
+        State::Waiting => "waiting for a sound…",
+        State::Stopped if has_tape => "paused",
+        State::Stopped => "empty",
+    };
+    let ink = if state == State::Stopped { theme::TEXT_DIM } else { theme::ROSE };
+    ui.label(egui::RichText::new(format!("{}  {status}", clock(secs))).monospace().size(m.text_small + 1.0).color(ink));
+    let usable = has_tape && state == State::Stopped;
+    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        let hint = "Write the tape as a file and place it on the arrangement, at the playhead (the tape empties)";
+        if widgets::button(ui, Legend::Text("Send to arranger"), None, hint).clicked() && usable {
+            rec.ask = Some(Ask::SendToArranger);
+        }
+        let hint = if can_append {
+            "Add the tape to the end of the open audio clip, as a new version of its file (undo goes back; the tape empties)"
+        } else {
+            "Open an audio clip first (on the arrangement) to append the tape to it"
+        };
+        if widgets::button(ui, Legend::Text("Append to clip"), None, hint).clicked() && usable && can_append {
+            rec.ask = Some(Ask::Append);
+        }
+    });
+}
+
+/// The recorder's part of the transport row, after ▶ ■: record / pause,
+/// clear, and wait for sound.
+pub fn bar(ui: &mut Ui, r: Rect, rec: &mut Recorder) {
+    let m = theme::m();
     let shared = rec.shared.clone();
     let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
     let running = s.state != State::Stopped;
-    let has_tape = s.tape.frames() > 0;
+    let b = m.control_h;
+    let at = |i: f32| Rect::from_min_size(pos2(r.left() + i * (b + 4.0), r.center().y - b * 0.5), vec2(b, b));
+    let (icon, hint) = if running {
+        (Icon::Pause, "Pause (Record again carries on at the end)")
+    } else {
+        (Icon::Record, "Record (carries on at the end of the tape)")
+    };
+    if widgets::button_at(ui, at(0.0), ui.id().with("rec"), Legend::Icon(icon), running.then_some(theme::L_PINK), hint)
+        .clicked()
+    {
+        if running {
+            s.pause();
+        } else {
+            s.record();
+        }
+    }
+    let wait_r = Rect::from_min_max(at(1.0).min, pos2(r.right() - 8.0, at(1.0).bottom()));
+    let hint = "Wait for sound: Record waits until the input is louder than the gold line, then starts \
+                (with the moment just before, so the first sound isn't cut off)";
+    let lit = s.wait_for_sound.then_some(theme::L_AMBER);
+    if widgets::button_at(ui, wait_r, ui.id().with("wait"), Legend::Text("Wait for sound"), lit, hint).clicked() {
+        s.wait_for_sound ^= true;
+        if s.state == State::Waiting && !s.wait_for_sound {
+            s.state = State::Recording;
+        }
+    }
     if running {
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(30));
     }
+}
 
-    // ── Top: record / pause, clear, where we are · wait for sound, the input ──
-    let [rec_r, clear_r, status_r, wait_r, dev_r] =
-        flex::row(top, [Px(key * 1.6), Px(key * 2.0), Grow(1.0), Px(key * 3.6), Px(240.0)], 6.0);
-    inside(ui, rec_r, "rec", |ui| {
-        let (icon, hint) = if running {
-            (Icon::Pause, "Pause (Record again carries on at the end)")
-        } else {
-            (Icon::Record, "Record (carries on at the end of the tape)")
-        };
-        if widgets::key(ui, rec_r.size(), Legend::Icon(icon), running, theme::L_PINK, hint).clicked() {
-            if running {
-                s.pause();
-            } else {
-                s.record();
-            }
-        }
-    });
-    inside(ui, clear_r, "clear", |ui| {
-        if widgets::key(ui, clear_r.size(), Legend::Text("CLEAR"), false, theme::L_MINT, "Throw the tape away")
-            .clicked()
-        {
-            s.clear();
-        }
-    });
-    let status = match s.state {
-        State::Recording => "recording".to_string(),
-        State::Waiting => "waiting for a sound…".to_string(),
-        State::Stopped if has_tape => "paused".to_string(),
-        State::Stopped => "empty".to_string(),
+/// The plate under the transport row: where the tape listens and where it
+/// plays, Clear, and the input meter (slim, at the right edge).
+pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
+    let m = theme::m();
+    ui.painter().rect_filled(r, theme::cr(0), theme::PANEL);
+    let meter = Rect::from_min_max(pos2(r.right() - 14.0, r.top() + 8.0), pos2(r.right() - 8.0, r.bottom() - 8.0));
+    let body = Rect::from_min_max(r.min + vec2(8.0, 6.0), pos2(meter.left() - 8.0, r.bottom() - 6.0));
+    let (has_tape, running, level, threshold, wait) = {
+        let s = rec.shared.lock().unwrap_or_else(|e| e.into_inner());
+        (s.tape.frames() > 0, s.state != State::Stopped, s.level, s.threshold, s.wait_for_sound)
     };
-    let ink = if running { theme::ROSE } else { theme::TEXT_DIM };
-    ui.painter().text(
-        status_r.left_center() + vec2(6.0, 0.0),
-        Align2::LEFT_CENTER,
-        format!("{}   {status}", clock(s.tape.seconds())),
-        FontId::monospace(m.text_small * 1.3),
-        ink,
-    );
-    inside(ui, wait_r, "wait", |ui| {
-        let hint = "Record waits until the input is louder than the line on the meter, then starts \
-                    (with the moment just before, so the first sound isn't cut off)";
-        if widgets::key(ui, wait_r.size(), Legend::Text("WAIT FOR SOUND"), s.wait_for_sound, theme::L_AMBER, hint)
-            .clicked()
-        {
-            s.wait_for_sound ^= true;
-            if s.state == State::Waiting && !s.wait_for_sound {
-                s.state = State::Recording;
-            }
-        }
-    });
-    inside(ui, dev_r, "device", |ui| {
-        let shown = rec.device.clone().unwrap_or_else(|| "Default input".to_string());
-        ui.add_enabled_ui(!has_tape && !running, |ui| {
-            egui::ComboBox::from_id_salt("recorder-device").width(dev_r.width() - 8.0).selected_text(shown).show_ui(
-                ui,
-                |ui| {
-                    if ui.selectable_label(rec.device.is_none(), "Default input").clicked() {
+    let row = m.control_h + 6.0;
+    let label = |ui: &mut Ui, y: f32, text: &str| {
+        ui.painter().text(
+            pos2(body.left(), y),
+            Align2::LEFT_TOP,
+            text,
+            FontId::proportional(m.text_small),
+            theme::TEXT_DIM,
+        );
+    };
+    let field = |y: f32| Rect::from_min_size(pos2(body.left(), y), vec2(body.width(), m.control_h));
+    // Where it listens.
+    let mut y = body.top();
+    label(ui, y, "INPUT");
+    y += m.text_small + 3.0;
+    if field(y).bottom() <= body.bottom() {
+        let f = field(y);
+        inside(ui, f, "device", |ui| {
+            let shown = rec.device.clone().unwrap_or_else(|| "The system's input".to_string());
+            ui.add_enabled_ui(!has_tape && !running, |ui| {
+                egui::ComboBox::from_id_salt("recorder-device").width(f.width() - 8.0).selected_text(shown).show_ui(ui, |ui| {
+                    if ui.selectable_label(rec.device.is_none(), "The system's input").clicked() {
                         rec.set_device(None);
                     }
                     for name in rec.device_list.get_or_insert_with(Recorder::devices).clone() {
@@ -531,104 +576,119 @@ pub fn show(ui: &mut Ui, rec: &mut Recorder, can_append: bool) {
                             rec.set_device(Some(name));
                         }
                     }
-                },
-            );
-        })
-        .response
-        .on_hover_text("Where the tape listens (clear the tape to pick another)");
-    });
-
-    // ── The input meter, and the "wait for sound" line on it (drag it) ──
-    widgets::meter_bar(ui.painter(), meter_r, widgets::meter_fraction(s.level), false);
-    if s.wait_for_sound {
-        let x = meter_r.left() + widgets::meter_fraction(s.threshold) * meter_r.width();
-        let resp = ui.interact(meter_r.expand(4.0), ui.id().with("threshold"), Sense::drag());
-        if let Some(pos) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
-            let frac = ((pos.x - meter_r.left()) / meter_r.width()).clamp(0.02, 1.0);
-            s.threshold = lyra_plugin::db_to_gain(frac * 60.0 - 60.0);
-        }
-        ui.painter().vline(x, meter_r.expand(3.0).y_range(), theme::stroke(2.0, theme::GOLD));
-        resp.on_hover_text(format!("Starts above {:.0} dB: drag", lyra_plugin::gain_to_db(s.threshold)));
+                });
+            })
+            .response
+            .on_hover_text("Where the tape listens: the system's input is whatever your desktop's sound settings pick (clear the tape to change it)");
+        });
+    }
+    y += row;
+    // Where it plays.
+    label(ui, y, "PLAYS INTO");
+    y += m.text_small + 3.0;
+    if field(y).bottom() <= body.bottom() {
+        let f = field(y);
+        inside(ui, f, "track", |ui| {
+            let name = |t: usize| tracks.get(t).cloned().unwrap_or_else(|| widgets::insert_label(t));
+            egui::ComboBox::from_id_salt("recorder-track")
+                .width(f.width() - 8.0)
+                .selected_text(name(rec.track))
+                .show_ui(ui, |ui| {
+                    for t in 0..tracks.len() {
+                        if ui.selectable_label(rec.track == t, name(t)).clicked() {
+                            rec.track = t;
+                        }
+                    }
+                })
+                .response
+                .on_hover_text("The mixer insert you hear the tape through (its effects too); a sent take plays there");
+        });
+    }
+    y += row + 4.0;
+    // Clear, at the bottom of the controls.
+    let clear = Rect::from_min_size(pos2(body.left(), y), vec2(body.width(), m.control_h));
+    if clear.bottom() <= body.bottom()
+        && widgets::button_at(
+            ui,
+            clear,
+            ui.id().with("clear"),
+            Legend::Text("Clear the tape"),
+            None,
+            "Throw the tape away",
+        )
+        .clicked()
+    {
+        rec.shared.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
     if let Some(e) = &rec.error {
-        ui.painter().text(meter_r.center(), Align2::CENTER_CENTER, e, FontId::proportional(m.text_small), theme::ROSE);
+        ui.painter().text(body.left_bottom(), Align2::LEFT_BOTTOM, e, FontId::proportional(m.text_small), theme::ROSE);
     }
 
-    // ── The tape, growing from the left (at least ten seconds wide) ──
-    theme::well(ui.painter(), wave_r);
-    let inner = wave_r.shrink(4.0);
-    if !has_tape {
-        ui.painter().text(
-            inner.center(),
+    // The meter: eased (it rises quickly and falls slowly), in calm colours.
+    rec.shown_level = if level > rec.shown_level {
+        rec.shown_level + (level - rec.shown_level) * 0.35
+    } else {
+        rec.shown_level * 0.94
+    };
+    let frac = widgets::meter_fraction(rec.shown_level);
+    ui.painter().rect_filled(meter, theme::cr(2), theme::WELL);
+    let lit = Rect::from_min_max(pos2(meter.left(), meter.bottom() - frac * meter.height()), meter.max);
+    ui.painter().rect_filled(lit, theme::cr(2), theme::MINT_DEEP);
+    if frac > 0.0 {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(40));
+    }
+    if wait {
+        // The "wait for sound" level: drag it up and down.
+        let y = meter.bottom() - widgets::meter_fraction(threshold) * meter.height();
+        let resp = ui.interact(meter.expand2(vec2(6.0, 4.0)), ui.id().with("threshold"), Sense::drag());
+        if let Some(pos) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+            let f = ((meter.bottom() - pos.y) / meter.height()).clamp(0.02, 1.0);
+            rec.shared.lock().unwrap_or_else(|e| e.into_inner()).threshold = lyra_plugin::db_to_gain(f * 60.0 - 60.0);
+        }
+        ui.painter().hline(meter.expand2(vec2(3.0, 0.0)).x_range(), y, theme::stroke(2.0, theme::GOLD));
+        resp.on_hover_text(format!("Starts above {:.0} dB: drag", lyra_plugin::gain_to_db(threshold)));
+    }
+}
+
+/// The tape's waveform in `wave`, `x_of` placing a time (seconds).
+pub fn paint_tape(ui: &Ui, wave: Rect, rec: &Recorder, x_of: impl Fn(f64) -> f32, secs_at: impl Fn(f32) -> f64) {
+    let s = rec.shared.lock().unwrap_or_else(|e| e.into_inner());
+    let tape = &s.tape;
+    let p = ui.painter().with_clip_rect(wave);
+    let (mid, half) = (wave.center().y, wave.height() * 0.45);
+    if tape.frames() == 0 {
+        p.text(
+            wave.center(),
             Align2::CENTER_CENTER,
-            "A scratch tape: record, then send it to the arranger or append it to a clip. Clear throws it away.",
-            FontId::proportional(m.text_small * 1.1),
+            "A scratch tape: record, listen, then send it to the arranger or append it to a clip.",
+            FontId::proportional(theme::m().text_small + 1.0),
             theme::TEXT_DIM,
         );
-    } else {
-        let peaks = &s.tape.peaks;
-        let span = (s.tape.frames() as f64).max(10.0 * s.tape.rate as f64) / PEAK_FRAMES as f64;
-        let per_px = span / inner.width() as f64;
-        let mid = inner.center().y;
-        let half = inner.height() * 0.5;
-        // The length of the tape as a line, so even a quiet take shows how long it is.
-        let end = inner.left() + ((s.tape.frames() as f64 / PEAK_FRAMES as f64) / per_px) as f32;
-        ui.painter().hline(inner.left()..=end.min(inner.right()), mid, theme::stroke(1.0, theme::MINT_DEEP));
-        let mut x = 0.0f32;
-        while x < inner.width() {
-            let a = (x as f64 * per_px) as usize;
-            let b = (((x + 1.0) as f64 * per_px) as usize).max(a + 1).min(peaks.len());
-            if a >= peaks.len() {
-                break;
-            }
-            let (lo, hi) = peaks[a..b].iter().fold((0.0f32, 0.0f32), |(lo, hi), p| (lo.min(p.0), hi.max(p.1)));
-            let px = inner.left() + x;
-            ui.painter().vline(
-                px,
-                egui::Rangef::new(mid - hi.min(1.0) * half, mid - lo.max(-1.0) * half + 1.0),
-                theme::stroke(1.0, theme::MINT),
-            );
-            x += 1.0;
-        }
+        return;
     }
+    let rate = tape.rate.max(1) as f64;
+    let end = x_of(tape.seconds()).min(wave.right());
+    p.hline(wave.left()..=end, mid, theme::stroke(1.0, theme::MINT_DEEP));
+    let mut x = wave.left().max(x_of(0.0));
+    while x < end {
+        let a = (secs_at(x) * rate) as usize / PEAK_FRAMES;
+        let b = ((secs_at(x + 1.0) * rate) as usize / PEAK_FRAMES).max(a + 1).min(tape.peaks.len());
+        if a >= tape.peaks.len() {
+            break;
+        }
+        let (lo, hi) = tape.peaks[a..b].iter().fold((0.0f32, 0.0f32), |(lo, hi), p| (lo.min(p.0), hi.max(p.1)));
+        p.vline(
+            x,
+            egui::Rangef::new(mid - hi.min(1.0) * half, mid - lo.max(-1.0) * half + 1.0),
+            theme::stroke(1.0, theme::MINT),
+        );
+        x += 1.0;
+    }
+}
 
-    // ── Bottom: the name a kept take gets · append · send ──
-    let [name_label, name_r, _, append_r, send_r] =
-        flex::row(bottom, [Px(46.0), Px(220.0), Grow(1.0), Px(key * 4.2), Px(key * 4.8)], 6.0);
-    ui.painter().text(
-        name_label.right_center(),
-        Align2::RIGHT_CENTER,
-        "name",
-        FontId::proportional(m.text_small),
-        theme::TEXT_DIM,
-    );
-    inside(ui, name_r, "prefix", |ui| {
-        ui.add(egui::TextEdit::singleline(&mut rec.prefix).desired_width(name_r.width() - 8.0))
-            .on_hover_text("A kept take is called this, plus the date and time");
-    });
-    drop(s);
-    let usable = has_tape && !running;
-    inside(ui, append_r, "append", |ui| {
-        let hint = if can_append {
-            "Add the tape to the end of the audio clip that's open (as a new version of its file; undo goes back)"
-        } else {
-            "Open an audio clip first (Editor tab) to append the tape to it"
-        };
-        if widgets::key(ui, append_r.size(), Legend::Text("APPEND TO CLIP"), false, theme::L_MINT, hint).clicked()
-            && usable
-            && can_append
-        {
-            rec.ask = Some(Ask::Append);
-        }
-    });
-    inside(ui, send_r, "send", |ui| {
-        let hint = "Write the tape as a file and place it on the arrangement, at the playhead";
-        if widgets::key(ui, send_r.size(), Legend::Text("SEND TO ARRANGER"), false, theme::L_MINT, hint).clicked()
-            && usable
-        {
-            rec.ask = Some(Ask::SendToArranger);
-        }
-    });
+/// How long the tape is (seconds).
+pub fn tape_seconds(rec: &Recorder) -> f64 {
+    rec.shared.lock().map_or(0.0, |s| s.tape.seconds())
 }
 
 #[cfg(test)]

@@ -92,6 +92,8 @@ pub struct Metrics {
     pub module_gap: f32,
     pub corner: f32,
     /// Knobs in the channel rack / in the instrument editor.
+    /// The toolbar's buttons (square, icon ones).
+    pub tool_key: f32,
     pub knob_small: f32,
     pub knob_large: f32,
     pub led: f32,
@@ -118,6 +120,7 @@ impl Metrics {
         module_pad: 6.0,
         module_gap: 8.0,
         corner: 5.0,
+        tool_key: 34.0,
         knob_small: 28.0,
         knob_large: 40.0,
         led: 18.0,
@@ -671,35 +674,6 @@ fn key_layers(
             p.rect_filled(face, r_face.corners(), shade(KEY_FACE, k));
         }
     }
-}
-
-/// Radio keys: `n` faces side by side in one shared recess, split by a thin
-/// recess wall. Only the group's outer corners are rounded; where two faces
-/// meet, the corners are square. `state(i)` gives each face's (light, hot).
-/// Returns the faces.
-pub fn radio_keys(p: &Painter, rect: Rect, n: usize, state: impl Fn(usize) -> (Option<Light>, bool)) -> Vec<Rect> {
-    let n = n.max(1);
-    let g = key_geom(rect.height().min(rect.width() / n as f32));
-    p.rect_filled(rect, cr(g.r_out.round() as u8), KEY_RECESS);
-    let inner = rect.shrink(g.recess);
-    let wall = g.recess.max(1.5);
-    let w = (inner.width() - wall * (n - 1) as f32) / n as f32;
-    (0..n)
-        .map(|i| {
-            let pad = Rect::from_min_size(
-                egui::pos2(inner.left() + i as f32 * (w + wall), inner.top()),
-                egui::vec2(w, inner.height()),
-            );
-            // The pad runs flush to the wall; only the outer sides keep their bezel.
-            let face = Rect::from_min_max(
-                egui::pos2(if i == 0 { pad.left() + g.pad } else { pad.left() }, pad.top() + g.pad),
-                egui::pos2(if i == n - 1 { pad.right() - g.pad } else { pad.right() }, pad.bottom() - g.pad),
-            );
-            let (light, hot) = state(i);
-            key_layers(p, pad, face, &g, (i == 0, i == n - 1), light, hot, 1.0);
-            face
-        })
-        .collect()
 }
 
 /// A flat key for dense grids (the channel rack's steps): the dark recess
