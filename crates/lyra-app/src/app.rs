@@ -49,8 +49,8 @@ pub struct UiState {
     /// "Show this editor": a widget asks, the app makes sure an area shows it
     /// (opening the bottom area if neither does).
     pub show: Option<Editor>,
-    /// The editors on screen this frame (lights the toolbar keys).
-    pub visible: Vec<Editor>,
+    /// Whether the bottom area is open this frame (lights its toolbar key).
+    pub bottom_open: bool,
     /// "Open this pattern in the piano roll" (double-click in the browser or
     /// on a clip): the top area switches to the piano roll for it.
     pub open_pattern: Option<usize>,
@@ -120,7 +120,7 @@ impl Default for UiState {
             raise: None,
             show_design: false,
             show: None,
-            visible: Vec::new(),
+            bottom_open: false,
             open_pattern: None,
             library: Vec::new(),
             rescan: true,
@@ -975,7 +975,7 @@ impl LyraApp {
             Action::ToggleDesign => self.ui.show_design ^= true,
             Action::ToggleBrowser => self.ui.show_browser ^= true,
             Action::ToggleMixer => self.toggle_bottom(Editor::Mixer),
-            Action::TogglePlaylist => self.toggle_bottom(Editor::Arrangement),
+            Action::ToggleBottom => self.bottom_open ^= true,
             Action::ToggleSongMode => self.ui.song_mode ^= true,
             Action::SongMode(on) => self.ui.song_mode = on,
             Action::Automate => self.automate(),
@@ -1047,6 +1047,22 @@ fn bottom_panel_id(editor: Editor) -> Id {
 }
 
 /// A folded side panel: a thin strip with an arrow; click it to unfold.
+/// The folded bottom area: a thin strip along the bottom with an arrow; click it to unfold.
+fn folded_bottom(ctx: &egui::Context, open: &mut bool) {
+    let frame = egui::Frame::default().fill(theme::PANEL);
+    egui::TopBottomPanel::bottom("bottom-folded").resizable(false).exact_height(14.0).frame(frame).show(ctx, |ui| {
+        let r = ui.max_rect();
+        let resp = ui.interact(r, Id::new("bottom-folded").with("unfold"), egui::Sense::click());
+        let c = r.center();
+        let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+        let pts = vec![c + egui::vec2(-4.0, 1.5), c + egui::vec2(0.0, -2.5), c + egui::vec2(4.0, 1.5)];
+        ui.painter().add(egui::Shape::line(pts, theme::stroke(1.5, ink)));
+        if resp.on_hover_text("Unfold the bottom area  (F5)").clicked() {
+            *open = true;
+        }
+    });
+}
+
 fn folded_strip(ctx: &egui::Context, id: &'static str, left: bool, hint: &str, open: &mut bool) {
     let panel = if left { egui::SidePanel::left(id) } else { egui::SidePanel::right(id) };
     panel.resizable(false).exact_width(14.0).frame(egui::Frame::default().fill(theme::PANEL)).show(ctx, |ui| {
@@ -1096,10 +1112,7 @@ impl eframe::App for LyraApp {
             actions.push(Action::TogglePlay);
         }
 
-        self.ui.visible = [Some(self.areas[0].editor), self.bottom_open.then_some(self.areas[1].editor)]
-            .into_iter()
-            .flatten()
-            .collect();
+        self.ui.bottom_open = self.bottom_open;
 
         // ── Top bar ──
         egui::TopBottomPanel::top("transport")
@@ -1377,6 +1390,9 @@ impl LyraApp {
             Editor::Audio | Editor::Automation => avail * 0.36,
             _ => avail * 0.5,
         };
+        if !self.bottom_open {
+            folded_bottom(ctx, &mut self.bottom_open);
+        }
         let r = egui::TopBottomPanel::bottom(bottom_panel_id(editor))
             .resizable(true)
             .default_height(default_h)
@@ -1586,7 +1602,7 @@ impl LyraApp {
                         }
                         ui.label(
                             RichText::new(format!(
-                                "Z-M Q-P play · -/= octave {:+} · [ ] pattern · F5 F7 F9 bottom area · F4 F6 panels",
+                                "Z-M Q-P play · -/= octave {:+} · [ ] pattern · F4 F5 F6 panels · F7 piano roll · F9 mixer · F3 actions",
                                 self.keyboard.octave
                             ))
                             .small()

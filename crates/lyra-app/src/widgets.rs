@@ -264,10 +264,8 @@ pub enum Icon {
     Minus,
     Rack,
     Piano,
-    Knob,
     Playlist,
     Mixer,
-    Browser,
     Wave,
     /// Arrangement tools.
     Pointer,
@@ -275,6 +273,11 @@ pub enum Icon {
     Slide,
     /// An automation curve.
     Curve,
+    /// The window's layout with one side filled in: the left panel, the
+    /// bottom area, the right panel (like a code editor's layout keys).
+    PanelLeft,
+    PanelBottom,
+    PanelRight,
 }
 
 /// Draw an icon centred in `r` (a key's face). Hand-drawn vectors until the
@@ -327,10 +330,6 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, _bg: Col
                 p.rect_filled(key, cr(1), ink);
             }
         }
-        Icon::Knob => {
-            p.circle_stroke(c, 5.5 * u, line);
-            p.line_segment([c, c + vec2(3.0, -3.5) * u], line);
-        }
         Icon::Mixer => {
             // Three faders at different heights.
             for (x, cap) in [(-4.5, -2.0), (0.0, 3.0), (4.5, -4.5)] {
@@ -338,16 +337,15 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, _bg: Col
                 p.rect_filled(Rect::from_center_size(c + vec2(x, cap) * u, vec2(3.6, 2.6) * u), cr(1), ink);
             }
         }
-        Icon::Browser => {
-            // A panel on the left with a list beside it.
-            let frame = Rect::from_center_size(c, vec2(13.0, 11.0) * u);
+        Icon::PanelLeft | Icon::PanelBottom | Icon::PanelRight => {
+            let frame = Rect::from_center_size(c, vec2(14.0, 11.0) * u);
+            let part = match icon {
+                Icon::PanelLeft => Rect::from_min_max(frame.min, pos2(frame.left() + 4.5 * u, frame.bottom())),
+                Icon::PanelRight => Rect::from_min_max(pos2(frame.right() - 4.5 * u, frame.top()), frame.max),
+                _ => Rect::from_min_max(pos2(frame.left(), frame.bottom() - 4.0 * u), frame.max),
+            };
+            p.rect_filled(part, cr((1.5 * u) as u8), ink);
             p.rect_stroke(frame, cr((1.5 * u) as u8), line, egui::StrokeKind::Middle);
-            let split = frame.left() + 4.5 * u;
-            p.vline(split, frame.y_range(), line);
-            for k in 0..3 {
-                let y = frame.top() + (2.8 + k as f32 * 2.7) * u;
-                p.hline(split + 2.0 * u..=frame.right() - 2.0 * u, y, stroke(u.max(1.0), ink));
-            }
         }
         Icon::Curve => {
             // A curve rising through three points.

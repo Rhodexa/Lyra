@@ -65,7 +65,8 @@ pub enum Action {
     TogglePiano,
     ToggleEditor,
     ToggleDesign,
-    TogglePlaylist,
+    /// Open or fold the bottom area (keeping whatever editor it shows).
+    ToggleBottom,
     ToggleMixer,
     ToggleBrowser,
     /// Tab: the area under the mouse flips back to its previous editor.
@@ -255,7 +256,7 @@ impl Keyboard {
                 Key::F12 => out.push(Action::ToggleDesign),
                 Key::F3 => out.push(Action::ContextMenu),
                 Key::F4 => out.push(Action::ToggleBrowser),
-                Key::F5 => out.push(Action::TogglePlaylist),
+                Key::F5 => out.push(Action::ToggleBottom),
                 Key::F9 => out.push(Action::ToggleMixer),
                 Key::L => out.push(Action::ToggleSongMode),
                 _ => {}
