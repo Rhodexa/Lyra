@@ -444,6 +444,32 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .vp.v .win .end::after{left:28%;right:28%;top:6px;bottom:auto;width:auto;height:2px}
 .vp.v .win .end.l{top:0} .vp.v .win .end.r{bottom:0;top:auto}
 .sc-demo{display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;align-items:start}
+/* ═════════ HINT + DIALOG (draft 1) ═════════
+   Both pop up over the UI: H1 / D1 in the LCD's colours, H2 / D2 dark. A shortcut is a small tag. */
+.tip{position:fixed;z-index:60;max-width:260px;padding:6px 9px;border-radius:5px;font:12.5px/1.4 var(--read-font);pointer-events:none;
+  opacity:0;transition:opacity .08s;box-shadow:0 6px 16px #0008;background-clip:padding-box}
+.tip.show{opacity:1}
+.tip.lcd{background:var(--lcd);color:var(--lcd-ink);border:var(--btn-bw) solid color-mix(in srgb,var(--lcd-ink),black 50%)}
+.tip.dark{background:var(--surface-sel);color:var(--ink);border:var(--btn-bw) solid color-mix(in srgb,var(--surface-sel),black var(--btn-ol))}
+.tip .k,.dlg .k{display:inline-block;margin-left:8px;padding:2px 5px 1px;border-radius:3px;font:var(--btn-fw) 10px/1.2 var(--btn-font);letter-spacing:.06em;vertical-align:1px}
+.tip.lcd .k{background:var(--lcd-ink);color:#cfcfcf} .tip.dark .k{background:var(--ground);color:var(--ink-dim)}
+.tip.static{position:static;opacity:1;display:inline-block}
+.veil{position:fixed;inset:0;z-index:70;background:#000a;display:none;place-items:center}
+.veil.show{display:grid}
+.dlg{position:relative;width:400px;border-radius:calc(var(--btn-r) + var(--btn-bw));padding:16px;box-shadow:0 10px 30px #000a;background-clip:padding-box}
+.dlg .dt{font:700 13px/1 var(--btn-font);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.dlg .dm{font:14px/1.45 var(--read-font);margin-bottom:16px}
+.dlg .dm b{font-weight:600}
+.dlg .db{display:flex;gap:var(--gap-in);align-items:center}
+.dlg .db .grow{flex:1}
+.dlg.lcd{background:var(--lcd);color:var(--lcd-ink);border:var(--btn-bw) solid color-mix(in srgb,var(--lcd-ink),black 50%)}
+.dlg.lcd .bare{color:var(--lcd-ink)}
+.dlg.lcd .hit:hover .btn.bare{--b:#a9a9a9}
+.dlg.dark{background:var(--surface);color:var(--ink);border:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol));padding-top:40px}
+.dlg.dark .dt{position:absolute;top:0;left:0;margin:0;padding:6px 10px 5px 9px;background:var(--ground);color:var(--ink-dim);border-radius:var(--btn-r) 0 5px 0;font-size:11px}
+.dlg .hint-keys{font:11px var(--read-font);opacity:.7}
+.dlg.static{display:inline-block}
+.hd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:start}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -676,6 +702,22 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <div class="caps" style="margin:18px 0 6px">Viewport · horizontal (with the miniature) and vertical (without) · drag the windows; drag their ends to zoom</div>
   <div id="sc-vp"></div>
 </div>
+
+<!-- ═════════════════════════ HINT + DIALOG ═════════════════════════ -->
+<h2>Hint · dialog <span class="draft">UI-NEEDS 14 · 24 · DRAFT 1</span></h2>
+<p>Both pop up over the UI, so: <b>H1 / D1 in the LCD's colours</b> (like the drawer: "this is on top, read me"), or <b>H2 / D2 dark</b> (a lifted plate; the dark dialog has its title on a corner tag, like the plates). A shortcut is a small tag. Hover the buttons (a hint appears after 0.4 s); open the dialogs (Enter = the lit action, Esc = cancel).</p>
+<div class="card">
+  <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Hints</span><span id="tip-style"></span></div>
+  <div class="caps" style="margin-bottom:6px">Hover these</div>
+  <div class="bar" id="tip-bar"></div>
+  <div class="caps" style="margin:16px 0 8px">Drawn still</div>
+  <div class="row" id="tip-static" style="gap:24px;align-items:flex-start"></div>
+</div>
+<div class="card">
+  <div class="row" style="gap:8px;margin-bottom:14px"><span class="caps">Open</span><span id="dlg-open"></span></div>
+  <div class="hd-grid" id="dlg-static"></div>
+</div>
+<div class="veil" id="veil"></div>
 </main>
 
 <script>
@@ -1518,6 +1560,59 @@ function viewportBar(onChange, minis, axis = 'h') {
   if (mxs) { const parent = mxs.parentElement; const wrap = plainScroll(mxs, 'h', {width: '100%'}); parent.append(wrap); mxs.style.width = 'max-content'; }
   const arrHdr = document.querySelector('#mock .arr .hdr');
   if (arrHdr) { const lanes = document.querySelector('#mock .arr .lanes'); const mvp = viewportBar(() => {}, clips); mvp.style.margin = '4px 4px 0'; arrHdr.after(mvp); }
+})();
+// ── hints and dialogs ──
+let tipStyle = 'lcd';
+const tip = h('div', 'tip lcd', document.body);
+function hint(target, text, key) {
+  let timer = null;
+  target.addEventListener('pointerenter', () => { timer = setTimeout(() => {
+    tip.className = 'tip ' + tipStyle; tip.innerHTML = text + (key ? `<span class="k">${key}</span>` : '');
+    const r = target.getBoundingClientRect(); tip.style.left = Math.min(innerWidth - 270, r.left) + 'px'; tip.style.top = r.bottom + 6 + 'px';
+    requestAnimationFrame(() => tip.classList.add('show')); }, 400); });
+  target.addEventListener('pointerleave', () => { clearTimeout(timer); tip.classList.remove('show'); });
+  target.addEventListener('pointerdown', () => { clearTimeout(timer); tip.classList.remove('show'); });
+}
+function dialog(kind, o) {
+  const d = h('div', 'dlg ' + kind);
+  h('div', 'dt', d, o.title); h('div', 'dm', d, o.message);
+  const b = h('div', 'db', d);
+  const dont = button('M', o.other, {push: true, bare: true}); b.append(dont); h('span', 'grow', b);
+  const cancel = button('M', 'Cancel', {push: true}), ok = button('M', o.ok, {push: true, on: true, minw: '96px'});
+  b.append(cancel, ok); setLight(d, 'mint');
+  return {d, dont, cancel, ok};
+}
+(() => {
+  const tsw = modeSwitch('B', 'S', [['LCD'], ['Dark']], 0);
+  tsw.addEventListener('click', () => setTimeout(() => { tipStyle = tsw.querySelectorAll('.btn')[1].classList.contains('on') ? 'dark' : 'lcd'; }));
+  $('#tip-style').append(tsw);
+  const bar = $('#tip-bar');
+  const items = [[button('L', 'play', {push: true}), 'Play from the playhead', 'Space'], [button('L', 'stop', {push: true}), 'Stop, and back to where you started', 'Space'],
+    [button('L', 'rec', {light: 'pink'}), 'Record into the Recorder tape', 'R'], [button('L', 'loop'), 'Loop the selected region', 'L'],
+    [numPicker('lcd', 'L', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM', under: true}), 'Tempo. Hover a digit to choose how fine, then drag or scroll; double-click to type.', null],
+    [button('L', 'arr', {on: true}), 'Left panel', 'F4'], [button('L', 'mixer', {on: true}), 'Bottom area', 'F5']];
+  items.forEach(([n, t, k]) => { bar.append(n); hint(n, t, k); });
+  const st = $('#tip-static');
+  for (const k of ['lcd', 'dark']) { const t = h('div', 'tip static ' + k, st); t.innerHTML = 'Loop the selected region<span class="k">L</span>'; const t2 = h('div', 'tip static ' + k, st); t2.style.maxWidth = '240px'; t2.textContent = 'Tempo. Hover a digit to choose how fine, then drag or scroll; double-click to type.'; }
+  // dialogs
+  const msg = {title: 'Save changes?', message: 'Night Runway has changes that aren\'t saved.', other: 'Don\'t save', ok: 'Save'};
+  const msgEl = () => { const m = Object.assign({}, msg); return m; };
+  const g = $('#dlg-static');
+  for (const [k, label] of [['lcd', 'D1 · LCD'], ['dark', 'D2 · dark, title on a tag']]) {
+    const c = h('div', '', g); h('div', 'caps', c, label).style.marginBottom = '8px';
+    const {d} = dialog(k + ' static', msgEl()); d.querySelector('.dm').innerHTML = '<b>Night Runway</b> has changes that aren\'t saved.'; c.append(d);
+  }
+  const veil = $('#veil');
+  const open = k => {
+    veil.innerHTML = ''; const {d, dont, cancel, ok} = dialog(k, msgEl()); d.querySelector('.dm').innerHTML = '<b>Night Runway</b> has changes that aren\'t saved.';
+    veil.append(d); veil.classList.add('show');
+    const close = () => { veil.classList.remove('show'); removeEventListener('keydown', keys); };
+    const keys = e => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); close(); } };
+    [dont, cancel, ok].forEach(x => x.addEventListener('click', close)); veil.onclick = e => { if (e.target === veil) close(); };
+    addEventListener('keydown', keys);
+  };
+  const ob = $('#dlg-open'); const b1 = button('S', 'D1 · LCD', {push: true}), b2 = button('S', 'D2 · dark', {push: true}); b1.onclick = () => open('lcd'); b2.onclick = () => open('dark'); ob.append(b1, b2);
+  document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
 </body>
