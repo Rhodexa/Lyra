@@ -382,10 +382,20 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .mock .left{grid-row:2/4;display:flex;flex-direction:column;background:var(--ground)}
 /* the tabbed panel IS the area: tabs on the ground strip at its top, the chosen tab flows into the whole area */
 .mock .left .ftabs{margin-bottom:0}
-.mock .left .ftab:first-child{border-left-color:transparent;border-top-left-radius:0}
-.mock .left .ftab:last-child{border-right-color:transparent;border-top-right-radius:0}
+/* the edge tabs have NO side border (a transparent one shows the ground through it and shifts the tab 2 px) */
+.mock .left .ftab:first-child{border-left-width:0;border-top-left-radius:0}
+.mock .left .ftab:last-child{border-right-width:0;border-top-right-radius:0}
+.mock .left .ftab+.ftab{margin-left:calc(var(--btn-bw) * -1)}
 .mock .left .ftab.on{border-bottom-color:var(--surface)}
 .mock .left .tabbody{flex:1;background:var(--surface)}
+/* option: rounded docked panels (tiles on a dark frame); whatever sits in a corner follows the curve */
+.mock.round>*{border-radius:6px}
+.mock.round .left{background:transparent}
+.mock.round .left .ftabs{background:var(--ground);border-radius:6px 6px 0 0}
+.mock.round .left .ftab:first-child{border-top-left-radius:6px}
+.mock.round .left .ftab:last-child{border-top-right-radius:6px}
+.mock.round .left .tabbody{border-radius:0 0 6px 6px}
+.mock.round .arr,.mock.round .mx{overflow:hidden}
 .mock .ctx{grid-column:1/-1;display:flex;align-items:center;gap:var(--gap-in);padding:3px 6px;background:var(--ground);font-size:12px;color:var(--ink-dim)}
 .arr .lanes{display:grid;grid-template-columns:150px 1fr}
 .arr .ruler{grid-column:1/-1;display:grid;grid-template-columns:150px 1fr;height:24px;border-bottom:var(--btn-bw) solid var(--ground)}
@@ -614,6 +624,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 <!-- ═════════════════════════ MOCK SCREEN ═════════════════════════ -->
 <h2>Mock screen <span class="draft">DRAFT 2</span></h2>
 <p>A whole Lyra window, built only from catalog widgets and the kept ones: the toolbar, the left panel, the arrangement, the mixer and the context bar. This is where everything gets judged together. It's live: click, drag, open the dropdowns. <b>Draft 2:</b> the toolbar is a panel (the ground colour only shows in the gaps); the left panel <i>is</i> the tabbed panel (tabs on the ground strip, the chosen one flows into the whole area: no panel inside a panel); the toolbar's displays are a narrower M LCD with their label under it.</p>
+<div class="row" style="justify-content:flex-end;margin:0 0 8px"><span class="caps" style="margin-right:6px">Docked panels</span><span id="mock-corners"></span></div>
 <div class="scroll" style="overflow-x:auto"><div class="mock" id="mock"></div></div>
 </main>
 
@@ -1379,6 +1390,9 @@ let lastT = 0;
   h('span', 'grow', ctx).style.flex = '1';
   h('span', 'caps', ctx, '2 clips'); ctx.append(button('S', 'Duplicate', {push: true}), button('S', 'Split', {push: true}), button('S', 'Quantize', {push: true}));
   m.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
+  const cs = modeSwitch('B', 'S', [['Square'], ['Rounded']], 0);
+  cs.addEventListener('click', () => setTimeout(() => m.classList.toggle('round', cs.querySelectorAll('.btn')[1].classList.contains('on'))));
+  $('#mock-corners').append(cs);
 })();
 </script>
 </body>
