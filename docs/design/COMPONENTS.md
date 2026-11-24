@@ -10,6 +10,24 @@ here, with where its code lives, where it's used, and how it's doing.
 Plugins (Fluttersine, Chrysalis) are not in this list on purpose: they keep
 their own look.
 
+
+> **Hands off the plugins.** Fluttersine (`fm_editor.rs`) and Chrysalis
+> (`chrysalis_editor.rs`, `chrysalis_table.rs`) are independent projects with
+> their own visual language. The cleanup and the widget catalog must not change
+> them. **Before** any shared widget or theme value below is changed, first give
+> the plugin editors their own copies of what they borrow, so they no longer
+> depend on Lyra's widgets. Today they borrow:
+>
+> - **Fluttersine:** `widgets::paint_knob`, `knob_painted`, `paint_icon`, `Icon`;
+>   `theme::led`, `lcd_panel`, `well`, `key_ink`, `mix`, `shade`, `m()` (Metrics),
+>   the colours `TEXT`, `TEXT_DIM`, `PANEL`, `PANEL_HI`, `INSET`, `BG`, `SEAM`,
+>   `LCD`, `LCD_INK`, `LCD_INK_DIM` and all eight `L_*` lights; `flex`, `rack::tracked`.
+> - **Chrysalis:** `widgets::knob_painted` (behaviour only; it paints its own
+>   knobs), `theme::mix`, `shade`, `hex`, `radial_circle`, `cr`, `stroke`;
+>   `fm_editor::wheel_step`; `flex`, `rack::tracked`.
+>
+> (Listed 2026-11-24 from the `use` lines and calls; re-check before splitting.)
+
 ---
 
 ## Controls (you press, turn or drag them)

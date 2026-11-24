@@ -5,6 +5,24 @@ consistent again. It lists what to standardise or build, and the design
 questions only you can answer. Each has my suggestion. The inventory of
 what exists is in [COMPONENTS.md](COMPONENTS.md).
 
+
+> **Hands off the plugins.** Fluttersine (`fm_editor.rs`) and Chrysalis
+> (`chrysalis_editor.rs`, `chrysalis_table.rs`) are independent projects with
+> their own visual language. The cleanup and the widget catalog must not change
+> them. **Before** any shared widget or theme value below is changed, first give
+> the plugin editors their own copies of what they borrow, so they no longer
+> depend on Lyra's widgets. Today they borrow:
+>
+> - **Fluttersine:** `widgets::paint_knob`, `knob_painted`, `paint_icon`, `Icon`;
+>   `theme::led`, `lcd_panel`, `well`, `key_ink`, `mix`, `shade`, `m()` (Metrics),
+>   the colours `TEXT`, `TEXT_DIM`, `PANEL`, `PANEL_HI`, `INSET`, `BG`, `SEAM`,
+>   `LCD`, `LCD_INK`, `LCD_INK_DIM` and all eight `L_*` lights; `flex`, `rack::tracked`.
+> - **Chrysalis:** `widgets::knob_painted` (behaviour only; it paints its own
+>   knobs), `theme::mix`, `shade`, `hex`, `radial_circle`, `cr`, `stroke`;
+>   `fm_editor::wheel_step`; `flex`, `rack::tracked`.
+>
+> (Listed 2026-11-24 from the `use` lines and calls; re-check before splitting.)
+
 ## What to call them
 
 In egui, the library Lyra is drawn with, anything you can place and click is
@@ -70,6 +88,37 @@ should follow the same three sizes, so a row of mixed widgets lines up:
     line because it had its own).
 14. **Menus and tooltips**: egui's, restyled to match (colours, corners,
     padding) rather than rebuilt.
+
+## Also missing (found 2026-11-24, while building the catalog)
+
+Foundations, decided once and used by every widget:
+
+15. **Colour roles**, not colours: *ground* (BG), *surface* (PANEL), *raised*
+    (buttons), *sunken* (wells), *ink*, *ink-dim*, *ink-on-light*, *edge*, and
+    *the light* (a widget's colour). Today ~40 greys are typed inside widgets.
+16. **One set of states** with one look each: idle, hover, pressed, **on**,
+    **selected**, **disabled** (nothing has a disabled look yet), and *playing*
+    (things that flash with the music). No focus rings or glows.
+17. **Type scale**: three sizes (label caps ~9–10, small 11, body 14), one
+    rule for caps labels, monospace only for numbers.
+18. **Corner radii and gaps**: two or three of each, as tokens.
+19. **Icons**: your set, at S / M / L sizes, one stroke weight, tinted with ink.
+
+Widgets and views nobody has designed yet:
+
+20. **List row**: the browser, files, presets, the Patterns tab: name, detail,
+    hover, selected, dragging. Probably the most-used thing in Lyra after knobs.
+21. **Splitter**: the edges you drag to resize panels (only egui's today).
+22. **Slider**: a horizontal fader for settings and the F12 panel (egui's).
+23. **Light picker**: choosing a channel's colour from the eight lights.
+24. **Dialog**: "Save changes?" and friends, in place of egui's window.
+25. **Busy / progress**: rendering, loading samples.
+26. **Drop target**: how a place shows it will accept a dragged sample.
+27. **Hint**: the tooltip look (14 says restyle egui's; this is its spec).
+
+What I'd *drop* from Lyra's own set: the silicone key (now Fluttersine's),
+the choice widget (the mode switch replaces it) and the number well (the
+dropdown and number picker replace it).
 
 ## Questions for you
 

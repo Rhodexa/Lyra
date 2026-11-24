@@ -91,8 +91,9 @@ details.history>summary:hover{color:var(--text)}
 .cell{display:grid;justify-items:center;gap:6px;min-width:0}
 .cap-label{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);text-align:center}
 .readout{font:600 12px ui-monospace,monospace;color:var(--text-dim);min-height:1.4em}
-svg.dial{display:block;touch-action:none;cursor:ns-resize;user-select:none;overflow:visible;outline:none}
-svg.dial:focus-visible{filter:drop-shadow(0 0 2px var(--text))}
+svg.dial{display:block;touch-action:none;cursor:ns-resize;user-select:none;overflow:visible}
+/* No focus rings or glows, ever (the studies had them; Lyra doesn't). */
+:focus,:focus-visible{outline:none}
 svg.dial:hover .lift{filter:brightness(1.08)}
 .scroll{overflow-x:auto;max-width:100%}
 /* palette */
@@ -122,7 +123,6 @@ ul.todo li{margin:3px 0}
 .key.on .face{color:var(--ink-lit)}
 .key:hover .pad,.key:hover .face{filter:brightness(1.14)}
 .key.on:hover .pad,.key.on:hover .face{filter:brightness(1.06)}
-.key:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 .flat{appearance:none;border:0;padding:1px;background:var(--key-recess);cursor:pointer;flex:none}
 .flat i{display:block;width:100%;height:100%;background:var(--flat-off)}
 .flat:hover i{filter:brightness(1.15)}
@@ -160,6 +160,7 @@ ul.todo li{margin:3px 0}
   </div>
   <div class="picker" id="accent-picker"><span>Light:</span></div>
 </div>
+<p style="max-width:none;border-left:3px solid var(--gold);padding:6px 10px;background:var(--panel)"><b>Not for the plugins.</b> Fluttersine and Chrysalis are independent projects with their own visual language. Nothing here applies to them, and changing this catalog must never change them. Before any shared widget or theme value changes, the plugin editors get their own copies of what they borrow (see COMPONENTS.md).</p>
 <nav>
   <a href="#palette">Palette</a><a href="#knobs">Knobs</a><a href="#keys">Silicone keys</a><a href="#leds">LEDs</a>
   <a href="#displays">LCD &amp; dropdown</a><a href="#faders">Faders</a><a href="#meters">Meters</a><a href="#strips">Mixer strips</a>
@@ -189,11 +190,10 @@ ul.todo li{margin:3px 0}
     <div class="row" id="k-cur-app"></div>
     <p class="note">The arc is the channel's light (mid tone); the mixer's pan uses MINT. Hover lifts the body 8 %. In the app, values show on hover/drag, not under every knob.</p>
   </article>
-  <details class="history" open><summary>History · 3 versions</summary>
+  <details class="history" open><summary>History · 2 versions</summary>
     <article class="ver"><header><span class="badge">v7</span><h3>Control library: the three final knobs</h3><span class="src">lyra-control-library(-mint-v2).html · 2026-11-15</span></header><div class="row" id="k-v7"></div><p class="note">Became the app's Tiny / Rubber / Polymer almost number for number.</p></article>
     <article class="ver"><header><span class="badge">v6</span><h3>Large RUIC: checker-lit polymer</h3><span class="src">lyra-large-ruic-v6.html · 2026-11-15</span></header><div class="row" id="k-v6"></div><p class="note">Fixed checker lighting, recessed arc, a rotating pointer with no border. Absolute drag (angle follows the mouse) in the study.</p></article>
-            <article class="ver"><header><span class="badge">v3</span><h3>Cap constructions: rounded square · ring · pill</h3><span class="src">lyra-knobs-v3.html = lyra-knobs-v3-1.html · 2026-11-14</span></header><div class="row" id="k-v3"></div><p class="note">The two v3 files are byte-identical. 260° sweep.</p></article>
-          </details>
+            </details>
 </section>
 
 <!-- ═════════════════════════════ KEYS ═════════════════════════════ -->
@@ -507,14 +507,6 @@ const polymerHist = {box: 300, base: g => { circ(g, 150, 110, '#1c1c1c'); circ(g
   ptr: linePtr(65, 87, 10, '#aaaaaa')};
 histRow('#k-v7', [['Tiny · flat', v7.tiny, 104], ['Normal · rubber', v7.normal, 155], ['Large · polymer', polymerHist, 252]]);
 (() => { const k = histKnob(polymerHist, false, 300, .68); const c = h('div', 'cell', $('#k-v6')); c.append(k.svg); h('div', 'cap-label', c, 'Large RUIC · continuous'); c.append(k.r); })();
-// v3 (160 box, ±130°)
-const v3cap = '#414141', v3rim = '#5f5f5f';
-const v3 = {
-  small: {box: 160, sweep: 130, base: g => circ(g, 80, 51, '#1a1a1a'), scale: s => s ? {dots: {r: 55, off: '#5e5e5e', offR: 2.9, onR: 4.6}} : {arc: {r: 55, w: 4, track: '#4a4a4a'}}, body: g => { el('rect', {x: 43, y: 43, width: 74, height: 74, rx: 17, fill: v3cap, stroke: v3rim, 'stroke-width': 2}, g); el('rect', {x: 49, y: 49, width: 62, height: 62, rx: 13, fill: '#3c3c3c'}, g); }, ptr: linePtr(16, 29, 6)},
-  normal: {box: 160, sweep: 130, base: g => circ(g, 80, 61, '#1a1a1a'), scale: s => s ? {dots: {r: 65, off: '#5e5e5e', offR: 2.9, onR: 4.6}} : {arc: {r: 65, w: 5, track: '#4a4a4a'}}, body: g => { circ(g, 80, 50, v3cap, {stroke: v3rim, 'stroke-width': 3}); circ(g, 80, 41, '#404040'); }, ptr: linePtr(22, 37, 5)},
-  big: {box: 160, sweep: 130, base: g => circ(g, 80, 70, '#1a1a1a'), scale: s => s ? {dots: {r: 74, off: '#5e5e5e', offR: 3.3, onR: 4.6}} : {arc: {r: 74, w: 5, track: '#4a4a4a'}}, body: g => { circ(g, 80, 58, '#393939', {stroke: v3rim, 'stroke-width': 3}); el('rect', {x: 38, y: 50, width: 84, height: 60, rx: 21, fill: v3cap}, g); }, ptr: linePtr(21, 37, 5)},
-};
-histRow('#k-v3', [['Utility encoder', v3.small, 112], ['Rubber cap', v3.normal, 132], ['Instrument dial', v3.big, 156]]);
 // ───────────────────────── silicone keys ─────────────────────────
 const PIANO = '<svg viewBox="0 0 64 64" fill="none" style="width:70%;height:70%"><rect x="8" y="14" width="48" height="36" rx="3" stroke="currentColor" stroke-width="3"/><path d="M20 50V15M32 50V15M44 50V15" stroke="currentColor" stroke-width="2.5"/><path d="M17 14V34H23V14M29 14V34H35V14M41 14V34H47V14" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/></svg>';
 function key(size, light, legend, on = false, o = {}) { // theme::key + key_geom
