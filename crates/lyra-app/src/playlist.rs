@@ -756,19 +756,21 @@ impl Playlist {
             timeline::paint_rubber_band(&painter, *from, pos);
         }
         self.paint_headers(&painter, &view, headers, p);
-        overview.paint(&painter, &self.time, matches!(self.drag, Drag::Overview(_)));
+        overview.paint(&painter, &self.time, matches!(self.drag, Drag::Overview(_)), || {
+            for c in &p.clips {
+                let x0 = overview.x_of(&self.time, c.start as f32);
+                let x1 = overview.x_of(&self.time, c.end() as f32);
+                let y = overview_r.top()
+                    + 3.0
+                    + (c.track as f32 / p.tracks.len().max(1) as f32) * (overview_r.height() - 6.0);
+                painter.rect_filled(
+                    Rect::from_min_max(pos2(x0, y), pos2(x1.max(x0 + 1.0), y + 2.0)),
+                    cr(0),
+                    clip_light(p, c).mid.gamma_multiply(0.8),
+                );
+            }
+        });
         vbar.paint(&painter, &self.rows(grid, p.tracks.len()), matches!(self.drag, Drag::VBar(_)));
-        for c in &p.clips {
-            let x0 = overview.x_of(&self.time, c.start as f32);
-            let x1 = overview.x_of(&self.time, c.end() as f32);
-            let y =
-                overview_r.top() + 3.0 + (c.track as f32 / p.tracks.len().max(1) as f32) * (overview_r.height() - 6.0);
-            painter.rect_filled(
-                Rect::from_min_max(pos2(x0, y), pos2(x1.max(x0 + 1.0), y + 2.0)),
-                cr(0),
-                clip_light(p, c).mid.gamma_multiply(0.8),
-            );
-        }
         timeline::paint_ruler(&painter, &self.time, ruler, song_len, Some((playhead as f32, playing)), grid);
         if let Some(range) = self.looped {
             timeline::paint_loop(&painter, &self.time, ruler, grid, range);

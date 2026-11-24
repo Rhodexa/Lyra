@@ -109,8 +109,11 @@ impl Overview {
         }
     }
 
-    pub fn paint(&self, painter: &Painter, v: &TimeView, hot: bool) {
+    /// The track, then `mini` (the content's miniature), then the window over
+    /// it: the miniature never covers the thumb.
+    pub fn paint(&self, painter: &Painter, v: &TimeView, hot: bool, mini: impl FnOnce()) {
         paint_track(painter, self.rect);
+        mini();
         let thumb = self.thumb(v);
         paint_thumb(painter, thumb, hot);
         // The zoom handles: a grip line in the middle of each 14 px end.
@@ -270,8 +273,10 @@ fn paint_track(painter: &Painter, r: Rect) {
 /// plate at 45 % with its dark outline, lighter while hot.
 fn paint_thumb(painter: &Painter, thumb: Rect, hot: bool) {
     let a = if hot { 0.6 } else { 0.45 };
-    painter.rect_filled(thumb, cr(3), theme::outline_of(theme::PLATE));
+    // See-through: the fill, then the outline as a stroke (a filled outline
+    // rect under it would make the window opaque).
     painter.rect_filled(thumb.shrink(theme::OUTLINE_W), cr(2), theme::PLATE.gamma_multiply(a));
+    painter.rect_stroke(thumb, cr(3), stroke(theme::OUTLINE_W, theme::outline_of(theme::PLATE)), egui::StrokeKind::Inside);
 }
 
 /// Auto-scroll while a drag is held at or past an edge of the view: how many

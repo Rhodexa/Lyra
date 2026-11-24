@@ -579,18 +579,19 @@ impl PianoRoll {
         if let (Drag::Select { from, .. }, Some(pos)) = (&self.drag, pos) {
             timeline::paint_rubber_band(&painter, *from, pos);
         }
-        overview.paint(&painter, &self.time, matches!(self.drag, Drag::Overview(_)));
         // A tiny silhouette of the channel's notes, so you can see where things are.
-        for n in p.patterns[pat].notes(ch_id) {
-            let x0 = overview.x_of(&self.time, n.start as f32);
-            let x1 = overview.x_of(&self.time, (n.start + n.len) as f32);
-            let y = overview_r.center().y;
-            painter.rect_filled(
-                Rect::from_min_max(pos2(x0, y - 1.0), pos2(x1.max(x0 + 1.0), y + 1.0)),
-                cr(0),
-                color.gamma_multiply(0.5),
-            );
-        }
+        overview.paint(&painter, &self.time, matches!(self.drag, Drag::Overview(_)), || {
+            for n in p.patterns[pat].notes(ch_id) {
+                let x0 = overview.x_of(&self.time, n.start as f32);
+                let x1 = overview.x_of(&self.time, (n.start + n.len) as f32);
+                let y = overview_r.center().y;
+                painter.rect_filled(
+                    Rect::from_min_max(pos2(x0, y - 1.0), pos2(x1.max(x0 + 1.0), y + 1.0)),
+                    cr(0),
+                    color.gamma_multiply(0.5),
+                );
+            }
+        });
         vbar.paint(&painter, &self.rows(grid), matches!(self.drag, Drag::VBar(_)));
         // Playhead: a bright line while playing, a dim marker (where Play starts) when stopped.
         timeline::paint_ruler(&painter, &self.time, ruler, pattern_ticks, Some((play, playing)), grid);
