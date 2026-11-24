@@ -137,6 +137,9 @@ pub struct Playlist {
     selection: Vec<usize>,
     /// The loop region (song ticks), if one is drawn; see `timeline::loop_span`.
     pub looped: Option<(u32, u32)>,
+    /// A MIDI file dropped on the arrangement (file, tick, track): the app
+    /// reads it in there (and reports trouble).
+    pub dropped_midi: Option<(std::path::PathBuf, u32, usize)>,
     drag: Drag,
     clicks: timeline::Clicks,
     pub tool: Tool,
@@ -151,6 +154,7 @@ impl Default for Playlist {
             snap: TICKS_PER_BAR,
             selection: Vec::new(),
             looped: None,
+            dropped_midi: None,
             drag: Drag::None,
             clicks: timeline::Clicks::default(),
             tool: Tool::default(),
@@ -538,6 +542,19 @@ impl Playlist {
             || egui::DragAndDrop::has_payload_of_type::<AutomationDrag>(ui.ctx())
             || egui::DragAndDrop::has_payload_of_type::<PatternDrag>(ui.ctx());
         let mut ghost = None;
+        // A MIDI file: every track of it, from here down.
+        if let Some(at) = drop_at.filter(|_| egui::DragAndDrop::has_payload_of_type::<crate::midi::MidiDrag>(ui.ctx()))
+        {
+            let snap = if mods.alt { 1 } else { self.snap };
+            let start = (view.tick(at.x).max(0.0) as u32 / snap) * snap;
+            let track = view.track(at.y).max(0) as usize;
+            ghost = Some(Clip::of_pattern(0, track.min(p.tracks.len().saturating_sub(1)), start, TICKS_PER_BAR));
+            if ui.input(|i| i.pointer.any_released()) {
+                if let Some(d) = egui::DragAndDrop::take_payload::<crate::midi::MidiDrag>(ui.ctx()) {
+                    self.dropped_midi = Some((d.0.clone(), start, track));
+                }
+            }
+        }
         if let (Some(at), true) = (drop_at, dropping) {
             let snap = if mods.alt { 1 } else { self.snap };
             let start = (view.tick(at.x).max(0.0) as u32 / snap) * snap;

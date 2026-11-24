@@ -219,6 +219,9 @@ fn folder(ui: &mut Ui, f: &Folder, depth: usize, p: &mut Project, h: &mut Histor
 
 /// One sample: a speaker mark, its name, how long it is.
 fn file_row(ui: &mut Ui, file: &Path, indent: f32, p: &mut Project, h: &mut History, st: &mut UiState) {
+    if crate::midi::is_midi(file) {
+        return midi_row(ui, file, indent, st);
+    }
     let m = theme::m();
     let name = samples::name_for(file);
     let shown = samples::display_name(&name);
@@ -270,6 +273,38 @@ fn file_row(ui: &mut Ui, file: &Path, indent: f32, p: &mut Project, h: &mut Hist
         } else {
             st.preview = Some(name.clone());
         }
+    }
+}
+
+/// A MIDI file in the browser: drag it onto the piano roll (into the
+/// instrument you're editing) or the arrangement (every track, from there
+/// down); double-click to bring the whole file in below the song.
+fn midi_row(ui: &mut Ui, file: &Path, indent: f32, st: &mut UiState) {
+    let m = theme::m();
+    let shown = file.file_stem().map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::click_and_drag());
+    paint_row(ui, r, &resp, &shown, None, false, indent, 58.0);
+    // A note mark: "this is notes, not sound".
+    let c = pos2(r.left() + indent + 6.0, r.center().y);
+    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
+    ui.painter().circle_filled(c + vec2(-1.0, 3.0), 2.5, ink);
+    ui.painter().vline(c.x + 1.5, egui::Rangef::new(c.y - 5.0, c.y + 3.0), theme::stroke(1.2, ink));
+    ui.painter().text(
+        r.right_center() - vec2(6.0, 0.0),
+        Align2::RIGHT_CENTER,
+        "MIDI",
+        FontId::monospace(m.text_small),
+        ink,
+    );
+    if resp.drag_started() {
+        egui::DragAndDrop::set_payload(ui.ctx(), crate::midi::MidiDrag(file.to_path_buf()));
+    }
+    let resp = resp.on_hover_text(format!(
+        "{}\nDrag: onto the piano roll (into this instrument) or a track (every part, from there down) · double-click: bring it all in",
+        file.display()
+    ));
+    if resp.clicked() && double_click(ui, "browser-last-sample-click", file.display().to_string()) {
+        st.import_midi = Some(file.to_path_buf());
     }
 }
 

@@ -149,8 +149,6 @@ pub struct Song {
 
 pub struct TrackIn {
     pub name: String,
-    /// The MIDI channel, 0–15 (9 is drums in General MIDI).
-    pub channel: u8,
     pub notes: Vec<Note>,
 }
 
@@ -236,10 +234,78 @@ pub fn read(bytes: &[u8]) -> Result<Song, String> {
             notes.sort_by_key(|n| (n.start, n.key));
             let base = name.clone().unwrap_or_else(|| format!("Track {}", index + 1));
             let name = if used.len() > 1 { format!("{base} · ch {}", c + 1) } else { base };
-            tracks.push(TrackIn { name, channel: c as u8, notes });
+            tracks.push(TrackIn { name, notes });
         }
     }
     Ok(Song { bpm, tracks })
+}
+
+// ── Importing ──
+
+/// What new instruments from a MIDI file play: Lyra Synth, a plain start.
+const IMPORT_INSTRUMENT: &str = "lyra.synth";
+
+/// Reads a `.mid` file.
+pub fn load(path: &std::path::Path) -> Result<Song, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("can't read {}: {e}", path.display()))?;
+    read(&bytes)
+}
+
+/// The whole file into the song: each track becomes an instrument with a
+/// pattern of its notes, placed at tick `at` on its own arrangement track,
+/// from `track` down (tracks are added when the song runs out of them).
+/// A song with nothing in it yet takes the file's tempo. Returns how many
+/// tracks came in.
+pub fn import(p: &mut lyra_model::Project, song: &Song, at: u32, track: usize) -> usize {
+    use lyra_model::{Clip, Track};
+    if p.clips.is_empty() {
+        if let Some(bpm) = song.bpm {
+            p.bpm = (bpm * 100.0).round() / 100.0;
+        }
+    }
+    for (k, t) in song.tracks.iter().enumerate() {
+        let ch = p.add_channel(&t.name, IMPORT_INSTRUMENT, lyra_catalog::default_params(IMPORT_INSTRUMENT));
+        let i = p.add_pattern();
+        p.patterns[i].name = t.name.clone();
+        p.patterns[i].notes_mut(ch).extend(t.notes.iter().cloned());
+        let len = p.patterns[i].play_length() * TICKS_PER_STEP;
+        let row = track + k;
+        while p.tracks.len() <= row {
+            let name = format!("Track {}", p.tracks.len() + 1);
+            p.tracks.push(Track { name, mute: false });
+        }
+        // An empty track still called "Track n" takes the part's name.
+        let empty = !p.clips.iter().any(|c| c.track == row);
+        if empty && p.tracks[row].name == format!("Track {}", row + 1) {
+            p.tracks[row].name = t.name.clone();
+        }
+        let id = p.patterns[i].id;
+        p.add_clip(Clip::of_pattern(id, row, at, len));
+    }
+    song.tracks.len()
+}
+
+/// The arrangement track below every track that has clips: where a whole
+/// imported file goes when it isn't dropped somewhere.
+pub fn free_track(p: &lyra_model::Project) -> usize {
+    p.clips.iter().map(|c| c.track + 1).max().unwrap_or(0)
+}
+
+/// Every track's notes as one list, moved to start at `at`: a file dropped
+/// onto the piano roll goes into the instrument being edited.
+pub fn merged(song: &Song, at: u32) -> Vec<Note> {
+    let mut notes: Vec<Note> =
+        song.tracks.iter().flat_map(|t| &t.notes).map(|n| Note { start: n.start + at, ..n.clone() }).collect();
+    notes.sort_by_key(|n| (n.start, n.key));
+    notes
+}
+
+/// A MIDI file being dragged out of the browser.
+#[derive(Clone, Debug)]
+pub struct MidiDrag(pub std::path::PathBuf);
+
+pub fn is_midi(path: &std::path::Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "mid" | "midi"))
 }
 
 #[cfg(test)]
@@ -278,6 +344,35 @@ mod tests {
         assert_eq!(song.tracks[1].notes, vec![n(0, 384, 36)]);
     }
 
+    #[test]
+    fn importing_makes_an_instrument_a_pattern_and_a_clip_per_track() {
+        let lead = TrackOut { name: "Lead".into(), channel: 0, notes: vec![n(0, 96, 60), n(96, 96, 64)] };
+        let bass = TrackOut { name: "Bass".into(), channel: 1, notes: vec![n(0, 768, 36)] };
+        let song = read(&write("t", 90.0, 768, &[lead, bass])).unwrap();
+        let mut p = lyra_model::Project::default();
+        let (channels, patterns) = (p.channels.len(), p.patterns.len());
+        let row = free_track(&p);
+        assert_eq!(import(&mut p, &song, 0, row), 2);
+        assert_eq!(p.bpm, 90.0, "an empty song takes the file's tempo");
+        assert_eq!(p.channels.len(), channels + 2);
+        assert_eq!(p.patterns.len(), patterns + 2);
+        let bass_pattern = p.patterns.last().unwrap();
+        assert_eq!(bass_pattern.name, "Bass");
+        assert_eq!(p.clips.len(), 2);
+        assert_eq!((p.clips[0].track, p.clips[1].track), (0, 1), "a track each");
+        assert_eq!(p.tracks[1].name, "Bass", "named after its part");
+        assert_eq!(p.clips[1].len, 2 * lyra_model::TICKS_PER_BAR, "as long as its notes");
+        // A second file goes below, and keeps the song's tempo.
+        p.bpm = 120.0;
+        let row = free_track(&p);
+        import(&mut p, &song, 0, row);
+        assert_eq!(p.clips[2].track, 2);
+        assert_eq!(p.bpm, 120.0);
+        // Merged for the piano roll: everything, moved.
+        let all = merged(&song, 384);
+        assert_eq!(all.iter().map(|n| (n.start, n.key)).collect::<Vec<_>>(), vec![(384, 36), (384, 60), (480, 64)]);
+    }
+
     /// A hand-made file at 480 ticks a beat: one track, two channels, the pedal.
     #[test]
     fn other_resolutions_mixed_channels_and_the_pedal() {
@@ -298,9 +393,7 @@ mod tests {
         file.extend_from_slice(&t);
         let song = read(&file).unwrap();
         assert_eq!(song.tracks.len(), 2, "split by channel");
-        assert_eq!(song.tracks[0].channel, 0);
         assert_eq!(song.tracks[0].notes[0].len, 192, "held by the pedal for two beats");
-        assert_eq!(song.tracks[1].channel, 9);
         assert_eq!(song.tracks[1].notes[0].len, 24, "a sixteenth");
         assert!(song.tracks[1].name.ends_with("ch 10"));
     }

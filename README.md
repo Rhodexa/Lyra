@@ -22,13 +22,17 @@ cargo run --release -- --install-desktop
 | Do | How |
 |---|---|
 | Play / stop | `Space` · Stop while stopped goes back to the start |
-| Project | click the logo (New is only there: no shortcut, so it can't happen by accident) · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as. New, Open and closing the window ask first when there are unsaved changes. Sounds in the song's folder (or the folder above it, say a `library/` shared by a folder of songs) are saved relative to the song, so the whole folder can move; **Collect audio into the song's folder** (logo menu) copies every other sound into its `audio/` |
+| Project | the **File** menu, top left (New is only there: no shortcut, so it can't happen by accident) · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as. New, Open and closing the window ask first when there are unsaved changes. Sounds in the song's folder (or the folder above it, say a `library/` shared by a folder of songs) are saved relative to the song, so the whole folder can move; **Collect audio into the song's folder** (File menu) copies every other sound into its `audio/` |
 | Layout | Left: the browser (`F4`), in tabs: **Files** (samples and your folders), **Instruments**, **Effects**. Right (`F6`): the project's racks, in tabs: **Plugins** (instruments), **Patterns** (each showing its notes; + New, right-click to clone), **Audio** (audio clips as rack rows: mute, pan, volume, insert) and **Automation**. Click one: the next click on the arrangement places it; double-click: open it; drag it onto a track. Both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Audio clip, Automation, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. `F5` / `F7` / `F9` open the bottom area on the arrangement / piano roll / mixer; the same key again folds it. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
 | Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
 | Patterns | the right panel's **Patterns** tab (+ New pattern, right-click to clone), or `[` / `]` |
 | Play notes | typing keyboard: `Z`–`M` and `Q`–`P` rows; `-` / `=` octave (shown in the top bar) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
+| What can I do here? | the **context bar** (bottom right) offers what fits the selection; `F3` shows the same at the mouse |
+| Loop a part | Alt+drag along a ruler (arrangement: the song; piano roll: the pattern), snapped to the grid; playback stays inside it. Alt+click the ruler, or "Clear loop", to take it away |
+| MIDI out | select notes in the piano roll → context bar / `F3`: *Export notes*, *Export bars n–m* (the bars your notes are in, or the loop: every instrument), *Export pattern*; in the arrangement, a loop exports its bars of the whole song. Plain tracks, one per instrument |
+| MIDI in | **File → Import MIDI…** or double-click a `.mid` in the Files tab: every part becomes an instrument with its own pattern, on its own track. Drag a `.mid` onto a track (from there down) or onto the piano roll (all its notes into the instrument you're editing). Sustain pedal becomes note length; an empty song takes the file's tempo |
 | Knobs | drag (Shift = fine), wheel, double-click to reset |
 | UI size | `F12` Design panel, or `Ctrl+=` / `Ctrl+-` / `Ctrl+0` zoom (`LYRA_ZOOM=1.3` to start bigger) |
 
@@ -81,6 +85,7 @@ cargo run --release -- --install-desktop
 | Your own folders | "+ Add folder…" at the bottom; right-click a folder: open it in the file manager, or take it out of the browser |
 | Your own samples | or put WAV/FLAC files in `~/.local/share/lyra/library`, then rescan (the round arrow by the search) |
 | How long | each file shows its length, read from its header |
+| MIDI files | shown too (marked MIDI): drag onto the piano roll or a track, double-click to bring it all in |
 
 Lyra ships a **Starter Kit** of 65 CC0 one-shots (see `assets/samples/Starter Kit/CREDITS.md`).
 

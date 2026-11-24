@@ -95,6 +95,8 @@ pub struct UiState {
     /// Which tab the browser shows, and what the Files tab searches for.
     pub left_tab: LeftTab,
     pub search: String,
+    /// A MIDI file to bring in whole (double-clicked in the browser).
+    pub import_midi: Option<std::path::PathBuf>,
     /// Sample lengths in seconds, read from file headers as rows show up.
     pub lengths: std::collections::HashMap<std::path::PathBuf, Option<f64>>,
     /// The control changed last, anywhere: what "Automate" automates.
@@ -140,6 +142,7 @@ impl Default for UiState {
             right_tab: RightTab::Plugins,
             left_tab: LeftTab::Files,
             search: String::new(),
+            import_midi: None,
             lengths: std::collections::HashMap::new(),
             last_tweaked: None,
             last_pattern: 0,
@@ -543,6 +546,32 @@ impl LyraApp {
             }
             Editor::Arrangement => area.playlist.context(),
             _ => Vec::new(),
+        }
+    }
+
+    /// Bring a MIDI file in: as a song part (every track an instrument with a
+    /// pattern, from `track` down) or as notes for the instrument being edited.
+    fn import_midi(&mut self, path: &std::path::Path, to: Midi) {
+        let song = match crate::midi::load(path) {
+            Ok(s) if s.tracks.is_empty() => return self.notify("That MIDI file has no notes", true),
+            Ok(s) => s,
+            Err(e) => return self.notify(&e, true),
+        };
+        self.history.checkpoint(&self.project);
+        let name = files::display_name(Some(path));
+        match to {
+            Midi::Song { at, track } => {
+                let n = crate::midi::import(&mut self.project, &song, at, track);
+                self.notify(&format!("{name}: {n} parts, each a new instrument and pattern"), false);
+            }
+            Midi::Notes { at } => {
+                let Some(ch) = self.project.channels.get(self.ui.selected).map(|c| c.id) else { return };
+                let pat = self.ui.pattern.min(self.project.patterns.len() - 1);
+                let notes = crate::midi::merged(&song, at);
+                let n = notes.len();
+                self.project.patterns[pat].notes_mut(ch).extend(notes);
+                self.notify(&format!("{name}: {n} notes"), false);
+            }
         }
     }
 
@@ -960,6 +989,12 @@ impl LyraApp {
             Action::ExportWav | Action::ExportStems => self.export(a == Action::ExportStems),
             Action::ExportData => self.export_data(),
             Action::ExportNotesMidi | Action::ExportBarsMidi | Action::ExportPatternMidi => self.export_midi(a),
+            Action::ImportMidi => {
+                if let Some(path) = files::pick_open_midi() {
+                    let row = crate::midi::free_track(&self.project);
+                    self.import_midi(&path, Midi::Song { at: 0, track: row });
+                }
+            }
             Action::ContextMenu => self.context_menu = ctx.input(|i| i.pointer.hover_pos()),
             Action::ClearLoop => {
                 let area = &mut self.areas[self.key_area];
@@ -1092,6 +1127,19 @@ impl eframe::App for LyraApp {
         // ── Docked: browser (left), plugin rack (right), the two areas (centre) ──
         self.docked(ctx, playing, playhead, &mut actions);
         self.context_menu(ctx, &mut actions);
+        // MIDI files brought in this frame: double-clicked in the browser, or dropped on an editor.
+        if let Some(path) = self.ui.import_midi.take() {
+            let track = crate::midi::free_track(&self.project);
+            self.import_midi(&path, Midi::Song { at: 0, track });
+        }
+        for i in 0..self.areas.len() {
+            if let Some((path, at)) = self.areas[i].piano.dropped_midi.take() {
+                self.import_midi(&path, Midi::Notes { at });
+            }
+            if let Some((path, at, track)) = self.areas[i].playlist.dropped_midi.take() {
+                self.import_midi(&path, Midi::Song { at, track });
+            }
+        }
 
         // ── Windows ──
         // The zoom factor set in `new()` only applies from the 2nd frame. Windows
@@ -1548,6 +1596,15 @@ impl LyraApp {
                 });
             });
     }
+}
+
+/// Where an imported MIDI file goes.
+#[derive(Clone, Copy)]
+enum Midi {
+    /// Every track an instrument and a pattern, placed at `at` from arrangement `track` down.
+    Song { at: u32, track: usize },
+    /// All its notes into the instrument being edited, from tick `at`.
+    Notes { at: u32 },
 }
 
 /// True while the pointer is on (or dragging) one of the docked panels'

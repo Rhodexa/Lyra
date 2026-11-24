@@ -182,6 +182,7 @@ fn file_menu(ui: &mut Ui, actions: &mut Vec<Action>) {
         ("Save", "Ctrl+S", Action::Save),
         ("Save as…", "Ctrl+Shift+S", Action::SaveAs),
         ("Collect audio into the song's folder", "", Action::Collect),
+        ("Import MIDI…", "", Action::ImportMidi),
         ("Export WAV…", "Ctrl+E", Action::ExportWav),
         ("Export stems…", "Ctrl+Shift+E", Action::ExportStems),
         ("Export data…", "", Action::ExportData),

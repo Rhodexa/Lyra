@@ -318,7 +318,7 @@ pub fn scan(path: &Path, name: &str) -> Option<Folder> {
             if let Some(f) = scan(&p, &e.file_name().to_string_lossy()) {
                 folders.push(f);
             }
-        } else if is_audio(&p) {
+        } else if is_audio(&p) || crate::midi::is_midi(&p) {
             files.push(p);
         }
     }
