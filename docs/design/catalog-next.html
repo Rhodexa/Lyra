@@ -174,10 +174,11 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .ftab{--b:var(--tab-off);flex:1 1 0;min-width:0;position:relative;display:flex;align-items:center;justify-content:center;height:var(--h);padding:0 4px;cursor:pointer;
   background:var(--b);color:var(--ink-dim);font:var(--btn-fw) var(--fs)/1 var(--btn-font);letter-spacing:.04em;text-transform:var(--btn-case);white-space:nowrap;user-select:none;
   border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-bottom-color:color-mix(in srgb,var(--surface),black var(--btn-ol));
-  border-radius:var(--btn-r) var(--btn-r) 0 0}
+  border-radius:0 0 var(--btn-r) var(--btn-r)}   /* one rule: square tops, rounded bottoms; all tabs one height */
+.ftab.on{border-radius:0}
 .ftab+.ftab{margin-left:calc(var(--btn-bw) * -1)}
 .ftab:hover{--b:#262626;color:var(--ink)}
-.ftab.on{--b:var(--surface);color:var(--ink);border-bottom-color:var(--surface);height:calc(var(--h) + 3px);z-index:1}
+.ftab.on{--b:var(--surface);color:var(--ink);border-bottom-color:var(--surface);z-index:1}
 .t3 .track{display:flex;width:100%;margin-bottom:var(--gap-in)} .t3 .track .hit{flex:1 1 0;min-width:0} .t3 .track .btn{width:100%;min-width:0;padding:0 4px}
 .t3 .track .btn span{overflow:hidden;text-overflow:ellipsis;min-width:0}
 .ftabs.S{--h:var(--s);--fs:12px} .ftabs.M{--h:var(--m);--fs:13px}
@@ -389,8 +390,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 /* the tabbed panel IS the area: tabs on the ground strip at its top, the chosen tab flows into the whole area */
 .mock .left .ftabs{margin-bottom:0}
 /* the edge tabs have NO side border (a transparent one shows the ground through it and shifts the tab 2 px) */
-.mock .left .ftab:first-child{border-left-width:0;border-top-left-radius:0}
-.mock .left .ftab:last-child{border-right-width:0;border-top-right-radius:0}
+.mock .left .ftab:first-child{border-left-width:0}
+.mock .left .ftab:last-child{border-right-width:0}
 .mock .left .ftab+.ftab{margin-left:calc(var(--btn-bw) * -1)}
 .mock .left .ftab.on{border-bottom-color:var(--surface)}
 /* an outline that touches a seam is redundant: the seam already is the edge */
@@ -629,7 +630,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 
 <!-- ═════════════════════════ MOCK SCREEN ═════════════════════════ -->
 <h2>Mock screen <span class="draft">DRAFT 3</span></h2>
-<p>A whole Lyra window, built only from catalog widgets and the kept ones: the toolbar, the left panel, the arrangement, the mixer and the context bar. This is where everything gets judged together. It's live: click, drag, open the dropdowns. <b>Draft 2:</b> the toolbar is a panel (the ground colour only shows in the gaps); the left panel <i>is</i> the tabbed panel (tabs on the ground strip, the chosen one flows into the whole area: no panel inside a panel); the toolbar's displays are a narrower M LCD with their label under it. <b>Draft 3:</b> FILE is a bare button; tabs lose their top outline where they touch the seam (an outline against a seam is redundant); square panels (rounded ones were tried and dropped: cut corners, oval tabs).</p>
+<p>A whole Lyra window, built only from catalog widgets and the kept ones: the toolbar, the left panel, the arrangement, the mixer and the context bar. This is where everything gets judged together. It's live: click, drag, open the dropdowns. <b>Draft 2:</b> the toolbar is a panel (the ground colour only shows in the gaps); the left panel <i>is</i> the tabbed panel (tabs on the ground strip, the chosen one flows into the whole area: no panel inside a panel); the toolbar's displays are a narrower M LCD with their label under it. <b>Draft 3:</b> FILE is a bare button; tabs lose their top outline where they touch the seam (an outline against a seam is redundant); square panels (rounded ones: deferred, not rejected: the cut corners and oval tabs came from how this mock was built; a proper version keeps content away from the corners). Tabs: one rule, square tops, rounded bottoms on the tabs that aren't chosen, all one height.</p>
 <div class="scroll" style="overflow-x:auto"><div class="mock" id="mock"></div></div>
 </main>
 
