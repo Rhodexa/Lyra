@@ -8,7 +8,7 @@
 //! 5. `bridge.sync` pushes whatever changed to the engine
 
 use crate::areas::{self, Area, Editor};
-use crate::widgets::Hint;
+use crate::widgets::{self, Hint};
 use crate::bridge::{Bridge, Playing};
 use crate::keys::{Action, Keyboard};
 use crate::theme::{self, cr};
@@ -467,27 +467,51 @@ impl LyraApp {
         let Some(how) = self.leaving else { return };
         let name = files::display_name(self.path.as_deref());
         let mut answer = None;
-        let modal = egui::Modal::new(Id::new("save-changes")).show(ctx, |ui| {
-            ui.set_width(340.0);
-            ui.label(RichText::new(format!("Save the changes to “{name}”?")).strong());
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new("If you don't, they're still in Open backup, until the next backup replaces them.")
-                    .small()
-                    .color(theme::TEXT_DIM),
-            );
-            ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                if ui.button("Save").clicked() {
-                    answer = Some(true);
-                }
-                if ui.button("Don't save").clicked() {
-                    answer = Some(false);
-                }
-                if ui.button("Cancel").clicked() {
-                    self.leaving = None;
-                }
+        // A short question: the LCD dialog (catalog-next, settled), drawn by Lyra.
+        let modal = egui::Modal::new(Id::new("save-changes")).frame(egui::Frame::NONE).show(ctx, |ui| {
+            let bg = ui.painter().add(egui::Shape::Noop);
+            let pad = 16.0;
+            let inner = egui::Frame::NONE.inner_margin(pad).show(ui, |ui| {
+                ui.set_width(360.0);
+                let title = ui.fonts(|f| f.layout_no_wrap("SAVE CHANGES?".into(), theme::label_bold(13.0), theme::LCD_INK));
+                let (tr, _) = ui.allocate_exact_size(title.size(), egui::Sense::hover());
+                ui.painter().galley(tr.min, title, theme::LCD_INK);
+                ui.add_space(10.0);
+                ui.label(RichText::new(format!("“{name}” has changes that aren't saved.")).font(theme::read(14.0)).color(theme::LCD_INK));
+                ui.add_space(2.0);
+                ui.label(
+                    RichText::new("If you don't save, they're still in Open backup until the next backup replaces them.")
+                        .font(theme::read(12.0))
+                        .color(theme::LCD_INK_DIM),
+                );
+                ui.add_space(16.0);
+                ui.horizontal(|ui| {
+                    if widgets::bare_button(ui, "Don't save", true, "").clicked() {
+                        answer = Some(false);
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let save = widgets::button(ui, widgets::Legend::Text("Save"), Some(theme::L_MINT), "Save  (Enter)");
+                        if save.clicked() {
+                            answer = Some(true);
+                        }
+                        if widgets::button(ui, widgets::Legend::Text("Cancel"), None, "Stay  (Esc)").clicked() {
+                            self.leaving = None;
+                        }
+                    });
+                });
             });
+            let r = inner.response.rect;
+            ui.painter().set(
+                bg,
+                egui::Shape::Vec(vec![
+                    egui::Shape::rect_filled(r.translate(egui::vec2(0.0, 8.0)).expand(4.0), theme::cr(10), egui::Color32::from_black_alpha(110)),
+                    egui::Shape::rect_filled(r, theme::cr(7), theme::mix(theme::LCD_INK, egui::Color32::BLACK, 0.5)),
+                    egui::Shape::rect_filled(r.shrink(theme::OUTLINE_W), theme::cr(5), theme::LCD),
+                ]),
+            );
+            if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                answer = Some(true);
+            }
         });
         if modal.should_close() {
             self.leaving = None; // Esc or a click outside: stay

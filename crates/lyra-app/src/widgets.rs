@@ -903,6 +903,33 @@ fn paint_legend(ui: &Ui, r: Rect, legend: Legend, ink: Color32, body: Color32, b
     }
 }
 
+/// A bare button (catalog-next, settled): no plate and no outline until the
+/// mouse is on it, the same size and target as any button. For menu-like
+/// buttons (FILE) and quiet actions (a dialog's "Don't save"). `on_lcd`: it
+/// sits on an LCD panel (dark legend, a grey plate under the mouse).
+pub fn bare_button(ui: &mut Ui, text: &str, on_lcd: bool, hint: &str) -> Response {
+    let m = theme::m();
+    let w = (legend_galley(ui, text, legend_size(m.control_h), false, Color32::WHITE).size().x + m.control_h * 0.8).max(m.control_h);
+    let (r, resp) = ui.allocate_exact_size(vec2(w, m.control_h), Sense::click());
+    let p = ui.painter();
+    let (hover_fill, ink, ink_hot) = if on_lcd {
+        (theme::mix(theme::LCD, Color32::BLACK, 0.12), theme::LCD_INK, theme::LCD_INK)
+    } else {
+        (theme::PLATE, theme::LEGEND, Color32::WHITE)
+    };
+    if resp.hovered() {
+        let f = if resp.is_pointer_button_down_on() { theme::mix(hover_fill, Color32::BLACK, 0.12) } else { hover_fill };
+        p.rect_filled(r, cr(3), f);
+    }
+    let g = legend_galley(ui, text, legend_size(r.height()), false, if resp.hovered() { ink_hot } else { ink });
+    p.galley(r.center() - g.size() * 0.5, g, ink);
+    if hint.is_empty() {
+        resp
+    } else {
+        resp.hint(hint)
+    }
+}
+
 /// A button sized to its legend: square for an icon, the text plus room
 /// for words. `lit`: it is on (shown in that light).
 pub fn button(ui: &mut Ui, legend: Legend, lit: Option<theme::Light>, hint: &str) -> Response {

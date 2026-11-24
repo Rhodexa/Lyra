@@ -40,7 +40,8 @@ pub fn show(
 
         // The File menu: everything about the song as a file.
         module(ui, |ui| {
-            let label = egui::RichText::new("File").size(theme::m().text_small * 1.25).color(theme::TEXT);
+            // A bare button: no plate, the legend in caps (catalog-next, settled).
+            let label = egui::RichText::new("FILE").font(theme::label(13.0)).color(theme::LEGEND);
             egui::menu::menu_custom_button(ui, egui::Button::new(label).frame(false), |ui| {
                 file_menu(ui, actions);
             })
