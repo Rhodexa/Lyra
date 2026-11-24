@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lyra Catalog Next</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&family=Ubuntu:wght@300;400;500;700&family=Noto+Sans:wght@400;500;600;700&family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
   Lyra · catalog NEXT — the simplified widget set, being designed here.
   Workflow (UI-NEEDS.md): HTML first, iterate until approved, the app last.
@@ -36,13 +38,16 @@
   /* ── sizes: S / M / L. Draft 2 (Rhodexa): 28 is the smallest anything may be, 40 the middle ── */
   --s:28px; --m:40px; --l:52px;
   --hit-min:28px;          /* nothing reacts in less than S */
-  /* ── button (draft 3: flat; contrast does the work, not rims or bevels) ── */
-  --btn:#474747;           /* A: a plate clearly lighter than the surface */
-  --btn-hover:#525252;
-  --btn-press:#3d3d3d;
-  --btn-sunk:#1c1c1c;      /* B: a well darker than the surface */
-  --btn-sunk-hover:#232323;
-  --legend:#dedede;        /* idle legend: near-white, not grey */
+  /* ── button (draft 4): set live by the tuner on this page ── */
+  --btn-body:#454545;      /* the plate */
+  --btn-edge:#121212;      /* the outline: always darker than everything near it */
+  --btn-bw:1.5px;          /* outline width */
+  --btn-r:4px;             /* corner radius at M (scaled for S and L) */
+  --btn-shade:3%;          /* a faint top-to-bottom shading, Blender-style (0 = flat) */
+  --btn-font:'Inter',system-ui,sans-serif;
+  --btn-fw:600;
+  --btn-case:uppercase;
+  --legend:#e2e2e2;        /* idle legend */
   /* ── type ── */
   --t-caps:600 10px/1 system-ui,sans-serif;   /* labels, letter-spaced */
   --t-small:11px; --t-body:14px;
@@ -77,47 +82,44 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .grid{display:grid;grid-template-columns:auto repeat(6,minmax(80px,auto));gap:10px 18px;align-items:center;justify-items:center}
 .grid>.caps:first-child,.grid .rowhead{justify-self:start}
 
-/* ═════════ BUTTON (draft 3) ═════════
-   Flat. No rim, no bevel, no gradient. Separation from the surface comes
-   from value contrast; the legend is near-white caps. ON = a solid light.
-   Variant A (plate, lighter), B (well, darker), C (bare until hovered).    */
+/* ═════════ BUTTON (draft 4) ═════════
+   A plate with a DARK outline (never light), squarish corners, a faint
+   shading. ON = a darker tone of the light, so its legend reads.
+   Every value comes from the tuner's tokens in :root.                      */
 .hit{display:inline-grid;place-items:center;min-width:var(--hit-min);min-height:var(--hit-min);cursor:pointer;position:relative}
 .show-hits .hit::after{content:'';position:absolute;inset:0;border:1px dashed #f5dba580;pointer-events:none}
-.btn{--h:var(--m);--fs:13px;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:var(--h);min-width:var(--h);
-  padding:0 calc(var(--h) * .4);border-radius:calc(var(--h) * .2);background:var(--btn);color:var(--legend);
-  font:600 var(--fs)/1 system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;user-select:none}
+.btn{--h:var(--m);--k:1;--fs:13px;--b:var(--btn-body);display:inline-flex;align-items:center;justify-content:center;gap:8px;height:var(--h);min-width:var(--h);
+  padding:0 calc(var(--h) * .38);border:var(--btn-bw) solid var(--btn-edge);border-radius:calc(var(--btn-r) * var(--k));
+  background:linear-gradient(color-mix(in srgb,var(--b),white var(--btn-shade)),color-mix(in srgb,var(--b),black var(--btn-shade)));
+  color:var(--legend);font:var(--btn-fw) var(--fs)/1 var(--btn-font);letter-spacing:.04em;text-transform:var(--btn-case);white-space:nowrap;user-select:none}
 .btn svg{width:18px;height:18px;flex:none}
 .btn.icon{padding:0}
-.btn.S{--h:var(--s);--fs:12px;gap:6px}
+.btn.S{--h:var(--s);--k:.75;--fs:12px;gap:6px}
 .btn.S svg{width:15px;height:15px}
-.btn.L{--h:var(--l);--fs:15px}
+.btn.L{--h:var(--l);--k:1.25;--fs:15px}
 .btn.L svg{width:22px;height:22px}
-.hit:hover .btn,.btn.is-hover{background:var(--btn-hover);color:#fff}
-.hit:active .btn,.btn.is-press{background:var(--btn-press)}
-.btn.on{background:var(--mid);color:var(--ink-on-light);font-weight:700}
-.btn.on.soft{background:var(--low)}
-.hit:hover .btn.on,.btn.on.is-hover{background:var(--hi);color:var(--ink-on-light)}
-.hit:active .btn.on,.btn.on.is-press{background:var(--low)}
+.hit:hover .btn,.btn.is-hover{--b:color-mix(in srgb,var(--btn-body),white 9%);color:#fff}
+.hit:active .btn,.btn.is-press{--b:color-mix(in srgb,var(--btn-body),black 18%)}
 .hit.dis{cursor:default}
-.hit.dis .btn{background:#303030;color:var(--ink-faint)}
-/* B: sunken */
-.vB .btn{background:var(--btn-sunk)}
-.vB .hit:hover .btn,.vB .btn.is-hover{background:var(--btn-sunk-hover)}
-.vB .hit:active .btn,.vB .btn.is-press{background:#141414}
-.vB .btn.on{background:var(--mid)} .vB .hit:hover .btn.on{background:var(--hi)}
-.vB .hit.dis .btn{background:#222;color:var(--ink-faint)}
-/* C: bare until hovered */
-.vC .btn{background:transparent;color:var(--ink)}
-.vC .hit:hover .btn,.vC .btn.is-hover{background:var(--btn)}
-.vC .hit:active .btn,.vC .btn.is-press{background:var(--btn-press)}
-.vC .btn.on{background:var(--mid);color:var(--ink-on-light)} .vC .hit:hover .btn.on{background:var(--hi)}
-.vC .hit.dis .btn{background:transparent;color:var(--ink-faint)}
-/* the rejected drafts, kept small for comparison */
-.flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:var(--raised);box-shadow:inset 0 0 0 1px var(--edge-raised);color:var(--ink-dim);font:500 12px system-ui}
-.flat1.on{background:var(--mid);color:var(--ink-on-light);text-shadow:.5px 0 0 currentColor}
+.hit.dis .btn{--b:color-mix(in srgb,var(--btn-body),var(--surface) 65%);color:var(--ink-faint)}
+/* ON, four tones to choose from (class on <body>) */
+.btn.on{--b:color-mix(in srgb,var(--mid),black 55%);color:var(--hi)}                       /* deep (default) */
+.on-rim .btn.on{--b:var(--rim);color:#fff}
+.on-edge .btn.on{--b:var(--edge-l);color:var(--ink-on-light)}
+.on-pastel .btn.on{--b:var(--mid);color:var(--ink-on-light)}
+.hit:hover .btn.on,.btn.on.is-hover{filter:brightness(1.1)}
+.hit:active .btn.on,.btn.on.is-press{filter:brightness(.88)}
+/* earlier drafts, kept only for the comparison row */
+.flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
 .key2>span{display:flex;flex:1;padding:2px;border-radius:6px;background:linear-gradient(#4a4a4a,#3c3c3c 14%,#3c3c3c 86%,#2c2c2c)}
 .key2>span>span{display:flex;align-items:center;padding:0 14px;border-radius:4px;background:#353535;color:#a4a4a4;font:600 13px system-ui;letter-spacing:.07em}
+/* tuner */
+.tuner{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px 24px;align-items:center}
+.tuner label{display:grid;grid-template-columns:100px 1fr 70px;gap:8px;align-items:center;font-size:12px;color:var(--ink-dim)}
+.tuner output{font:12px var(--t-num);color:var(--ink)}
+.tuner select{background:var(--sunken);color:var(--ink);border:1px solid var(--edge);border-radius:3px;padding:3px;font:12px system-ui}
+#copyout{white-space:pre;font:12px var(--t-num);background:var(--sunken);padding:8px;margin-top:10px;display:none;color:var(--ink)}
 /* context mock-ups */
 .bar{display:flex;align-items:center;gap:var(--gap-in);background:var(--ground);padding:6px}
 .plate{background:var(--surface);display:flex;align-items:center;gap:var(--gap-in);padding:0 8px;height:52px}
@@ -128,7 +130,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </head>
 <body>
 <main>
-<h1>Lyra · catalog next <span class="draft">DRAFT 3</span></h1>
+<h1>Lyra · catalog next <span class="draft">DRAFT 4</span></h1>
 <p>The simplified widget set, designed here before anything changes in the app. Everything below is built only from the foundations. Nothing is approved yet; every number is there to be argued with. The app as it is today: <a href="widget-catalog.html" style="color:var(--ink)">widget-catalog.html</a>. Not for Fluttersine or Chrysalis.</p>
 
 <!-- ═════════════════════════ FOUNDATIONS ═════════════════════════ -->
@@ -142,10 +144,10 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <h3>States: one look each, for every widget</h3>
   <table>
     <tr><th>state</th><th>how it looks</th><th>button, as an example</th></tr>
-    <tr><td>idle</td><td>a flat plate a step lighter than the surface, near-white legend</td><td data-state="idle"></td></tr>
+    <tr><td>idle</td><td>a plate lighter than the surface, a dark outline, near-white legend</td><td data-state="idle"></td></tr>
     <tr><td>hover</td><td>plate a step lighter, white legend</td><td data-state="is-hover"></td></tr>
     <tr><td>pressed</td><td>plate a step darker</td><td data-state="is-press"></td></tr>
-    <tr><td>on</td><td>solid light, dark bold ink</td><td data-state="on"></td></tr>
+    <tr><td>on</td><td>a darker tone of the light, its legend in the light's brightest tone</td><td data-state="on"></td></tr>
     <tr><td>selected</td><td>the <i>surface</i> lifts to surface-sel, plus a 2 px line in its light (strips, rows, tiles; not controls)</td><td><span style="display:inline-block;width:90px;height:28px;background:var(--surface-sel);box-shadow:inset 0 2px 0 var(--mid)"></span></td></tr>
     <tr><td>disabled</td><td>plate sinks toward the surface, faint ink, no hover</td><td data-state="off-dis"></td></tr>
     <tr><td>playing</td><td>flashes its light with the music (rack name keys, clips under the playhead)</td><td><i>see list row, later</i></td></tr>
@@ -162,14 +164,20 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
     <tr><td>legend</td><td>12 · 13 · 15 px</td><td>button legends at S · M · L: caps, 600, letter-spaced .06em</td></tr>
     <tr><td>small · body</td><td>11 · 14 px</td><td>details · names and reading text</td></tr>
     <tr><td>numbers</td><td><span style="font-family:var(--t-num)">120.00 · −6.0 dB</span></td><td>monospace, only for numbers</td></tr>
-    <tr><td>r-tile · r-ctl · r-well</td><td>2 · 20 % of height · 6 px</td><td>clips, steps, rows · controls · wells and LCDs</td></tr>
+    <tr><td>r-tile · r-ctl · r-well</td><td>2 · 4 (at M) · 6 px</td><td>clips, steps, rows · controls · wells and LCDs</td></tr>
     <tr><td>gap-join · gap-in · gap-out</td><td>2 · 4 · 8 px</td><td>joined parts, seams · inside a group · between groups</td></tr>
   </table>
 </div>
 
 <!-- ═════════════════════════ BUTTON ═════════════════════════ -->
 <h2>Button <span class="draft">UI-NEEDS 1</span></h2>
-<p><b>Draft 3: flat.</b> No rim, no bevel, no gradient: the silicone-key look stays with the synths. Clarity comes from contrast: a body a clear step lighter than the surface, near-white caps legends (12 · 13 · 15 px), corners at 20 % of the height. <b>On</b> is the solid light with dark bold ink; the second "on" column uses a darker tone of the light, in case the bright one glares.</p>
+<p><b>Draft 4.</b> The dark outline is back (thicker), the corners squarer, a faint Blender-style shading, and "on" uses a <i>darker</i> tone of the light so its legend reads. The font may be half the problem: the app draws with egui's default (Ubuntu Light, a thin face); Blender uses Inter. Everything here is live in the tuner: drag until it feels right, then press Copy and paste me the numbers.</p>
+<div class="card">
+  <div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">Tuner</h3>
+    <span class="row" style="gap:6px"><span class="hit" id="copy"></span><span class="hit" id="reset"></span></span></div>
+  <div class="tuner" id="tuner"></div>
+  <div id="copyout"></div>
+</div>
 <div class="card">
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
     <div class="row" style="gap:6px"><span class="caps">Light</span><div class="lightpick" id="lights"></div></div>
@@ -187,9 +195,9 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <div class="plate" style="height:36px" id="ctx-dense"></div>
 </div>
 <div class="card">
-  <h3>Three flat variants, at 40 px</h3>
+  <h3>The drafts so far, at 40 px</h3>
   <div class="row" id="vs"></div>
-  <p style="margin-top:10px">Hover them. A is a plate a clear step lighter than the surface; B is a well a step darker (the same family as the dropdown); C has no body until the mouse is on it (toolbars often do this). All three share the solid "on".</p>
+  
 </div>
 </main>
 
@@ -251,13 +259,13 @@ let light = 'mint';
 // the matrix: size × state
 (() => {
   const m = $('#matrix');
-  ['', 'idle', 'hover', 'pressed', 'on', 'on · darker light', 'disabled'].forEach(t => h('div', 'caps', m, t));
+  ['', 'idle', 'hover', 'pressed', 'on', 'on · hover', 'disabled'].forEach(t => h('div', 'caps', m, t));
   for (const [size, px] of [['S', 28], ['M', 40], ['L', 52]]) for (const legend of ['Reverse', 'loop']) {
     h('div', 'caps rowhead', m, `${size} · ${px} px · ${ICON[legend] ? 'icon' : 'text'}`);
     for (const st of ['idle', 'hover', 'pressed', 'on', 'soft', 'disabled']) {
-      const b = button(size, legend, {on: st === 'on' || st === 'soft', soft: st === 'soft', disabled: st === 'disabled', push: !['idle', 'on', 'soft'].includes(st)});
+      const b = button(size, legend, {on: st === 'on' || st === 'soft', disabled: st === 'disabled', push: !['idle', 'on'].includes(st)});
       const body = b.querySelector('.btn');
-      if (st === 'hover') body.classList.add('is-hover'); if (st === 'pressed') body.classList.add('is-press');
+      if (st === 'hover' || st === 'soft') body.classList.add('is-hover'); if (st === 'pressed') body.classList.add('is-press');
       m.append(b);
     }
   }
@@ -267,6 +275,45 @@ let light = 'mint';
 document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.state;
   const b = button('M', 'Reverse', {on: st === 'on', disabled: st === 'off-dis', push: true}); const body = b.querySelector('.btn');
   if (st === 'is-hover') body.classList.add('is-hover'); if (st === 'is-press') body.classList.add('is-press'); setLight(body, 'mint'); td.append(b); });
+// tuner: every control writes a token on :root; values are remembered in this browser
+(() => {
+  const root = document.documentElement, KEY = 'lyra-next-tuner';
+  const grey = v => '#' + Math.round(v).toString(16).padStart(2, '0').repeat(3);
+  const controls = [
+    ['outline width', 'range', '--btn-bw', 1.5, [0, 3, .5], v => v + 'px'],
+    ['outline grey', 'range', '--btn-edge', 0x12, [0x08, 0x26, 1], grey],
+    ['corner radius', 'range', '--btn-r', 4, [0, 12, .5], v => v + 'px'],
+    ['plate grey', 'range', '--btn-body', 0x45, [0x30, 0x60, 1], grey],
+    ['shading', 'range', '--btn-shade', 3, [0, 10, 1], v => v + '%'],
+    ['legend grey', 'range', '--legend', 0xe2, [0x99, 0xff, 1], grey],
+    ['font', 'select', '--btn-font', 'Inter', ['Inter', 'IBM Plex Sans', 'Barlow', 'Roboto Condensed', 'Noto Sans', 'Ubuntu', 'system-ui'], v => v === 'system-ui' ? v : `'${v}',system-ui,sans-serif`],
+    ['weight', 'select', '--btn-fw', '600', ['400', '500', '600', '700'], v => v],
+    ['case', 'select', '--btn-case', 'uppercase', ['uppercase', 'none'], v => v],
+    ['on', 'select', null, 'deep', ['deep', 'rim', 'edge', 'pastel'], v => v],
+  ];
+  let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  const state = {};
+  const apply = (name, raw) => {
+    const c = controls.find(x => x[0] === name); state[name] = raw;
+    if (c[2]) root.style.setProperty(c[2], c[5](c[1] === 'range' ? +raw : raw));
+    else ['deep', 'rim', 'edge', 'pastel'].forEach(t => document.body.classList.toggle('on-' + t, t === raw && t !== 'deep'));
+    const out = document.getElementById('out-' + name.replace(/ /g, '-')); if (out) out.textContent = c[1] === 'range' ? c[5](+raw) : '';
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  };
+  const host = $('#tuner');
+  for (const [name, kind, , def, opts] of controls) {
+    const l = h('label', '', host); h('span', '', l, name); let inp;
+    if (kind === 'range') { inp = h('input', '', l); inp.type = 'range'; [inp.min, inp.max, inp.step] = opts; }
+    else { inp = h('select', '', l, opts.map(o => `<option>${o}</option>`).join('')); }
+    const o = h('output', '', l); o.id = 'out-' + name.replace(/ /g, '-');
+    inp.value = saved[name] ?? def; inp.oninput = () => apply(name, inp.value); apply(name, inp.value);
+  }
+  const cp = button('S', 'Copy', {push: true}), rs = button('S', 'Reset', {push: true});
+  $('#copy').replaceWith(cp); $('#reset').replaceWith(rs);
+  cp.onclick = () => { const txt = controls.map(c => `${c[0]}: ${c[1] === 'range' ? c[5](+state[c[0]]) : state[c[0]]}`).join('\n');
+    const box = $('#copyout'); box.style.display = 'block'; box.textContent = txt; navigator.clipboard?.writeText(txt); };
+  rs.onclick = () => { for (const c of controls) { const inp = [...host.querySelectorAll('label')].find(l => l.firstChild.textContent === c[0]).querySelector('input,select'); inp.value = c[3]; apply(c[0], c[3]); } };
+})();
 // in context
 (() => {
   const tb = $('#ctx-toolbar');
@@ -278,17 +325,13 @@ document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.
   const dn = $('#ctx-dense'); h('span', 'caps', dn, 'Octave'); dn.append(button('S', '−', {push: true}), button('S', '+', {push: true}));
   const s2 = h('span', '', dn); s2.style.width = '16px'; h('span', 'caps', dn, 'Fold'); dn.append(button('S', 'loop'));
   document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
-  // variants and rejected drafts
+  // the drafts so far, for comparison
   const vs = $('#vs');
-  const col = (label, cls, make) => { const c = h('div', 'cell ' + cls, vs); c.style.cssText = 'background:var(--surface);padding:12px;gap:8px;justify-items:stretch';
-    h('div', 'caps', c, label); make(c); };
-  for (const [v, label] of [['vA', 'A · plate (the matrix above)'], ['vB', 'B · well, darker than the surface'], ['vC', 'C · bare until hovered']])
-    col(label, v, c => { const r = h('div', 'row', c); r.style.gap = '6px';
-      r.append(button('M', 'Reverse'), button('M', 'loop', {on: true}), button('M', 'Bar', {push: true}), button('M', 'trash', {push: true}), button('M', 'Off', {disabled: true})); });
-  const rej = h('div', 'cell', vs); rej.style.cssText = 'background:var(--surface);padding:12px;gap:8px;justify-items:start';
-  h('div', 'caps', rej, 'rejected: draft 1 · draft 2');
-  const rr = h('div', 'row', rej); rr.style.gap = '6px';
-  rr.append(h('span', 'flat1', null, 'Reverse'), h('span', 'key2', null, '<span><span>REVERSE</span></span>'));
+  const add = (label, n) => { const c = h('div', 'cell', vs); c.append(n); h('div', 'caps', c, label); };
+  add('draft 1 · hairline, dim ink', h('span', 'flat1', null, 'Reverse'));
+  add('draft 2 · silicone (rejected)', h('span', 'key2', null, '<span><span>REVERSE</span></span>'));
+  add('draft 3 · no outline (rejected)', (() => { const x = h('span', 'flat1', null, 'REVERSE'); x.style.cssText = 'box-shadow:none;border-radius:8px;background:#474747;color:#dedede;font:600 13px system-ui;letter-spacing:.06em;padding:0 16px'; return x; })());
+  add('draft 4 · off', button('M', 'Reverse', {push: true})); add('draft 4 · on', button('M', 'Reverse', {on: true, push: true}));
   document.querySelectorAll('.btn,.flat1').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
