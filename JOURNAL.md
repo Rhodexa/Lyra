@@ -14,6 +14,9 @@ no marks would default to not urgent or 'coding teams judges'
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
 // - [ ] ? bug or missing?
 - [ ] bug a pattern not on the timeline or not playing yet still shows a staff playing from the start, patterns clippy on the arranger not from their 0 tick show the staff playing from 0 despite playing further ahead in the arranger. might be related. 
+- [ ] Stretching viewport bar beyond used space enters a stretching loop that grows way too fast
+
+- [ ] *(UI port notes, 2026-11-25 — details in docs/design/PORT-STATUS.md)* Menus as LCD drawers (and the key root/scale pickers); the gap under editor headers (audio-clip editor tabs have no top edge); octave/scale buttons and FILE should react across the toolbar's full height; alignment in the audio-clip editor's transport row and the Recorder plate.
 
 ## Wishes
 *Things you wish Lyra did.*
