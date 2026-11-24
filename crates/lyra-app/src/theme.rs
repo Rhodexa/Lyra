@@ -285,9 +285,10 @@ pub fn apply(ctx: &Context) {
     // Scroll bars: Lyra's own (a recessed well, a flat thumb), always there
     // and always the same size; egui's default ones hide, shrink and flash.
     style.spacing.scroll = egui::style::ScrollStyle {
-        bar_width: 12.0,
+        // 20 px in all, like the catalog's plain bar (16 + 2 + 2).
+        bar_width: 16.0,
         handle_min_length: 28.0,
-        bar_inner_margin: 3.0,
+        bar_inner_margin: 2.0,
         bar_outer_margin: 2.0,
         dormant_background_opacity: 1.0,
         active_background_opacity: 1.0,

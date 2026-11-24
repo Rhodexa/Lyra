@@ -75,9 +75,10 @@ impl Overview {
     pub fn press(&self, v: &mut TimeView, pos: Pos2) -> OverviewDrag {
         let thumb = self.thumb(v);
         let visible = v.visible(self.area);
-        if (pos.x - thumb.left()).abs() < 7.0 {
+        // The zoom handles: 14 px inside each end of the window (and a little past it).
+        if pos.x > thumb.left() - 3.0 && pos.x < thumb.left() + HANDLE {
             OverviewDrag::Edge { left: true, fixed: v.scroll + visible }
-        } else if (pos.x - thumb.right()).abs() < 7.0 {
+        } else if pos.x < thumb.right() + 3.0 && pos.x > thumb.right() - HANDLE {
             OverviewDrag::Edge { left: false, fixed: v.scroll }
         } else if thumb.x_range().contains(pos.x) {
             OverviewDrag::Pan { grab: self.at(v, pos.x) - v.scroll }
@@ -109,14 +110,14 @@ impl Overview {
     }
 
     pub fn paint(&self, painter: &Painter, v: &TimeView, hot: bool) {
-        theme::well(painter, self.rect);
-        let thumb = self.thumb(v).shrink2(egui::vec2(0.0, 2.0));
+        paint_track(painter, self.rect);
+        let thumb = self.thumb(v);
         paint_thumb(painter, thumb, hot);
-        // Grips on both ends: "drag me to zoom".
-        for x in [thumb.left() + 6.0, thumb.right() - 6.0] {
-            for dx in [-1.5, 1.5] {
-                painter.vline(x + dx, thumb.shrink(6.0).y_range(), stroke(1.0, theme::TEXT_DIM));
-            }
+        // The zoom handles: a grip line in the middle of each 14 px end.
+        for x in [thumb.left() + HANDLE * 0.5, thumb.right() - HANDLE * 0.5] {
+            let y = thumb.y_range();
+            let h = y.span() * 0.22;
+            painter.vline(x, egui::Rangef::new(y.min + h, y.max - h), stroke(2.0, if hot { theme::INK } else { theme::INK_DIM }));
         }
     }
 
@@ -184,9 +185,10 @@ pub struct VBar {
 }
 
 impl VBar {
-    /// How wide every row editor's bar is.
+    /// How wide every row editor's bar is: exactly as wide as the overview
+    /// bar is tall (consistency, predictability).
     pub fn width() -> f32 {
-        (theme::m().overview_h * 0.7).round()
+        theme::m().overview_h
     }
 
     fn span(&self, v: &RowView) -> f32 {
@@ -209,9 +211,9 @@ impl VBar {
 
     pub fn press(&self, v: &mut RowView, pos: Pos2) -> VDrag {
         let thumb = self.thumb(v);
-        if (pos.y - thumb.top()).abs() < 6.0 {
+        if pos.y > thumb.top() - 3.0 && pos.y < thumb.top() + HANDLE {
             VDrag::Edge { top: true, fixed: v.start + v.visible }
-        } else if (pos.y - thumb.bottom()).abs() < 6.0 {
+        } else if pos.y < thumb.bottom() + 3.0 && pos.y > thumb.bottom() - HANDLE {
             VDrag::Edge { top: false, fixed: v.start }
         } else if thumb.y_range().contains(pos.y) {
             VDrag::Pan { grab: self.at(v, pos.y) - v.start }
@@ -245,23 +247,31 @@ impl VBar {
     }
 
     pub fn paint(&self, painter: &Painter, v: &RowView, hot: bool) {
-        theme::well(painter, self.rect);
-        let thumb = self.thumb(v).shrink2(egui::vec2(2.0, 0.0));
+        paint_track(painter, self.rect);
+        let thumb = self.thumb(v);
         paint_thumb(painter, thumb, hot);
-        // Grips on both ends: "drag me to zoom".
-        for y in [thumb.top() + 6.0, thumb.bottom() - 6.0] {
-            for dy in [-1.5, 1.5] {
-                painter.hline(thumb.shrink(4.0).x_range(), y + dy, stroke(1.0, theme::TEXT_DIM));
-            }
+        for y in [thumb.top() + HANDLE * 0.5, thumb.bottom() - HANDLE * 0.5] {
+            let x = thumb.x_range();
+            let w = x.span() * 0.28;
+            painter.hline(egui::Rangef::new(x.min + w, x.max - w), y, stroke(2.0, if hot { theme::INK } else { theme::INK_DIM }));
         }
     }
 }
 
-/// A scrollbar thumb: a flat plate in the well, with the keys' dark outline.
+/// Width of a viewport bar's zoom handles (wide targets).
+const HANDLE: f32 = 14.0;
+
+/// A scrollbar's track: a sunken well with its outline.
+fn paint_track(painter: &Painter, r: Rect) {
+    theme::outlined(painter, r, theme::CORNER, theme::SUNKEN);
+}
+
+/// A scrollbar thumb (catalog-next, settled): a see-through window, the button
+/// plate at 45 % with its dark outline, lighter while hot.
 fn paint_thumb(painter: &Painter, thumb: Rect, hot: bool) {
-    painter.rect_filled(thumb, cr(4), theme::KEY_RECESS);
-    let fill = if hot { egui::Color32::from_rgb(0x4a, 0x4a, 0x4a) } else { egui::Color32::from_rgb(0x3a, 0x3a, 0x3a) };
-    painter.rect_filled(thumb.shrink(1.0), cr(3), fill);
+    let a = if hot { 0.6 } else { 0.45 };
+    painter.rect_filled(thumb, cr(3), theme::outline_of(theme::PLATE));
+    painter.rect_filled(thumb.shrink(theme::OUTLINE_W), cr(2), theme::PLATE.gamma_multiply(a));
 }
 
 /// Auto-scroll while a drag is held at or past an edge of the view: how many
