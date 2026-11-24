@@ -331,6 +331,11 @@ pub fn apply(ctx: &Context) {
         w.corner_radius = corner;
         w.expansion = 0.0;
     }
+    // egui paints a resizable panel's edge with these when hovered or dragged:
+    // no light line on a seam (the splitter's grip plate shows instead). Text
+    // colour is set by `override_text_color`, so this doesn't touch labels.
+    v.widgets.hovered.fg_stroke = stroke(OUTLINE_W, GROUND);
+    v.widgets.active.fg_stroke = stroke(OUTLINE_W, GROUND);
     v.widgets.noninteractive.corner_radius = corner;
     v.slider_trailing_fill = true;
     ctx.set_style(style);

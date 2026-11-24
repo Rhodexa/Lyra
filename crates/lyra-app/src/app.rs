@@ -1441,7 +1441,7 @@ impl LyraApp {
         // ── Browser ──
         if self.ui.show_browser {
             // (Clicking the browser leaves keyboard focus where it was.)
-            egui::SidePanel::left("browser")
+            let r = egui::SidePanel::left("browser")
                 .resizable(true)
                 .default_width(230.0)
                 .width_range(160.0..=480.0)
@@ -1464,13 +1464,15 @@ impl LyraApp {
                     }
                     inside.show(ui, |ui| crate::browser::show(ui, &mut self.project, &mut self.history, &mut self.ui));
                 });
+            ctx.data_mut(|d| d.insert_temp(Id::new("seam-left"), r.response.rect));
         } else {
+            ctx.data_mut(|d| d.remove::<egui::Rect>(Id::new("seam-left")));
             folded_strip(ctx, "browser-folded", true, "Unfold the browser  (F4)", &mut self.ui.show_browser);
         }
 
         // ── Plugin rack (right) ──
         if self.ui.show_plugins {
-            egui::SidePanel::right("plugins")
+            let r = egui::SidePanel::right("plugins")
                 .resizable(true)
                 .default_width(300.0)
                 .width_range(220.0..=520.0)
@@ -1525,7 +1527,9 @@ impl LyraApp {
                         }
                     }
                 });
+            ctx.data_mut(|d| d.insert_temp(Id::new("seam-right"), r.response.rect));
         } else {
+            ctx.data_mut(|d| d.remove::<egui::Rect>(Id::new("seam-right")));
             folded_strip(ctx, "plugins-folded", false, "Unfold the plugin rack  (F6)", &mut self.ui.show_plugins);
         }
 
@@ -1600,6 +1604,16 @@ impl LyraApp {
         let r =
             egui::CentralPanel::default().frame(panel).show(ctx, |ui| self.area_ui(0, ui, playing, playhead, actions));
         self.area_rects[0] = Some(r.response.rect);
+        // The splitters' grips: on the seam under the mouse (or being dragged).
+        let left = ctx.data(|d| d.get_temp::<egui::Rect>(Id::new("seam-left")));
+        let right = ctx.data(|d| d.get_temp::<egui::Rect>(Id::new("seam-right")));
+        let bottom = self.area_rects[1];
+        let seams = [
+            left.map(|r| (r.right(), r.y_range(), true)),
+            right.map(|r| (r.left(), r.y_range(), true)),
+            bottom.map(|r| (r.top(), r.x_range(), false)),
+        ];
+        seam_grips(ctx, seams);
     }
 
     /// One area: its header (editor picker + the editor's own controls) and
@@ -1839,3 +1853,28 @@ pub fn on_panel_edge(ctx: &egui::Context) -> bool {
         })
     })
 }
+
+/// The splitter grip (catalog-next, settled): resizing works as egui does it;
+/// over a resizable seam (or while dragging it) a small grip plate shows on
+/// it, centred along the seam. Each seam: (position, extent along it, vertical).
+fn seam_grips(ctx: &egui::Context, seams: impl IntoIterator<Item = Option<(f32, egui::Rangef, bool)>>) {
+    let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) else { return };
+    let dragging = ctx.input(|i| i.pointer.primary_down());
+    let resizing = matches!(
+        ctx.output(|o| o.cursor_icon),
+        egui::CursorIcon::ResizeHorizontal | egui::CursorIcon::ResizeColumn | egui::CursorIcon::ResizeVertical | egui::CursorIcon::ResizeRow
+    );
+    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, Id::new("seam-grips")));
+    for (at, span, vertical) in seams.into_iter().flatten() {
+        let (d, along) = if vertical { (pos.x - at, pos.y) } else { (pos.y - at, pos.x) };
+        let near = d.abs() <= 8.0 && span.contains(along);
+        if !(near && (resizing || !dragging)) {
+            continue;
+        }
+        let c = if vertical { egui::pos2(at, span.center()) } else { egui::pos2(span.center(), at) };
+        let size = if vertical { egui::vec2(8.0, 36.0) } else { egui::vec2(36.0, 8.0) };
+        let r = egui::Rect::from_center_size(c, size);
+        theme::outlined(&painter, r, 3.0, theme::PLATE);
+    }
+}
+
