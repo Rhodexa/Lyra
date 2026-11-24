@@ -264,26 +264,30 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .kids>div{overflow:hidden;display:flex;flex-direction:column;min-height:0}
 @media (prefers-reduced-motion:reduce){.kids{transition:none}}
 .lst-legend{display:grid;grid-template-columns:120px 300px;gap:2px 16px;align-items:center}
-/* ═════════ NUMBER PICKER (draft 1) ═════════
-   The BPM display's behaviour as a widget. Hover a digit: it's marked, and drag / wheel
-   change that place (tens, ones, tenths…). Double-click: type it. Two looks:
-   NP1 · LCD: the pale panel, dark digits (the LCD = "a number you can change").
-   NP2 · well: the dark well, light digits (like the closed dropdown).          */
-.np{--h:var(--m);--k:1;--nfs:19px;--b:var(--sunken);height:var(--h);display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 10px;
+/* ═════════ NUMBER PICKER (draft 2) ═════════
+   The BPM display's behaviour as a widget. Each digit is its own big cell (more room
+   between digits, less padding around the panel) so it's easy to aim at; hovering the
+   blank part or the unit aims at the ones. Drag / wheel change the aimed place.
+   Double-click: type it. The unit sits beside the number (S, M), or on a TAG: a small
+   dark sticker on the LCD's bottom edge (L), so the display doesn't grow.          */
+.np{--h:var(--m);--k:1;--nfs:19px;--b:var(--sunken);position:relative;height:var(--h);display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:0 4px;
   background:var(--b);border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-radius:calc(var(--btn-r) * var(--k));
   color:var(--ink);cursor:ns-resize;user-select:none;touch-action:none;vertical-align:top}
-.np.S{--h:var(--s);--k:.75;--nfs:14px;padding:0 7px;gap:5px} .np.L{--h:var(--l);--k:1.25;--nfs:25px;padding:0 12px}
-.np.L.stack{flex-direction:column;gap:2px}
-.np .num{font:600 var(--nfs)/1 var(--t-num);letter-spacing:-.03em;white-space:pre}
-.np .d{border-radius:2px;padding:1px 0}
-.np .unit{font:var(--btn-fw) 11px/1 var(--btn-font);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim)}
-.np.S .unit{font-size:10px} .np.L.stack .unit{font-size:9px}
+.np.S{--h:var(--s);--k:.75;--nfs:14px;padding:0 3px;gap:3px} .np.L{--h:var(--l);--k:1.25;--nfs:25px;padding:0 5px}
+.np .num{display:flex;align-items:stretch;align-self:stretch;font:600 var(--nfs)/1 var(--t-num);white-space:pre}
+.np .num>span{display:flex;align-items:center;justify-content:center;min-width:.62em}
+.np .d{width:.95em;border-radius:2px}
+.np .unit{font:var(--btn-fw) 11px/1 var(--btn-font);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);padding-right:4px}
+.np.S .unit{font-size:10px;padding-right:3px}
 .np .d.f{background:#2e2e2e;box-shadow:inset 0 -2px 0 var(--mid)}
 .np:hover{--b:#1e1e1e}
-.np.lcd{--b:var(--lcd);color:var(--lcd-ink)} .np.lcd:hover{--b:#e2e2e2}
+.np.lcd{--b:var(--lcd);color:var(--lcd-ink)} .np.lcd:hover{--b:color-mix(in srgb,var(--lcd),white 25%)}
 .np.lcd .unit{color:var(--lcd-dim)}
-.np.lcd .d.f{background:#c6c6c6;box-shadow:inset 0 -2px 0 var(--lcd-ink)}
-.np input{width:var(--w);background:transparent;border:0;outline:0;padding:0;color:inherit;font:600 var(--nfs)/1 var(--t-num);letter-spacing:-.03em;text-align:right}
+.np.lcd .d.f{background:color-mix(in srgb,var(--lcd),black 10%);box-shadow:inset 0 -2px 0 var(--lcd-ink)}
+/* the tag: a dark sticker on the bottom edge */
+.np .tag{position:absolute;left:50%;bottom:0;transform:translate(-50%,55%);padding:2px 5px;border-radius:2px;background:#2a2a2a;
+  border:1px solid #151515;color:#dcdcdc;font:var(--btn-fw) 8.5px/1 var(--btn-font);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;pointer-events:none}
+.np input{width:var(--w);background:transparent;border:0;outline:0;padding:0 4px;color:inherit;font:600 var(--nfs)/1 var(--t-num);text-align:right}
 .np.editing{cursor:text;box-shadow:inset 0 0 0 1px var(--mid)}
 .np.lcd.editing{box-shadow:inset 0 0 0 1px var(--lcd-ink)}
 .np-grid{display:grid;grid-template-columns:150px repeat(2,minmax(0,1fr));gap:14px 24px;align-items:center}
@@ -446,9 +450,10 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ NUMBER PICKER ═════════════════════════ -->
-<h2>Number picker <span class="draft">UI-NEEDS 5 · DRAFT 1</span></h2>
-<p>The BPM display's behaviour as a widget, for tempo, swing, gain, pitch, lengths. <b>Hover a digit</b>: it's marked, and <b>drag up / down</b> or <b>wheel</b> change that place (tens, ones, tenths…); the drag keeps the raw value and only the display snaps. <b>Double-click</b> to type (Enter keeps, Esc cancels). Two looks: <b>NP1 · LCD</b> (the pale panel: "a number you can change", like today's BPM) and <b>NP2 · well</b> (dark, like the closed dropdown).</p>
+<h2>Number picker <span class="draft">UI-NEEDS 5 · DRAFT 2</span></h2>
+<p>The BPM display's behaviour as a widget, for tempo, swing, gain, pitch, lengths. <b>Hover a digit</b>: it's marked, and <b>drag up / down</b> or <b>wheel</b> change that place (tens, ones, tenths…); the drag keeps the raw value and only the display snaps. <b>Double-click</b> to type (Enter keeps, Esc cancels). <b>Draft 2:</b> every digit is its own bigger cell (easier to aim at), less padding around the panel; hovering the blank part or the unit aims at the ones; at L the unit is a <b>tag</b>, a dark sticker on the bottom edge. Two looks: <b>NP1 · LCD</b> (the pale panel: "a number you can change", like today's BPM) and <b>NP2 · well</b> (dark, like the closed dropdown).</p>
 <div class="card">
+  <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">LCD tone (also the drawers)</span><span id="lcd-tone"></span></div>
   <div class="np-grid" id="np-grid"></div>
 </div>
 <div class="card">
@@ -850,7 +855,7 @@ function browserList() {
 function numPicker(kind, size, o) {
   const el = h('div', 'np ' + size + (kind === 'lcd' ? ' lcd' : '') + (o.stack ? ' stack' : ''));
   setLight(el, o.light || light);
-  const num = h('span', 'num', el), unit = o.unit ? h('span', 'unit', el, o.unit) : null;
+  const num = h('span', 'num', el), unit = o.unit ? h('span', o.tag ? 'tag' : 'unit', el, o.unit) : null;
   let raw = o.value, place = o.place ?? 1, acc = 0, last = null, hovered = null;
   const fmt = v => { const t = Math.abs(v).toFixed(o.dec || 0); return (o.signed ? (v < 0 ? '−' : '+') : (v < 0 ? '−' : '')) + t; };
   const width = Math.max(fmt(o.max).length, fmt(o.min).length);
@@ -868,7 +873,7 @@ function numPicker(kind, size, o) {
   const set = v => { raw = clamp(v, o.min, o.max); render(); };
   el.addEventListener('pointermove', e => {
     if (last != null) { acc += (last - e.clientY) / 6; last = e.clientY; const n = Math.trunc(acc); if (n) { acc -= n; set(raw + n * place); } return; }
-    const d = e.target.closest('.d'); hovered = !!d; if (d) place = +d.dataset.place; render();
+    const d = e.target.closest('.d'); hovered = true; place = d ? +d.dataset.place : (o.place ?? 1); render();
   });
   el.addEventListener('pointerleave', () => { hovered = false; if (last == null) render(); });
   el.addEventListener('pointerdown', e => { if (el.classList.contains('editing')) return; last = e.clientY; acc = 0; el.setPointerCapture(e.pointerId); e.preventDefault(); });
@@ -885,25 +890,29 @@ function numPicker(kind, size, o) {
   });
   if (o.readonly) el.style.cursor = 'default';
   render();
-  if (o.text != null) num.textContent = o.text;   // a read-only readout (LCD text)
+  if (o.text != null) [...o.text].forEach(c => h('span', '', num, c));   // a read-only readout (LCD text)
   return el;
 }
 (() => {
+  const tones = [['Bright', '#dadada'], ['Soft', '#cbcbcb'], ['Dim', '#bcbcbc']];
+  const tsw = modeSwitch('B', 'S', tones.map(t => [t[0]]), 0);
+  tsw.addEventListener('click', () => setTimeout(() => { const i = [...tsw.querySelectorAll('.btn')].findIndex(b => b.classList.contains('on')); document.documentElement.style.setProperty('--lcd', tones[i][1]); }));
+  $('#lcd-tone').append(tsw);
   const g = $('#np-grid');
   ['', 'NP1 · LCD', 'NP2 · well'].forEach(t => h('div', 'caps', g, t));
   const rows = [
     ['S · 28 · swing', 'S', {value: 54, min: 0, max: 100, unit: '%'}],
     ['M · 40 · tempo', 'M', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM'}],
     ['M · 40 · gain', 'M', {value: -6, min: -60, max: 12, dec: 1, unit: 'dB', signed: true, place: .1}],
-    ['L · 52 · tempo', 'L', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM', stack: true}],
     ['L · 52 · beside', 'L', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM'}],
+    ['L · 52 · tag', 'L', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM', tag: true}],
   ];
   for (const [label, size, o] of rows) { h('div', 'caps', g, label); for (const k of ['lcd', 'well']) { const c = h('div', '', g); c.append(numPicker(k, size, o)); } }
   // context
   const tb = $('#np-toolbar');
-  const pos = numPicker('lcd', 'L', {value: 0, min: 0, max: 0, unit: 'Bar.beat.step', stack: true, readonly: true, text: '12.3.1'});
-  tb.append(button('L', 'play', {push: true}), pos, numPicker('lcd', 'L', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM', stack: true}),
-            numPicker('well', 'L', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM', stack: true}), modeSwitch('B', 'L', [['Song'], ['Pat', 'amber']], 0, {minw: '80px'}));
+  const pos = numPicker('lcd', 'L', {value: 0, min: 0, max: 0, unit: 'Bar.beat.step', tag: true, readonly: true, text: '12.3.1'});
+  tb.append(button('L', 'play', {push: true}), pos, numPicker('lcd', 'L', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM', tag: true}),
+            numPicker('well', 'L', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM', tag: true}), modeSwitch('B', 'L', [['Song'], ['Pat', 'amber']], 0, {minw: '80px'}));
   const hd = $('#np-header'); h('span', '', hd, 'Piano roll').style.cssText = 'font-size:14px;margin-right:16px';
   hd.append(h('span', 'caps', null, 'Swing'), numPicker('lcd', 'M', {value: 54, min: 0, max: 100, unit: '%'}), h('span', 'caps', null, 'Length'),
             numPicker('lcd', 'M', {value: 4, min: 1, max: 999, unit: 'bars'}), dropdown('M', [['Bar'], ['Beat'], ['1/2 beat']], 0, {width: '110px', lcd: true}));
