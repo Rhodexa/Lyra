@@ -49,6 +49,7 @@
   --btn-case:uppercase;
   --legend:#b0b0b0;        /* idle legend */
   /* No gradients. Ever. */
+  --accent:#a6e7c9;        /* the kept knobs' default arc (MINT) */
   /* ── LCD (theme::lcd_panel): a pale backlit panel with dark ink ── */
   --lcd:#bcbcbc; --lcd-ink:#2f2f2f; --lcd-dim:#4e4e4e;   /* dim: settled (easier on the eyes) */
   /* ── type ── */
@@ -368,6 +369,29 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .lr input.rn{flex:1;min-width:0;height:22px;margin:0 -4px;padding:0 4px;border:var(--btn-bw) solid color-mix(in srgb,var(--lcd-ink),black 50%);border-radius:3px;
   background:var(--lcd);color:var(--lcd-ink);font:13px var(--read-font);outline:0}
 .lr input.rn::selection{background:var(--lcd-ink);color:var(--lcd)}
+/* ═════════ MOCK SCREEN ═════════ */
+.mock{display:grid;grid-template-columns:300px minmax(0,1fr);grid-template-rows:auto auto auto auto;gap:2px;background:var(--ground);width:1148px;user-select:none}
+.mock .lst{width:100%}
+.mock .arr,.mock .mx{min-width:0;overflow:hidden}
+.mock>*{background:var(--surface)}
+.mock .tb{grid-column:1/-1;display:flex;align-items:center;gap:var(--gap-in);padding:4px 6px;background:var(--ground)}
+.mock .tb .grp{display:flex;align-items:center;gap:var(--gap-in)}
+.mock .tb .gap{width:10px}
+.mock .left{grid-row:2/4}
+.mock .ctx{grid-column:1/-1;display:flex;align-items:center;gap:var(--gap-in);padding:3px 6px;background:var(--ground);font-size:12px;color:var(--ink-dim)}
+.arr .lanes{display:grid;grid-template-columns:150px 1fr}
+.arr .ruler{grid-column:1/-1;display:grid;grid-template-columns:150px 1fr;height:24px;border-bottom:var(--btn-bw) solid var(--ground)}
+.arr .ruler .nums{position:relative;font:11px var(--t-num);color:var(--ink-dim)}
+.arr .ruler .nums span{position:absolute;top:6px}
+.arr .th{height:42px;display:flex;align-items:center;gap:8px;padding:0 8px;border-bottom:var(--btn-bw) solid var(--ground);font:13px var(--read-font);color:var(--ink)}
+.arr .th .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arr .ln{position:relative;height:42px;border-bottom:var(--btn-bw) solid var(--ground);border-left:var(--btn-bw) solid var(--ground);
+  background-image:repeating-linear-gradient(90deg,transparent 0 calc(var(--bar) - 1px),#2f2f2f calc(var(--bar) - 1px) var(--bar))}
+.clip{position:absolute;top:3px;bottom:3px;border-radius:var(--r-tile);overflow:hidden;background:color-mix(in srgb,var(--mid) 6%,transparent)}
+.clip .ct{height:14px;padding:0 5px;font:600 10px/14px var(--read-font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clip svg{position:absolute;left:0;right:0;top:15px;bottom:2px;width:100%;height:calc(100% - 17px)}
+.playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--mid);pointer-events:none}
+.mx .strips{display:flex;gap:2px;background:var(--ground);padding:0;overflow:hidden}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -531,7 +555,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ NUMBER PICKER ═════════════════════════ -->
-<h2>Number picker <span class="draft">UI-NEEDS 5 · PARKED (draft 3)</span></h2>
+<h2>Number picker <span class="draft">UI-NEEDS 5 · SETTLED: USABLE AS IS</span></h2>
 <p>The BPM display's behaviour as a widget, for tempo, swing, gain, pitch, lengths. <b>Hover a digit</b>: it's marked, and <b>drag up / down</b> or <b>wheel</b> change that place (tens, ones, tenths…); the drag keeps the raw value and only the display snaps. <b>Double-click</b> to type (Enter keeps, Esc cancels). <b>Draft 2:</b> every digit is its own bigger cell (easier to aim at), less padding around the panel; hovering the blank part or the unit aims at the ones; at L the unit is a <b>tag</b>: a dark label inside the screen's bottom-left corner (square where it meets the edges, rounded at its free corner). <b>Draft 3:</b> the LCD is dim by default; its outline is the ink colour, with an inner shadow, so the screen sits <i>in</i> the panel. Two looks: <b>NP1 · LCD</b> (the pale panel: "a number you can change", like today's BPM) and <b>NP2 · well</b> (dark, like the closed dropdown).</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">LCD tone (also the drawers)</span><span id="lcd-tone"></span></div>
@@ -573,6 +597,16 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
     <div style="flex:1;min-width:420px"><div class="caps" style="margin-bottom:6px">A header with a name field · M</div><div class="area p4" id="tf-header"></div></div>
   </div>
 </div>
+
+<!-- ═════════════════════════ KEPT + STANDARD METER ═════════════════════════ -->
+<h2>Kept from today <span class="draft">KNOBS · FADER · LED · CLIPS · METER</span></h2>
+<p>Knobs, faders, LEDs and clips stay exactly as they are in the app (copied from widget-catalog.html). Meters become <b>one standard meter</b>, the strip's (a dark well, two bars, the fixed full-scale gradient, a pale peak line), used vertically <i>and</i> horizontally, replacing the toolbar's own horizontal one.</p>
+<div class="card"><div class="row" id="kept" style="align-items:flex-end;gap:28px"></div></div>
+
+<!-- ═════════════════════════ MOCK SCREEN ═════════════════════════ -->
+<h2>Mock screen <span class="draft">DRAFT 1</span></h2>
+<p>A whole Lyra window, built only from catalog widgets and the kept ones: the toolbar, the left panel, the arrangement, the mixer and the context bar. This is where everything gets judged together. It's live: click, drag, open the dropdowns.</p>
+<div class="scroll" style="overflow-x:auto"><div class="mock" id="mock"></div></div>
 </main>
 
 <script>
@@ -1107,6 +1141,233 @@ function textField(size, o = {}) {
             h('span', 'grow'), button('M', 'plus', {push: true}), button('M', 'trash', {push: true}));
   const b = h('div', 'bodyrow', area); h('div', 'wave', b).style.minHeight = '60px';
   document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
+})();
+// ═════════ KEPT FROM TODAY (copied from widget-catalog.html: knobs, LED, fader; rated 'really good as they are') ═════════
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs = {}, parent) { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); parent && parent.append(n); return n; }
+const pol = (cx, cy, r, deg) => { const a = deg * Math.PI / 180; return [cx + r * Math.sin(a), cy - r * Math.cos(a)]; }; // 0° = up, clockwise
+function arcD(cx, cy, r, a, b) { if (b - a < 0.05) return ''; const [x, y] = pol(cx, cy, r, a), [u, v] = pol(cx, cy, r, b); return `M${x} ${y}A${r} ${r} 0 ${b - a > 180 ? 1 : 0} 1 ${u} ${v}`; }
+const rgb = hx => [1, 3, 5].map(i => parseInt(hx.slice(i, i + 2), 16));
+const hex = a => '#' + a.map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('');
+const shade = (c, k) => hex(rgb(c).map(v => v * k));           // theme::shade
+const mix = (a, b, t) => { const x = rgb(a), y = rgb(b); return hex(x.map((v, i) => v + (y[i] - v) * t)); }; // theme::mix
+let uid = 0;
+function bindDial(node, o) {
+  const n = o.steps || 0, def = o.def ?? o.value;
+  let raw = o.value, last = null;
+  const shown = () => n ? Math.round(raw * (n - 1)) / (n - 1) : raw;
+  const show = () => { const t = shown(); o.draw(t, n ? Math.round(t * (n - 1)) : null); node.setAttribute('aria-valuenow', n ? Math.round(t * (n - 1)) + 1 : Math.round(t * 100)); };
+  const set = v => { raw = clamp(v, 0, 1); show(); };
+  node.setAttribute('tabindex', 0); node.setAttribute('role', 'slider');
+  node.addEventListener('pointerdown', e => { if (e.button) return; last = o.axis === 'x' ? e.clientX : e.clientY; node.setPointerCapture(e.pointerId); e.preventDefault(); node.focus({preventScroll: true}); });
+  node.addEventListener('pointermove', e => {
+    if (last == null) return;
+    const p = o.axis === 'x' ? e.clientX : e.clientY, d = o.axis === 'x' ? p - last : last - p; last = p;
+    const span = n ? 12 * (n - 1) : (o.span || 180) * (e.shiftKey ? 5 : 1);
+    set(raw + d / span);
+  });
+  const end = () => last = null;
+  node.addEventListener('pointerup', end); node.addEventListener('pointercancel', end);
+  node.addEventListener('wheel', e => { e.preventDefault(); const d = e.deltaY < 0 ? 1 : -1; set(n ? shown() + d / (n - 1) : raw + d * (o.wheel || .02)); }, {passive: false});
+  node.addEventListener('dblclick', () => set(def));
+  node.addEventListener('keydown', e => {
+    const d = {ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1}[e.key]; if (!d) return;
+    e.preventDefault(); set(n ? shown() + d / (n - 1) : raw + d * .01);
+  });
+  show(); return {set};
+}
+const pct = (t, i, n) => i == null ? Math.round(t * 100) + '%' : `${i + 1} / ${n}`;
+const panTxt = t => { const v = Math.round((t - .5) * 200); return v === 0 ? 'C' : (v < 0 ? 'L' : 'R') + Math.abs(v); };
+
+const ORDER = ['mint','pink','blue','lavender','peach','amber','cyan','lime'];
+const L = n => { const [hi,mid,low,edge,rim] = LIGHTS[n]; return {hi,mid,low,edge,rim}; };
+const METER_STOPS = [[0,'#9fe4a9'],[.7,'#c8e5a3'],[.86,'#f0d28b'],[1,'#ee9996']];
+function appKnob(size, {steps = 0, bipolar = false, value = .55, color = 'var(--accent)', look} = {}) {
+  // KnobStyle::for_size; `look` forces one (to show a small look enlarged)
+  const style = look || (size < 44 && bipolar ? 'pan' : size < 34 ? 'tiny' : size < 62 ? 'rubber' : 'polymer');
+  const u = size / 300, C = 150, px = v => v / u; // px → box units (the app's .max(n) minimums are in px)
+  const svg = el('svg', {viewBox: '0 0 300 300', width: size, height: size, class: 'dial'});
+  const lift = el('g', {class: 'lift'}), disc = (r, f, p = svg) => el('circle', {cx: C, cy: C, r, fill: f}, p);
+  const [arcR, arcW0, trackC] = {pan: [133.5, 15, '#252525'], tiny: [119, 6, '#222222'], rubber: [124, 6, '#222222'], polymer: [125, 7, '#1c1c1c']}[style];
+  const arcW = Math.max(arcW0, px(1.6));
+  if (style === 'pan') { disc(132, '#191919'); svg.append(lift); disc(117, '#454545', lift); disc(99, '#4d4d4d', lift); disc(84, '#474747', lift); }
+  if (style === 'tiny') { svg.append(lift); disc(94, '#363636', lift); disc(85, '#3b3b3b', lift); }
+  if (style === 'rubber') { disc(108, '#1b1b1b'); svg.append(lift); disc(98.5, '#5f5f5f', lift); disc(93.5, '#3f3f3f', lift); disc(83, '#414141', lift); }
+  if (style === 'polymer') {
+    disc(110, '#1c1c1c'); const a = el('g', {class: 'lift'}, svg); disc(106, '#363636', a); disc(101, '#1c1c1c'); svg.append(lift); disc(96, '#3b3b3b', lift);
+    const id = 'q' + (++uid), cp = el('clipPath', {id}, el('defs', {}, svg)); el('circle', {cx: C, cy: C, r: 88}, cp);
+    const g = el('g', {'clip-path': `url(#${id})`}, lift);
+    [[62, 62, '#474747'], [150, 62, '#4d4d4d'], [62, 150, '#4d4d4d'], [150, 150, '#474747']].forEach(([x, y, f]) => el('rect', {x, y, width: 88, height: 88, fill: f}, g)); // the app still has #41494b / #474f51 (see notes)
+  }
+  let act, dots = [];
+  if (steps >= 2 && steps <= 12) {
+    for (let i = 0; i < steps; i++) { const [x, y] = pol(C, C, arcR, -135 + 270 * i / (steps - 1)); dots.push(el('circle', {cx: x, cy: y}, svg)); }
+  } else {
+    el('path', {d: arcD(C, C, arcR, -135, 135), fill: 'none', stroke: trackC, 'stroke-width': arcW}, svg);
+    act = el('path', {fill: 'none', stroke: color, 'stroke-width': arcW, 'stroke-linecap': 'round'}, svg);
+    if (bipolar) { const [x, y] = pol(C, C, arcR, 0); el('circle', {cx: x, cy: y, r: Math.max(8.4, px(1.2)), fill: '#a2a2a2'}, svg); }
+  }
+  let ptr;
+  if (style === 'pan') ptr = el('circle', {r: Math.max(12.6, px(1.6)), fill: '#c0c0c0'}, svg);
+  if (style === 'tiny') ptr = el('circle', {r: Math.max(7, px(1.5)), fill: color}, svg);
+  if (style === 'rubber') ptr = el('line', {stroke: color, 'stroke-width': Math.max(8, px(1.5)), 'stroke-linecap': 'round'}, svg);
+  if (style === 'polymer') ptr = el('line', {stroke: '#a9a9a9', 'stroke-width': 10, 'stroke-linecap': 'round', class: 'lift'}, svg);
+  const draw = (t, i) => {
+    const a = -135 + 270 * t;
+    if (act) act.setAttribute('d', bipolar ? arcD(C, C, arcR, Math.min(0, a), Math.max(0, a)) : arcD(C, C, arcR, -135, a));
+    dots.forEach((d, k) => { const on = k === i; d.setAttribute('r', on ? Math.max(7, px(1.8)) : Math.max(5, px(1.2))); d.setAttribute('fill', on ? color : '#2d2d2d'); });
+    if (style === 'pan' || style === 'tiny') { const [x, y] = pol(C, C, style === 'pan' ? 93 : 61, a); ptr.setAttribute('cx', x); ptr.setAttribute('cy', y); }
+    else { const [r1, r2] = style === 'rubber' ? [47, 66] : [63, 85]; const [x1, y1] = pol(C, C, r1, a), [x2, y2] = pol(C, C, r2, a); Object.entries({x1, y1, x2, y2}).forEach(([k, v]) => ptr.setAttribute(k, v)); }
+  };
+  return {svg, bind: out => bindDial(svg, {steps, value: bipolar ? .5 : value, def: bipolar ? .5 : value, draw: (t, i) => { draw(t, i); out && (out.textContent = bipolar ? panTxt(t) : pct(t, i, steps)); }})};
+}
+function led(d, light, on = true, o = {}) {
+  const svg = el('svg', {viewBox: `0 0 ${d} ${d}`, width: d, height: d, class: 'dial', style: 'cursor:pointer'}), c = d / 2, r = d / 2, ring = Math.max(d * .07, 1), bead = d * .3, id = 'l' + (++uid);
+  const well = el('circle', {cx: c, cy: c, r}, svg), rg = el('circle', {cx: c, cy: c, r: r - ring / 2, fill: 'none', 'stroke-width': ring}, svg);
+  const g = el('radialGradient', {id, cx: .5 - .1 * .5, cy: .5 - .16 * .5, r: .5, fx: .5 - .1 * .5, fy: .5 - .16 * .5}, el('defs', {}, svg));
+  const lt = o.light || L(light); [['0', lt.hi], ['.55', lt.mid], ['1', lt.edge]].forEach(([of, col]) => el('stop', {offset: of, 'stop-color': col}, g));
+  const b = el('circle', {cx: c, cy: c, r: bead}, svg);
+  const hl = el('path', {fill: 'none', 'stroke-width': .8, d: (() => { let p = ''; for (let i = 0; i <= 8; i++) { const a = Math.PI * (1.15 + .7 * i / 8); p += (i ? 'L' : 'M') + (c + Math.cos(a) * (bead - .8)) + ' ' + (c + Math.sin(a) * (bead - .8)); } return p; })()}, svg);
+  let hot = false;
+  const paint = () => {
+    if (on) { well.setAttribute('fill', o.wellOn || shade(lt.low, .4)); rg.setAttribute('stroke', o.ringOn || shade(lt.low, .55)); b.setAttribute('fill', `url(#${id})`); hl.style.display = 'none'; svg.style.filter = (hot ? 'brightness(1.05) ' : '') + (o.glow ? `drop-shadow(0 0 ${d * .25}px ${lt.mid}99)` : ''); }
+    else { well.setAttribute('fill', o.wellOff || '#161616'); rg.setAttribute('stroke', o.ringOff || '#1d1d1d'); const bc = o.beadOff || (hot ? '#535353' : '#484848'); b.setAttribute('fill', bc); hl.style.display = ''; hl.setAttribute('stroke', mix(bc, '#6b6b6b', .35)); svg.style.filter = ''; }
+  };
+  svg.addEventListener('pointerenter', () => { hot = true; paint(); }); svg.addEventListener('pointerleave', () => { hot = false; paint(); });
+  svg.addEventListener('click', () => { on = !on; paint(); }); paint(); return svg;
+}
+function signal(t, seed, k = 0) { // synthetic, like the studies: a level in dB
+  const wave = .5 + .25 * Math.sin(t / 310 + seed * 1.7 + k * .37) + .17 * Math.sin(t / 103 + seed * 2.3 + k * .8) + .08 * Math.sin(t / 71 + seed * .9 + k * 2.1);
+  return Math.min(-.3, -55 + 65 * .48 + wave * 15);
+}
+function appFader(light, scale = 1, value = .72) {
+  const W = 40, H = 210, svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: W * scale, height: H * scale, class: 'dial'}), y0 = 10, y1 = H - 9, span = y1 - y0, cx = W * .55;
+  for (let k = 0; k <= 10; k++) { const y = y0 + k * span / 10, major = k % 5 === 0; el('line', {x1: 3, x2: major ? 8 : 6, y1: y, y2: y, stroke: major ? '#737373' : '#505050', 'stroke-width': major ? 1.4 : 1}, svg); }
+  el('rect', {x: cx - 4, y: y0, width: 8, height: span, rx: 4, fill: '#161616'}, svg);
+  el('rect', {x: cx - 2, y: y0 + 2, width: 4, height: span - 4, rx: 2, fill: '#2b2b2b'}, svg);
+  const fill = el('rect', {x: cx - 2, width: 4, rx: 2, fill: light}, svg);
+  const cap = el('g', {}, svg), w = W - 6, r = (x, y, ww, hh, rx, f, p = cap) => el('rect', {x: cx - ww / 2 + x, y: y - hh / 2, width: ww, height: hh, rx, fill: f}, p);
+  r(0, 1.5, w, 17, 4, '#0000003c'); r(0, .5, w, 17, 4, '#202020'); const body = el('g', {class: 'lift'}, cap); r(0, 0, w - 2, 15, 3, '#444444', body); r(0, 0, w - 6, 11, 3, '#4f4f4f', body);
+  [-1, 0, 1].forEach(k => el('line', {x1: cx - 7, x2: cx + 7, y1: k * 2.5, y2: k * 2.5, stroke: mix('#4f4f4f', k ? '#727272' : '#818181', k ? .55 : .78), 'stroke-width': 1}, body));
+  const draw = t => { const y = y1 - t * span; cap.setAttribute('transform', `translate(0 ${y})`); fill.setAttribute('y', Math.max(y, y0 + 2)); fill.setAttribute('height', Math.max(0, y1 - 2 - Math.max(y, y0 + 2))); };
+  return {svg, bind: out => bindDial(svg, {value, def: .72, span: span * scale, wheel: .015, draw: t => { draw(t); out && (out.textContent = Math.round(t * 100) + '% travel'); }})};
+}
+
+// ── THE standard meter (the strip's: a dark well, two bars, a fixed full-scale gradient,
+//    a pale peak line that waits 0.4 s then falls), vertical OR horizontal. One meter everywhere.
+const meters = [];
+function stdMeter(orient, len, seed, thick = 22) {
+  const V = orient === 'v', W = V ? thick : len, H = V ? len : thick, id = 'sm' + (++uid);
+  const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: W, height: H});
+  const g = el('linearGradient', V ? {id, x1: 0, y1: H - 3, x2: 0, y2: 3, gradientUnits: 'userSpaceOnUse'} : {id, x1: 3, y1: 0, x2: W - 3, y2: 0, gradientUnits: 'userSpaceOnUse'}, el('defs', {}, svg));
+  METER_STOPS.forEach(([o, c]) => el('stop', {offset: o * 100 + '%', 'stop-color': c}, g));
+  el('rect', {x: 0, y: 0, width: W, height: H, rx: 2, fill: '#151515'}, svg);
+  el('rect', {x: 2, y: 2, width: W - 4, height: H - 4, rx: 1, fill: '#1f1f1f'}, svg);
+  const bt = (thick - 4 - 6) / 2, bl = len - 8, bars = [];
+  for (let k = 0; k < 2; k++) {
+    const off = 4 + k * (bt + 2);
+    const r = V ? {x: off, y: 4, width: bt, height: bl} : {x: 4, y: off, width: bl, height: bt};
+    el('rect', {...r, fill: '#282828'}, svg);
+    const fill = el('rect', {...r, fill: `url(#${id})`}, svg), peak = el('rect', {...r, fill: '#e5e9b7', opacity: .9});
+    svg.append(peak); bars.push({fill, peak, lvl: -60, held: 0, since: 0});
+  }
+  meters.push((t, dt) => bars.forEach((b, k) => {
+    const tgt = signal(t, seed, k); b.lvl += (tgt - b.lvl) * (tgt > b.lvl ? .53 : .18);
+    const f = clamp((b.lvl + 60) / 60, 0, 1);
+    if (f >= b.held) { b.held = f; b.since = t; } else if (t - b.since > 400) b.held = Math.max(f, b.held - .2 * Math.min(dt, .1));
+    if (V) { b.fill.setAttribute('y', 4 + bl * (1 - f)); b.fill.setAttribute('height', bl * f); b.peak.setAttribute('y', 4 + bl * (1 - b.held) - 1); b.peak.setAttribute('height', 2); }
+    else { b.fill.setAttribute('width', bl * f); b.peak.setAttribute('x', 4 + bl * b.held - 1); b.peak.setAttribute('width', 2); }
+    b.peak.setAttribute('opacity', b.held > .02 ? .9 : 0);
+  }));
+  return svg;
+}
+let lastT = 0;
+(function tick(t) { const dt = lastT ? Math.min(.12, (t - lastT) / 1000) : .016; lastT = t; meters.forEach(f => f(t, dt)); requestAnimationFrame(tick); })(0);
+
+// ── kept widgets, shown ──
+(() => {
+  const k = $('#kept'), add = (label, n) => { const c = h('div', 'cell', k); c.append(n); h('div', 'caps', c, label); return c; };
+  for (const [sz, look, l] of [[28, null, 'Tiny 28'], [44, null, 'Rubber 44'], [72, null, 'Polymer 72'], [28, null, 'Pan 28', true]]) { const kn = appKnob(sz, {bipolar: !!l.includes('Pan')}); kn.bind(); add(l, kn.svg); }
+  const f = appFader(L('mint').mid, 1); f.bind(); add('Fader 40 × 210', f.svg);
+  add('Meter · vertical', stdMeter('v', 210, 1));
+  add('Meter · horizontal', stdMeter('h', 180, 2));
+  const leds = h('div', 'row'); leds.style.gap = '6px'; [1, 1, 0, 1].forEach((v, i) => leds.append(led(22, ORDER[i], !!v))); add('LED', leds);
+})();
+
+// ── the mock screen ──
+(() => {
+  const m = $('#mock');
+  // toolbar
+  const tb = h('div', 'tb', m);
+  const grp = () => h('div', 'grp', tb), gap = () => h('span', 'gap', tb);
+  const g0 = grp(); g0.append(button('L', 'File', {push: true}));
+  gap();
+  const g1 = grp(); g1.append(button('L', 'play', {push: true}), button('L', 'stop', {push: true}), button('L', 'rec', {light: 'pink'}), button('L', 'loop'));
+  gap();
+  const g2 = grp(); g2.append(numPicker('lcd', 'L', {value: 0, min: 0, max: 0, unit: 'Bar.beat.step', tag: true, readonly: true, text: '12.3.1'}),
+    numPicker('lcd', 'L', {value: 131, min: 20, max: 999, dec: 1, unit: 'BPM', tag: true}));
+  gap();
+  const g3 = grp(); g3.append(modeSwitch('B', 'L', [['Song'], ['Pat', 'amber']], 0, {minw: '76px'}));
+  h('span', 'grow', tb).style.flex = '1';
+  const g4 = grp(); g4.append(stdMeter('h', 180, 9));
+  gap();
+  const g5 = grp(); g5.append(button('L', 'arr', {on: true}), button('L', 'mixer', {on: true}), button('L', 'roll'));
+  // left panel
+  const left = h('div', 'left', m); left.style.padding = '6px 6px 0';
+  left.append(tabsT2('S', ['Files', 'Instruments', 'Effects'], 0, ''));
+  const body = left.querySelector('.body'); body.style.padding = '0'; body.style.minHeight = '0'; const bl = browserList(); bl.classList.add('sel-lifted'); body.append(bl);
+  left.querySelector('.panel').style.borderBottom = '0';
+  // arrangement
+  const arr = h('div', 'arr p4', m);
+  const hd = h('div', 'hdr', arr);
+  hd.append(dropdown('S', [['Arrangement', 'arr'], ['Piano roll', 'roll'], ['Mixer', 'mixer'], ['Audio clip', 'wave']], 0, {width: '160px', lcd: true}),
+    modeSwitch('B', 'S', [['pointer'], ['pencil'], ['slice'], ['mute']], 0), h('span', 'sep'),
+    dropdown('S', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], '-', ['None']], 0, {width: '96px', lcd: true}));
+  const hint = h('span', '', hd, 'click places: Overglider 1–4'); hint.style.cssText = 'font-size:12px;color:var(--ink-dim);margin-left:6px';
+  h('span', 'grow', hd).style.flex = '1'; hd.append(button('S', 'plus', {push: true}), button('S', 'trash', {push: true}));
+  const lanes = h('div', 'lanes', arr), BAR = 52;
+  const ruler = h('div', 'ruler', lanes); h('div', '', ruler); const nums = h('div', 'nums', ruler);
+  for (let b = 1; b <= 16; b++) { const sp = h('span', '', nums, String(b)); sp.style.left = (b - 1) * BAR + 4 + 'px'; }
+  const tracks = [['Drums', 'mint', [[4, 8, 'Groove', 'notes'], [12, 4, 'Groove', 'notes']]], ['Bass', 'pink', [[0, 4, 'Pattern 26', 'notes'], [4, 8, 'Overglider bass', 'notes']]],
+    ['Keys', 'blue', [[0, 4, 'Saw lead · Filter', 'auto'], [4, 4, 'Chrysalis · Drive', 'auto']]], ['Lead', 'lavender', [[4, 8, 'Chrysalis · Filter 1', 'auto']]],
+    ['Vox', 'amber', [[1, 2, 'voice_sample_b', 'wave'], [3, 2, 'voice_sample_b_3', 'wave'], [10, 3, 'voice_sample_12', 'wave']]], ['Pad', 'cyan', [[8, 6, 'Night pad', 'notes']]]];
+  const draw = (svg, kind, w) => {
+    if (kind === 'notes') for (let i = 0; i < w / 7; i++) el('rect', {x: i * 7 + 2, y: 4 + ((i * 37) % 17), width: 5, height: 2, fill: 'var(--hi)', opacity: .8}, svg);
+    if (kind === 'auto') { let d = 'M0 18'; for (let x = 0; x <= w; x += 8) d += ` L${x} ${12 + 8 * Math.sin(x / 23)}`; el('path', {d, fill: 'none', stroke: 'var(--hi)', 'stroke-width': 1.5, opacity: .9}, svg); }
+    if (kind === 'wave') for (let x = 0; x < w; x += 2) { const a = 2 + 9 * Math.abs(Math.sin(x / 7) * Math.sin(x / 31)); el('rect', {x, y: 12 - a, width: 1.2, height: 2 * a, fill: 'var(--hi)', opacity: .85}, svg); }
+  };
+  tracks.forEach(([name, lt, clips], i) => {
+    const th = h('div', 'th', lanes); th.append(led(18, lt, i !== 3)); h('span', 'nm', th, name);
+    const ln = h('div', 'ln', lanes); ln.style.setProperty('--bar', BAR + 'px');
+    clips.forEach(([at, len, title, kind]) => {
+      const c = h('div', 'clip', ln); setLight(c, lt); const lc = L(lt);
+      c.style.left = at * BAR + 1 + 'px'; c.style.width = len * BAR - 2 + 'px';
+      const ct = h('div', 'ct', c, title); ct.style.background = shade(lc.mid, .5); ct.style.color = lc.hi;
+      const svg = el('svg', {viewBox: `0 0 ${len * BAR} 24`, preserveAspectRatio: 'none'}, c); draw(svg, kind, len * BAR);
+    });
+    if (i === 0) { const ph = h('div', 'playhead', ln); ph.style.left = 10.3 * BAR + 'px'; ph.style.height = tracks.length * 44 + 'px'; ph.style.zIndex = 3; }
+  });
+  // mixer
+  const mx = h('div', 'mx p4', m); mx.style.gridColumn = '2';
+  const mh = h('div', 'hdr', mx); mh.append(dropdown('S', [['Mixer', 'mixer'], ['Arrangement', 'arr']], 0, {width: '160px', lcd: true}));
+  h('span', 'grow', mh).style.flex = '1'; mh.append(button('S', 'plus', {push: true}));
+  const strips = h('div', 'strips', mx);
+  [['Master', 'mint', .8], ['Drums', 'mint', .72], ['Bass', 'pink', .6], ['Keys', 'blue', .66], ['Lead', 'lavender', .5], ['Vox', 'amber', .7], ['Pad', 'cyan', .55], ['Insert 7', 'lime', .64], ['Insert 8', 'peach', .5], ['Insert 9', 'mint', .7], ['Insert 10', 'pink', .45], ['Insert 11', 'blue', .6], ['Insert 12', 'lavender', .58]]
+  .forEach(([name, lt, v], t) => {
+    const s = h('div', '', strips); s.style.cssText = `position:relative;width:73px;height:290px;flex:none;background:${t === 1 ? 'var(--surface-sel)' : 'var(--surface)'}`;
+    if (t === 1) { const top = h('div', '', s); top.style.cssText = `position:absolute;left:0;top:0;width:100%;height:2px;background:${L(lt).mid}`; }
+    const f = appFader(L(lt).mid, 1, v); f.svg.setAttribute('height', 180); f.svg.style.cssText = 'position:absolute;left:4px;top:8px'; s.append(f.svg); f.bind();
+    const me = stdMeter('v', 180, t + 20, 22); me.style.cssText = 'position:absolute;left:44px;top:8px'; s.append(me);
+    const nm = h('div', '', s, name.toUpperCase()); nm.style.cssText = 'position:absolute;left:4px;top:196px;width:24px;height:88px;writing-mode:vertical-rl;transform:rotate(180deg);font:12px var(--read-font);letter-spacing:1.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--name, #c0c0c0);line-height:24px';
+    const pan = appKnob(28, {bipolar: true}); pan.svg.style.cssText = 'position:absolute;left:33px;top:196px'; s.append(pan.svg); pan.bind();
+    const l = led(22, 'mint', t !== 4); l.style.cssText += ';position:absolute;left:36px;top:240px'; s.append(l);
+  });
+  // context bar
+  const ctx = h('div', 'ctx', m);
+  h('span', '', ctx, '● Alsa · 48000 Hz · 128 frames (2.7 ms) · DSP 16%');
+  h('span', 'grow', ctx).style.flex = '1';
+  h('span', 'caps', ctx, '2 clips'); ctx.append(button('S', 'Duplicate', {push: true}), button('S', 'Split', {push: true}), button('S', 'Quantize', {push: true}));
+  m.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
 </body>
