@@ -40,7 +40,8 @@
   --hit-min:28px;          /* nothing reacts in less than S */
   /* ── button (draft 5, Rhodexa's tuning): set live by the tuner on this page ── */
   --btn-body:#454545;      /* the plate */
-  --btn-ol:50%;            /* the outline = the body's own colour, this much toward black */
+  /* the outline = the body's own colour, this much toward black; bigger buttons want a lighter line */
+  --btn-ol-s:50%; --btn-ol-m:45%; --btn-ol-l:30%;
   --btn-bw:2px;            /* outline width */
   --btn-r:4px;             /* corner radius at M (scaled for S and L); fine up to 6 */
   --btn-font:'Inter',system-ui,sans-serif;
@@ -90,20 +91,20 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
    Every value comes from the tuner's tokens in :root.                      */
 .hit{display:inline-grid;place-items:center;min-width:var(--hit-min);min-height:var(--hit-min);cursor:pointer;position:relative}
 .show-hits .hit::after{content:'';position:absolute;inset:0;border:1px dashed #f5dba580;pointer-events:none}
-.btn{--h:var(--m);--k:1;--fs:13px;--b:var(--btn-body);display:inline-flex;align-items:center;justify-content:center;gap:8px;height:var(--h);min-width:var(--h);
-  padding:0 calc(var(--h) * .38);border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-radius:calc(var(--btn-r) * var(--k));
+.btn{--h:var(--m);--k:1;--fs:13px;--ol:var(--btn-ol-m);--b:var(--btn-body);display:inline-flex;align-items:center;justify-content:center;gap:8px;height:var(--h);min-width:var(--h);
+  padding:0 calc(var(--h) * .38);border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--ol));border-radius:calc(var(--btn-r) * var(--k));
   background:var(--b);
   color:var(--legend);font:var(--btn-fw) var(--fs)/1 var(--btn-font);letter-spacing:.04em;text-transform:var(--btn-case);white-space:nowrap;user-select:none}
 .btn svg{width:18px;height:18px;flex:none}
 .btn.icon{padding:0}
-.btn.S{--h:var(--s);--k:.75;--fs:12px;gap:6px}
+.btn.S{--h:var(--s);--k:.75;--fs:12px;--ol:var(--btn-ol-s);gap:6px}
 .btn.S svg{width:15px;height:15px}
-.btn.L{--h:var(--l);--k:1.25;--fs:15px}
+.btn.L{--h:var(--l);--k:1.25;--fs:15px;--ol:var(--btn-ol-l)}
 .btn.L svg{width:22px;height:22px}
 .hit:hover .btn,.btn.is-hover{--b:color-mix(in srgb,var(--btn-body),white 9%);color:#fff}
 .hit:active .btn,.btn.is-press{--b:color-mix(in srgb,var(--btn-body),black 18%)}
 .hit.dis{cursor:default}
-.hit.dis .btn{--b:color-mix(in srgb,var(--btn-body),var(--surface) 65%);color:var(--ink-faint)}
+.hit.dis .btn{--b:color-mix(in srgb,var(--btn-body),var(--surface) 65%);border-color:var(--b);color:var(--ink-faint)}  /* no outline: a flat sticker, not a key */
 /* ON, four tones to choose from (class on <body>) */
 .btn.on{--b:color-mix(in srgb,var(--mid),black 55%);color:var(--hi)}                       /* deep (default) */
 .on-rim .btn.on,.on-rim .hit:hover .btn.on{--b:var(--rim);color:#fff}
@@ -132,7 +133,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </head>
 <body>
 <main>
-<h1>Lyra · catalog next <span class="draft">DRAFT 5</span></h1>
+<h1>Lyra · catalog next <span class="draft">DRAFT 6</span></h1>
 <p>The simplified widget set, designed here before anything changes in the app. Everything below is built only from the foundations. Nothing is approved yet; every number is there to be argued with. The app as it is today: <a href="widget-catalog.html" style="color:var(--ink)">widget-catalog.html</a>. Not for Fluttersine or Chrysalis.</p>
 
 <!-- ═════════════════════════ FOUNDATIONS ═════════════════════════ -->
@@ -146,12 +147,12 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <h3>States: one look each, for every widget</h3>
   <table>
     <tr><th>state</th><th>how it looks</th><th>button, as an example</th></tr>
-    <tr><td>idle</td><td>a flat plate lighter than the surface, a 2 px outline in its own colour at half brightness</td><td data-state="idle"></td></tr>
+    <tr><td>idle</td><td>a flat plate lighter than the surface, a 2 px outline in its own colour darkened 50 · 45 · 30 % at S · M · L</td><td data-state="idle"></td></tr>
     <tr><td>hover</td><td>plate a step lighter, white legend</td><td data-state="is-hover"></td></tr>
     <tr><td>pressed</td><td>plate a step darker</td><td data-state="is-press"></td></tr>
     <tr><td>on</td><td>a deep tone of the light (outline: the same, darker), legend in the light's brightest tone</td><td data-state="on"></td></tr>
     <tr><td>selected</td><td>the <i>surface</i> lifts to surface-sel, plus a 2 px line in its light (strips, rows, tiles; not controls)</td><td><span style="display:inline-block;width:90px;height:28px;background:var(--surface-sel);box-shadow:inset 0 2px 0 var(--mid)"></span></td></tr>
-    <tr><td>disabled</td><td>plate sinks toward the surface, faint ink, no hover</td><td data-state="off-dis"></td></tr>
+    <tr><td>disabled</td><td>no outline (a flat sticker, not a key), plate sinks toward the surface, faint ink, no hover</td><td data-state="off-dis"></td></tr>
     <tr><td>playing</td><td>flashes its light with the music (rack name keys, clips under the playhead)</td><td><i>see list row, later</i></td></tr>
     <tr><td>focus</td><td><b>nothing</b>: no rings, no glows</td><td></td></tr>
   </table>
@@ -162,7 +163,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
     <tr><th>token</th><th>value</th><th>for</th></tr>
     <tr><td>S · M · L</td><td>28 · 40 · 52 px</td><td>drawn height of every control; knobs Tiny · Rubber · Polymer</td></tr>
     <tr><td>hit-min</td><td>28 px</td><td>nothing is drawn or reacts smaller than S</td></tr>
-    <tr><td>font</td><td style="font-family:Inter">Inter</td><td>the one font for all of Lyra's own UI (OFL, tabular numbers; Blender uses it). Mono only for numbers.</td></tr>
+    <tr><td>font</td><td style="font-family:Inter">Inter</td><td>the one font for all of Lyra's own UI. SIL Open Font License: free to bundle inside an MIT / Apache app (the font keeps its own licence file), and bundled it looks the same on every system. Tabular numbers; Blender uses it. Mono only for numbers.</td></tr>
     <tr><td>caps label</td><td><span class="caps">Input · Pan · Mute</span></td><td>10 px, 600, letter-spaced, above the thing it names</td></tr>
     <tr><td>legend</td><td>12 · 13 · 15 px</td><td>button legends at S · M · L: caps, 600, letter-spaced .06em</td></tr>
     <tr><td>small · body</td><td>11 · 14 px</td><td>details · names and reading text</td></tr>
@@ -174,7 +175,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 
 <!-- ═════════════════════════ BUTTON ═════════════════════════ -->
 <h2>Button <span class="draft">UI-NEEDS 1</span></h2>
-<p><b>Draft 5</b>, from your tuning: a flat plate (no gradient, ever), a <b>2 px outline in the button's own colour, half as bright</b>, so a grey plate gets a dark grey line and a lit green one a dark green line, like vector art. Corners 4 px (fine up to 6). Inter, semibold, caps. "On" is a deep tone of the light. The tuner still works; Copy gives me the numbers.</p>
+<p><b>Draft 5</b>, from your tuning: a flat plate (no gradient, ever), a <b>2 px outline in the button's own colour, darkened: 50 % at S, 45 % at M, 30 % at L</b> (bigger buttons want a lighter line). Disabled buttons have no outline, so a grey plate gets a dark grey line and a lit green one a dark green line, like vector art. Corners 4 px (fine up to 6). Inter, semibold, caps. "On" is a deep tone of the light. The tuner still works; Copy gives me the numbers.</p>
 <div class="card">
   <div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">Tuner</h3>
     <span class="row" style="gap:6px"><span class="hit" id="copy"></span><span class="hit" id="reset"></span></span></div>
@@ -280,11 +281,13 @@ document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.
   if (st === 'is-hover') body.classList.add('is-hover'); if (st === 'is-press') body.classList.add('is-press'); setLight(body, 'mint'); td.append(b); });
 // tuner: every control writes a token on :root; values are remembered in this browser
 (() => {
-  const root = document.documentElement, KEY = 'lyra-next-tuner-5';
+  const root = document.documentElement, KEY = 'lyra-next-tuner-6';
   const grey = v => '#' + Math.round(v).toString(16).padStart(2, '0').repeat(3);
   const controls = [
     ['outline width', 'range', '--btn-bw', 2, [0, 3, .5], v => v + 'px'],
-    ['outline darkness', 'range', '--btn-ol', 50, [0, 100, 5], v => v + '%'],
+    ['outline S (28)', 'range', '--btn-ol-s', 50, [0, 100, 5], v => v + '%'],
+    ['outline M (40)', 'range', '--btn-ol-m', 45, [0, 100, 5], v => v + '%'],
+    ['outline L (52)', 'range', '--btn-ol-l', 30, [0, 100, 5], v => v + '%'],
     ['corner radius', 'range', '--btn-r', 4, [0, 8, .5], v => v + 'px'],
     ['plate grey', 'range', '--btn-body', 0x45, [0x30, 0x60, 1], grey],
     ['legend grey', 'range', '--legend', 0xb0, [0x99, 0xff, 1], grey],
