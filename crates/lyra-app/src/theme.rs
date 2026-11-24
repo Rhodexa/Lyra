@@ -173,11 +173,8 @@ pub const SURFACE_SEL: Color32 = PANEL_HI;
 /// A control's body: the button plate.
 pub const PLATE: Color32 = Color32::from_rgb(0x45, 0x45, 0x45);
 /// Wells: dropdowns, fields, tracks.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const SUNKEN: Color32 = WELL;
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const INK: Color32 = TEXT;
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const INK_DIM: Color32 = TEXT_DIM;
 /// Idle legends on plates.
 pub const LEGEND: Color32 = Color32::from_rgb(0xb0, 0xb0, 0xb0);

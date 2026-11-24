@@ -822,13 +822,19 @@ fn paint_button(ui: &Ui, r: Rect, resp: &Response, legend: Legend, lit: Option<t
         None if hovered => Color32::WHITE,
         None => theme::LEGEND,
     };
+    paint_legend(ui, r, legend, ink, body, lit.is_some());
+}
+
+/// A button's legend (icon, or caps text) centred in `r`.
+fn paint_legend(ui: &Ui, r: Rect, legend: Legend, ink: Color32, body: Color32, bold: bool) {
+    let p = ui.painter();
     match legend {
         Legend::Icon(icon) => {
             let side = r.height().min(r.width());
             paint_icon(p, Rect::from_center_size(r.center(), vec2(side, side)).shrink(side * 0.2), icon, ink, body);
         }
         Legend::Text(t) => {
-            let g = legend_galley(ui, t, legend_size(r.height()), lit.is_some(), ink);
+            let g = legend_galley(ui, t, legend_size(r.height()), bold, ink);
             p.with_clip_rect(r.shrink(theme::OUTLINE_W)).galley(r.center() - g.size() * 0.5, g, ink);
         }
     }
@@ -877,8 +883,11 @@ pub fn button_at(
     }
 }
 
-/// Buttons side by side where exactly one is chosen (SONG / PAT): the
-/// chosen one lit in its light. Returns the one clicked.
+/// The mode switch (catalog-next.html, settled): one choice among a few. A
+/// sunken track; the chosen option is one lit plate, in its own light, that
+/// slides there; each option reacts across its whole share of the track. With
+/// two options any click switches (SONG / PAT). `size` is one option's cell.
+/// Returns the option to switch to, when clicked.
 pub fn choice(
     ui: &mut Ui,
     size: egui::Vec2,
@@ -886,15 +895,47 @@ pub fn choice(
     chosen: usize,
     hint: &str,
 ) -> Option<usize> {
+    let n = options.len().max(1);
+    let bw = theme::OUTLINE_W;
+    let (rect, _) = ui.allocate_exact_size(vec2(size.x * n as f32 + 2.0 * bw, size.y), Sense::hover());
+    let id = ui.id().with(("mode-switch", rect.min.x as i32, rect.min.y as i32));
+    let k = rect.height() / theme::SIZE_M;
+    let radius = (theme::CORNER * k).clamp(3.0, 5.0);
+    let inner = rect.shrink(bw);
+    let cell_w = inner.width() / n as f32;
+    let cell = |i: usize| Rect::from_min_size(pos2(inner.left() + i as f32 * cell_w, inner.top()), vec2(cell_w, inner.height()));
     let mut clicked = None;
-    ui.scope(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
-        for (i, (legend, light)) in options.iter().enumerate() {
-            if button_sized(ui, size, *legend, (i == chosen).then_some(*light), hint).clicked() {
-                clicked = Some(i);
-            }
+    let mut hovered = None;
+    for i in 0..n {
+        let resp = ui.interact(cell(i), id.with(i), Sense::click());
+        let resp = if hint.is_empty() { resp } else { resp.on_hover_text(hint) };
+        if resp.hovered() {
+            hovered = Some(i);
         }
-    });
+        if resp.clicked() {
+            clicked = Some(if n == 2 { 1 - chosen.min(1) } else { i });
+        }
+    }
+    let p = ui.painter();
+    theme::outlined(p, rect, radius + bw, theme::SUNKEN);
+    // The lit plate slides to the chosen cell.
+    let chosen = chosen.min(n - 1);
+    let x = ui.ctx().animate_value_with_time(id.with("x"), cell(chosen).left(), 0.08);
+    let plate = Rect::from_min_size(pos2(x, inner.top()), vec2(cell_w, inner.height()));
+    let light = options[chosen].1;
+    let body = if hovered == Some(chosen) { light.mid } else { light.low };
+    theme::outlined(p, plate, radius, body);
+    for (i, (legend, l)) in options.iter().enumerate() {
+        let on = i == chosen;
+        let ink = if on {
+            theme::mix(l.rim, Color32::BLACK, 0.68)
+        } else if hovered == Some(i) {
+            theme::INK
+        } else {
+            theme::INK_DIM
+        };
+        paint_legend(ui, cell(i), *legend, ink, if on { body } else { theme::SUNKEN }, on);
+    }
     clicked
 }
 
