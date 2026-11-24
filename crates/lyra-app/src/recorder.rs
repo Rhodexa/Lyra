@@ -499,8 +499,12 @@ pub fn header(ui: &mut Ui, rec: &mut Recorder, can_append: bool) {
     });
 }
 
-/// The recorder's part of the transport row, after ▶ ■: record / pause,
-/// clear, and wait for sound.
+/// The input meter's column at the plate's right (meter and its margins); the
+/// transport row's keys stop where it starts, like the plate's controls.
+const METER_COLUMN: f32 = 30.0;
+
+/// The recorder's part of the transport row, after ▶ ■: record / pause
+/// and wait for sound.
 pub fn bar(ui: &mut Ui, r: Rect, rec: &mut Recorder) {
     let m = theme::m();
     let shared = rec.shared.clone();
@@ -522,7 +526,8 @@ pub fn bar(ui: &mut Ui, r: Rect, rec: &mut Recorder) {
             s.record();
         }
     }
-    let wait_r = Rect::from_min_max(at(1.0).min, pos2(r.right() - 8.0, at(1.0).bottom()));
+    // Ends where the plate's controls end (left of its meter): one column, one width.
+    let wait_r = Rect::from_min_max(at(1.0).min, pos2(r.right() - METER_COLUMN, at(1.0).bottom()));
     let hint = "Wait for sound: Record waits until the input is louder than the gold line, then starts \
                 (with the moment just before, so the first sound isn't cut off)";
     let lit = s.wait_for_sound.then_some(theme::L_AMBER);
@@ -543,7 +548,7 @@ pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
     let m = theme::m();
     ui.painter().rect_filled(r, theme::cr(0), theme::PANEL);
     let meter = Rect::from_min_max(pos2(r.right() - 22.0, r.top() + 8.0), pos2(r.right() - 8.0, r.bottom() - 8.0));
-    let body = Rect::from_min_max(r.min + vec2(8.0, 6.0), pos2(meter.left() - 8.0, r.bottom() - 6.0));
+    let body = Rect::from_min_max(r.min + vec2(8.0, 6.0), pos2(r.right() - METER_COLUMN, r.bottom() - 6.0));
     let (has_tape, running, level, threshold, wait) = {
         let s = rec.shared.lock().unwrap_or_else(|e| e.into_inner());
         (s.tape.frames() > 0, s.state != State::Stopped, s.level, s.threshold, s.wait_for_sound)
@@ -566,7 +571,7 @@ pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
                 rows.extend(list.iter().map(|n| widgets::DropRow::text(n.as_str())));
                 let at = rec.device.as_ref().and_then(|d| list.iter().position(|n| n == d)).map_or(0, |i| i + 1);
                 let hint = "Where the tape listens: the system's input is whatever your desktop's sound settings pick (clear the tape to change it)";
-                if let Some(i) = widgets::dropdown(ui, "recorder-device", f.width() - 8.0, &rows, at, true, hint) {
+                if let Some(i) = widgets::dropdown(ui, "recorder-device", f.width(), &rows, at, true, hint) {
                     rec.set_device(if i == 0 { None } else { Some(list[i - 1].clone()) });
                 }
             });
@@ -582,7 +587,7 @@ pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
             let name = |t: usize| tracks.get(t).cloned().unwrap_or_else(|| widgets::insert_label(t));
             let rows: Vec<_> = (0..tracks.len()).map(|t| widgets::DropRow::text(name(t))).collect();
             let hint = "The mixer insert you hear the tape through (its effects too); a sent take plays there";
-            if let Some(i) = widgets::dropdown(ui, "recorder-track", f.width() - 8.0, &rows, rec.track, true, hint) {
+            if let Some(i) = widgets::dropdown(ui, "recorder-track", f.width(), &rows, rec.track, true, hint) {
                 rec.track = i;
             }
         });
