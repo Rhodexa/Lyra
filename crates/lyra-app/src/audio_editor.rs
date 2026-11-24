@@ -296,18 +296,6 @@ fn hover(v: &View, p: &Project, a: &lyra_model::Audio, frame: Option<&Frame>, po
 impl AudioEditor {
     /// The editor's header row: the clip's name and how many copies play it.
     pub fn toolbar(&mut self, ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, rec: &mut Recorder) {
-        // EDITOR / RECORDER: a mode switch in the header (the header is the
-        // editor's top edge; tabs under it had none of their own).
-        let options = [
-            (widgets::Legend::Text("Editor"), theme::L_MINT),
-            (widgets::Legend::Text("Recorder"), theme::L_PINK),
-        ];
-        let size = vec2(86.0, theme::m().control_h);
-        let hint = "EDITOR: the clip's file · RECORDER: a scratch tape for takes";
-        if let Some(t) = widgets::choice(ui, size, &options, self.tab as usize, hint) {
-            self.tab = if t == 0 { AudioTab::Editor } else { AudioTab::Recorder };
-        }
-        ui.add_space(6.0);
         if self.tab == AudioTab::Recorder {
             let can_append = current(p, st).is_some();
             return crate::recorder::header(ui, rec, can_append);
@@ -329,7 +317,8 @@ impl AudioEditor {
             .hint(file.display().to_string());
     }
 
-    /// The editor: at the left the transport row (▶ ■ stay put in
+    /// The editor: at the left the tabs (EDITOR / RECORDER: two tools that
+    /// work together, not modes), the transport row (▶ ■ stay put in
     /// both tabs) and the tab's plate; at the right the waveform view.
     #[allow(clippy::too_many_arguments)]
     pub fn show(
@@ -347,7 +336,11 @@ impl AudioEditor {
         let size = ui.available_size().max(vec2(420.0, 120.0));
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let [left, canvas] = flex::row(rect, [Px(PLATE_W + theme::SEAM + SOURCE_W), Grow(1.0)], theme::SEAM);
-        let [bar_r, plates] = flex::col(left, [Px(m.control_h + 12.0), Grow(1.0)], 0.0);
+        let [tabs_r, bar_r, plates] = flex::col(left, [Px(m.control_h + 4.0), Px(m.control_h + 12.0), Grow(1.0)], 0.0);
+        let tabs = ["Editor", "Recorder"];
+        if let Some(t) = widgets::tab_row(ui, tabs_r, &tabs, self.tab as usize, ui.id().with("audio-tabs")) {
+            self.tab = if t == 0 { AudioTab::Editor } else { AudioTab::Recorder };
+        }
         // The transport row: ▶ ■ for what this tab shows, then the tab's own keys.
         ui.painter().rect_filled(bar_r, cr(0), theme::PANEL);
         let b = m.control_h;

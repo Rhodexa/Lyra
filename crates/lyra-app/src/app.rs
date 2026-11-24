@@ -276,6 +276,7 @@ impl LyraApp {
             ("mixer", Editor::Mixer),
             ("steps", Editor::Steps),
             ("audio", Editor::Audio),
+            ("automation", Editor::Automation),
         ]
         .into_iter()
         .find(|(name, _)| dev.wants(name))
@@ -1432,7 +1433,9 @@ impl LyraApp {
     /// bottom area opens and folds with F5 / F7 / F9.
     fn docked(&mut self, ctx: &egui::Context, playing: bool, playhead: f64, actions: &mut Vec<Action>) {
         let m = theme::m();
-        let panel = egui::Frame::default().fill(theme::PANEL).inner_margin(Margin::same(8));
+        // The areas have no padding: the header pads itself, and each editor
+        // brings its own if it wants any (timelines run edge to edge).
+        let panel = egui::Frame::default().fill(theme::PANEL).inner_margin(Margin::ZERO);
         // Side panels: the header runs edge to edge, the content keeps a margin.
         let side = egui::Frame::default().fill(theme::PANEL);
         let inside = egui::Frame::default().inner_margin(Margin { left: 8, right: 8, top: 6, bottom: 8 });
@@ -1629,28 +1632,34 @@ impl LyraApp {
         let LyraApp { areas, project: p, history: h, ui: st, samples, recorder, .. } = self;
         let area = &mut areas[i];
         ui.push_id(("area", i), |ui| {
-            ui.horizontal(|ui| {
-                areas::picker(ui, area);
-                ui.add_space(6.0);
-                match area.editor {
-                    Editor::Arrangement => area.playlist.toolbar(ui, p, st, actions),
-                    Editor::Audio => area.audio.toolbar(ui, p, h, st, recorder),
-                    Editor::Automation => area.automation.toolbar(ui, p, h, st),
-                    Editor::PianoRoll if has_channel => {
-                        let color = theme::channel_color(p.channels[ch].color);
-                        area.piano.toolbar(ui, p, h, color, ch);
+            ui.spacing_mut().item_spacing.y = 0.0; // header, line and editor touch
+            let header = egui::Frame::NONE.inner_margin(Margin { left: 8, right: 8, top: 6, bottom: 6 });
+            header.show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 4.0;
+                ui.horizontal(|ui| {
+                    areas::picker(ui, area);
+                    ui.add_space(6.0);
+                    match area.editor {
+                        Editor::Arrangement => area.playlist.toolbar(ui, p, st, actions),
+                        Editor::Audio => area.audio.toolbar(ui, p, h, st, recorder),
+                        Editor::Automation => area.automation.toolbar(ui, p, h, st),
+                        Editor::PianoRoll if has_channel => {
+                            let color = theme::channel_color(p.channels[ch].color);
+                            area.piano.toolbar(ui, p, h, color, ch);
+                        }
+                        _ => {}
                     }
-                    _ => {}
-                }
+                });
             });
             // The header's bottom edge: an engraved line in the ground colour,
-            // edge to edge across the area (its frame has an 8 px margin).
-            ui.add_space(5.0);
-            let y = ui.cursor().top() - 3.0;
-            let x = ui.max_rect().x_range();
-            let line = egui::Rect::from_min_max(egui::pos2(x.min - 8.0, y), egui::pos2(x.max + 8.0, y + theme::OUTLINE_W));
-            ui.painter().with_clip_rect(line).rect_filled(line, theme::cr(0), theme::GROUND);
-            ui.add_space(3.0);
+            // edge to edge; the editor starts right under it.
+            let (line, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), theme::OUTLINE_W), egui::Sense::hover());
+            ui.painter().rect_filled(line, theme::cr(0), theme::GROUND);
+            // The editor gets the rest of the area exactly (no item spacing above it).
+            let rest = ui.available_rect_before_wrap();
+            ui.allocate_rect(rest, egui::Sense::hover());
+            let ui = &mut ui.new_child(egui::UiBuilder::new().max_rect(rest).layout(*ui.layout()));
+            ui.spacing_mut().item_spacing.y = 4.0;
             match area.editor {
                 Editor::Arrangement => {
                     let song_playhead = if st.song_mode { playhead } else { 0.0 };
@@ -1675,7 +1684,9 @@ impl LyraApp {
                     area.piano.show(ui, p, h, pat, ch, tick, sounding, &live_keys, actions);
                 }
                 Editor::PianoRoll => {
-                    ui.label(RichText::new("Add an instrument in the plugin rack first.").color(theme::TEXT_DIM));
+                    egui::Frame::NONE.inner_margin(Margin::same(8)).show(ui, |ui| {
+                        ui.label(RichText::new("Add an instrument in the plugin rack first.").color(theme::TEXT_DIM));
+                    });
                 }
                 Editor::Mixer => {
                     // The mixer's strips sit on the background, like a rack frame.
@@ -1684,9 +1695,11 @@ impl LyraApp {
                 }
                 Editor::Steps => {
                     let play_step = local.filter(|_| playing).map(|t| (t / TICKS_PER_STEP as f64) as u32);
-                    egui::ScrollArea::vertical()
-                        .id_salt("steps-v")
-                        .show(ui, |ui| rack::show(ui, p, h, st, play_step, true));
+                    egui::ScrollArea::vertical().id_salt("steps-v").show(ui, |ui| {
+                        egui::Frame::NONE
+                            .inner_margin(Margin::same(8))
+                            .show(ui, |ui| rack::show(ui, p, h, st, play_step, true));
+                    });
                 }
             }
         });
