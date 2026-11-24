@@ -136,10 +136,16 @@ dropdown and number picker replace it).
 
 ## How we work on it
 
-1. You settle the questions above (and studies, if you make them).
-2. Each widget is built once, shown in F12 at every size and state, and named
-   in COMPONENTS.md.
-3. Every place in the app switches to it, one widget at a time, each with a
-   before/after screenshot.
-4. New UI from then on only uses catalog widgets. Anything missing gets added
-   to the catalog first.
+Decided 2026-11-24: **HTML first, the app last.** We design every widget in
+HTML until it's right, and that takes many rounds (the knobs took several,
+across more than one AI model). No Rust changes until the catalog is stable.
+
+1. Each widget is drafted in the catalog's "Next" page, at every size and
+   state, live (drag, hover, click), on the foundations (colours, states, type,
+   sizes) rather than its own numbers.
+2. Rhodexa reacts; we iterate there until it's approved.
+3. When the whole set is stable: first decouple Fluttersine and Chrysalis (see
+   the top of this file), then port widget by widget, each with a before/after
+   screenshot, and name it in COMPONENTS.md.
+4. From then on, new UI only uses catalog widgets. Anything missing is
+   designed in the catalog first.
