@@ -46,8 +46,11 @@ are good ideas the engine doesn't do yet.
 A short bank of starting points, e.g. *Solo cellist* (defaults), *Bright
 lead* (character 1), *Pizzicato*, *Deadpan* (performer off), *Violin solo*.
 
-## Open questions
+## Not included
 
-- Is a mini keyboard useful inside Lyra, which already has a piano roll?
-  (It would need live playing, i.e. notes whose length isn't known yet.)
+- The concept's mini keyboard and PLAY/STOP were only there to test the
+  colours (Rhodexa, 2026-11-23). Lyra has the piano roll and transport.
+
+## Notes
+
 - Logo: integrated into the face, never a corner sticker (Lyra rule).
