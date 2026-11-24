@@ -462,7 +462,7 @@ impl PianoRoll {
             if egui::DragAndDrop::has_payload_of_type::<crate::midi::MidiDrag>(ui.ctx()) {
                 let at = timeline::snap(tick.max(0.0), self.snap).max(0.0) as u32;
                 let x = view.x(at as f32);
-                painter_line(ui, x, grid);
+                drop_line(ui, x, grid);
                 if ui.input(|i| i.pointer.any_released()) {
                     if let Some(d) = egui::DragAndDrop::take_payload::<crate::midi::MidiDrag>(ui.ctx()) {
                         self.dropped_midi = Some((d.0.clone(), at));
@@ -1113,6 +1113,11 @@ impl PianoRoll {
     }
 }
 
+/// Where a dropped file will land: a bright line down the grid.
+fn drop_line(ui: &Ui, x: f32, grid: Rect) {
+    ui.painter().vline(x, grid.y_range(), stroke(2.0, theme::MINT));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1146,9 +1151,4 @@ mod tests {
         let all = roll.midi_export(Action::ExportPatternMidi, &p, 0, 0).unwrap();
         assert_eq!(all.tracks.iter().map(|t| t.notes.len()).sum::<usize>(), 5);
     }
-}
-
-/// Where a dropped file will land: a bright line down the grid.
-fn painter_line(ui: &Ui, x: f32, grid: Rect) {
-    ui.painter().vline(x, grid.y_range(), stroke(2.0, theme::MINT));
 }
