@@ -3,8 +3,18 @@
 //! to Claude or into JOURNAL.md — it drops straight into `Metrics::DEFAULT`.
 
 use crate::theme::{self, Metrics};
-use crate::widgets::Hint;
-use egui::{RichText, Slider, Ui};
+use crate::widgets;
+use egui::{RichText, Ui};
+
+const D: Metrics = Metrics::DEFAULT;
+const SLIDER_W: f32 = 180.0;
+
+/// One size on a slider; double-click it for the default.
+fn row(ui: &mut Ui, v: &mut f32, range: std::ops::RangeInclusive<f32>, default: f32, label: &str) {
+    // Whole pixels read as whole numbers; sizes with fractions keep one digit.
+    let decimals = if default.fract() == 0.0 && *range.end() >= 30.0 { 0 } else { 1 };
+    widgets::slider(ui, v, range, default, decimals, SLIDER_W, label);
+}
 
 pub fn show(ui: &mut Ui) {
     let ctx = ui.ctx().clone();
@@ -22,40 +32,40 @@ pub fn show(ui: &mut Ui) {
 
     let mut zoom = ctx.zoom_factor();
     section(ui, "Whole UI", |ui| {
-        ui.add(Slider::new(&mut zoom, 0.6..=2.0).text("zoom (also Ctrl +/-)"));
+        widgets::slider(ui, &mut zoom, 0.6..=2.0, 1.0, 2, SLIDER_W, "zoom (also Ctrl +/-)");
     });
     if (zoom - ctx.zoom_factor()).abs() > 1e-3 {
         ctx.set_zoom_factor(zoom);
     }
 
     section(ui, "Text & controls", |ui| {
-        ui.add(Slider::new(&mut m.text, 9.0..=22.0).text("text"));
-        ui.add(Slider::new(&mut m.text_small, 7.0..=18.0).text("small text"));
-        ui.add(Slider::new(&mut m.control_h, 16.0..=44.0).text("button / menu height"));
-        ui.add(Slider::new(&mut m.corner, 0.0..=12.0).text("corner radius"));
+        row(ui, &mut m.text, 9.0..=22.0, D.text, "text");
+        row(ui, &mut m.text_small, 7.0..=18.0, D.text_small, "small text");
+        row(ui, &mut m.control_h, 16.0..=44.0, D.control_h, "button / menu height");
+        row(ui, &mut m.corner, 0.0..=12.0, D.corner, "corner radius");
     });
     section(ui, "Toolbar", |ui| {
-        ui.add(Slider::new(&mut m.toolbar_h, 30.0..=110.0).text("height"));
-        ui.add(Slider::new(&mut m.module_pad, 0.0..=16.0).text("module padding"));
-        ui.add(Slider::new(&mut m.module_gap, 0.0..=24.0).text("space between modules"));
+        row(ui, &mut m.toolbar_h, 30.0..=110.0, D.toolbar_h, "height");
+        row(ui, &mut m.module_pad, 0.0..=16.0, D.module_pad, "module padding");
+        row(ui, &mut m.module_gap, 0.0..=24.0, D.module_gap, "space between modules");
     });
     section(ui, "Channel rack", |ui| {
-        ui.add(Slider::new(&mut m.step_w, 12.0..=40.0).text("step width"));
-        ui.add(Slider::new(&mut m.step_h, 14.0..=48.0).text("step height"));
-        ui.add(Slider::new(&mut m.knob_small, 14.0..=40.0).text("knob size"));
-        ui.add(Slider::new(&mut m.led, 10.0..=28.0).text("mute light size"));
-        ui.add(Slider::new(&mut m.name_w, 70.0..=240.0).text("name width"));
+        row(ui, &mut m.step_w, 12.0..=40.0, D.step_w, "step width");
+        row(ui, &mut m.step_h, 14.0..=48.0, D.step_h, "step height");
+        row(ui, &mut m.knob_small, 14.0..=40.0, D.knob_small, "knob size");
+        row(ui, &mut m.led, 10.0..=28.0, D.led, "mute light size");
+        row(ui, &mut m.name_w, 70.0..=240.0, D.name_w, "name width");
     });
     section(ui, "Instrument editor", |ui| {
-        ui.add(Slider::new(&mut m.knob_large, 24.0..=72.0).text("knob size"));
+        row(ui, &mut m.knob_large, 24.0..=72.0, D.knob_large, "knob size");
     });
     section(ui, "Piano roll", |ui| {
-        ui.add(Slider::new(&mut m.overview_h, 6.0..=60.0).text("overview bar height"));
-        ui.add(Slider::new(&mut m.ruler_h, 12.0..=40.0).text("ruler height"));
-        ui.add(Slider::new(&mut m.keys_w, 30.0..=120.0).text("keyboard width"));
-        ui.add(Slider::new(&mut m.row_h, 8.0..=32.0).text("row height (new windows)"));
-        ui.add(Slider::new(&mut m.edge_grab, 2.0..=24.0).text("resize zone inside note"));
-        ui.add(Slider::new(&mut m.edge_reach, 0.0..=24.0).text("resize zone past note end"));
+        row(ui, &mut m.overview_h, 6.0..=60.0, D.overview_h, "overview bar height");
+        row(ui, &mut m.ruler_h, 12.0..=40.0, D.ruler_h, "ruler height");
+        row(ui, &mut m.keys_w, 30.0..=120.0, D.keys_w, "keyboard width");
+        row(ui, &mut m.row_h, 8.0..=32.0, D.row_h, "row height (new windows)");
+        row(ui, &mut m.edge_grab, 2.0..=24.0, D.edge_grab, "resize zone inside note");
+        row(ui, &mut m.edge_reach, 0.0..=24.0, D.edge_reach, "resize zone past note end");
     });
 
     section(ui, "Control library", material_swatch);
@@ -66,11 +76,12 @@ pub fn show(ui: &mut Ui) {
 
     ui.add_space(6.0);
     ui.horizontal(|ui| {
-        if ui.button("Copy as code").hint("Puts the numbers on the clipboard").clicked() {
+        let copy = widgets::Legend::Text("Copy as code");
+        if widgets::button(ui, copy, None, "Puts the numbers on the clipboard").clicked() {
             let zoom_line = format!("// UI zoom: {:.2}\n", ctx.zoom_factor());
             ctx.copy_text(zoom_line + &theme::m().as_code());
         }
-        if ui.button("Reset").clicked() {
+        if widgets::button(ui, widgets::Legend::Text("Reset"), None, "Every size back to its default").clicked() {
             theme::set_metrics(&ctx, Metrics::DEFAULT);
             ctx.set_zoom_factor(1.0);
         }
@@ -78,9 +89,12 @@ pub fn show(ui: &mut Ui) {
 }
 
 fn section(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
-    ui.label(RichText::new(title.to_uppercase()).small().color(theme::TEXT_DIM));
-    ui.indent(title, add);
-    ui.add_space(4.0);
+    let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 14.0), egui::Sense::hover());
+    widgets::field_label(ui, r.left_bottom() - egui::vec2(0.0, 12.0), title);
+    ui.spacing_mut().item_spacing.y = 0.0;
+    add(ui);
+    ui.spacing_mut().item_spacing.y = 4.0;
+    ui.add_space(6.0);
 }
 
 /// The control library (from the user's HTML studies), painted by the real

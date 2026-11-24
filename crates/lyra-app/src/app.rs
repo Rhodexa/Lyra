@@ -1694,10 +1694,13 @@ impl LyraApp {
 
     /// The floating windows: instrument editor, effect, design panel.
     fn windows(&mut self, ctx: &egui::Context) {
+        // Lyra's frame: the panel with an outline in its own colour, lifted
+        // off the app by the drawers' shadow; the title row is Lyra's own.
         let frame = egui::Frame::window(&ctx.style())
             .fill(theme::PANEL)
-            .stroke(theme::stroke(1.0, theme::LINE))
+            .stroke(theme::stroke(theme::OUTLINE_W, theme::outline_of(theme::PANEL)))
             .corner_radius(cr(5))
+            .shadow(egui::epaint::Shadow { offset: [0, 4], blur: 10, spread: 1, color: egui::Color32::from_black_alpha(90) })
             .inner_margin(Margin::same(8));
 
         // Default spots (first open only): instrument editor top-right, effect below it.
@@ -1711,14 +1714,16 @@ impl LyraApp {
         if self.ui.show_editor && has_channel {
             let mut open = true;
             let live = self.bridge.live(self.project.channels[ch].id);
-            egui::Window::new(format!("Instrument · {}", self.project.channels[ch].name))
+            let title = format!("Instrument · {}", self.project.channels[ch].name);
+            egui::Window::new(&title)
                 .id(Id::new("editor"))
-                .open(&mut open)
+                .title_bar(false)
                 .pivot(egui::Align2::RIGHT_TOP)
                 .default_pos([screen.right() - 16.0, 54.0])
                 .resizable(false)
                 .frame(frame)
                 .show(ctx, |ui| {
+                    widgets::window_title(ui, &title, &mut open);
                     editor::show(ui, &mut self.project, &mut self.history, ch, live.clone());
                 });
             self.ui.show_editor = open;
@@ -1732,14 +1737,18 @@ impl LyraApp {
             let mut open = true;
             let name = lyra_catalog::effects::info(&self.project.mixer[t].effects[i].effect)
                 .map_or("Missing effect", |e| e.name);
-            egui::Window::new(format!("{name} · {}", self.project.mixer[t].name))
+            let title = format!("{name} · {}", self.project.mixer[t].name);
+            egui::Window::new(&title)
                 .id(Id::new("effect"))
-                .open(&mut open)
+                .title_bar(false)
                 .pivot(egui::Align2::RIGHT_TOP)
                 .default_pos([screen.right() - 16.0, piano_top])
                 .resizable(false)
                 .frame(frame)
-                .show(ctx, |ui| crate::mixer::effect_editor(ui, &mut self.project, &mut self.history, t, i));
+                .show(ctx, |ui| {
+                    widgets::window_title(ui, &title, &mut open);
+                    crate::mixer::effect_editor(ui, &mut self.project, &mut self.history, t, i)
+                });
             if !open {
                 self.ui.effect = None;
             }
@@ -1749,12 +1758,16 @@ impl LyraApp {
             let mut open = true;
             egui::Window::new("Design · sizes")
                 .id(Id::new("design"))
-                .open(&mut open)
+                .title_bar(false)
                 .pivot(egui::Align2::RIGHT_BOTTOM)
                 .default_pos([screen.right() - 16.0, screen.bottom() - 40.0])
                 .resizable(false)
                 .frame(frame)
-                .show(ctx, crate::design::show);
+                .show(ctx, |ui| {
+                    widgets::window_title(ui, "Design · sizes", &mut open);
+                    // Taller than most screens: it scrolls instead of running off the top.
+                    egui::ScrollArea::vertical().max_height(screen.height() - 160.0).show(ui, crate::design::show);
+                });
             self.ui.show_design = open;
         }
     }

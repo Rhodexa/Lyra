@@ -264,6 +264,8 @@ pub enum Icon {
     PanelLeft,
     PanelBottom,
     PanelRight,
+    /// A floating window's close key.
+    Close,
 }
 
 /// Draw an icon centred in `r` (a key's face). Hand-drawn vectors until the
@@ -292,6 +294,10 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, _bg: Col
             let s = if matches!(icon, Icon::Prev) { -1.0 } else { 1.0 };
             let pts = vec![c + vec2(-1.5 * s, -4.5) * u, c + vec2(2.5 * s, 0.0) * u, c + vec2(-1.5 * s, 4.5) * u];
             p.add(Shape::line(pts, line));
+        }
+        Icon::Close => {
+            p.line_segment([c - vec2(4.0, 4.0) * u, c + vec2(4.0, 4.0) * u], line);
+            p.line_segment([c + vec2(-4.0, 4.0) * u, c + vec2(4.0, -4.0) * u], line);
         }
         Icon::Plus | Icon::Minus => {
             p.line_segment([c - vec2(5.0, 0.0) * u, c + vec2(5.0, 0.0) * u], line);
@@ -408,6 +414,29 @@ pub fn module<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
             ui.horizontal_centered(add).inner
         })
         .inner
+}
+
+/// A floating window's title row (its own, not egui's): the name in caps on
+/// the label font, a close key at the right, an engraved line under it like
+/// the editors' headers. The window drags by its background.
+pub fn window_title(ui: &mut Ui, title: &str, open: &mut bool) {
+    let h = theme::m().control_h;
+    ui.horizontal(|ui| {
+        ui.set_height(h);
+        let g = legend_galley(ui, title, 13.0, false, theme::INK);
+        let (r, _) = ui.allocate_exact_size(g.size(), Sense::hover());
+        ui.painter().galley(r.min, g, theme::INK);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if button_sized(ui, vec2(h, h), Legend::Icon(Icon::Close), None, "Close").clicked() {
+                *open = false;
+            }
+        });
+    });
+    let (line, _) = ui.allocate_exact_size(vec2(ui.available_width(), 2.0), Sense::hover());
+    // Edge to edge: across the window's 8 pt margin too.
+    let wide = line.expand2(vec2(8.0, 0.0));
+    ui.ctx().layer_painter(ui.layer_id()).rect_filled(wide, cr(0), theme::GROUND);
+    ui.add_space(4.0);
 }
 
 /// The big toolbar key: the toolbar's height less a module's padding.
@@ -1193,6 +1222,81 @@ pub fn field_label(ui: &Ui, at: Pos2, text: &str) {
         ))
     });
     ui.painter().galley(at, g, theme::INK_DIM);
+}
+
+/// The slider (catalog-next, settled: SL1), for settings (the F12 panel): a
+/// recessed track lit up to a small fader cap, then a quiet number and the
+/// label. Press to jump there and drag (Shift = fine), the wheel steps, a
+/// double-click goes back to `default`. The value stays continuous; only the
+/// readout rounds to `decimals`. Returns the row's response (`changed()`).
+#[allow(clippy::too_many_arguments)]
+pub fn slider(
+    ui: &mut Ui,
+    value: &mut f32,
+    range: std::ops::RangeInclusive<f32>,
+    default: f32,
+    decimals: usize,
+    width: f32,
+    label: &str,
+) -> Response {
+    let h = theme::m().control_h;
+    let (lo, hi) = (*range.start(), *range.end());
+    let span = (hi - lo).max(1e-6);
+    let readout_w = 44.0;
+    let label_g = ui.fonts(|f| f.layout_no_wrap(label.to_string(), theme::read(13.0), theme::INK));
+    let total = vec2(width + 10.0 + readout_w + 10.0 + label_g.size().x, h);
+    let id = ui.next_auto_id(); // labels repeat across sections ("knob size")
+    let (row, _) = ui.allocate_exact_size(total, Sense::hover());
+    let track = Rect::from_min_size(row.min, vec2(width, h));
+    let mut resp = ui.interact(track, id.with("track"), Sense::click_and_drag());
+    let before = *value;
+    // The cap's centre travels between these (it never hangs off the track).
+    let (x0, x1) = (track.left() + 7.5, track.right() - 7.5);
+    if resp.double_clicked() {
+        *value = default;
+    } else if resp.drag_started() && !ui.input(|i| i.modifiers.shift) {
+        if let Some(p) = resp.interact_pointer_pos() {
+            *value = lo + ((p.x - x0) / (x1 - x0)).clamp(0.0, 1.0) * span;
+        }
+    } else if resp.dragged() {
+        let fine = if ui.input(|i| i.modifiers.shift) { 0.1 } else { 1.0 };
+        *value += resp.drag_delta().x / (x1 - x0) * span * fine;
+    }
+    if resp.hovered() {
+        let wheel = ui.input(|i| i.raw_scroll_delta.y);
+        if wheel != 0.0 {
+            *value += wheel.signum() * span / 100.0;
+        }
+    }
+    *value = value.clamp(lo, hi);
+    if *value != before {
+        resp.mark_changed();
+    }
+    let t = (*value - lo) / span;
+    let cx = x0 + t * (x1 - x0);
+    let p = ui.painter();
+    let mid_y = track.center().y;
+    let outer = Rect::from_min_max(pos2(track.left(), mid_y - 4.0), pos2(track.right(), mid_y + 4.0));
+    p.rect_filled(outer, cr(4), Color32::from_gray(0x16));
+    let groove = outer.shrink(2.0);
+    p.rect_filled(groove, cr(2), Color32::from_gray(0x2b));
+    p.rect_filled(Rect::from_min_max(groove.min, pos2(cx, groove.max.y)), cr(2), theme::L_MINT.mid);
+    let hot = resp.hovered() || resp.dragged();
+    let cap = Rect::from_center_size(pos2(cx, mid_y), vec2(15.0, 24.0));
+    p.rect_filled(cap.translate(vec2(0.0, 1.5)), cr(4), Color32::from_black_alpha(64));
+    let body = if hot { Color32::from_gray(0x4b) } else { Color32::from_gray(0x44) };
+    p.rect_filled(cap, cr(4), Color32::from_gray(0x20));
+    p.rect_filled(cap.shrink(1.0), cr(3), theme::mix(body, Color32::WHITE, 0.06));
+    p.rect_filled(cap.shrink(3.0), cr(2), body);
+    p.vline(cx, (cap.top() + 5.0)..=(cap.bottom() - 5.0), stroke(1.0, Color32::from_gray(0x76)));
+    // The readout: a quiet number, fixed width, right-aligned; then the label.
+    let ink = if hot { theme::INK } else { theme::INK_DIM };
+    let num = format!("{:.*}", decimals, *value);
+    let g = ui.fonts(|f| f.layout_no_wrap(num, egui::FontId::monospace(12.0), ink));
+    let rx = track.right() + 10.0 + readout_w;
+    p.galley(pos2(rx - g.size().x, mid_y - g.size().y * 0.5), g, ink);
+    p.galley(pos2(rx + 10.0, mid_y - label_g.size().y * 0.5), label_g, theme::INK);
+    resp
 }
 
 /// The checkbox (catalog-next, settled: C2): a sunken box, backlit with a dark
