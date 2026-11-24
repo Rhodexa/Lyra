@@ -744,9 +744,13 @@ impl Playlist {
             }
         }
         if let Some(g) = &ghost {
+            // The settled drop preview: what will be there, as a ghost clip (a
+            // soft tint of the light and a title strip; no outline).
             let r = view.clip_rect(g);
-            painter.rect_filled(r, cr(4), theme::TEXT.gamma_multiply(0.12));
-            painter.rect_stroke(r, cr(4), stroke(1.5, theme::TEXT.gamma_multiply(0.6)), StrokeKind::Inside);
+            let light = theme::L_MINT;
+            painter.rect_filled(r, cr(2), light.mid.gamma_multiply(0.22));
+            let strip = Rect::from_min_max(r.min, pos2(r.right(), (r.top() + 14.0).min(r.bottom())));
+            painter.rect_filled(strip, egui::CornerRadius { nw: 2, ne: 2, sw: 0, se: 0 }, light.mid.gamma_multiply(0.45));
         }
         if let (Drag::Select { from, .. }, Some(pos)) = (&self.drag, pos) {
             timeline::paint_rubber_band(&painter, *from, pos);

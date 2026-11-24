@@ -827,9 +827,8 @@ impl LyraApp {
     fn poll_export(&mut self, ctx: &egui::Context) {
         let Some(export) = &self.export else { return };
         if !export.thread.is_finished() {
-            let permille = export.progress.load(std::sync::atomic::Ordering::Relaxed);
-            self.toast = Some((format!("Exporting… {}%", permille / 10), false, std::time::Instant::now()));
-            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            // The status bar draws the progress (see `status_bar`).
+            ctx.request_repaint_after(std::time::Duration::from_millis(50));
             return;
         }
         let export = self.export.take().expect("checked above");
@@ -1032,11 +1031,11 @@ impl LyraApp {
                 let layer = egui::LayerId::new(egui::Order::Tooltip, Id::new("sample-drag"));
                 let painter = ctx.layer_painter(layer);
                 let text = crate::samples::display_name(&drag.0);
-                let galley = painter.layout_no_wrap(text, egui::FontId::proportional(theme::m().text), theme::TEXT);
-                let r = egui::Rect::from_min_size(pos + egui::vec2(14.0, 8.0), galley.size() + egui::vec2(16.0, 8.0));
-                painter.rect_filled(r, cr(4), theme::PANEL_HI);
-                painter.rect_stroke(r, cr(4), theme::stroke(1.0, theme::LINE), egui::StrokeKind::Inside);
-                painter.galley(r.min + egui::vec2(8.0, 4.0), galley, theme::TEXT);
+                let galley = painter.layout_no_wrap(text, theme::read(13.0), theme::INK);
+                let r = egui::Rect::from_min_size(pos + egui::vec2(14.0, 8.0), galley.size() + egui::vec2(20.0, 12.0));
+                // The settled drag ghost: a plate with its outline.
+                theme::outlined(&painter, r, theme::CORNER, theme::PLATE);
+                painter.galley(r.min + egui::vec2(10.0, 6.0), galley, theme::INK);
             }
         }
         for err in self.samples.take_errors() {
@@ -1767,6 +1766,26 @@ impl LyraApp {
             .frame(egui::Frame::default().fill(theme::TOOLBAR).inner_margin(Margin::symmetric(8, 0)))
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
+                    // Busy (catalog-next, settled): never block, never spin. A
+                    // pulsing activity light, the task, a progress track lit to
+                    // where it is, and a quiet percentage.
+                    if let Some(export) = self.export.as_ref().filter(|e| !e.thread.is_finished()) {
+                        let f = export.progress.load(Relaxed) as f32 / 1000.0;
+                        let t = ui.input(|i| i.time);
+                        let pulse = 0.4 + 0.6 * (0.5 + 0.5 * (t * std::f64::consts::TAU * 1.1).sin()) as f32;
+                        let (dot, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                        ui.painter().circle_filled(dot.center(), 5.0, theme::outline_of(theme::L_MINT.mid));
+                        ui.painter().circle_filled(dot.center(), 3.5, theme::L_MINT.mid.gamma_multiply(pulse));
+                        ui.label(RichText::new("Exporting…").font(theme::read(12.0)).color(theme::INK_DIM));
+                        let (track, _) = ui.allocate_exact_size(egui::vec2(220.0, 8.0), egui::Sense::hover());
+                        ui.painter().rect_filled(track, theme::cr(4), theme::GROUND);
+                        let bed = track.shrink(2.0);
+                        ui.painter().rect_filled(bed, theme::cr(2), egui::Color32::from_rgb(0x2b, 0x2b, 0x2b));
+                        let lit = egui::Rect::from_min_size(bed.min, egui::vec2(bed.width() * f.clamp(0.0, 1.0), bed.height()));
+                        ui.painter().rect_filled(lit, theme::cr(2), theme::L_MINT.mid);
+                        ui.label(RichText::new(format!("{:>3.0} %", f * 100.0)).font(egui::FontId::monospace(12.0)).color(theme::INK_DIM));
+                        ui.add_space(12.0);
+                    }
                     // A short message (saved, opened, errors) for a few seconds.
                     if let Some((text, error, at)) = &self.toast {
                         if at.elapsed() < Duration::from_secs(if *error { 8 } else { 4 }) {
