@@ -115,6 +115,32 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .on-deep .btn.on{--b:color-mix(in srgb,var(--mid),black 55%);color:var(--hi)}
 .on-deep .hit:hover .btn.on,.on-deep .btn.on.is-hover{--b:color-mix(in srgb,var(--mid),black 45%)}
 .on-deep .hit:active .btn.on,.on-deep .btn.on.is-press{--b:color-mix(in srgb,var(--mid),black 63%)}
+/* ═════════ MODE SWITCH (draft 1) ═════════
+   One choice among a few, joined into one object.
+   A · joined: the button plates fused; square corners where they touch, one shared outline.
+   B · track: a sunken well; bare labels; the chosen one is a backlit plate inside it.     */
+.seg{display:inline-flex;align-items:stretch}
+.seg .hit{min-width:0}
+.seg .hit+.hit{margin-left:calc(var(--btn-bw) * -1)}
+.seg .btn{border-radius:0;position:relative}
+.seg .hit:first-child .btn{border-radius:calc(var(--btn-r) * var(--k)) 0 0 calc(var(--btn-r) * var(--k))}
+.seg .hit:last-child .btn{border-radius:0 calc(var(--btn-r) * var(--k)) calc(var(--btn-r) * var(--k)) 0}
+.seg .btn.on{z-index:1}
+.seg.vert{flex-direction:column}
+.seg.vert .hit+.hit{margin-left:0;margin-top:calc(var(--btn-bw) * -1)}
+.seg.vert .hit:first-child .btn{border-radius:calc(var(--btn-r) * var(--k)) calc(var(--btn-r) * var(--k)) 0 0}
+.seg.vert .hit:last-child .btn{border-radius:0 0 calc(var(--btn-r) * var(--k)) calc(var(--btn-r) * var(--k))}
+.seg.vert .btn{width:100%}
+.track{--k:1;display:inline-flex;align-items:center;gap:2px;padding:3px;background:var(--sunken);
+  border:var(--btn-bw) solid color-mix(in srgb,var(--sunken),black var(--btn-ol));border-radius:calc((var(--btn-r) + 3px) * var(--k))}
+.track .hit{min-height:0}
+.track .btn{height:calc(var(--h) - 10px);--b:transparent;border-color:transparent;color:var(--ink-dim)}
+.track .hit:hover .btn{--b:transparent;color:var(--ink)}
+.track .btn.on{--b:var(--low);border-color:color-mix(in srgb,var(--low),black var(--btn-ol));color:color-mix(in srgb,var(--rim),black 68%)}
+.track .hit:hover .btn.on{--b:var(--mid)}
+.track.S{--h:var(--s);--k:.75} .track.M{--h:var(--m)} .track.L{--h:var(--l);--k:1.25}
+.track.S .btn{height:calc(var(--h) - 8px)}
+.ms-grid{display:grid;grid-template-columns:150px 1fr 1fr 1fr;gap:16px 20px;align-items:center}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -211,6 +237,24 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <div class="row" id="vs"></div>
   
 </div>
+
+<!-- ═════════════════════════ MODE SWITCH ═════════════════════════ -->
+<h2>Mode switch <span class="draft">UI-NEEDS 2 · DRAFT 1</span></h2>
+<p>One choice among a few: a radio group, joined into one object so it reads as "pick one" before you click. Two options <b>toggle</b> when you click either one (SONG / PAT, as you like it); three or more behave as a radio. The chosen option is backlit, like a button that's on. Three ways to build it; click them.</p>
+<div class="card">
+  <div class="ms-grid" id="ms-matrix"></div>
+</div>
+<div class="card">
+  <h3>In context</h3>
+  <div class="caps" style="margin-bottom:6px">Toolbar · L · SONG / PAT, each with its own light</div>
+  <div class="bar" id="ms-toolbar"></div>
+  <div class="caps" style="margin:14px 0 6px">Editor header · M · the arrangement's tools, then snap</div>
+  <div class="plate" id="ms-header"></div>
+  <div class="caps" style="margin:14px 0 6px">A plate · M · EDITOR / RECORDER</div>
+  <div class="plate" id="ms-plate"></div>
+  <div class="caps" style="margin:14px 0 6px">Vertical · a tool column</div>
+  <div class="row" id="ms-vert" style="align-items:flex-start"></div>
+</div>
 </main>
 
 <script>
@@ -230,6 +274,10 @@ const ICON = {
   loop:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9V6a2 2 0 012-2h7m-2-2l2 2-2 2M13 7v3a2 2 0 01-2 2H4m2 2l-2-2 2-2"/></svg>',
   plus:'<svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>',
   trash:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5"/></svg>',
+  pointer:'<svg viewBox="0 0 16 16"><path d="M4 2l8 7H8.6l2 4.3-1.6.7-2-4.3L4 12z" fill="currentColor"/></svg>',
+  pencil:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 13l1-3.5L11 2.5 13.5 5 6.5 12zM9.5 4l2.5 2.5"/></svg>',
+  slice:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5v13M3 5h3M3 11h3M10 5h3M10 11h3"/></svg>',
+  mute:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M4.2 11.8l7.6-7.6"/></svg>',
   snap:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 3v10M8 3v10M13 3v10"/></svg>',
 };
 // A button: size S/M/L, legend (text or icon name), toggles on click unless `push`.
@@ -367,6 +415,50 @@ document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.
   add('draft 7 · on (deep)', (() => { const x = h('span', 'flat1', null, 'REVERSE'); x.style.cssText = "border-radius:4px;background:#526b5f;box-shadow:inset 0 0 0 2px #29362f;color:#d5ffe7;font:700 13px 'Roboto Condensed',system-ui;letter-spacing:.04em;padding:0 16px"; return x; })());
   add('draft 8 · off', button('M', 'Reverse', {push: true})); add('draft 8 · on (backlit)', button('M', 'Reverse', {on: true, push: true}));
   document.querySelectorAll('.btn,.flat1').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
+})();
+
+// ── mode switch ──
+// kind: 'A' joined, 'B' track, 'C' loose buttons. opts: [legend, light?]. Two options toggle.
+function modeSwitch(kind, size, opts, chosen = 0, o = {}) {
+  const box = h('span', kind === 'A' ? 'seg' + (o.vert ? ' vert' : '') : kind === 'B' ? 'track ' + size : 'row');
+  if (kind === 'C') box.style.gap = 'var(--gap-in)';
+  const hits = opts.map(([legend, lt], i) => {
+    const hit = button(size, legend, {push: true, on: i === chosen, light: lt || 'mint', minw: o.minw});
+    box.append(hit); return hit;
+  });
+  const pick = i => { chosen = i; hits.forEach((x, k) => x.querySelector('.btn').classList.toggle('on', k === chosen)); };
+  hits.forEach((x, i) => x.addEventListener('click', () => pick(opts.length === 2 ? 1 - chosen : i)));
+  return box;
+}
+(() => {
+  const m = $('#ms-matrix');
+  ['', 'A · joined', 'B · track', 'C · loose buttons (today)'].forEach(t => h('div', 'caps', m, t));
+  const rows = [
+    ['S · 28 · text', 'S', [['Song'], ['Pat', 'amber']], {minw: '56px'}],
+    ['M · 40 · text', 'M', [['Editor'], ['Recorder']], {}],
+    ['M · 40 · icons', 'M', [['pointer'], ['pencil'], ['slice'], ['mute']], {}],
+    ['L · 52 · text', 'L', [['Song'], ['Pat', 'amber']], {minw: '92px'}],
+    ['L · 52 · 3 options', 'L', [['Bar'], ['Beat'], ['Step']], {minw: '72px'}],
+  ];
+  for (const [label, size, opts, o] of rows) {
+    h('div', 'caps', m, label);
+    for (const kind of ['A', 'B', 'C']) { const c = h('div', '', m); c.append(modeSwitch(kind, size, opts, 0, o)); }
+  }
+  $('#ms-toolbar').append(button('L', 'play', {push: true}), button('L', 'stop', {push: true}));
+  const sp = h('span', '', $('#ms-toolbar')); sp.style.width = '12px';
+  $('#ms-toolbar').append(modeSwitch('A', 'L', [['Song'], ['Pat', 'amber']], 0, {minw: '92px'}));
+  const sp2 = h('span', '', $('#ms-toolbar')); sp2.style.width = '24px';
+  $('#ms-toolbar').append(modeSwitch('B', 'L', [['Song'], ['Pat', 'amber']], 0, {minw: '92px'}));
+  const hd = $('#ms-header'); h('span', '', hd, 'Arrangement').style.cssText = 'font-size:14px;margin-right:16px';
+  hd.append(modeSwitch('A', 'M', [['pointer'], ['pencil'], ['slice'], ['mute']]));
+  const g = h('span', '', hd); g.style.width = '16px';
+  hd.append(modeSwitch('B', 'M', [['pointer'], ['pencil'], ['slice'], ['mute']]));
+  const g2 = h('span', '', hd); g2.style.marginLeft = 'auto'; hd.append(button('M', 'Bar', {push: true}));
+  const pl = $('#ms-plate'); h('span', 'caps', pl, 'Tape'); pl.append(modeSwitch('A', 'M', [['Editor'], ['Recorder']], 1, {minw: '96px'}));
+  const g3 = h('span', '', pl); g3.style.width = '24px'; pl.append(modeSwitch('B', 'M', [['Editor'], ['Recorder']], 1, {minw: '96px'}));
+  const v = $('#ms-vert');
+  v.append(modeSwitch('A', 'M', [['pointer'], ['pencil'], ['slice'], ['mute']], 1, {vert: true}));
+  document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
 </body>
