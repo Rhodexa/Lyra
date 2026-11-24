@@ -162,10 +162,8 @@ pub fn set_metrics(ctx: &Context, metrics: Metrics) {
 // ground colour; a control's outline is its own colour mixed toward black.
 
 /// Behind everything; shows only in the gaps between panels.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const GROUND: Color32 = BG;
 /// Panels, strips, plates.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const SURFACE: Color32 = PANEL;
 /// A selected surface (a strip, a row).
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)

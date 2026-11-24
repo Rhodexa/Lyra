@@ -714,10 +714,9 @@ pub fn panel_header(
     fold_on_left: bool,
     fold_hint: &str,
 ) -> (Option<usize>, bool) {
-    let m = theme::m();
-    let h = m.control_h + 4.0;
+    let h = theme::m().control_h;
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
-    ui.painter().rect_filled(r, cr(0), theme::BG);
+    ui.painter().rect_filled(r, cr(0), theme::GROUND);
     let (fold, rest) = if fold_on_left {
         (Rect::from_min_size(r.min, vec2(h, h)), Rect::from_min_max(pos2(r.left() + h + theme::SEAM, r.top()), r.max))
     } else {
@@ -727,44 +726,86 @@ pub fn panel_header(
         )
     };
     let id = ui.id().with(("panel-header", tabs.first().copied().unwrap_or("")));
-    let off = theme::mix(theme::BG, theme::PANEL, 0.55);
     let clicked = tab_row(ui, rest, tabs, chosen, id);
+    // The fold key: a tab that isn't chosen, with a chevron.
     let resp = ui.interact(fold, id.with("fold"), Sense::click());
-    ui.painter().rect_filled(fold, cr(0), if resp.hovered() { theme::mix(off, theme::PANEL, 0.5) } else { off });
+    let body = if resp.hovered() { TAB_HOVER } else { TAB_OFF };
+    paint_tab(ui.painter(), fold, body, false, fold_on_left, !fold_on_left);
     let icon = if fold_on_left { Icon::Next } else { Icon::Prev };
-    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
-    paint_icon(ui.painter(), fold.shrink(h * 0.22), icon, ink, off);
+    let ink = if resp.hovered() { theme::INK } else { theme::INK_DIM };
+    paint_icon(ui.painter(), fold.shrink(h * 0.26).translate(vec2(0.0, -1.0)), icon, ink, body);
     let folded = resp.on_hover_text(fold_hint).clicked();
     (clicked, folded)
 }
 
-/// Tabs: equal cells across `r`, the chosen one in the panel's colour (it
-/// joins what's below it), the others recessed. The one tab look, for panel
-/// headers and for any view's own tabs. Returns the tab clicked.
+/// The colour of a tab that isn't chosen (it sits back, darker).
+const TAB_OFF: Color32 = Color32::from_rgb(0x20, 0x20, 0x20);
+const TAB_HOVER: Color32 = Color32::from_rgb(0x26, 0x26, 0x26);
+
+/// One folder tab in `cell` (catalog-next.html, settled): square top, rounded
+/// bottom unless chosen; the chosen one is the panel's own colour and flows
+/// into it. Neighbours share one outline (half of it each); no outline on the
+/// top (the seam is the edge) nor on the row's outer ends.
+fn paint_tab(p: &egui::Painter, cell: Rect, body: Color32, on: bool, first: bool, last: bool) {
+    let bw = theme::OUTLINE_W;
+    let r = if on { 0 } else { theme::CORNER as u8 };
+    let corners = egui::CornerRadius { nw: 0, ne: 0, sw: r, se: r };
+    p.rect_filled(cell, corners, theme::outline_of(body));
+    let inner = Rect::from_min_max(
+        pos2(cell.left() + if first { 0.0 } else { bw * 0.5 }, cell.top()),
+        pos2(cell.right() - if last { 0.0 } else { bw * 0.5 }, cell.bottom() - if on { 0.0 } else { bw }),
+    );
+    let ri = r.saturating_sub(bw as u8);
+    p.rect_filled(inner, egui::CornerRadius { nw: 0, ne: 0, sw: ri, se: ri }, body);
+}
+
+/// Caps text that fits `max_w`, ending in "…" if it has to.
+fn fitted_caps(ui: &Ui, text: &str, size: f32, max_w: f32, color: Color32) -> std::sync::Arc<egui::Galley> {
+    let full = legend_galley(ui, text, size, false, color);
+    if full.size().x <= max_w {
+        return full;
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut n = chars.len();
+    while n > 1 {
+        n -= 1;
+        let t: String = chars[..n].iter().collect::<String>().trim_end().to_string() + "…";
+        let g = legend_galley(ui, &t, size, false, color);
+        if g.size().x <= max_w {
+            return g;
+        }
+    }
+    legend_galley(ui, "…", size, false, color)
+}
+
+/// Folder tabs: equal cells across `r` on the ground strip, the chosen one in
+/// the panel's colour (it joins what's below it), the others darker with
+/// rounded bottoms. The one tab look, for panel headers and any view's own
+/// tabs. Returns the tab clicked.
 pub fn tab_row(ui: &mut Ui, r: Rect, tabs: &[&str], chosen: usize, id: egui::Id) -> Option<usize> {
-    let m = theme::m();
-    ui.painter().rect_filled(r, cr(0), theme::BG);
-    let off = theme::mix(theme::BG, theme::PANEL, 0.55);
+    ui.painter().rect_filled(r, cr(0), theme::GROUND);
     let mut clicked = None;
-    for (i, cell) in crate::flex::even_row(r, tabs.len(), theme::SEAM).into_iter().enumerate() {
+    let n = tabs.len();
+    for (i, cell) in crate::flex::even_row(r, n, 0.0).into_iter().enumerate() {
         let resp = ui.interact(cell, id.with(i), Sense::click());
         let on = i == chosen;
-        let fill = if on {
-            theme::PANEL
+        let body = if on {
+            theme::SURFACE
         } else if resp.hovered() {
-            theme::mix(off, theme::PANEL, 0.5)
+            TAB_HOVER
         } else {
-            off
+            TAB_OFF
         };
-        ui.painter().rect_filled(cell, cr(0), fill);
-        let ink = if on || resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
-        ui.painter().with_clip_rect(cell).text(
-            cell.center(),
-            egui::Align2::CENTER_CENTER,
-            tabs[i],
-            egui::FontId::proportional(m.text_small + 1.0),
-            ink,
-        );
+        paint_tab(ui.painter(), cell, body, on, i == 0, i + 1 == n);
+        let ink = if on || resp.hovered() { theme::INK } else { theme::INK_DIM };
+        let g = fitted_caps(ui, tabs[i], legend_size(cell.height()), cell.width() - 10.0, ink);
+        let at = cell.center() - g.size() * 0.5 - vec2(0.0, if on { 0.0 } else { theme::OUTLINE_W * 0.5 });
+        ui.painter().galley(at, g, ink);
+        let resp = if fitted_caps(ui, tabs[i], legend_size(cell.height()), f32::MAX, ink).size().x > cell.width() - 10.0 {
+            resp.on_hover_text(tabs[i])
+        } else {
+            resp
+        };
         if resp.clicked() {
             clicked = Some(i);
         }
