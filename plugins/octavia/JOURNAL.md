@@ -57,6 +57,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-23)* What happens when the player releases a stopped (non-open) string while it's still decaying?
   - Claude: the finger lifting turns the string back into the open string: the stopped note is choked, the leftover energy rings faintly at the open pitch, plus a tiny pluck from the finger leaving. Modelled now: before a rest, once a stopped note has died to about a quarter (as players wait), the finger lifts. Not for open strings, plucks, double stops, or when the next note is close. Demo: `scores/lifts.txt` → `renders/lifts.wav`.
 
+- [x] *(Rhodexa, 2026-11-23)* "You have no idea how good Rainbow Tylenol sounds with this." Ran: `midi/rainbow.mid --instrument violin --bright 0.3 --transpose -12`.
+  - Claude: now a reference piece. `scripts/refs.sh` re-renders every piece Rhodexa liked with its exact settings and lists the notes that are now played differently; `--accept` makes a run the new baseline. I run it after every performer change.
+
 ## Wishes
 
 - [ ]

@@ -60,6 +60,13 @@ next note down as a **double stop** when it's held and playable
 is shifted by octaves into the instrument's range. The extracted line is
 written as `NAME.roll`, so you can see and edit what Octavia plays.
 
+## Reference pieces
+
+`scripts/refs.sh` re-renders the pieces that already sound right (with their
+exact settings) into `renders/refs/` and lists any note now played
+differently. `scripts/refs.sh --accept` takes the current run as the new
+baseline. Add a line to the script when a new piece earns its place.
+
 ## Score format
 
 ```text
