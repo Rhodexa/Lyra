@@ -129,6 +129,17 @@ What I'd *drop* from Lyra's own set: the silicone key (now Fluttersine's),
 the choice widget (the mode switch replaces it) and the number well (the
 dropdown and number picker replace it).
 
+## Pass two (after the port)
+
+Views designed from the settled widgets, once they exist in the app:
+
+- **Transport**: play, stop, record, loop, and how they sit together.
+- **BPM control**: the tempo display and its friends (tap tempo? time signature?).
+- **Master volume**: the master fader or knob with its meter.
+- **Oscilloscope / spectrum analyser**: a scope or spectrum in the toolbar or a panel.
+- Open from the mock: the colour chip beside the LED doubles the track's colour;
+  rounded docked panels (deferred, not rejected: needs content kept off the corners).
+
 ## Questions for you
 
 1. **Rounded corners on tiles** (clips, steps, rows)? My suggestion: a 2 px
