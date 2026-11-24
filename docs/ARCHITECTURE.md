@@ -293,6 +293,39 @@ key root and a scale. The piano roll uses them to highlight rows and to build
 "in key" chords: stacked scale thirds from the clicked note, which snaps into
 the key first.
 
+## UI layout
+
+* **The flexbox: `lyra-app/src/flex.rs`.** Layout by arithmetic. Take a
+  rectangle and split it into a row or a column of parts. Each part is fixed
+  (`Px(28.0)`) or a share of what's left (`Grow(1.0)`), with a gap between parts:
+
+  ```rust
+  let [tabs, bar, plates] = flex::col(left, [Px(32.0), Px(40.0), Grow(1.0)], 0.0);
+  let [name, field] = flex::row(r, [Px(80.0), Grow(1.0)], 6.0);
+  let cells = flex::even_row(r, 7, 4.0);   // seven equal columns (also even_col)
+  let key = flex::center(r, vec2(28.0, 28.0));
+  ```
+
+  Padding is `Rect::shrink` / `shrink2` on the rectangle before splitting it.
+  Hand-made views (the audio-clip editor, the automation editor, Chrysalis)
+  are built this way: allocate one rectangle, split it, paint and interact in
+  the parts. Pieces then line up and fill their space, with no pixel numbers
+  scattered around. Prefer it to egui's `horizontal` / `vertical` for
+  anything that must line up.
+* **One row = one height, one column = one width.** Controls stacked in a
+  column share its left edge and width (the Recorder plate). Keys in a row
+  share its height. When something won't line up, look for a part sized by
+  hand next to one sized by flex.
+* **Areas have no padding.** The two centre areas (`app::area_ui`) are
+  frames with no margin. The header row pads itself (8 px at the sides) and
+  ends in an engraved line. The editor gets the rest of the area exactly, so
+  timelines, rulers and bars run edge to edge. An editor that wants padding
+  brings its own (the step sequencer wraps itself in an 8 px frame).
+* **Tabs vs mode switch.** Folder tabs (`tab_row`) switch between tools or
+  pages that sit under them, like EDITOR / RECORDER, two tools that work
+  together. The mode switch (`choice`) is for one setting with a few values
+  (SONG / PAT).
+
 ## Conventions
 
 * Parameter `id` = its index in the plugin's `params()` list. Built-in instrument
@@ -302,11 +335,7 @@ the key first.
   `ctx.input(|i| …)` (or `memory`, `data`…) closure. egui's context lock is not
   re-entrant, so the nested call deadlocks the UI thread. Copy the values out
   first, then call. (This froze the app on the first click in v0.1.)
-* **Layout by arithmetic:** `lyra-app/src/flex.rs` splits a rectangle into
-  rows or columns of fixed (`Px`) and growing (`Grow`) parts with gaps, like a
-  tiny flexbox. Hand-made panels use it so pieces line up and fill their
-  space instead of being placed with pixel numbers (Chrysalis's editor is
-  built on it).
+* **Layout:** see "UI layout" below.
 * Scroll bars everywhere are Lyra's (set once in `theme::apply`): solid,
   always visible, one width, well and thumb colours; egui's default thin
   floating bars are gone.
