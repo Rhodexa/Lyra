@@ -549,15 +549,7 @@ pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
         (s.tape.frames() > 0, s.state != State::Stopped, s.level, s.threshold, s.wait_for_sound)
     };
     let row = m.control_h + 6.0;
-    let label = |ui: &mut Ui, y: f32, text: &str| {
-        ui.painter().text(
-            pos2(body.left(), y),
-            Align2::LEFT_TOP,
-            text,
-            FontId::proportional(m.text_small),
-            theme::TEXT_DIM,
-        );
-    };
+    let label = |ui: &mut Ui, y: f32, text: &str| widgets::field_label(ui, pos2(body.left(), y), text);
     let field = |y: f32| Rect::from_min_size(pos2(body.left(), y), vec2(body.width(), m.control_h));
     // Where it listens.
     let mut y = body.top();

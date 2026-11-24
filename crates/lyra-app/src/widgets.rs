@@ -1108,6 +1108,37 @@ fn show_hint(ctx: &egui::Context, id: egui::Id, under: Rect, text: &str) {
         });
 }
 
+/// A plate's title (catalog-next, settled: engraved + tag): a tag in the
+/// plate's top-left corner, the ground's colour, square where it meets the
+/// plate's edges and rounded at its free corner, the title in caps. Returns
+/// how tall it is (lay the plate's fields out below it).
+pub fn plate_tag(ui: &Ui, plate: Rect, title: &str) -> f32 {
+    let g = ui.fonts(|f| {
+        f.layout_job(egui::text::LayoutJob::single_section(
+            title.to_uppercase(),
+            egui::TextFormat { font_id: theme::label(11.0), color: theme::INK_DIM, extra_letter_spacing: 1.1, ..Default::default() },
+        ))
+    });
+    // The engraved line the tag hangs from, across the plate's top.
+    let line = Rect::from_min_size(plate.min, vec2(plate.width(), theme::OUTLINE_W));
+    ui.painter().rect_filled(line, cr(0), theme::GROUND);
+    let r = Rect::from_min_size(plate.min, g.size() + vec2(16.0, 8.0));
+    ui.painter().rect_filled(r, egui::CornerRadius { nw: 0, ne: 0, sw: 0, se: 5 }, theme::GROUND);
+    ui.painter().galley(r.min + vec2(8.0, 4.0), g, theme::INK_DIM);
+    r.height()
+}
+
+/// A field's label (catalog-next, settled): small caps above its control.
+pub fn field_label(ui: &Ui, at: Pos2, text: &str) {
+    let g = ui.fonts(|f| {
+        f.layout_job(egui::text::LayoutJob::single_section(
+            text.to_uppercase(),
+            egui::TextFormat { font_id: theme::label(10.0), color: theme::INK_DIM, extra_letter_spacing: 0.8, ..Default::default() },
+        ))
+    });
+    ui.painter().galley(at, g, theme::INK_DIM);
+}
+
 /// One row of a [`dropdown`].
 #[derive(Clone, Default)]
 pub struct DropRow {

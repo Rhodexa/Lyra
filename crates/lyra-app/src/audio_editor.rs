@@ -768,14 +768,7 @@ fn knob_plate(
 ) -> PlateEdit {
     let m = theme::m();
     ui.painter().rect_filled(area, cr(0), theme::PANEL);
-    ui.painter().text(
-        area.left_top() + vec2(8.0, 6.0),
-        Align2::LEFT_TOP,
-        title,
-        FontId::proportional(m.text_small),
-        theme::TEXT_DIM,
-    );
-    let top = area.top() + 12.0 + m.text_small;
+    let top = area.top() + widgets::plate_tag(ui, area, title) + 8.0;
     let cell = vec2(area.width() * 0.5, m.knob_large + 2.0 * m.text_small + 12.0);
     let mut edit = PlateEdit { checkpoint: false, change: None };
     for (k, &(info, (col, row))) in knobs.iter().enumerate() {
