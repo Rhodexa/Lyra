@@ -307,8 +307,9 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
    Plate: a titled group of fields. P1 engraved (no box) · P2 boxed, title on a corner tag
    (the LCD tag's shape) · P3 a title strip. Field: a caps label above its control.   */
 .area{background:var(--surface);width:100%;max-width:1060px}
-.hdr{display:flex;align-items:center;gap:var(--gap-in);padding:4px;border-bottom:var(--btn-bw) solid var(--edge)}
-.hdr .sep{width:var(--btn-bw);align-self:stretch;margin:3px 4px;background:var(--edge);border-radius:1px}
+/* every separation line inside a panel is the GROUND colour: a slit showing the background, like the seams between modules */
+.hdr{display:flex;align-items:center;gap:var(--gap-in);padding:4px;border-bottom:var(--btn-bw) solid var(--ground)}
+.hdr .sep{width:var(--btn-bw);align-self:stretch;margin:3px 4px;background:var(--ground);border-radius:1px}
 .hdr .grow{flex:1}
 .hdr .title{font:13px var(--read-font);color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;padding:0 4px}
 .area .bodyrow{display:flex;gap:10px;padding:10px;align-items:stretch}
@@ -321,17 +322,20 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .field>.caps{font-size:10px}
 /* P1 engraved */
 .p1 .pl{padding:2px 12px}
-.p1 .pl+.pl{border-left:var(--btn-bw) solid var(--edge)}
+.p1 .pl+.pl{border-left:var(--btn-bw) solid var(--ground)}
 /* P2 boxed, title on a corner tag */
 .p2 .pl{padding:28px 10px 10px;border:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:calc(var(--btn-r) + var(--btn-bw))}
 .p2 .pl .pt{position:absolute;top:0;left:0;padding:4px 8px 4px 7px;background:color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:var(--btn-r) 0 5px 0}
 /* P4 engraved + tag: no boxes; the dividers and the title tags hang from the header's line */
-.p4 .bodyrow{padding-top:0}
+.p4 .bodyrow{padding-top:0;padding-left:0}
 .p4 .pl{padding:30px 12px 4px}
-.p4 .pl+.pl{border-left:var(--btn-bw) solid var(--edge)}
-.p4 .pl .pt{position:absolute;top:0;left:0;padding:4px 8px 4px 7px;background:color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:0 0 5px 0}
+.p4 .pl+.pl{border-left:var(--btn-bw) solid var(--ground)}
+.p4 .pl .pt{position:absolute;top:0;left:0;padding:4px 8px 4px 7px;background:var(--ground);border-radius:0 0 5px 0}
 .p4 .pl+.pl .pt{left:0}
 .p4 .wave{margin-top:10px}
+/* P5 raised: no border, the plate a step lighter (a THIRD surface level: rare, for explicitly modular things) */
+.p5 .pl{padding:28px 10px 10px;background:var(--surface-sel);border-radius:calc(var(--btn-r) + var(--btn-bw))}
+.p5 .pl .pt{position:absolute;top:0;left:0;padding:4px 8px 4px 7px;background:var(--ground);border-radius:calc(var(--btn-r) + var(--btn-bw)) 0 5px 0}
 /* P3 title strip */
 .p3 .pl{padding:0 0 10px;border:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:calc(var(--btn-r) + var(--btn-bw));overflow:hidden}
 .p3 .pl .pt{padding:6px 10px;background:#232323;border-bottom:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol))}
@@ -519,7 +523,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 
 <!-- ═════════════════════════ HEADER, PLATE, FIELD ═════════════════════════ -->
 <h2>Header row · plate · field <span class="draft">UI-NEEDS 7 · 8 · 9 · DRAFT 2</span></h2>
-<p>The pieces an editor is built from, shown as a real one: the audio-clip editor. <b>Header</b>: name on the left, actions on the right, groups apart with an engraved divider; one height per header (compact = S, normal = M). <b>Plate</b>: a titled group of fields. <b>Draft 2: engraved + tag</b> is the default (compact and readable: no boxes, the dividers and title tags hang from the header's line); <b>Tag (boxed)</b> is for bigger, explicitly modular things; Engraved and Strip stay for comparison. <b>Field</b>: a small caps label above its control. Small numbers use the LCD (the strategy from the number picker).</p>
+<p>The pieces an editor is built from, shown as a real one: the audio-clip editor. <b>Header</b>: name on the left, actions on the right, groups apart with an engraved divider; one height per header (compact = S, normal = M). <b>Plate</b>: a titled group of fields. <b>Draft 2: engraved + tag</b> is the default (compact and readable: no boxes, the dividers and title tags hang from the header's line); <b>Tag (boxed)</b> or <b>Raised</b> (no border, a step lighter: a third surface level, so rare) are for bigger, explicitly modular things; Engraved and Strip stay for comparison. Every separation line is the <b>ground</b> colour: a slit showing the background, like the seams between modules. <b>Field</b>: a small caps label above its control. Small numbers use the LCD (the strategy from the number picker).</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Plates</span><span id="pl-style"></span></div>
   <div class="caps" style="margin-bottom:6px">Compact header · S (28) · the audio-clip editor</div>
@@ -1016,7 +1020,7 @@ function editor(host, size, page) {
 }
 (() => {
   editor($('#ed-compact'), 'S', 0); editor($('#ed-normal'), 'M', 1);
-  const names = ['Engraved + tag', 'Engraved', 'Tag (boxed)', 'Strip'], cls = ['p4', 'p1', 'p2', 'p3'];
+  const names = ['Engraved + tag', 'Engraved', 'Tag (boxed)', 'Raised', 'Strip'], cls = ['p4', 'p1', 'p2', 'p5', 'p3'];
   const sw = modeSwitch('B', 'S', names.map(n => [n]), 0);
   sw.addEventListener('click', () => setTimeout(() => { const i = [...sw.querySelectorAll('.btn')].findIndex(b => b.classList.contains('on'));
     document.querySelectorAll('.area').forEach(a => { cls.forEach(c => a.classList.remove(c)); a.classList.add(cls[i]); }); }));
