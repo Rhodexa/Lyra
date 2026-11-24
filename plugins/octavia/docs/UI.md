@@ -5,6 +5,22 @@ Colour and mood: `design/vibe-2026-11-23.png`. Mauve-grey body, pink for
 Lyra's existing views, as a page inside the instrument window (no new
 windows).
 
+## The display: properly cheap (Rhodexa, 2026-11-23)
+
+A real budget LCD, not a smooth screen:
+
+- **Dot matrix** for the performer view: a coarse pixel grid (on the order
+  of 128×48), square dots with visible gaps, unlit dots faintly ghosted on
+  the cream glass, dark dots only, no anti-aliasing, no gradients. The note
+  lane, strings, hand and bow traces are drawn *in dots*, which suits
+  them: the curves are already stepped at 250 frames a second.
+- **Segment digits** (7/14-segment, with the faint unlit segments showing)
+  for numbers and short words: knob values, the preset number, "ARCO" /
+  "PIZZ".
+- Decision colours can't exist on a one-colour LCD, so on the screen they
+  become dot *patterns* (solid, hollow, dotted, a bouncing dot for
+  spiccato…). Colour stays for the plots and the knobs' pink.
+
 ## What it should show: the performer thinking
 
 The thing no other instrument has is a player making decisions, so the
