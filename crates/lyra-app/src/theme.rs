@@ -179,7 +179,6 @@ pub const LEGEND: Color32 = Color32::from_rgb(0xb0, 0xb0, 0xb0);
 /// Disabled.
 pub const INK_FAINT: Color32 = Color32::from_rgb(0x5c, 0x5c, 0x5c);
 /// Text on a lit body or an LCD.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const INK_ON_LIGHT: Color32 = Color32::from_rgb(0x2c, 0x2c, 0x2c);
 /// The dim LCD (settled): pale panel, dark ink.
 pub const LCD_DIM: Color32 = LCD;
@@ -309,22 +308,26 @@ pub fn apply(ctx: &Context) {
     v.window_stroke = stroke(1.0, LINE);
     v.window_shadow = egui::epaint::Shadow::NONE;
     v.popup_shadow = egui::epaint::Shadow::NONE;
-    v.selection.bg_fill = MINT_DEEP;
-    v.selection.stroke = stroke(1.0, MINT);
+    // Selected (a menu's chosen item): backlit, like a button that's on.
+    v.selection.bg_fill = L_MINT.low;
+    v.selection.stroke = stroke(1.0, INK_ON_LIGHT);
     v.widgets.noninteractive.bg_fill = PANEL;
     v.widgets.noninteractive.bg_stroke = stroke(1.0, LINE);
-    // Plain buttons: the small flat M / S buttons from the mixer study.
-    let edge = stroke(1.0, Color32::from_rgb(0x1b, 0x1b, 0x1b));
-    let corner = cr(4);
+    // egui's own buttons (the few left until their areas are ported) look like
+    // Lyra's: the plate, a 2 px outline in its own colour, lighter on hover,
+    // darker while pressed.
+    let corner = cr(CORNER as u8);
+    let hover = mix(PLATE, Color32::WHITE, 0.09);
+    let press = mix(PLATE, Color32::BLACK, 0.18);
     for (w, fill) in [
-        (&mut v.widgets.inactive, RAISED),
-        (&mut v.widgets.hovered, Color32::from_rgb(0x44, 0x44, 0x44)),
-        (&mut v.widgets.active, MINT_DEEP),
-        (&mut v.widgets.open, Color32::from_rgb(0x44, 0x44, 0x44)),
+        (&mut v.widgets.inactive, PLATE),
+        (&mut v.widgets.hovered, hover),
+        (&mut v.widgets.active, press),
+        (&mut v.widgets.open, hover),
     ] {
         w.bg_fill = fill;
         w.weak_bg_fill = fill;
-        w.bg_stroke = edge;
+        w.bg_stroke = stroke(OUTLINE_W, outline_of(fill));
         w.corner_radius = corner;
         w.expansion = 0.0;
     }
