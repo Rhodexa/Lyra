@@ -1125,7 +1125,12 @@ pub trait Hint {
 impl Hint for Response {
     fn hint(self, text: impl Into<String>) -> Self {
         let text = text.into();
-        if text.is_empty() || !self.hovered() || self.ctx.input(|i| i.pointer.any_down()) {
+        // No hints while a drawer is open: they'd sit on top of its rows.
+        if text.is_empty()
+            || !self.hovered()
+            || self.ctx.input(|i| i.pointer.any_down())
+            || self.ctx.memory(|m| m.any_popup_open())
+        {
             return self;
         }
         let ctx = self.ctx.clone();
