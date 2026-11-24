@@ -105,13 +105,18 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .hit:active .btn,.btn.is-press{--b:color-mix(in srgb,var(--btn-body),black 18%)}
 .hit.dis{cursor:default}
 .hit.dis .btn{--b:color-mix(in srgb,var(--btn-body),var(--surface) 65%);border-color:var(--b);color:var(--ink-faint)}  /* no outline: a flat sticker, not a key */
-/* ON, four tones to choose from (class on <body>) */
-.btn.on{--b:color-mix(in srgb,var(--mid),black 55%);color:var(--hi)}                       /* deep (default) */
-.on-rim .btn.on,.on-rim .hit:hover .btn.on{--b:var(--rim);color:#fff}
-.on-edge .btn.on,.on-edge .hit:hover .btn.on{--b:var(--edge-l);color:var(--ink-on-light)}
-.on-pastel .btn.on,.on-pastel .hit:hover .btn.on{--b:var(--mid);color:var(--ink-on-light)}
-.hit:hover .btn.on,.btn.on.is-hover{--b:color-mix(in srgb,var(--mid),black 45%)}
-.hit:active .btn.on,.btn.on.is-press{--b:color-mix(in srgb,var(--mid),black 63%)}
+/* ON = backlit: the body lights up (a mid-low tone of the light, not the glaring
+   pastel) and the legend reads as a dark stencil, tinted by its own light.
+   Other styles to compare are chosen in the tuner (class on <body>). */
+.btn.on{--b:var(--low);color:color-mix(in srgb,var(--rim),black 68%);font-weight:700}
+.hit:hover .btn.on,.btn.on.is-hover{--b:var(--mid)}
+.hit:active .btn.on,.btn.on.is-press{--b:var(--edge-l)}
+.on-litol .btn.on{border-color:var(--hi)}
+.on-deep .btn.on{--b:color-mix(in srgb,var(--mid),black 55%);color:var(--hi)}
+.on-deep .hit:hover .btn.on,.on-deep .btn.on.is-hover{--b:color-mix(in srgb,var(--mid),black 45%)}
+.on-deep .hit:active .btn.on,.on-deep .btn.on.is-press{--b:color-mix(in srgb,var(--mid),black 63%)}
+.on-pastel .btn.on{--b:var(--mid);color:var(--ink-on-light)}
+.on-pastel .hit:hover .btn.on,.on-pastel .btn.on.is-hover{--b:var(--hi)}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -133,7 +138,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </head>
 <body>
 <main>
-<h1>Lyra · catalog next <span class="draft">DRAFT 7</span></h1>
+<h1>Lyra · catalog next <span class="draft">DRAFT 8</span></h1>
 <p>The simplified widget set, designed here before anything changes in the app. Everything below is built only from the foundations. Nothing is approved yet; every number is there to be argued with. The app as it is today: <a href="widget-catalog.html" style="color:var(--ink)">widget-catalog.html</a>. Not for Fluttersine or Chrysalis.</p>
 
 <!-- ═════════════════════════ FOUNDATIONS ═════════════════════════ -->
@@ -150,7 +155,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
     <tr><td>idle</td><td>a flat plate lighter than the surface, a 2 px outline in its own colour darkened 50 %</td><td data-state="idle"></td></tr>
     <tr><td>hover</td><td>plate a step lighter, white legend</td><td data-state="is-hover"></td></tr>
     <tr><td>pressed</td><td>plate a step darker</td><td data-state="is-press"></td></tr>
-    <tr><td>on</td><td>a deep tone of the light (outline: the same, darker), legend in the light's brightest tone</td><td data-state="on"></td></tr>
+    <tr><td>on</td><td><b>backlit</b>: the body lights up in a mid-low tone of the light, the legend becomes a dark stencil tinted by the light; outline = body darkened</td><td data-state="on"></td></tr>
     <tr><td>selected</td><td>the <i>surface</i> lifts to surface-sel, plus a 2 px line in its light (strips, rows, tiles; not controls)</td><td><span style="display:inline-block;width:90px;height:28px;background:var(--surface-sel);box-shadow:inset 0 2px 0 var(--mid)"></span></td></tr>
     <tr><td>disabled</td><td>no outline (a flat sticker, not a key), plate sinks toward the surface, faint ink, no hover</td><td data-state="off-dis"></td></tr>
     <tr><td>playing</td><td>flashes its light with the music (rack name keys, clips under the playhead)</td><td><i>see list row, later</i></td></tr>
@@ -175,7 +180,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 
 <!-- ═════════════════════════ BUTTON ═════════════════════════ -->
 <h2>Button <span class="draft">UI-NEEDS 1</span></h2>
-<p><b>Draft 5</b>, from your tuning: a flat plate (no gradient, ever), a <b>2 px outline in the button's own colour, darkened 50 %</b>. Disabled buttons have no outline, so a grey plate gets a dark grey line and a lit green one a dark green line, like vector art. Corners 4 px (fine up to 6). Roboto Condensed, semibold, caps. "On" is a deep tone of the light. The tuner still works; Copy gives me the numbers.</p>
+<p><b>Draft 5</b>, from your tuning: a flat plate (no gradient, ever), a <b>2 px outline in the button's own colour, darkened 50 %</b>. Disabled buttons have no outline, so a grey plate gets a dark grey line and a lit green one a dark green line, like vector art. Corners 4 px (fine up to 6). Roboto Condensed, semibold, caps. "On" is <b>backlit</b>: the body lights up and the legend turns dark, like a stencil in front of a light (tuner "on": backlit · litol = backlit with a bright outline · deep · pastel). The tuner still works; Copy gives me the numbers.</p>
 <div class="card">
   <div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">Tuner</h3>
     <span class="row" style="gap:6px"><span class="hit" id="copy"></span><span class="hit" id="reset"></span></span></div>
@@ -286,7 +291,7 @@ document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.
   if (st === 'is-hover') body.classList.add('is-hover'); if (st === 'is-press') body.classList.add('is-press'); setLight(body, 'mint'); td.append(b); });
 // tuner: every control writes a token on :root; values are remembered in this browser
 (() => {
-  const root = document.documentElement, KEY = 'lyra-next-tuner-7';
+  const root = document.documentElement, KEY = 'lyra-next-tuner-8';
   const grey = v => '#' + Math.round(v).toString(16).padStart(2, '0').repeat(3);
   const controls = [
     ['outline width', 'range', '--btn-bw', 2, [0, 3, .5], v => v + 'px'],
@@ -297,7 +302,7 @@ document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.
     ['font', 'select', '--btn-font', 'Roboto Condensed', ['Roboto Condensed', 'Inter', 'Inter Tight', 'IBM Plex Sans Condensed', 'Barlow Semi Condensed', 'IBM Plex Sans', 'Barlow', 'Noto Sans', 'Ubuntu', 'system-ui'], v => v === 'system-ui' ? v : `'${v}',system-ui,sans-serif`],
     ['weight', 'select', '--btn-fw', '600', ['400', '500', '600', '700'], v => v],
     ['case', 'select', '--btn-case', 'uppercase', ['uppercase', 'none'], v => v],
-    ['on', 'select', null, 'deep', ['deep', 'rim', 'edge', 'pastel'], v => v],
+    ['on', 'select', null, 'backlit', ['backlit', 'litol', 'deep', 'pastel'], v => v],
   ];
   let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
   delete saved['outline grey']; delete saved['shading'];
@@ -305,7 +310,7 @@ document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.
   const apply = (name, raw) => {
     const c = controls.find(x => x[0] === name); state[name] = raw;
     if (c[2]) root.style.setProperty(c[2], c[5](c[1] === 'range' ? +raw : raw));
-    else ['deep', 'rim', 'edge', 'pastel'].forEach(t => document.body.classList.toggle('on-' + t, t === raw && t !== 'deep'));
+    else ['litol', 'deep', 'pastel'].forEach(t => document.body.classList.toggle('on-' + t, t === raw));
     const out = document.getElementById('out-' + name.replace(/ /g, '-')); if (out) out.textContent = c[1] === 'range' ? c[5](+raw) : '';
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
   };
@@ -361,7 +366,8 @@ document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.
   add('draft 2 · silicone (rejected)', h('span', 'key2', null, '<span><span>REVERSE</span></span>'));
   add('draft 3 · no outline (rejected)', (() => { const x = h('span', 'flat1', null, 'REVERSE'); x.style.cssText = 'box-shadow:none;border-radius:8px;background:#474747;color:#dedede;font:600 13px system-ui;letter-spacing:.06em;padding:0 16px'; return x; })());
   add('draft 4 · 1.5 px grey outline, shading', (() => { const x = h('span', 'flat1', null, 'REVERSE'); x.style.cssText = 'border-radius:4px;background:linear-gradient(#4b4b4b,#3f3f3f);box-shadow:inset 0 0 0 1.5px #121212;color:#e2e2e2;font:600 13px Inter,system-ui;letter-spacing:.04em;padding:0 16px'; return x; })());
-  add('draft 5 · off', button('M', 'Reverse', {push: true})); add('draft 5 · on', button('M', 'Reverse', {on: true, push: true}));
+  add('draft 7 · on (deep)', (() => { const x = h('span', 'flat1', null, 'REVERSE'); x.style.cssText = "border-radius:4px;background:#526b5f;box-shadow:inset 0 0 0 2px #29362f;color:#d5ffe7;font:700 13px 'Roboto Condensed',system-ui;letter-spacing:.04em;padding:0 16px"; return x; })());
+  add('draft 8 · off', button('M', 'Reverse', {push: true})); add('draft 8 · on (backlit)', button('M', 'Reverse', {on: true, push: true}));
   document.querySelectorAll('.btn,.flat1').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
