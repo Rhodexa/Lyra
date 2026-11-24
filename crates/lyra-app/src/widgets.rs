@@ -423,33 +423,56 @@ pub enum Legend<'a> {
     Text(&'a str),
 }
 
-/// LCD text, laid out tight like the studies (letter-spacing -0.06em).
-fn lcd_galley(ui: &Ui, text: &str, size: f32) -> std::sync::Arc<egui::Galley> {
-    let job = egui::text::LayoutJob::single_section(
-        text.to_owned(),
-        egui::TextFormat {
-            font_id: egui::FontId::monospace(size),
-            extra_letter_spacing: -0.06 * size,
-            color: theme::LCD_INK,
-            ..Default::default()
-        },
-    );
+/// LCD digits (catalog-next, settled): monospace with room between them, each
+/// one a bigger target; `aim`: the character shown in inverse video.
+fn lcd_galley(ui: &Ui, text: &str, size: f32, aim: Option<usize>) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::default();
+    for (i, ch) in text.chars().enumerate() {
+        let on = aim == Some(i);
+        job.append(
+            &ch.to_string(),
+            0.0,
+            egui::TextFormat {
+                font_id: egui::FontId::monospace(size),
+                extra_letter_spacing: 0.18 * size,
+                color: if on { theme::LCD } else { theme::LCD_INK },
+                background: if on { theme::LCD_INK } else { Color32::TRANSPARENT },
+                ..Default::default()
+            },
+        );
+    }
     ui.fonts(|f| f.layout_job(job))
 }
 
-fn lcd_caption(p: &egui::Painter, rect: Rect, caption: &str) {
-    p.text(
-        rect.center_bottom() - vec2(0.0, rect.height() * 0.16),
-        egui::Align2::CENTER_CENTER,
-        caption,
-        egui::FontId::proportional((rect.height() * 0.23).clamp(9.0, 11.0)),
-        theme::LCD_INK_DIM,
-    );
+/// Height of an LCD's label line, under the screen.
+const LCD_LABEL_H: f32 = 12.0;
+
+/// The screen part of an LCD widget: the label goes under it.
+fn lcd_screen(rect: Rect, caption: &str) -> Rect {
+    if caption.is_empty() {
+        rect
+    } else {
+        Rect::from_min_max(rect.min, pos2(rect.right(), rect.bottom() - LCD_LABEL_H))
+    }
 }
 
-/// The digits sit a little above centre, leaving room for the caption.
-fn lcd_digits_center(rect: Rect) -> Pos2 {
-    rect.center() - vec2(0.0, rect.height() * 0.11)
+/// The label under an LCD: small caps on the surface, quiet.
+fn lcd_caption(ui: &Ui, rect: Rect, caption: &str) {
+    if caption.is_empty() {
+        return;
+    }
+    let text: String = caption.split_whitespace().collect::<Vec<_>>().join(" ");
+    let job = egui::text::LayoutJob::single_section(
+        text.to_uppercase(),
+        egui::TextFormat { font_id: theme::label(9.0), color: theme::INK_DIM, extra_letter_spacing: 0.9, ..Default::default() },
+    );
+    let g = ui.fonts(|f| f.layout_job(job));
+    ui.painter().galley(pos2(rect.center().x - g.size().x * 0.5, rect.bottom() - LCD_LABEL_H + 2.0), g, theme::INK_DIM);
+}
+
+/// The digits sit in the middle of the screen.
+fn lcd_digits_center(screen: Rect) -> Pos2 {
+    screen.center()
 }
 
 /// A number on a backlit LCD. Hover a digit to pick how fine you tune, then
@@ -467,10 +490,11 @@ pub fn lcd_number(
     let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
     let id = resp.id;
     let before = *value;
-    let digit_size = (size.y * 0.6).round();
+    let screen = lcd_screen(rect, caption);
+    let digit_size = (screen.height() * 0.55).round();
     let text = format!("{:.*}", decimals, *value);
-    let galley = lcd_galley(ui, &text, digit_size);
-    let center = lcd_digits_center(rect);
+    let galley = lcd_galley(ui, &text, digit_size, None);
+    let center = lcd_digits_center(screen);
     let origin = center - galley.size() * 0.5;
     // Each character's x range, from the laid-out glyphs.
     let glyphs: Vec<(f32, f32)> =
@@ -522,14 +546,14 @@ pub fn lcd_number(
     }
 
     let p = ui.painter().clone();
-    theme::lcd_panel(&p, rect);
+    theme::lcd_panel(&p, screen);
     if let Some(mut buf) = editing.take() {
         let edit = egui::TextEdit::singleline(&mut buf)
             .font(egui::FontId::monospace(digit_size))
             .text_color(theme::LCD_INK)
             .frame(false)
             .horizontal_align(egui::Align::Center);
-        let inner = Rect::from_center_size(center, vec2(size.x - 8.0, digit_size + 4.0));
+        let inner = Rect::from_center_size(center, vec2(screen.width() - 8.0, digit_size + 4.0));
         let r = ui.put(inner, edit);
         r.request_focus();
         let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
@@ -543,21 +567,19 @@ pub fn lcd_number(
             editing = Some(buf);
         }
     } else {
-        p.galley(origin, galley.clone(), theme::LCD_INK);
-        // Underline the digit being tuned.
-        if resp.hovered() || resp.dragged() {
-            let i = if place >= 0 { dot as i32 - 1 - place } else { dot as i32 - place };
-            if let Some(&(x0, x1)) = glyphs.get(i.max(0) as usize) {
-                let y = origin.y + galley.size().y - 1.0;
-                p.hline(x0 + 1.0..=x1 - 1.0, y, stroke(1.5, theme::LCD_INK_DIM));
-            }
-        }
+        // The digit being tuned, in inverse video.
+        let aim = (resp.hovered() || resp.dragged())
+            .then(|| if place >= 0 { dot as i32 - 1 - place } else { dot as i32 - place })
+            .filter(|i| *i >= 0)
+            .map(|i| i as usize);
+        let shown = if aim.is_some() { lcd_galley(ui, &text, digit_size, aim) } else { galley.clone() };
+        p.galley(origin, shown, theme::LCD_INK);
     }
     ui.data_mut(|d| match &editing {
         Some(b) => d.insert_temp(editing_id, b.clone()),
         None => d.remove::<String>(editing_id),
     });
-    lcd_caption(&p, rect, caption);
+    lcd_caption(ui, rect, caption);
 
     let factor = 10f64.powi(decimals as i32);
     *value = ((*value * factor).round() / factor).clamp(*range.start(), *range.end());
@@ -570,11 +592,11 @@ pub fn lcd_number(
 /// A small read-only LCD (song position and such).
 pub fn lcd_text(ui: &mut Ui, text: &str, caption: &str, size: egui::Vec2) -> Response {
     let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
-    let p = ui.painter();
-    theme::lcd_panel(p, rect);
-    let galley = lcd_galley(ui, text, (size.y * 0.5).round());
-    p.galley(lcd_digits_center(rect) - galley.size() * 0.5, galley, theme::LCD_INK);
-    lcd_caption(p, rect, caption);
+    let screen = lcd_screen(rect, caption);
+    theme::lcd_panel(ui.painter(), screen);
+    let galley = lcd_galley(ui, text, (screen.height() * 0.5).round(), None);
+    ui.painter().galley(lcd_digits_center(screen) - galley.size() * 0.5, galley, theme::LCD_INK);
+    lcd_caption(ui, rect, caption);
     resp
 }
 

@@ -118,7 +118,7 @@ impl Metrics {
         text: 14.0,
         text_small: 11.0,
         control_h: 28.0,
-        toolbar_h: 56.0,
+        toolbar_h: 64.0,
         module_pad: 6.0,
         module_gap: 8.0,
         corner: 5.0,
@@ -182,7 +182,7 @@ pub const INK_FAINT: Color32 = Color32::from_rgb(0x5c, 0x5c, 0x5c);
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const INK_ON_LIGHT: Color32 = Color32::from_rgb(0x2c, 0x2c, 0x2c);
 /// The dim LCD (settled): pale panel, dark ink.
-pub const LCD_DIM: Color32 = Color32::from_rgb(0xbc, 0xbc, 0xbc);
+pub const LCD_DIM: Color32 = LCD;
 
 /// Sizes: S · M · L. 28 is the floor for anything drawn or clicked.
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)
@@ -728,19 +728,23 @@ pub fn led(p: &Painter, c: egui::Pos2, d: f32, light: Option<Light>, hot: bool) 
 }
 
 /// LCD colours: pale backlight, dark ink.
-pub const LCD: Color32 = hex(0xdadada);
+/// The dim LCD (catalog-next, settled): easier on the eyes than the old #dadada.
+pub const LCD: Color32 = hex(0xbcbcbc);
 pub const LCD_INK: Color32 = hex(0x2f2f2f);
-pub const LCD_INK_DIM: Color32 = hex(0x5e5e5e);
+pub const LCD_INK_DIM: Color32 = hex(0x4e4e4e);
 
-/// The LCD panel itself (text goes on top).
+/// The LCD panel itself (text goes on top): the dim screen, an outline the ink
+/// darkened (darker than any surface), a corner radius that adds back the
+/// outline's width, and an inner shadow along the top, so it sits *in* the panel.
 pub fn lcd_panel(p: &Painter, r: Rect) {
-    let rad = (r.height() * 0.11).clamp(3.0, 7.0);
-    p.rect_filled(r, cr(rad as u8), LCD);
-    // Inset shadow under the top edge, three pixels deep, fading out.
-    let shadow = hex(0x19231e);
-    for (k, a) in [(0.0, 0.42), (1.0, 0.2), (2.0, 0.07)] {
-        let line = Rect::from_min_size(r.min + egui::vec2(rad * 0.55, k), egui::vec2(r.width() - rad * 1.1, 1.0));
-        p.rect_filled(line, cr(0), mix(LCD, shadow, a));
+    let k = (r.height() / SIZE_M).clamp(0.7, 1.3);
+    let rad = CORNER * k + OUTLINE_W;
+    p.rect_filled(r, cr(rad as u8), mix(LCD_INK, Color32::BLACK, 0.5));
+    let inner = r.shrink(OUTLINE_W);
+    p.rect_filled(inner, cr((rad - OUTLINE_W) as u8), LCD);
+    for (d, a) in [(0.0, 0.36), (1.0, 0.22), (2.0, 0.11), (3.0, 0.04)] {
+        let line = Rect::from_min_size(inner.min + egui::vec2(rad * 0.5, d), egui::vec2(inner.width() - rad, 1.0));
+        p.rect_filled(line, cr(0), mix(LCD, Color32::BLACK, a));
     }
 }
 
