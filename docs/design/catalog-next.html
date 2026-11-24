@@ -208,10 +208,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .pop-sel .dd-row.on{background:var(--surface-sel);color:var(--ink);box-shadow:inset 3px 0 0 var(--mid);font-weight:var(--btn-fw)}
 .dd-sep{height:2px;margin:2px 4px;background:color-mix(in srgb,var(--surface),black var(--btn-ol))}
 .dd-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;align-items:start}
-/* D3 · LCD: the dropdown in the LCD's colours, light with dark ink; the chosen row slightly grey */
-.dd.dd-lcd .dd-closed{--b:var(--lcd);color:var(--lcd-ink)}
-.dd.dd-lcd .chev{color:var(--lcd-dim)}
-.dd.dd-lcd:hover .dd-closed{--b:#e6e6e6}
+/* D3: the dark well when closed, the drawer in the LCD's colours (light, dark ink, the chosen row slightly grey) */
 .dd.dd-lcd .dd-pop{background:var(--lcd);border-color:color-mix(in srgb,var(--lcd),black var(--btn-ol))}
 .dd.dd-lcd .dd-row{color:var(--lcd-ink)}
 .dd.dd-lcd .dd-row:hover{background:#cacaca;color:var(--lcd-ink)}
@@ -341,8 +338,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ DROPDOWN ═════════════════════════ -->
-<h2>Dropdown <span class="draft">UI-NEEDS 4 · DRAFT 2</span></h2>
-<p>Today's area picker, on the new foundations: the 2 px outline in its own colour, the label font in caps, S · M · L. <b>D1 · well</b>: a sunken well, like the track (it shows a value). <b>D2 · plate</b>: a button with a chevron (it reads as "press me"). The popup is a panel of rows; the chosen row is either <b>lit</b> (backlit, like "on") or <b>sel</b> (the foundations' selected: lifted, with a lit edge). <b>D3 · LCD</b> (Rhodexa's idea): the LCD's pale colours with dark ink, the chosen row slightly grey: a dropdown can't be mistaken for the UI around it, and it joins the BPM display as "a value you can change". The first three are drawn open; the rest open on click.</p>
+<h2>Dropdown <span class="draft">UI-NEEDS 4 · DRAFT 3</span></h2>
+<p>Today's area picker, on the new foundations: the 2 px outline in its own colour, the label font in caps, S · M · L. <b>D1 · well</b>: a sunken well, like the track (it shows a value). <b>D2 · plate</b>: a button with a chevron (it reads as "press me"). The popup is a panel of rows; the chosen row is either <b>lit</b> (backlit, like "on") or <b>sel</b> (the foundations' selected: lifted, with a lit edge). <b>D3 · well + LCD drawer</b> (Rhodexa's idea, the favourite): closed it's the dark well; open, the drawer is the opposite colour, the LCD's pale panel with dark ink, the chosen row slightly grey, so the list you're reading can't blend into the UI behind it. The first three are drawn open; the rest open on click.</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Chosen row</span><span id="pop-style"></span></div>
   <div class="dd-grid" id="dd-grid"></div>
@@ -351,7 +348,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <h3>In context</h3>
   <div class="caps" style="margin-bottom:6px">D1 · well</div>
   <div class="plate" id="dd-ctx" style="height:56px"></div>
-  <div class="caps" style="margin:14px 0 6px">D3 · LCD</div>
+  <div class="caps" style="margin:14px 0 6px">D3 · well + LCD drawer (click one)</div>
   <div class="plate" id="dd-ctx-lcd" style="height:56px"></div>
   <p>One row, one height: everything here is M (40). Left to right: the area picker, snap, the mixer's insert (numbers: replaces the number well), a long list (chord stamp), then a button and a mode switch for scale.</p>
 </div>
@@ -629,11 +626,10 @@ document.addEventListener('click', () => document.querySelectorAll('.dd.open').f
   const g = $('#dd-grid');
   const col = (title, make) => { const c = h('div', '', g); h('div', 'caps', c, title).style.marginBottom = '8px'; make(c); };
   col('D1 · well · drawn open', c => c.append(dropdown('M', editors, 0, {static: true, width: '200px'})));
-  col('D3 · LCD · drawn open', c => c.append(dropdown('M', editors, 0, {static: true, lcd: true, width: '200px'})));
+  col('D3 · well + LCD drawer · drawn open', c => c.append(dropdown('M', editors, 0, {static: true, lcd: true, width: '200px'})));
   col('D2 · plate · drawn open', c => c.append(dropdown('M', editors, 0, {static: true, plate: true, width: '200px'})));
-  col('D1 · D3 at S and L', c => { c.append(dropdown('S', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], '-', ['None']], 0, {width: '120px'})); h('div', '', c).style.height = '8px';
-    c.append(dropdown('S', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], '-', ['None']], 0, {width: '120px', lcd: true})); h('div', '', c).style.height = '8px';
-    c.append(dropdown('L', editors, 1, {width: '220px'})); h('div', '', c).style.height = '8px'; c.append(dropdown('L', editors, 1, {width: '220px', lcd: true})); });
+  col('D3 at S and L (click)', c => { c.append(dropdown('S', [['Bar'], ['Beat'], ['1/2 beat'], ['1/4 beat'], '-', ['None']], 0, {width: '120px', lcd: true})); h('div', '', c).style.height = '8px';
+    c.append(dropdown('L', editors, 1, {width: '220px', lcd: true})); });
   const sw = modeSwitch('B', 'S', [['Lit'], ['Sel']], 0);
   sw.addEventListener('click', () => setTimeout(() => document.body.classList.toggle('pop-sel', sw.querySelectorAll('.btn')[1].classList.contains('on'))));
   $('#pop-style').append(sw);
