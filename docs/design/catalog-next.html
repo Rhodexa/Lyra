@@ -416,15 +416,16 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
    One look, two kinds. Plain: a sunken track, a button-plate thumb (≥ 28 px long), always
    visible, never flashing. Viewport: the same track with a miniature of the content inside;
    the thumb is a window over it; drag its ends to zoom. Thickness --sct (tunable).          */
-:root{--sct:16px}
+:root{--sct:20px}   /* settled */
 .sc{position:relative;--pad:calc(var(--sct) + 2px)}
 .sc.v{padding-right:var(--pad)} .sc.h{padding-bottom:var(--pad)}
 .sc-view{overflow:hidden;height:100%;width:100%}
 .sc-bar{position:absolute;background:var(--sunken);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--sunken),black var(--btn-ol));border-radius:4px}
 .sc.v>.sc-bar{top:0;right:0;bottom:0;width:var(--sct)} .sc.h>.sc-bar{left:0;right:0;bottom:0;height:var(--sct)}
-.sc-th{--b:var(--btn-body);position:absolute;background:var(--b);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-radius:3px;cursor:grab}
+/* the plain thumb is the viewport's window, without miniature or zoom handles */
+.sc-th{position:absolute;background:color-mix(in srgb,var(--btn-body) 45%,transparent);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--btn-body),black var(--btn-ol));border-radius:3px;cursor:grab}
 .sc.v .sc-th{left:-2px;right:-2px} .sc.h .sc-th{top:-2px;bottom:-2px}
-.sc-th:hover{--b:var(--btn-hover)} .sc-th.drag{--b:var(--btn-press);cursor:grabbing}
+.sc-th:hover{background:color-mix(in srgb,var(--btn-hover) 50%,transparent)} .sc-th.drag{cursor:grabbing;background:color-mix(in srgb,var(--btn-hover) 60%,transparent)}
 :root{--btn-hover:#525252;--btn-press:#383838}
 /* viewport bar */
 .vp{position:relative;height:calc(var(--sct) + 14px);background:var(--sunken);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--sunken),black var(--btn-ol));border-radius:4px;overflow:hidden}
@@ -432,9 +433,16 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .vp .mini i{position:absolute;height:2px;border-radius:1px}
 .vp .win{position:absolute;top:-2px;bottom:-2px;background:color-mix(in srgb,var(--btn-body) 45%,transparent);border:var(--btn-bw) solid color-mix(in srgb,var(--btn-body),black var(--btn-ol));border-radius:3px;cursor:grab}
 .vp .win:hover{background:color-mix(in srgb,var(--btn-hover) 50%,transparent)} .vp .win.drag{cursor:grabbing}
-.vp .win .end{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize}
-.vp .win .end::after{content:'';position:absolute;top:30%;bottom:30%;left:3px;width:2px;border-radius:1px;background:var(--ink-dim)}
+.vp .win .end{position:absolute;top:0;bottom:0;width:14px;cursor:ew-resize}           /* zoom handles: wide targets */
+.vp .win .end::after{content:'';position:absolute;top:28%;bottom:28%;left:6px;width:2px;border-radius:1px;background:var(--ink-dim)}
+.vp .win .end:hover::after{background:var(--ink)}
 .vp .win .end.l{left:0} .vp .win .end.r{right:0}
+/* the vertical viewport bar: the same window and handles, no miniature */
+.vp.v{width:var(--sct);height:auto}
+.vp.v .win{top:auto;bottom:auto;left:-2px;right:-2px}
+.vp.v .win .end{left:0;right:0;width:auto;height:14px;cursor:ns-resize}
+.vp.v .win .end::after{left:28%;right:28%;top:6px;bottom:auto;width:auto;height:2px}
+.vp.v .win .end.l{top:0} .vp.v .win .end.r{bottom:0;top:auto}
 .sc-demo{display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;align-items:start}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
@@ -658,15 +666,14 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 <div class="scroll" style="overflow-x:auto"><div class="mock" id="mock"></div></div>
 
 <!-- ═════════════════════════ SCROLLBARS ═════════════════════════ -->
-<h2>Scrollbars <span class="draft">UI-NEEDS 6 · DRAFT 1</span></h2>
-<p>One look, two kinds. <b>Plain</b> (lists, the browser, the mixer): a sunken track, the thumb a button plate (lighter on hover, pressed while dragging, never shorter than 28 px), always visible, never flashing. Click the track to jump a page toward the click; the wheel scrolls (over the mixer, a vertical wheel scrolls sideways). <b>Viewport</b> (the editors' overview bar): the same track with a miniature of the content inside; the thumb is a window over it: drag it to move, drag its ends to zoom. The mock screen's mixer now has a plain bar and its arrangement a viewport bar.</p>
+<h2>Scrollbars <span class="draft">UI-NEEDS 6 · DRAFT 2</span></h2>
+<p><b>Draft 2:</b> 20 px; one family. The <b>viewport</b> bar keeps its miniature and gets wide (14 px) zoom handles; the <b>vertical viewport</b> bar is the same window and handles without a miniature (rows: drag to scroll, drag its ends to zoom the rows); the <b>plain</b> bar is the viewport's window alone, no miniature, no handles. One look, two kinds. <b>Plain</b> (lists, the browser, the mixer): a sunken track, the thumb a button plate (lighter on hover, pressed while dragging, never shorter than 28 px), always visible, never flashing. Click the track to jump a page toward the click; the wheel scrolls (over the mixer, a vertical wheel scrolls sideways). <b>Viewport</b> (the editors' overview bar): the same track with a miniature of the content inside; the thumb is a window over it: drag it to move, drag its ends to zoom. The mock screen's mixer now has a plain bar and its arrangement a viewport bar.</p>
 <div class="card">
-  <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Thickness</span><span id="sc-thick"></span></div>
   <div class="sc-demo">
     <div><div class="caps" style="margin-bottom:6px">Plain · vertical · a long list</div><div id="sc-list"></div></div>
     <div><div class="caps" style="margin-bottom:6px">Plain · horizontal · the mixer</div><div id="sc-mixer"></div></div>
   </div>
-  <div class="caps" style="margin:18px 0 6px">Viewport · the arrangement's overview (drag the window; drag its ends to zoom)</div>
+  <div class="caps" style="margin:18px 0 6px">Viewport · horizontal (with the miniature) and vertical (without) · drag the windows; drag their ends to zoom</div>
   <div id="sc-vp"></div>
 </div>
 </main>
@@ -1467,27 +1474,25 @@ function plainScroll(content, axis, size) {
   return w;
 }
 // viewportBar(lanes, mini): a window over a miniature; drag to move, drag the ends to zoom.
-function viewportBar(onChange, minis) {
-  const vp = h('div', 'vp'), mini = h('div', 'mini', vp), win = h('div', 'win', vp);
+function viewportBar(onChange, minis, axis = 'h') {
+  const V = axis === 'v', vp = h('div', 'vp' + (V ? ' v' : '')), mini = h('div', 'mini', vp), win = h('div', 'win', vp);
   h('div', 'end l', win); h('div', 'end r', win);
-  minis.forEach(([x, w, row, lt]) => { const i = h('i', '', mini); Object.assign(i.style, {left: x * 100 + '%', width: w * 100 + '%', top: row * 3.2 + 'px', background: LIGHTS[lt][1]}); });
-  let a = 0, b = .55;
-  const draw = () => { win.style.left = a * 100 + '%'; win.style.width = (b - a) * 100 + '%'; onChange(a, b); };
+  if (!V) minis.forEach(([x, w, row, lt]) => { const i = h('i', '', mini); Object.assign(i.style, {left: x * 100 + '%', width: w * 100 + '%', top: row * 3.2 + 'px', background: LIGHTS[lt][1]}); });
+  let a = 0, b = V ? .7 : .55;
+  const draw = () => { win.style[V ? 'top' : 'left'] = a * 100 + '%'; win.style[V ? 'height' : 'width'] = (b - a) * 100 + '%'; onChange(a, b); };
   win.addEventListener('pointerdown', e => {
     const mode = e.target.classList.contains('l') ? 'l' : e.target.classList.contains('r') ? 'r' : 'm';
-    win.setPointerCapture(e.pointerId); win.classList.add('drag'); const x0 = e.clientX, a0 = a, b0 = b, W = vp.clientWidth;
-    const mv = ev => { const d = (ev.clientX - x0) / W;
+    win.setPointerCapture(e.pointerId); win.classList.add('drag'); const x0 = V ? e.clientY : e.clientX, a0 = a, b0 = b, W = V ? vp.clientHeight : vp.clientWidth;
+    const mv = ev => { const d = ((V ? ev.clientY : ev.clientX) - x0) / W;
       if (mode === 'm') { const w = b0 - a0; a = clamp(a0 + d, 0, 1 - w); b = a + w; }
-      if (mode === 'l') a = clamp(a0 + d, 0, b - .05); if (mode === 'r') b = clamp(b0 + d, a + .05, 1); draw(); };
+      if (mode === 'l') a = clamp(a0 + d, 0, b - .08); if (mode === 'r') b = clamp(b0 + d, a + .08, 1); draw(); };
     const up = () => { win.classList.remove('drag'); win.removeEventListener('pointermove', mv); win.removeEventListener('pointerup', up); };
     win.addEventListener('pointermove', mv); win.addEventListener('pointerup', up); });
   requestAnimationFrame(draw); return vp;
 }
 (() => {
   // thickness switch
-  const ts = [12, 16, 20], tsw = modeSwitch('B', 'S', ts.map(t => [t + ' px']), 1);
-  tsw.addEventListener('click', () => setTimeout(() => { const i = [...tsw.querySelectorAll('.btn')].findIndex(b => b.classList.contains('on')); document.documentElement.style.setProperty('--sct', ts[i] + 'px'); }));
-  $('#sc-thick').append(tsw);
+
   // a long list
   const lst = h('div', 'lst'); lst.style.width = '100%'; lst.classList.add('sel-lifted'); setLight(lst, light);
   const rows = h('div', 'rows', lst);
@@ -1499,13 +1504,15 @@ function viewportBar(onChange, minis) {
     const me = stdMeter('v', 120, 40 + t); me.style.cssText = 'position:absolute;left:44px;top:8px'; st.append(me); const n = h('div', 'caps', st, t ? 'Insert ' + t : 'Master'); n.style.cssText = 'position:absolute;left:6px;bottom:6px'; }
   $('#sc-mixer').append(plainScroll(strips, 'h', {height: '170px', width: '100%'}));
   // viewport
-  const box = h('div', ''); box.style.cssText = 'height:120px;overflow:hidden;position:relative;background:var(--surface);border:2px solid var(--ground);margin-top:4px';
-  const lane = h('div', '', box); lane.style.cssText = 'position:absolute;top:0;bottom:0;left:0';
+  const stage = h('div', ''); stage.style.cssText = 'display:grid;grid-template-columns:1fr var(--sct);gap:4px;margin-top:4px';
+  const box = h('div', '', stage); box.style.cssText = 'height:150px;overflow:hidden;position:relative;background:var(--surface);border:2px solid var(--ground)';
+  const lane = h('div', '', box); lane.style.cssText = 'position:absolute;top:0;left:0;height:100%';
   const clips = [[.05, .2, 0, 'mint'], [.3, .4, 0, 'mint'], [0, .25, 1, 'pink'], [.25, .5, 1, 'pink'], [.1, .3, 2, 'blue'], [.45, .2, 2, 'lavender'], [.6, .35, 3, 'amber'], [.2, .15, 4, 'cyan'], [.7, .25, 4, 'cyan']];
-  clips.forEach(([x, w, row, lt]) => { const c = h('div', 'clip', lane); setLight(c, lt); Object.assign(c.style, {left: x * 100 + '%', width: w * 100 + '%', top: row * 23 + 2 + 'px', height: '20px', bottom: 'auto'});
+  clips.forEach(([x, w, row, lt]) => { const c = h('div', 'clip', lane); setLight(c, lt); Object.assign(c.style, {left: x * 100 + '%', width: w * 100 + '%', top: `calc(${row * 20}% + 2px)`, height: 'calc(20% - 4px)', bottom: 'auto'});
     const ct = h('div', 'ct', c, lt); ct.style.background = shade(LIGHTS[lt][1], .5); ct.style.color = LIGHTS[lt][0]; });
   const vp = viewportBar((a, b) => { const W = box.clientWidth / (b - a); lane.style.width = W + 'px'; lane.style.left = -a * W + 'px'; }, clips);
-  $('#sc-vp').append(vp, box);
+  const vv = viewportBar((a, b) => { const H = box.clientHeight / (b - a); lane.style.height = H + 'px'; lane.style.top = -a * H + 'px'; }, [], 'v');
+  $('#sc-vp').append(vp, stage); stage.append(vv);
   // the mock screen: the mixer gets a plain bar, the arrangement a viewport bar
   const mxs = document.querySelector('#mock .mx .strips');
   if (mxs) { const parent = mxs.parentElement; const wrap = plainScroll(mxs, 'h', {width: '100%'}); parent.append(wrap); mxs.style.width = 'max-content'; }
