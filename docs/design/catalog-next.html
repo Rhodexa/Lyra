@@ -286,12 +286,12 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .np.lcd:hover{--b:color-mix(in srgb,var(--lcd),white 18%)}
 .np.lcd .unit{color:var(--lcd-dim)}
 .np.lcd .d.f{background:color-mix(in srgb,var(--lcd),black 10%);box-shadow:inset 0 -2px 0 var(--lcd-ink)}
-/* the tag: a dark label inside the screen, in its bottom-right corner. Square where it meets
+/* the tag: a dark label inside the screen, in its bottom-left corner. Square where it meets
    the screen's edges, the screen's rounding at the shared corner, rounded at its free corner. */
 .np.tagged{padding-bottom:9px}
 .np.S.tagged{padding-bottom:6px}
-.np .tag{position:absolute;right:0;bottom:0;padding:3px 5px 2px 6px;background:var(--lcd-ink);color:#e4e4e4;
-  border-radius:4px 0 calc(var(--btn-r) * var(--k) - var(--btn-bw)) 0;
+.np .tag{position:absolute;left:0;bottom:0;padding:3px 6px 2px 5px;background:var(--lcd-ink);color:#e4e4e4;
+  border-radius:0 4px 0 calc(var(--btn-r) * var(--k) - var(--btn-bw));
   font:var(--btn-fw) 9px/1 var(--btn-font);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;pointer-events:none}
 .np:not(.lcd) .tag{background:#2c2c2c;color:var(--ink-dim)}
 .np input{width:var(--w);background:transparent;border:0;outline:0;padding:0 4px;color:inherit;font:600 var(--nfs)/1 var(--t-num);text-align:right}
@@ -315,6 +315,10 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .lightpick{display:flex;gap:4px}
 .lightpick button{width:20px;height:20px;border-radius:4px;border:0;cursor:pointer;box-shadow:inset 0 0 0 1px #0006}
 .lightpick button[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--ink)}
+/* Backgrounds stop at the inside of the outline: otherwise a light fill shows through the
+   anti-aliased rounded corners of a dark outline (in egui: draw the outline shape, then the
+   fill shrunk inside it, never one on top of the other). */
+.btn,.track,.track .ind,.np,.dd-closed,.dd-pop,.ftab,.panel,.flat1{background-clip:padding-box}
 </style>
 </head>
 <body>
@@ -457,8 +461,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ NUMBER PICKER ═════════════════════════ -->
-<h2>Number picker <span class="draft">UI-NEEDS 5 · DRAFT 3</span></h2>
-<p>The BPM display's behaviour as a widget, for tempo, swing, gain, pitch, lengths. <b>Hover a digit</b>: it's marked, and <b>drag up / down</b> or <b>wheel</b> change that place (tens, ones, tenths…); the drag keeps the raw value and only the display snaps. <b>Double-click</b> to type (Enter keeps, Esc cancels). <b>Draft 2:</b> every digit is its own bigger cell (easier to aim at), less padding around the panel; hovering the blank part or the unit aims at the ones; at L the unit is a <b>tag</b>: a dark label inside the screen's bottom-right corner (square where it meets the edges, rounded at its free corner). <b>Draft 3:</b> the LCD is dim by default; its outline is the ink colour, with an inner shadow, so the screen sits <i>in</i> the panel. Two looks: <b>NP1 · LCD</b> (the pale panel: "a number you can change", like today's BPM) and <b>NP2 · well</b> (dark, like the closed dropdown).</p>
+<h2>Number picker <span class="draft">UI-NEEDS 5 · PARKED (draft 3)</span></h2>
+<p>The BPM display's behaviour as a widget, for tempo, swing, gain, pitch, lengths. <b>Hover a digit</b>: it's marked, and <b>drag up / down</b> or <b>wheel</b> change that place (tens, ones, tenths…); the drag keeps the raw value and only the display snaps. <b>Double-click</b> to type (Enter keeps, Esc cancels). <b>Draft 2:</b> every digit is its own bigger cell (easier to aim at), less padding around the panel; hovering the blank part or the unit aims at the ones; at L the unit is a <b>tag</b>: a dark label inside the screen's bottom-left corner (square where it meets the edges, rounded at its free corner). <b>Draft 3:</b> the LCD is dim by default; its outline is the ink colour, with an inner shadow, so the screen sits <i>in</i> the panel. Two looks: <b>NP1 · LCD</b> (the pale panel: "a number you can change", like today's BPM) and <b>NP2 · well</b> (dark, like the closed dropdown).</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">LCD tone (also the drawers)</span><span id="lcd-tone"></span></div>
   <div class="np-grid" id="np-grid"></div>
