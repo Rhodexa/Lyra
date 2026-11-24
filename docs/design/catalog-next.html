@@ -33,9 +33,14 @@
   /* the light: a widget's own colour (theme::Light), set per widget */
   --hi:#d5ffe7; --mid:#b7f3d3; --low:#90dbb8; --edge-l:#79c6a4; --rim:#648f7a;
 
-  /* ── sizes: S / M / L (UI-NEEDS question 4, provisional) ── */
-  --s:20px; --m:28px; --l:40px;
-  --hit-min:28px;          /* a hitbox is never smaller than M */
+  /* ── sizes: S / M / L. Draft 2 (Rhodexa): 28 is the smallest anything may be, 40 the middle ── */
+  --s:28px; --m:40px; --l:52px;
+  --hit-min:28px;          /* nothing reacts in less than S */
+  /* ── key material (the silicone key's, simplified for buttons) ── */
+  --recess:#141414;        /* the dark ring around every control */
+  --pad-top:#4a4a4a; --pad-mid:#3c3c3c; --pad-bottom:#2c2c2c;   /* lit from above */
+  --face:#353535;          /* where the legend sits */
+  --legend:#a4a4a4;        /* idle legend (the keys' unlit ink) */
   /* ── type ── */
   --t-caps:600 10px/1 system-ui,sans-serif;   /* labels, letter-spaced */
   --t-small:11px; --t-body:14px;
@@ -67,33 +72,44 @@ table{border-collapse:collapse;font:12px var(--t-num)}
 td,th{padding:5px 10px;text-align:left;border-bottom:1px solid var(--edge);vertical-align:middle}
 th{color:var(--ink-dim);font-weight:600}
 td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-align:-3px;margin-right:8px;box-shadow:inset 0 0 0 1px #0006}
-.grid{display:grid;grid-template-columns:auto repeat(5,minmax(70px,auto));gap:10px 18px;align-items:center;justify-items:center}
+.grid{display:grid;grid-template-columns:auto repeat(6,minmax(80px,auto));gap:10px 18px;align-items:center;justify-items:center}
 .grid>.caps:first-child,.grid .rowhead{justify-self:start}
 
-/* ═════════ BUTTON ═════════
-   Body = raised; rim = edge-raised (darker, never lighter).
-   ON = the light's body with dark ink (fake bold), like the lit keys.      */
+/* ═════════ BUTTON (draft 2) ═════════
+   Built like a small silicone key: recess → pad (lit from above) → face.
+   Legends are CAPS, semibold, letter-spaced. ON = the key's lit face.      */
 .hit{display:inline-grid;place-items:center;min-width:var(--hit-min);min-height:var(--hit-min);cursor:pointer;position:relative}
 .show-hits .hit::after{content:'';position:absolute;inset:0;border:1px dashed #f5dba580;pointer-events:none}
-.btn{--h:var(--m);display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--h);min-width:var(--h);
-  padding:0 calc(var(--h) * .38);border-radius:var(--r-ctl);background:var(--raised);box-shadow:inset 0 0 0 1px var(--edge-raised);
-  color:var(--ink-dim);font:500 12px system-ui,sans-serif;white-space:nowrap;user-select:none}
-.btn svg{width:16px;height:16px;flex:none}
-.btn.icon{padding:0}
-.btn.S{--h:var(--s);font-size:var(--t-small);border-radius:3px;padding:0 7px}
-.btn.S svg{width:12px;height:12px}
-.btn.L{--h:var(--l);font-size:13px;border-radius:5px}
-.btn.L svg{width:20px;height:20px}
-.hit:hover .btn,.btn.is-hover{background:var(--raised-hover);color:var(--ink)}
-.hit:active .btn,.btn.is-press{background:var(--raised-press);color:var(--ink)}
-.btn.on{background:var(--mid);color:var(--ink-on-light);box-shadow:inset 0 0 0 1px var(--rim);text-shadow:.5px 0 0 currentColor}
-.hit:hover .btn.on,.btn.on.is-hover{background:color-mix(in srgb,var(--mid) 60%,var(--hi))}
-.hit:active .btn.on,.btn.on.is-press{background:var(--low)}
-.btn.off-dis,.hit.dis .btn{background:var(--surface-sel);box-shadow:inset 0 0 0 1px var(--edge-raised);color:var(--ink-faint);text-shadow:none}
+.btn{--h:var(--m);--r:7px;--fs:13px;--pad:2px;display:inline-flex;height:var(--h);min-width:var(--h);padding:1px;border-radius:var(--r);background:var(--recess);user-select:none}
+.btn .pad{display:flex;flex:1;padding:var(--pad);border-radius:calc(var(--r) - 1px);background:linear-gradient(var(--pad-top),var(--pad-mid) 14%,var(--pad-mid) 86%,var(--pad-bottom))}
+.btn .face{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:0 calc(var(--h) * .36);border-radius:calc(var(--r) - 1px - var(--pad) * .8);
+  background:var(--face);color:var(--legend);font:600 var(--fs)/1 system-ui,sans-serif;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
+.btn svg{width:18px;height:18px;flex:none}
+.btn.icon .face{padding:0}
+.btn.S{--h:var(--s);--r:5px;--fs:11px;--pad:1.5px}
+.btn.S svg{width:14px;height:14px}
+.btn.L{--h:var(--l);--r:9px;--fs:14px;--pad:2.5px}
+.btn.L svg{width:22px;height:22px}
+.hit:hover .btn .pad,.hit:hover .btn .face,.btn.is-hover .pad,.btn.is-hover .face{filter:brightness(1.12)}
+.hit:hover .btn .face,.btn.is-hover .face{color:var(--ink)}
+.hit:active .btn .pad,.btn.is-press .pad{background:linear-gradient(var(--pad-bottom),var(--pad-mid) 14%,var(--pad-mid) 86%,var(--pad-top));filter:none}
+.hit:active .btn .face,.btn.is-press .face{background:#2f2f2f;color:var(--ink);filter:none}
+/* on: the lit key (bright) or a softer lit face (soft) */
+.btn.on .pad{background:linear-gradient(var(--rim),var(--edge-l) 14%,var(--edge-l) 86%,var(--rim))}
+.btn.on .face{background:radial-gradient(ellipse 85% 82% at 50% 49%,var(--hi),var(--mid) 38%,var(--low) 76%,var(--edge-l));color:var(--ink-on-light);font-weight:700}
+.btn.on.soft .face{background:radial-gradient(ellipse 85% 82% at 50% 49%,var(--mid),var(--low) 45%,var(--edge-l) 85%,var(--rim))}
+.hit:hover .btn.on .pad,.hit:hover .btn.on .face,.btn.on.is-hover .pad,.btn.on.is-hover .face{filter:brightness(1.06)}
+.hit:hover .btn.on .face{color:var(--ink-on-light)}
+.hit:active .btn.on .face,.btn.on.is-press .face{background:radial-gradient(ellipse 85% 82% at 50% 49%,var(--low),var(--edge-l) 70%,var(--rim));color:var(--ink-on-light)}
 .hit.dis{cursor:default}
+.hit.dis .btn .pad{background:#2e2e2e;filter:none}
+.hit.dis .btn .face{background:#2b2b2b;color:var(--ink-faint);filter:none}
+/* draft 1, kept only for the comparison card */
+.flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:var(--raised);box-shadow:inset 0 0 0 1px var(--edge-raised);color:var(--ink-dim);font:500 12px system-ui}
+.flat1.on{background:var(--mid);color:var(--ink-on-light);text-shadow:.5px 0 0 currentColor}
 /* context mock-ups */
 .bar{display:flex;align-items:center;gap:var(--gap-in);background:var(--ground);padding:6px}
-.plate{background:var(--surface);display:flex;align-items:center;gap:var(--gap-in);padding:0 8px;height:44px}
+.plate{background:var(--surface);display:flex;align-items:center;gap:var(--gap-in);padding:0 8px;height:52px}
 .lightpick{display:flex;gap:4px}
 .lightpick button{width:20px;height:20px;border-radius:4px;border:0;cursor:pointer;box-shadow:inset 0 0 0 1px #0006}
 .lightpick button[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--ink)}
@@ -101,7 +117,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </head>
 <body>
 <main>
-<h1>Lyra · catalog next <span class="draft">DRAFT 1</span></h1>
+<h1>Lyra · catalog next <span class="draft">DRAFT 2</span></h1>
 <p>The simplified widget set, designed here before anything changes in the app. Everything below is built only from the foundations. Nothing is approved yet; every number is there to be argued with. The app as it is today: <a href="widget-catalog.html" style="color:var(--ink)">widget-catalog.html</a>. Not for Fluttersine or Chrysalis.</p>
 
 <!-- ═════════════════════════ FOUNDATIONS ═════════════════════════ -->
@@ -115,12 +131,12 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <h3>States: one look each, for every widget</h3>
   <table>
     <tr><th>state</th><th>how it looks</th><th>button, as an example</th></tr>
-    <tr><td>idle</td><td>raised body, dim ink</td><td><span class="btn">Reverse</span></td></tr>
-    <tr><td>hover</td><td>body ×1.12, full ink</td><td><span class="btn is-hover">Reverse</span></td></tr>
-    <tr><td>pressed</td><td>body ×0.85</td><td><span class="btn is-press">Reverse</span></td></tr>
-    <tr><td>on</td><td>the light's body, dark ink, fake bold</td><td><span class="btn on">Reverse</span></td></tr>
+    <tr><td>idle</td><td>recess, pad lit from above, face; grey legend</td><td data-state="idle"></td></tr>
+    <tr><td>hover</td><td>pad and face ×1.12, full ink</td><td data-state="is-hover"></td></tr>
+    <tr><td>pressed</td><td>the pad's light comes from below; face darker</td><td data-state="is-press"></td></tr>
+    <tr><td>on</td><td>the face lit like a lit key, dark bold ink</td><td data-state="on"></td></tr>
     <tr><td>selected</td><td>the <i>surface</i> lifts to surface-sel, plus a 2 px line in its light (strips, rows, tiles; not controls)</td><td><span style="display:inline-block;width:90px;height:28px;background:var(--surface-sel);box-shadow:inset 0 2px 0 var(--mid)"></span></td></tr>
-    <tr><td>disabled</td><td>flat (no rim contrast), faint ink, no hover</td><td><span class="btn off-dis">Reverse</span></td></tr>
+    <tr><td>disabled</td><td>pad and face flat, faint ink, no hover</td><td data-state="off-dis"></td></tr>
     <tr><td>playing</td><td>flashes its light with the music (rack name keys, clips under the playhead)</td><td><i>see list row, later</i></td></tr>
     <tr><td>focus</td><td><b>nothing</b>: no rings, no glows</td><td></td></tr>
   </table>
@@ -129,10 +145,11 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <h3>Sizes, type, radii, gaps</h3>
   <table>
     <tr><th>token</th><th>value</th><th>for</th></tr>
-    <tr><td>S · M · L</td><td>20 · 28 · 40 px</td><td>drawn height of every control; knobs Tiny · Rubber · Polymer</td></tr>
-    <tr><td>hit-min</td><td>28 px</td><td>a small control is drawn small but reacts in at least M</td></tr>
+    <tr><td>S · M · L</td><td>28 · 40 · 52 px</td><td>drawn height of every control; knobs Tiny · Rubber · Polymer</td></tr>
+    <tr><td>hit-min</td><td>28 px</td><td>nothing is drawn or reacts smaller than S</td></tr>
     <tr><td>caps label</td><td><span class="caps">Input · Pan · Mute</span></td><td>10 px, 600, letter-spaced, above the thing it names</td></tr>
-    <tr><td>small · body</td><td>11 · 14 px</td><td>legends and details · names and reading text</td></tr>
+    <tr><td>legend</td><td>11 · 13 · 14 px</td><td>button legends at S · M · L: caps, 600, letter-spaced .07em</td></tr>
+    <tr><td>small · body</td><td>11 · 14 px</td><td>details · names and reading text</td></tr>
     <tr><td>numbers</td><td><span style="font-family:var(--t-num)">120.00 · −6.0 dB</span></td><td>monospace, only for numbers</td></tr>
     <tr><td>r-tile · r-ctl · r-well</td><td>2 · 4 · 6 px</td><td>clips, steps, rows · controls · wells and LCDs</td></tr>
     <tr><td>gap-join · gap-in · gap-out</td><td>2 · 4 · 8 px</td><td>joined parts, seams · inside a group · between groups</td></tr>
@@ -141,7 +158,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 
 <!-- ═════════════════════════ BUTTON ═════════════════════════ -->
 <h2>Button <span class="draft">UI-NEEDS 1</span></h2>
-<p>One button in three sizes, text or icon. <b>On</b> means a bright body with dark ink, like a lit key, instead of today's coloured ink on grey (hard to read, and it was the complaint). The S button reacts in a 28 px area; tick the box to see the hit areas.</p>
+<p><b>Draft 2.</b> Sizes 28 · 40 · 52 (28 is the smallest anything may be). Built like a small silicone key: dark recess, a pad lit from above, a face; pressed, the light comes from below. Legends always in caps, semibold, letter-spaced. <b>On</b> lights the face like a lit key; <b>soft</b> is a dimmer lit face for when the bright one glares. Pick one.</p>
 <div class="card">
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
     <div class="row" style="gap:6px"><span class="caps">Light</span><div class="lightpick" id="lights"></div></div>
@@ -156,12 +173,12 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <div class="caps" style="margin:14px 0 6px">Editor header · M (name left, actions right)</div>
   <div class="plate" id="ctx-header"></div>
   <div class="caps" style="margin:14px 0 6px">Dense row · S</div>
-  <div class="plate" style="height:30px" id="ctx-dense"></div>
+  <div class="plate" style="height:36px" id="ctx-dense"></div>
 </div>
 <div class="card">
-  <h3>Today vs next</h3>
+  <h3>Draft 1 vs draft 2, at 40 px</h3>
   <div class="row" id="vs"></div>
-  <p style="margin-top:10px">Today, "on" only changes the legend's colour. Next, the whole body lights up.</p>
+  <p style="margin-top:10px">Draft 1 was a flat fill with a hairline: a web button, not Lyra's material. Draft 2 is built like the silicone keys and knobs (recess, a pad lit from above, a face), with a bigger, caps, semibold legend and softer corners.</p>
 </div>
 </main>
 
@@ -188,9 +205,11 @@ const ICON = {
 function button(size, legend, o = {}) {
   const hit = h('span', 'hit' + (o.disabled ? ' dis' : ''));
   const icon = ICON[legend];
-  const b = h('span', 'btn ' + size + (icon ? ' icon' : '') + (o.on ? ' on' : ''), hit, icon || legend);
+  const b = h('span', 'btn ' + size + (icon ? ' icon' : '') + (o.on ? ' on' : '') + (o.soft ? ' soft' : ''), hit);
+  h('span', 'face', h('span', 'pad', b), icon || legend);
   if (o.light) setLight(b, o.light);
   if (o.width) b.style.width = o.width;
+  if (o.minw) b.style.minWidth = o.minw;
   if (!o.disabled && !o.push) hit.addEventListener('click', () => b.classList.toggle('on'));
   return hit;
 }
@@ -222,11 +241,11 @@ let light = 'mint';
 // the matrix: size × state
 (() => {
   const m = $('#matrix');
-  ['', 'idle', 'hover', 'pressed', 'on', 'disabled'].forEach(t => h('div', 'caps', m, t));
-  for (const [size, px] of [['S', 20], ['M', 28], ['L', 40]]) for (const legend of ['Reverse', 'loop']) {
+  ['', 'idle', 'hover', 'pressed', 'on · bright', 'on · soft', 'disabled'].forEach(t => h('div', 'caps', m, t));
+  for (const [size, px] of [['S', 28], ['M', 40], ['L', 52]]) for (const legend of ['Reverse', 'loop']) {
     h('div', 'caps rowhead', m, `${size} · ${px} px · ${ICON[legend] ? 'icon' : 'text'}`);
-    for (const st of ['idle', 'hover', 'pressed', 'on', 'disabled']) {
-      const b = button(size, legend, {on: st === 'on', disabled: st === 'disabled', push: st !== 'idle' && st !== 'on'});
+    for (const st of ['idle', 'hover', 'pressed', 'on', 'soft', 'disabled']) {
+      const b = button(size, legend, {on: st === 'on' || st === 'soft', soft: st === 'soft', disabled: st === 'disabled', push: !['idle', 'on', 'soft'].includes(st)});
       const body = b.querySelector('.btn');
       if (st === 'hover') body.classList.add('is-hover'); if (st === 'pressed') body.classList.add('is-press');
       m.append(b);
@@ -234,23 +253,27 @@ let light = 'mint';
   }
 })();
 
+// states table
+document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.state;
+  const b = button('M', 'Reverse', {on: st === 'on', disabled: st === 'off-dis', push: true}); const body = b.querySelector('.btn');
+  if (st === 'is-hover') body.classList.add('is-hover'); if (st === 'is-press') body.classList.add('is-press'); setLight(body, 'mint'); td.append(b); });
 // in context
 (() => {
   const tb = $('#ctx-toolbar');
   tb.append(button('L', 'play', {push: true}), button('L', 'stop', {push: true}), button('L', 'rec', {light: 'pink'}), button('L', 'loop', {on: true}));
   const sep = h('span', '', tb); sep.style.cssText = 'width:12px';
-  tb.append(button('L', 'SONG', {on: true}), button('L', 'PAT', {light: 'amber'}));
+  tb.append(button('L', 'SONG', {on: true, minw: '92px'}), button('L', 'PAT', {light: 'amber', minw: '92px'}));
   const hd = $('#ctx-header'); h('span', '', hd, 'Arrangement').style.cssText = 'font-size:14px;margin-right:auto';
   hd.append(button('M', 'snap'), button('M', 'Bar', {push: true}), button('M', 'plus', {push: true}), button('M', 'trash', {push: true}));
   const dn = $('#ctx-dense'); h('span', 'caps', dn, 'Octave'); dn.append(button('S', '−', {push: true}), button('S', '+', {push: true}));
   const s2 = h('span', '', dn); s2.style.width = '16px'; h('span', 'caps', dn, 'Fold'); dn.append(button('S', 'loop'));
   document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
-  // today vs next
+  // draft 1 vs draft 2
   const vs = $('#vs');
-  const today = (txt, on) => { const s = h('span', 'btn'); s.textContent = txt; s.style.cssText = `height:26px;font-size:12px;color:${on ? LIGHTS.mint[0] : 'var(--ink-dim)'};background:#3b3b3b`; return s; };
-  [['today · off', today('+ Link')], ['today · on', today('+ Link', true)], ['next · off', button('M', '+ Link', {push: true})], ['next · on', button('M', '+ Link', {on: true, push: true})]]
+  const d1 = (txt, on) => { const x = h('span', 'flat1' + (on ? ' on' : ''), null, txt); return x; };
+  [['draft 1 · off', d1('Reverse')], ['draft 1 · on', d1('Reverse', true)], ['draft 2 · off', button('M', 'Reverse', {push: true})], ['draft 2 · on', button('M', 'Reverse', {on: true, push: true})], ['draft 2 · on soft', button('M', 'Reverse', {on: true, soft: true, push: true})]]
     .forEach(([l, n]) => { const c = h('div', 'cell', vs); c.append(n); h('div', 'caps', c, l); });
-  document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
+  document.querySelectorAll('.btn,.flat1').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
 </body>
