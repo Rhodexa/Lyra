@@ -270,8 +270,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
    blank part or the unit aims at the ones. Drag / wheel change the aimed place.
    Double-click: type it. The unit sits beside the number (S, M), or on a TAG: a small
    dark sticker on the LCD's bottom edge (L), so the display doesn't grow.          */
-.np{--h:var(--m);--k:1;--nfs:19px;--b:var(--sunken);position:relative;height:var(--h);display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:0 4px;
-  background:var(--b);border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-radius:calc(var(--btn-r) * var(--k));
+.np{--h:var(--m);--k:1;--nfs:19px;--np-r:calc(var(--btn-r) * var(--k));--b:var(--sunken);position:relative;height:var(--h);display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:0 4px;
+  background:var(--b);border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-radius:var(--np-r);
   color:var(--ink);cursor:ns-resize;user-select:none;touch-action:none;vertical-align:top}
 .np.S{--h:var(--s);--k:.75;--nfs:14px;padding:0 3px;gap:3px} .np.L{--h:var(--l);--k:1.25;--nfs:25px;padding:0 5px}
 .np .num{display:flex;align-items:stretch;align-self:stretch;font:600 var(--nfs)/1 var(--t-num);white-space:pre}
@@ -281,17 +281,18 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .np.S .unit{font-size:10px;padding-right:3px}
 .np .d.f{background:#2e2e2e;box-shadow:inset 0 -2px 0 var(--mid)}
 .np:hover{--b:#1e1e1e}
-/* the LCD screen: outline in the ink colour, an inner shadow: it sits IN the panel */
-.np.lcd{--b:var(--lcd);color:var(--lcd-ink);border-color:var(--lcd-ink);box-shadow:inset 0 2px 4px #0000005c,inset 0 0 0 1px #00000026}
+/* the LCD screen: outline in the ink colour, an inner shadow: it sits IN the panel; its radius
+   adds back the outline's width, so the inside curve is what the outer one was meant to be */
+.np.lcd{--np-r:calc(var(--btn-r) * var(--k) + var(--btn-bw));--b:var(--lcd);color:var(--lcd-ink);border-color:var(--lcd-ink);box-shadow:inset 0 2px 4px #0000005c,inset 0 0 0 1px #00000026}
 .np.lcd:hover{--b:color-mix(in srgb,var(--lcd),white 18%)}
 .np.lcd .unit{color:var(--lcd-dim)}
 .np.lcd .d.f{background:color-mix(in srgb,var(--lcd),black 10%);box-shadow:inset 0 -2px 0 var(--lcd-ink)}
 /* the tag: a dark label inside the screen, in its bottom-left corner. Square where it meets
    the screen's edges, the screen's rounding at the shared corner, rounded at its free corner. */
-.np.tagged{padding-bottom:9px}
-.np.S.tagged{padding-bottom:6px}
-.np .tag{position:absolute;left:0;bottom:0;padding:3px 6px 2px 5px;background:var(--lcd-ink);color:#e4e4e4;
-  border-radius:0 4px 0 calc(var(--btn-r) * var(--k) - var(--btn-bw));
+.np.tagged{padding-bottom:14px}
+.np.S.tagged{padding-bottom:9px}
+.np .tag{position:absolute;left:0;bottom:0;padding:3px 6px 2px 5px;background:var(--lcd-ink);color:#a8a8a8;
+  border-radius:0 4px 0 calc(var(--np-r) - var(--btn-bw));
   font:var(--btn-fw) 9px/1 var(--btn-font);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;pointer-events:none}
 .np:not(.lcd) .tag{background:#2c2c2c;color:var(--ink-dim)}
 .np input{width:var(--w);background:transparent;border:0;outline:0;padding:0 4px;color:inherit;font:600 var(--nfs)/1 var(--t-num);text-align:right}
