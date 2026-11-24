@@ -1,0 +1,889 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lyra Widget Catalog</title>
+<!--
+  Lyra · widget catalog
+  =====================
+  One file that replaces docs/design/HTMLSamples15112026/ as the design reference.
+  Taken from the code on 2026-11-24 (crates/lyra-app/src/theme.rs, widgets.rs, mixer.rs).
+
+  How to read it
+  - Every family shows CURRENT first: drawn with the exact numbers the app uses today.
+  - Below it, the HISTORY: every study from HTMLSamples15112026, newest first, with
+    its version, source file and what it changed. Shapes and sizes are the study's own;
+    only the colours are brought up to today's palette:
+      * tinted blue-slate greys → the neutral grey of the same brightness (luma);
+      * accents → the light tokens (mint = --accent);
+      * mint text/readouts → TEXT (the "VFD" rule: mint is only for lights).
+  - The originals stay in git history (and in HTMLSamples15112026/ until removed).
+
+  All colours live in :root below, named after their Rust constant where one exists.
+  No external dependencies. Every control is live: drag, wheel, double-click to reset.
+-->
+<style>
+:root{
+  color-scheme:dark;
+  /* ── surfaces (theme.rs) ── */
+  --bg:#161616;          /* BG: workspace, rack frame, seams, toolbar */
+  --panel:#292929;       /* PANEL: windows, modules, strips */
+  --panel-hi:#303030;    /* PANEL_HI: selected strip, chosen row */
+  --raised:#3b3b3b;      /* RAISED: plain egui buttons, menus */
+  --well:#1a1a1a;        /* WELL / INSET: dropdowns, displays */
+  --well-edge:#141414;   /* WELL_EDGE */
+  --line:#111111;        /* LINE: engraved borders (darker than the surface) */
+  --tab-off:#202020;     /* tab_row: mix(BG, PANEL, .55) */
+  --tab-hover:#252525;   /* tab_row hover */
+  /* ── text ── */
+  --text:#cfcfcf;        /* TEXT */
+  --text-dim:#969696;    /* TEXT_DIM */
+  --label:#a6a6a6;       /* mixer.rs small labels (PAN, MUTE): not a token yet */
+  --name:#c0c0c0;        /* mixer.rs strip names: not a token yet */
+  /* ── accents ── */
+  --mint:#a6e7c9;        /* MINT (knob arcs and pan in the mixer) */
+  --mint-deep:#55796b;   /* MINT_DEEP: egui selection / pressed */
+  --gold:#f5dba5;        /* GOLD: Lyra's eyes, sparingly (PAT) */
+  --rose:#ffc5df;        /* ROSE */
+  --lavender:#dcc6fa;    /* LAVENDER */
+  --accent:var(--mint);  /* what the knobs/faders on this page light with (picker at the top) */
+  /* ── silicone key (theme::key) ── */
+  --key-recess:#141414; --pad-top:#494949; --pad-mid:#383838; --pad-bottom:#292929; --key-face:#292929;
+  --ink-lit:#2c2c2c; --ink-unlit:#a4a4a4; --flat-off:#303030;
+  /* ── flat button (widgets::button) ── */
+  --btn:#3b3b3b; --btn-rim:#1c1c1c; --btn-hover:#424242; --btn-press:#323232;
+  /* ── LCD (theme::lcd_panel) ── */
+  --lcd:#dadada; --lcd-ink:#2f2f2f; --lcd-dim:#5e5e5e;
+  /* ── meter (widgets::METER_STOPS) ── */
+  --m0:#9fe4a9; --m70:#c8e5a3; --m86:#f0d28b; --m100:#ee9996; --peak:#e5e9b7;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+main{max-width:1180px;margin:auto;padding:24px 16px 60px}
+a{color:var(--text)}
+code{font:12px ui-monospace,monospace;color:var(--text-dim)}
+h1{font-size:24px;font-weight:650;margin:0 0 4px}
+h2{font-size:18px;font-weight:650;margin:0 0 4px}
+h3{font-size:14px;font-weight:600;margin:0}
+p{margin:6px 0;color:var(--text-dim);max-width:820px}
+.top{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
+nav{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;flex-wrap:wrap;gap:2px;padding:8px 0;border-bottom:2px solid var(--line);margin-bottom:22px}
+nav a{background:var(--tab-off);color:var(--text-dim);text-decoration:none;padding:5px 11px;font-size:12px}
+nav a:hover{background:var(--tab-hover);color:var(--text)}
+.picker{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--text-dim)}
+.picker button{width:20px;height:20px;border-radius:4px;border:1px solid var(--btn-rim);cursor:pointer;padding:0}
+.picker button[aria-pressed=true]{outline:2px solid var(--text);outline-offset:1px}
+section.family{margin:0 0 38px;scroll-margin-top:56px}
+.ver{background:var(--panel);margin:10px 0 0;padding:14px 16px 16px}
+.ver>header{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;margin-bottom:12px}
+.badge{font:700 10px ui-monospace,monospace;letter-spacing:.08em;padding:2px 7px;border-radius:3px;background:var(--raised);color:var(--text)}
+.current>header .badge{background:var(--accent);color:var(--ink-lit)}
+.src{font:11px ui-monospace,monospace;color:var(--text-dim)}
+.note{font-size:12px;margin-top:10px}
+.hist-title{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin:18px 0 0}
+details.history>summary{cursor:pointer;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin:18px 0 0;list-style-position:inside}
+details.history>summary:hover{color:var(--text)}
+.history .ver{background:#262626}
+.row{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end}
+.cell{display:grid;justify-items:center;gap:6px;min-width:0}
+.cap-label{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);text-align:center}
+.readout{font:600 12px ui-monospace,monospace;color:var(--text-dim);min-height:1.4em}
+svg.dial{display:block;touch-action:none;cursor:ns-resize;user-select:none;overflow:visible;outline:none}
+svg.dial:focus-visible{filter:drop-shadow(0 0 2px var(--text))}
+svg.dial:hover .lift{filter:brightness(1.08)}
+.scroll{overflow-x:auto;max-width:100%}
+/* palette */
+.swgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.sw{display:flex;gap:8px;align-items:center;background:var(--bg);padding:5px;cursor:copy;border:0;color:inherit;text-align:left;font:inherit}
+.sw i{width:30px;height:30px;flex:none;border-radius:3px;border:1px solid #0006}
+.sw b{display:block;font:600 11px ui-monospace,monospace;color:var(--text)}
+.sw span{font:11px ui-monospace,monospace;color:var(--text-dim)}
+.group-title{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin:14px 0 6px}
+table{border-collapse:collapse;font:12px ui-monospace,monospace}
+td,th{padding:4px 8px;text-align:left;border-bottom:1px solid var(--line)}
+th{color:var(--text-dim);font-weight:600}
+td i{display:inline-block;width:14px;height:14px;border-radius:2px;vertical-align:-2px;margin-right:6px;border:1px solid #0006}
+ul.todo{margin:8px 0 0;padding-left:18px;color:var(--text-dim);font-size:13px;max-width:860px}
+ul.todo li{margin:3px 0}
+.toast{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:var(--raised);padding:6px 12px;border-radius:4px;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+
+/* silicone key (theme::key); geometry set per key from key_geom() */
+.key{appearance:none;border:0;background:var(--key-recess);cursor:pointer;display:block;flex:none;-webkit-tap-highlight-color:transparent}
+.key .pad{display:block;width:100%;height:100%;background:linear-gradient(var(--pad-top),var(--pad-mid) 12%,var(--pad-mid) 88%,var(--pad-bottom))}
+.key .face{position:relative;display:grid;place-items:center;width:100%;height:100%;overflow:hidden;background:var(--key-face);color:var(--ink-unlit);font:650 12px ui-monospace,monospace}
+.key .light{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse 85% 82% at 50% 49%,var(--hi) 0%,var(--mid) 38%,var(--low) 76%,var(--edge) 100%)}
+.key .legend{position:relative;z-index:1;display:grid;place-items:center}
+.key.on .pad{background:linear-gradient(var(--rim),var(--edge) 12%,var(--edge) 88%,var(--rim))}
+.key.on .light{opacity:1}
+.key.on .face{color:var(--ink-lit)}
+.key:hover .pad,.key:hover .face{filter:brightness(1.14)}
+.key.on:hover .pad,.key.on:hover .face{filter:brightness(1.06)}
+.key:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.flat{appearance:none;border:0;padding:1px;background:var(--key-recess);cursor:pointer;flex:none}
+.flat i{display:block;width:100%;height:100%;background:var(--flat-off)}
+.flat:hover i{filter:brightness(1.15)}
+
+/* flat button (widgets::button) */
+.btn{appearance:none;height:26px;min-width:26px;padding:0 10px;border:1px solid var(--btn-rim);border-radius:4px;background:var(--btn);color:var(--text-dim);font:12px system-ui,sans-serif;cursor:pointer;display:inline-grid;place-items:center}
+.btn:hover{background:var(--btn-hover);color:var(--text)}
+.btn:active{background:var(--btn-press)}
+.btn.lit{color:var(--lit)}
+.btn.l{height:34px;min-width:34px}
+.btn svg{width:16px;height:16px}
+.choice{display:inline-flex;gap:2px}
+.tabs{display:flex;gap:2px;background:var(--bg);width:360px;max-width:100%}
+.tabs button{flex:1;appearance:none;border:0;height:24px;background:var(--tab-off);color:var(--text-dim);font:12px system-ui;cursor:pointer}
+.tabs button:hover{background:var(--tab-hover);color:var(--text)}
+.tabs button[aria-selected=true]{background:var(--panel);color:var(--text)}
+.tab-body{width:360px;max-width:100%;height:46px;background:var(--panel);border-top:0}
+.well{background:var(--well);border:1px solid var(--well-edge);border-radius:5px;box-shadow:inset 0 1.5px 0 #00000033}
+.picker-dd{display:inline-flex;align-items:center;gap:8px;height:26px;padding:0 10px 0 8px;color:color-mix(in srgb,var(--text) 70%,var(--text-dim));cursor:pointer;font-size:13px}
+.picker-dd:hover{color:var(--text)}
+.numwell{display:inline-grid;place-items:center;width:30px;height:22px;font:12px ui-monospace,monospace;color:var(--text-dim);cursor:ns-resize;user-select:none;touch-action:none}
+.numwell:hover{color:var(--text)}
+.lcd{display:grid;place-content:center;text-align:center;background:var(--lcd);color:var(--lcd-ink);box-shadow:inset 0 1px 0 #19231e46,inset 0 2px 0 #19231e24,inset 0 3px 0 #19231e12}
+.lcd .num{font:650 22px ui-monospace,monospace;letter-spacing:-.04em}
+.lcd small{font:600 9px system-ui;letter-spacing:.08em;color:var(--lcd-dim)}
+</style>
+</head>
+<body>
+<main>
+<div class="top">
+  <div>
+    <h1>Lyra · widget catalog</h1>
+    <p>Taken from the code on 2026-11-24. <b>Current</b> = what the app draws today, with its exact numbers.
+    <b>History</b> = every HTML study (HTMLSamples15112026), newest first, recoloured to today's palette with its shapes untouched.</p>
+  </div>
+  <div class="picker" id="accent-picker"><span>Light:</span></div>
+</div>
+<nav>
+  <a href="#palette">Palette</a><a href="#knobs">Knobs</a><a href="#keys">Silicone keys</a><a href="#leds">LEDs</a>
+  <a href="#displays">LCD &amp; dropdown</a><a href="#faders">Faders</a><a href="#meters">Meters</a><a href="#strips">Mixer strips</a>
+  <a href="#nostudy">No study yet</a><a href="#notes">Cleanup notes</a>
+</nav>
+
+<!-- ═════════════════════════════ PALETTE ═════════════════════════════ -->
+<section class="family" id="palette">
+  <h2>Palette</h2>
+  <p>Two levels only: background and surface, both neutral charcoal. Edges are darker than what they edge. Text is soft white, never mint; mint and the other lights are only for lights (LEDs, lit keys, knob arcs, fader fills, the playhead). Click a swatch to copy its hex.</p>
+  <div class="ver current" id="pal"></div>
+  <div class="ver">
+    <header><span class="badge">MAP</span><h3>Old study colour → today</h3><span class="src">how the history below was recoloured</span></header>
+    <div class="scroll"><table id="colormap"></table></div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════ KNOBS ═════════════════════════════ -->
+<section class="family" id="knobs">
+  <h2>Knobs</h2>
+  <p>Four looks chosen by drawn size: <b>Tiny</b> (flat disc, under 34 px), <b>Rubber</b> (ringed cap, under 62 px), <b>Polymer</b> (checker-lit body, larger) and <b>Pan</b> (bipolar under 44 px). 270° sweep. Choice params (2–12 options) show dots instead of an arc.</p>
+  <article class="ver current">
+    <header><span class="badge">CURRENT · IN APP</span><h3>KnobStyle tiny / rubber / polymer / pan</h3><code>widgets::paint_knob</code></header>
+    <div class="cap-label" style="text-align:left">Study size</div>
+    <div class="row" id="k-cur-big"></div>
+    <div class="cap-label" style="text-align:left;margin-top:14px">App size (knob_small 28, 44, knob_large 72, pan 28)</div>
+    <div class="row" id="k-cur-app"></div>
+    <p class="note">The arc is the channel's light (mid tone); the mixer's pan uses MINT. Hover lifts the body 8 %. In the app, values show on hover/drag, not under every knob.</p>
+  </article>
+  <details class="history" open><summary>History · 7 versions</summary>
+    <article class="ver"><header><span class="badge">v7</span><h3>Control library: the three final knobs</h3><span class="src">lyra-control-library(-mint-v2).html · 2026-11-15</span></header><div class="row" id="k-v7"></div><p class="note">Became the app's Tiny / Rubber / Polymer almost number for number.</p></article>
+    <article class="ver"><header><span class="badge">v6</span><h3>Large RUIC: checker-lit polymer</h3><span class="src">lyra-large-ruic-v6.html · 2026-11-15</span></header><div class="row" id="k-v6"></div><p class="note">Fixed checker lighting, recessed arc, a rotating pointer with no border. Absolute drag (angle follows the mouse) in the study.</p></article>
+    <article class="ver"><header><span class="badge">v5</span><h3>Flat encoder · rubber cap · machined dial</h3><span class="src">lyra-knobs-v5.html · 2026-11-14</span></header><div class="row" id="k-v5"></div><p class="note">The big dial's brushed-metal gradient was dropped (no chrome); v6 replaced it.</p></article>
+    <article class="ver"><header><span class="badge">v4</span><h3>Distinct families: flat disc · rubber rim · grip dial</h3><span class="src">lyra-knobs-v4.html · 2026-11-14</span></header><div class="row" id="k-v4"></div></article>
+    <article class="ver"><header><span class="badge">v3</span><h3>Cap constructions: rounded square · ring · pill</h3><span class="src">lyra-knobs-v3.html = lyra-knobs-v3-1.html · 2026-11-14</span></header><div class="row" id="k-v3"></div><p class="note">The two v3 files are byte-identical. 260° sweep.</p></article>
+    <article class="ver"><header><span class="badge">v2</span><h3>Matte, marker only (no lit arc)</h3><span class="src">lyra-knobs-v2.html · 2026-11-14</span></header><div class="row" id="k-v2"></div></article>
+    <article class="ver"><header><span class="badge">v1</span><h3>One material, three sizes</h3><span class="src">lyra-knobs.html · 2026-11-14</span></header><div class="row" id="k-v1"></div></article>
+  </details>
+</section>
+
+<!-- ═════════════════════════════ KEYS ═════════════════════════════ -->
+<section class="family" id="keys">
+  <h2>Silicone keys</h2>
+  <p>Seen straight from the top, lit from above: a thin dark recess, a bezel pad (brighter top, constant middle, darker bottom) and a flat face. Lit, the face glows in its own light and the pad takes the light's rim. Zero gloss. In the app the big keys now belong to Fluttersine and the step grid uses the flat key.</p>
+  <article class="ver current">
+    <header><span class="badge">CURRENT · IN APP</span><h3>Eight lights, silicone key and flat key</h3><code>theme::key · theme::flat_key · theme::LIGHTS</code></header>
+    <div class="row" id="keys-cur"></div>
+    <div class="cap-label" style="text-align:left;margin-top:14px">Packed 24 (52 px) · step grid (flat keys, step_w 24 × step_h 30)</div>
+    <div class="row" id="keys-packed" style="gap:4px;max-width:680px"></div>
+    <div class="row" id="keys-flat" style="gap:2px;margin-top:10px"></div>
+    <p class="note">Channel order in the app: mint, pink, blue, lavender, peach, amber, cyan, lime (the study's order was mint, cyan, blue, lavender, pink, peach, amber, lime). Hover: unlit ×1.14, lit ×1.06.</p>
+  </article>
+  <details class="history" open><summary>History · 3 versions</summary>
+    <article class="ver"><header><span class="badge">v3</span><h3>Chromatic silicone rack</h3><span class="src">lyra-multicolor-button-rack.html · 2026-11-15</span></header><p class="note" style="margin-top:0">Same as the app's key: eight independent lights, 2 px recess. Only the order and the legend ink changed (study ink #25302c → #2c2c2c). Shown in the current card above.</p></article>
+    <article class="ver"><header><span class="badge">v2</span><h3>Control library: piano key and 8-key array, mint</h3><span class="src">lyra-control-library-mint-v2.html · 2026-11-15</span></header><div class="row" id="keys-v2"></div><p class="note">v2 lit the face with one flat mint (#83cdaa) under the radial light; v3 made every part come from the light.</p></article>
+    <article class="ver"><header><span class="badge">v1</span><h3>Piano pad, olive light</h3><span class="src">daw-piano-pad.html · 2026-11-14 · also lyra-control-library.html</span></header><div class="row" id="keys-v1"></div><p class="note">The first key. Pad stops at 10 / 90 % (later 12 / 88 %) and a soft inner shadow on the face. Its olive light, kept here only as a swatch, became mint in v2.</p></article>
+  </details>
+</section>
+
+<!-- ═════════════════════════════ LEDS ═════════════════════════════ -->
+<section class="family" id="leds">
+  <h2>LEDs</h2>
+  <p>A round recessed light that toggles (mute = lit when audible, on/off). Lit, its well takes its own light's colour. Rows of LEDs can be swept: press one and drag over its neighbours.</p>
+  <article class="ver current">
+    <header><span class="badge">CURRENT · IN APP</span><h3>LED in eight lights</h3><code>theme::led · widgets::led · widgets::sweep</code></header>
+    <div class="row" id="led-cur"></div>
+    <p class="note">22 px in the mixer, led 18 px in the rack. Unlit: well #161616, ring #1d1d1d, bead #484848 (hover #535353). Lit: well = low × 0.4, ring = low × 0.55, bead hi → mid → edge.</p>
+  </article>
+  <details class="history" open><summary>History · 2 versions</summary>
+    <article class="ver"><header><span class="badge">v2</span><h3>Mute with a softly tinted recess</h3><span class="src">lyra-single-channel-strip-v2.html · 2026-11-15</span></header><div class="row" id="led-v2"></div></article>
+    <article class="ver"><header><span class="badge">v1</span><h3>Mute with a glow</h3><span class="src">lyra-single-channel-strip.html (v1) · 2026-11-15</span></header><div class="row" id="led-v1"></div><p class="note">The outer glow went away in v2 (no glows).</p></article>
+  </details>
+</section>
+
+<!-- ═════════════════════════════ DISPLAYS ═════════════════════════════ -->
+<section class="family" id="displays">
+  <h2>LCD &amp; dropdown</h2>
+  <p>A pale backlit panel with dark ink. Hover a digit to choose how fine, drag or wheel, double-click to type (the BPM). Dropdowns sit in a recessed well.</p>
+  <article class="ver current">
+    <header><span class="badge">CURRENT · IN APP</span><h3>LCD number, LCD text, editor picker</h3><code>widgets::lcd_number · lcd_text · areas::picker_list · theme::well</code></header>
+    <div class="row" id="disp-cur"></div>
+    <p class="note">The editor picker is the model dropdown (UI-NEEDS #4); 12 plain egui ComboBoxes are still to switch to it.</p>
+  </article>
+  <details class="history" open><summary>History · 2 versions</summary>
+    <article class="ver"><header><span class="badge">v2</span><h3>Control library: dropdown, two LCDs</h3><span class="src">lyra-control-library-mint-v2.html · 2026-11-15</span></header><div class="row" id="disp-v2"></div></article>
+    <article class="ver"><header><span class="badge">v1</span><h3>Recess &amp; backlit LCD</h3><span class="src">lyra-recess-lcd.html · 2026-11-14</span></header><div class="row" id="disp-v1"></div></article>
+  </details>
+</section>
+
+<!-- ═════════════════════════════ FADERS ═════════════════════════════ -->
+<section class="family" id="faders">
+  <h2>Faders</h2>
+  <p>A recessed track lit from the bottom up to a three-layer cap with grip lines. The track itself is the indicator (no second value bar).</p>
+  <article class="ver current">
+    <header><span class="badge">CURRENT · IN APP</span><h3>Mixer fader, 40 × 210</h3><code>mixer::fader</code></header>
+    <div class="row" id="fad-cur"></div>
+    <p class="note">Drag (Shift = fine), wheel ≈ ½ dB, double-click = 0.8 (about −2 dB). The fill is the strip's light.</p>
+  </article>
+  <details class="history" open><summary>History · 2 versions</summary>
+    <article class="ver"><header><span class="badge">v2</span><h3>Compact, lit inside the track</h3><span class="src">lyra-mixer-strip-v4.html · lyra-single-channel-strip(-v2).html · 2026-11-15</span></header><div class="row" id="fad-v2"></div></article>
+    <article class="ver"><header><span class="badge">v1</span><h3>Chromeless deco fader: bar · ticks · plain</h3><span class="src">lyra-fader-v1.html · 2026-11-15</span></header><div class="row" id="fad-v1"></div><p class="note">The "bar" variant was used by mixer strips v1–v3.</p></article>
+  </details>
+</section>
+
+<!-- ═════════════════════════════ METERS ═════════════════════════════ -->
+<section class="family" id="meters">
+  <h2>Meters</h2>
+  <p>Linear in dB from −60 to 0 dBFS. The colour is fixed to the scale (green, lime, amber, rose at the top); the level only reveals it. A pale peak line waits 0.4 s, then falls.</p>
+  <article class="ver current">
+    <header><span class="badge">CURRENT · IN APP</span><h3>Stereo meter (strip) and horizontal meter (toolbar)</h3><code>mixer::meter · widgets::meter_bar · meter_stereo_h</code></header>
+    <div class="row" id="met-cur"></div>
+    <p class="note">The Recorder's calm, eased, one-colour meter is liked too and should become a widget (UI-NEEDS #10); it isn't drawn here.</p>
+  </article>
+  <details class="history" open><summary>History · 3 versions</summary>
+    <article class="ver"><header><span class="badge">v3</span><h3>Fixed full-scale gradient</h3><span class="src">lyra-mixer-strip-v3.html · 2026-11-15</span></header><div class="row" id="met-v3"></div></article>
+    <article class="ver"><header><span class="badge">v2</span><h3>Stereo, gradient stretched over the fill</h3><span class="src">lyra-mixer-strip-v2.html · 2026-11-15</span></header><div class="row" id="met-v2"></div><p class="note">The whole gradient squeezes into the lit part, so quiet signals already show rose at their top. v3 fixed that.</p></article>
+    <article class="ver"><header><span class="badge">v1</span><h3>Segmented LED meter, thick bevel</h3><span class="src">lyra-mixer-fader-vu-v1.html · 2026-11-15</span></header><div class="row" id="met-v1"></div></article>
+  </details>
+</section>
+
+<!-- ═════════════════════════════ STRIPS ═════════════════════════════ -->
+<section class="family" id="strips">
+  <h2>Mixer strips</h2>
+  <p>Fader and stereo meter on top; below, the vertical name beside pan and mute. One flat surface, no outline; strips sit on the background a 2 px seam apart.</p>
+  <article class="ver current">
+    <header><span class="badge">CURRENT · IN APP</span><h3>Channel strips, 73 × 400</h3><code>mixer::strip</code>
+      <span class="picker" style="margin-left:auto">Zoom <button class="btn" data-z="1">1×</button><button class="btn" data-z="1.5">1.5×</button><button class="btn" data-z="2">2×</button></span></header>
+    <div class="scroll"><div id="str-cur"></div></div>
+    <p class="note">Click a strip to select it (PANEL_HI and a 2 px line in its light). Coloured dots above the name = channels routed here. Mute LED: lit = audible; Alt-click = solo.</p>
+  </article>
+  <details class="history" open><summary>History · 6 versions</summary>
+    <article class="ver"><header><span class="badge">v6</span><h3>Single channel strip 02: pan arc, tinted mute</h3><span class="src">lyra-single-channel-strip-v2.html · 2026-11-15</span></header><div class="row" id="str-v6"></div><p class="note">The direct ancestor. The app made it ~60 % as wide, dropped the darker lower cells (two levels only), and moved the name to the floor.</p></article>
+    <article class="ver"><header><span class="badge">v5</span><h3>Single channel strip 01</h3><span class="src">lyra-single-channel-strip.html · 2026-11-15</span></header><div class="row" id="str-v5"></div></article>
+    <article class="ver"><header><span class="badge">v4</span><h3>Mixer strip 04: compact faders</h3><span class="src">lyra-mixer-strip-v4.html · 2026-11-15</span></header><div class="scroll" id="str-v4"></div></article>
+    <article class="ver"><header><span class="badge">v3</span><h3>Mixer strip 03: flat modules, chassis gap</h3><span class="src">lyra-mixer-strip-v3.html · 2026-11-15</span></header><div class="scroll" id="str-v3"></div></article>
+    <article class="ver"><header><span class="badge">v2</span><h3>Mixer strip 02: square, tightly packed</h3><span class="src">lyra-mixer-strip-v2.html · 2026-11-15</span></header><div class="scroll" id="str-v2"></div></article>
+    <article class="ver"><header><span class="badge">v1</span><h3>Fader + VU: rounded channel cards</h3><span class="src">lyra-mixer-fader-vu-v1.html · 2026-11-15</span></header><div class="scroll" id="str-v1"></div><p class="note">Rounded floating cards: the "Android" layout the rack idiom replaced.</p></article>
+  </details>
+</section>
+
+<!-- ═════════════════════════════ NO STUDY ═════════════════════════════ -->
+<section class="family" id="nostudy">
+  <h2>In the app, no study yet</h2>
+  <p>Widgets that exist in code but were never drawn as a study. They're here so the cleanup (COMPONENTS.md, UI-NEEDS.md) has them next to the rest. Status from COMPONENTS.md: ✓ keep · ~ needs sizes/states · ✗ to replace.</p>
+  <article class="ver current">
+    <header><span class="badge">CURRENT · IN APP</span><h3>Flat button ~</h3><code>widgets::button · button_sized · button_at</code></header>
+    <div class="row" id="ns-btn"></div>
+    <p class="note">A plate in the knob greys: idle #3b3b3b, hover ×1.12, pressed ×0.85, rim #1c1c1c. On = legend in its light's hi. UI-NEEDS proposes on = bright body with dark ink instead, in S / M / L (20 / 28 / 40).</p>
+  </article>
+  <article class="ver current">
+    <header><span class="badge">CURRENT · IN APP</span><h3>Choice ✗ · Tab row ✗ · Wide button ~ · Number well ✗</h3><code>widgets::choice · tab_row · wide_key · number_well</code></header>
+    <div class="row" id="ns-misc"></div>
+  </article>
+</section>
+
+<!-- ═════════════════════════════ NOTES ═════════════════════════════ -->
+<section class="family" id="notes">
+  <h2>Cleanup notes</h2>
+  <p>Things found while matching this page to the code.</p>
+  <div class="ver">
+    <ul class="todo">
+      <li><b>Tinted greys still in the app:</b> the Polymer knob's checker (#41494b / #474f51, neutral would be #474747 / #4d4d4d), the pan knob's centre tick (#91a79e) and pointer (#a6c9b8), and the LCD's top shadow (#19231e, harmless). Everything else is neutral.</li>
+      <li><b>Two mints:</b> MINT #a6e7c9 (pan, egui selection) and L_MINT.mid #b7f3d3 (channel 1). Pick one for "the" mint.</li>
+      <li><b>Colours typed in place, not tokens:</b> knob greys (widgets.rs), fader and meter greys, strip label #a6a6a6 and name #c0c0c0 (mixer.rs), button #3b3b3b / #1c1c1c (a copy of RAISED), meter background #282828, keyboard map #454545 / #6e6e6e. Name them in theme.rs, as this page does in :root.</li>
+      <li><b>WELL and INSET</b> are the same colour (#1a1a1a) under two names.</li>
+    </ul>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+// ───────────────────────── tokens (same as :root) ─────────────────────────
+const LIGHTS = { // theme.rs L_*: hi, mid, low, edge, rim
+  mint:    ['#d5ffe7','#b7f3d3','#90dbb8','#79c6a4','#648f7a'],
+  pink:    ['#ffe5f2','#ffc5df','#ed9fc3','#d485aa','#a36683'],
+  blue:    ['#e0eaff','#bfcefb','#91adeb','#7b94ce','#6176a3'],
+  lavender:['#f2e4ff','#dcc6fa','#b9a0e7','#a28acb','#7d6a9e'],
+  peach:   ['#ffeadc','#ffd0b4','#eeab8d','#d48e76','#a66d5e'],
+  amber:   ['#fff2d3','#f5dba5','#dfbd7b','#c3a068','#927a55'],
+  cyan:    ['#d8fbff','#b1edf4','#82cfdc','#6ab5c4','#568895'],
+  lime:    ['#efffd7','#d7f4b4','#b3d989','#96bc72','#73915b'],
+};
+const ORDER = ['mint','pink','blue','lavender','peach','amber','cyan','lime']; // theme::LIGHTS (channel order)
+const L = n => { const [hi,mid,low,edge,rim] = LIGHTS[n]; return {hi,mid,low,edge,rim}; };
+const METER_STOPS = [[0,'#9fe4a9'],[.7,'#c8e5a3'],[.86,'#f0d28b'],[1,'#ee9996']];
+
+// ───────────────────────── helpers ─────────────────────────
+const NS = 'http://www.w3.org/2000/svg';
+const $ = s => document.querySelector(s);
+function el(tag, attrs = {}, parent) { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); parent && parent.append(n); return n; }
+function h(tag, cls, parent, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; parent && parent.append(n); return n; }
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const pol = (cx, cy, r, deg) => { const a = deg * Math.PI / 180; return [cx + r * Math.sin(a), cy - r * Math.cos(a)]; }; // 0° = up, clockwise
+function arcD(cx, cy, r, a, b) { if (b - a < 0.05) return ''; const [x, y] = pol(cx, cy, r, a), [u, v] = pol(cx, cy, r, b); return `M${x} ${y}A${r} ${r} 0 ${b - a > 180 ? 1 : 0} 1 ${u} ${v}`; }
+const rgb = hx => [1, 3, 5].map(i => parseInt(hx.slice(i, i + 2), 16));
+const hex = a => '#' + a.map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('');
+const shade = (c, k) => hex(rgb(c).map(v => v * k));           // theme::shade
+const mix = (a, b, t) => { const x = rgb(a), y = rgb(b); return hex(x.map((v, i) => v + (y[i] - v) * t)); }; // theme::mix
+let uid = 0;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.k); toast.k = setTimeout(() => t.classList.remove('show'), 1100); }
+function cell(parent, label, node, readout) { const c = h('div', 'cell', parent); c.append(node); if (label) h('div', 'cap-label', c, label); const r = readout ? h('div', 'readout', c) : null; return r; }
+
+// One interaction for every continuous control on the page.
+// The raw value stays continuous while dragging; only the drawing is quantised
+// (Lyra's rule: quantise output, not input).
+function bindDial(node, o) {
+  const n = o.steps || 0, def = o.def ?? o.value;
+  let raw = o.value, last = null;
+  const shown = () => n ? Math.round(raw * (n - 1)) / (n - 1) : raw;
+  const show = () => { const t = shown(); o.draw(t, n ? Math.round(t * (n - 1)) : null); node.setAttribute('aria-valuenow', n ? Math.round(t * (n - 1)) + 1 : Math.round(t * 100)); };
+  const set = v => { raw = clamp(v, 0, 1); show(); };
+  node.setAttribute('tabindex', 0); node.setAttribute('role', 'slider');
+  node.addEventListener('pointerdown', e => { if (e.button) return; last = o.axis === 'x' ? e.clientX : e.clientY; node.setPointerCapture(e.pointerId); e.preventDefault(); node.focus({preventScroll: true}); });
+  node.addEventListener('pointermove', e => {
+    if (last == null) return;
+    const p = o.axis === 'x' ? e.clientX : e.clientY, d = o.axis === 'x' ? p - last : last - p; last = p;
+    const span = n ? 12 * (n - 1) : (o.span || 180) * (e.shiftKey ? 5 : 1);
+    set(raw + d / span);
+  });
+  const end = () => last = null;
+  node.addEventListener('pointerup', end); node.addEventListener('pointercancel', end);
+  node.addEventListener('wheel', e => { e.preventDefault(); const d = e.deltaY < 0 ? 1 : -1; set(n ? shown() + d / (n - 1) : raw + d * (o.wheel || .02)); }, {passive: false});
+  node.addEventListener('dblclick', () => set(def));
+  node.addEventListener('keydown', e => {
+    const d = {ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1}[e.key]; if (!d) return;
+    e.preventDefault(); set(n ? shown() + d / (n - 1) : raw + d * .01);
+  });
+  show(); return {set};
+}
+const pct = (t, i, n) => i == null ? Math.round(t * 100) + '%' : `${i + 1} / ${n}`;
+const panTxt = t => { const v = Math.round((t - .5) * 200); return v === 0 ? 'C' : (v < 0 ? 'L' : 'R') + Math.abs(v); };
+
+// ───────────────────────── accent picker ─────────────────────────
+(() => {
+  const host = $('#accent-picker');
+  const opts = [['MINT (#a6e7c9)', '#a6e7c9'], ...ORDER.map(n => [n + ' mid', LIGHTS[n][1]])];
+  opts.forEach(([name, c], i) => {
+    const b = h('button', '', host); b.style.background = c; b.title = name; b.setAttribute('aria-pressed', i === 0);
+    b.onclick = () => { document.documentElement.style.setProperty('--accent', c); host.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); };
+  });
+})();
+
+// ───────────────────────── palette ─────────────────────────
+(() => {
+  const groups = [
+    ['Surfaces', [['BG', '#161616'], ['PANEL', '#292929'], ['PANEL_HI', '#303030'], ['RAISED', '#3b3b3b'], ['WELL · INSET', '#1a1a1a'], ['WELL_EDGE', '#141414'], ['LINE', '#111111'], ['tab off', '#202020'], ['tab hover', '#252525']]],
+    ['Text', [['TEXT', '#cfcfcf'], ['TEXT_DIM', '#969696'], ['strip label', '#a6a6a6'], ['strip name', '#c0c0c0'], ['key ink unlit', '#a4a4a4'], ['key ink lit', '#2c2c2c']]],
+    ['Accents', [['MINT', '#a6e7c9'], ['MINT_DEEP', '#55796b'], ['GOLD', '#f5dba5'], ['ROSE', '#ffc5df'], ['LAVENDER', '#dcc6fa']]],
+    ['Silicone key', [['KEY_RECESS', '#141414'], ['PAD_TOP', '#494949'], ['PAD_MID', '#383838'], ['PAD_BOTTOM', '#292929'], ['KEY_FACE', '#292929'], ['flat key off', '#303030']]],
+    ['Flat button', [['BUTTON', '#3b3b3b'], ['hover ×1.12', '#424242'], ['pressed ×0.85', '#323232'], ['BUTTON_RIM', '#1c1c1c']]],
+    ['LCD', [['LCD', '#dadada'], ['LCD_INK', '#2f2f2f'], ['LCD_INK_DIM', '#5e5e5e'], ['top shadow', '#19231e']]],
+    ['Meter', [['0 %', '#9fe4a9'], ['70 %', '#c8e5a3'], ['86 %', '#f0d28b'], ['100 %', '#ee9996'], ['peak hold', '#e5e9b7'], ['bar off', '#282828'], ['well', '#151515'], ['well inner', '#1f1f1f']]],
+    ['Knob greys', [['tiny body', '#363636'], ['tiny face', '#3b3b3b'], ['rubber socket', '#1b1b1b'], ['rubber rim', '#5f5f5f'], ['rubber body', '#3f3f3f'], ['rubber face', '#414141'], ['polymer ring', '#363636'], ['polymer body', '#3b3b3b'], ['polymer pointer', '#a9a9a9'], ['arc track', '#222222'], ['dot off', '#2d2d2d'], ['pan body', '#454545']]],
+    ['Fader', [['track', '#161616'], ['track inner', '#2b2b2b'], ['cap rim', '#202020'], ['cap body', '#444444'], ['cap face', '#4f4f4f'], ['tick major', '#737373'], ['tick minor', '#505050']]],
+    ['Piano roll', [['ROLL_WHITE_ROW', '#282828'], ['ROLL_BLACK_ROW', '#212121'], ['ROLL_OUT_ROW', '#1b1b1b'], ['KEY_WHITE', '#c9c9c9'], ['KEY_BLACK', '#1d1d1d'], ['KEY_EDGE', '#949494']]],
+  ];
+  const host = $('#pal');
+  h('header', '', host).innerHTML = '<span class="badge">CURRENT · IN APP</span><h3>Tokens</h3><code>theme.rs (names in CAPS are Rust constants)</code>';
+  const sw = (parent, name, c) => { const b = h('button', 'sw', parent); b.innerHTML = `<i style="background:${c}"></i><div><b>${name}</b><span>${c}</span></div>`; b.onclick = () => { navigator.clipboard?.writeText(c); toast('Copied ' + c); }; };
+  for (const [title, list] of groups) { h('div', 'group-title', host, title); const g = h('div', 'swgrid', host); list.forEach(([n, c]) => sw(g, n, c)); }
+  h('div', 'group-title', host, 'Lights (theme::Light: hi · mid · low · edge · rim), channel order');
+  const t = h('table', '', h('div', 'scroll', host));
+  t.innerHTML = '<tr><th>light</th><th>hi</th><th>mid</th><th>low</th><th>edge</th><th>rim</th></tr>' +
+    ORDER.map(n => `<tr><td>L_${n.toUpperCase()}</td>${LIGHTS[n].map(c => `<td><i style="background:${c}"></i>${c}</td>`).join('')}</tr>`).join('');
+  const map = [
+    ['page backdrop', '#1c2226', '#161616', 'BG'], ['chassis / rack frame', '#111719', '#161616', 'BG (seams)'], ['panel', '#252b30', '#292929', 'PANEL'],
+    ['card inside a panel', '#22292e', '#262626', '(history cards only)'], ['recessed well', '#151b20', '#1a1a1a', 'WELL'], ['well edge', '#101519', '#141414', 'WELL_EDGE'],
+    ['ink', '#c4ccc8', '#cfcfcf', 'TEXT'], ['muted ink', '#8d9b96', '#969696', 'TEXT_DIM'], ['labels', '#9ea9a3', '#a6a6a6', 'strip label'], ['vertical name', '#b5c4bd', '#c0c0c0', 'strip name'],
+    ['accent', '#9fc6b4 · #a4c8b7 · #a6e7c9', '#a6e7c9', 'MINT'], ['mint readouts', '#a6e7c9 (text)', '#cfcfcf', 'TEXT (VFD rule)'], ['pressed M/S', '#55796b', '#55796b', 'MINT_DEEP'],
+    ['LCD', '#d5ddda', '#dadada', 'LCD'], ['LCD ink', '#27332f', '#2f2f2f', 'LCD_INK'], ['knob body', '#343d3f', '#3b3b3b', 'tiny face'],
+    ['other tinted greys', 'any #rrggbb with a teal cast', 'same-luma grey', 'Y = .2126 R + .7152 G + .0722 B'],
+  ];
+  $('#colormap').innerHTML = '<tr><th>role</th><th>study</th><th>today</th><th>token</th></tr>' + map.map(([r, a, b, n]) =>
+    `<tr><td>${r}</td><td>${a.startsWith('#') && a.length === 7 ? `<i style="background:${a}"></i>` : ''}${a}</td><td><i style="background:${b}"></i>${b}</td><td>${n}</td></tr>`).join('');
+})();
+
+// ───────────────────────── knobs: current (widgets::paint_knob) ─────────────────────────
+function appKnob(size, {steps = 0, bipolar = false, value = .55, color = 'var(--accent)', look} = {}) {
+  // KnobStyle::for_size; `look` forces one (to show a small look enlarged)
+  const style = look || (size < 44 && bipolar ? 'pan' : size < 34 ? 'tiny' : size < 62 ? 'rubber' : 'polymer');
+  const u = size / 300, C = 150, px = v => v / u; // px → box units (the app's .max(n) minimums are in px)
+  const svg = el('svg', {viewBox: '0 0 300 300', width: size, height: size, class: 'dial'});
+  const lift = el('g', {class: 'lift'}), disc = (r, f, p = svg) => el('circle', {cx: C, cy: C, r, fill: f}, p);
+  const [arcR, arcW0, trackC] = {pan: [133.5, 15, '#252525'], tiny: [119, 6, '#222222'], rubber: [124, 6, '#222222'], polymer: [125, 7, '#1c1c1c']}[style];
+  const arcW = Math.max(arcW0, px(1.6));
+  if (style === 'pan') { disc(132, '#191919'); svg.append(lift); disc(117, '#454545', lift); disc(99, '#4d4d4d', lift); disc(84, '#474747', lift); }
+  if (style === 'tiny') { svg.append(lift); disc(94, '#363636', lift); disc(85, '#3b3b3b', lift); }
+  if (style === 'rubber') { disc(108, '#1b1b1b'); svg.append(lift); disc(98.5, '#5f5f5f', lift); disc(93.5, '#3f3f3f', lift); disc(83, '#414141', lift); }
+  if (style === 'polymer') {
+    disc(110, '#1c1c1c'); const a = el('g', {class: 'lift'}, svg); disc(106, '#363636', a); disc(101, '#1c1c1c'); svg.append(lift); disc(96, '#3b3b3b', lift);
+    const id = 'q' + (++uid), cp = el('clipPath', {id}, el('defs', {}, svg)); el('circle', {cx: C, cy: C, r: 88}, cp);
+    const g = el('g', {'clip-path': `url(#${id})`}, lift);
+    [[62, 62, '#41494b'], [150, 62, '#474f51'], [62, 150, '#474f51'], [150, 150, '#41494b']].forEach(([x, y, f]) => el('rect', {x, y, width: 88, height: 88, fill: f}, g)); // app keeps these tinted (see notes)
+  }
+  let act, dots = [];
+  if (steps >= 2 && steps <= 12) {
+    for (let i = 0; i < steps; i++) { const [x, y] = pol(C, C, arcR, -135 + 270 * i / (steps - 1)); dots.push(el('circle', {cx: x, cy: y}, svg)); }
+  } else {
+    el('path', {d: arcD(C, C, arcR, -135, 135), fill: 'none', stroke: trackC, 'stroke-width': arcW}, svg);
+    act = el('path', {fill: 'none', stroke: color, 'stroke-width': arcW, 'stroke-linecap': 'round'}, svg);
+    if (bipolar) { const [x, y] = pol(C, C, arcR, 0); el('circle', {cx: x, cy: y, r: Math.max(8.4, px(1.2)), fill: '#91a79e'}, svg); }
+  }
+  let ptr;
+  if (style === 'pan') ptr = el('circle', {r: Math.max(12.6, px(1.6)), fill: '#a6c9b8'}, svg);
+  if (style === 'tiny') ptr = el('circle', {r: Math.max(7, px(1.5)), fill: color}, svg);
+  if (style === 'rubber') ptr = el('line', {stroke: color, 'stroke-width': Math.max(8, px(1.5)), 'stroke-linecap': 'round'}, svg);
+  if (style === 'polymer') ptr = el('line', {stroke: '#a9a9a9', 'stroke-width': 10, 'stroke-linecap': 'round', class: 'lift'}, svg);
+  const draw = (t, i) => {
+    const a = -135 + 270 * t;
+    if (act) act.setAttribute('d', bipolar ? arcD(C, C, arcR, Math.min(0, a), Math.max(0, a)) : arcD(C, C, arcR, -135, a));
+    dots.forEach((d, k) => { const on = k === i; d.setAttribute('r', on ? Math.max(7, px(1.8)) : Math.max(5, px(1.2))); d.setAttribute('fill', on ? color : '#2d2d2d'); });
+    if (style === 'pan' || style === 'tiny') { const [x, y] = pol(C, C, style === 'pan' ? 93 : 61, a); ptr.setAttribute('cx', x); ptr.setAttribute('cy', y); }
+    else { const [r1, r2] = style === 'rubber' ? [47, 66] : [63, 85]; const [x1, y1] = pol(C, C, r1, a), [x2, y2] = pol(C, C, r2, a); Object.entries({x1, y1, x2, y2}).forEach(([k, v]) => ptr.setAttribute(k, v)); }
+  };
+  return {svg, bind: out => bindDial(svg, {steps, value: bipolar ? .5 : value, def: bipolar ? .5 : value, draw: (t, i) => { draw(t, i); out && (out.textContent = bipolar ? panTxt(t) : pct(t, i, steps)); }})};
+}
+function knobCell(host, label, k) { const r = cell(host, label, k.svg, true); k.bind(r); }
+[[104, 'Tiny · continuous', 0, 'tiny'], [104, 'Tiny · 9 choices', 9, 'tiny'], [155, 'Rubber · continuous', 0, 'rubber'], [155, 'Rubber · 9 choices', 9, 'rubber'], [252, 'Polymer · continuous', 0, 'polymer'], [252, 'Polymer · 9 choices', 9, 'polymer']]
+  .forEach(([s, l, n, look]) => knobCell($('#k-cur-big'), l, appKnob(s, {steps: n, look})));
+knobCell($('#k-cur-big'), 'Rubber · bipolar', appKnob(155, {bipolar: true, look: 'rubber'}));
+knobCell($('#k-cur-big'), 'Pan (bipolar under 44 px)', appKnob(132, {bipolar: true, look: 'pan'}));
+[[28, 'Tiny 28'], [28, 'Tiny 28 · 4 choices', 4], [44, 'Rubber 44'], [44, 'Rubber 44 · 5 choices', 5], [72, 'Polymer 72']].forEach(([s, l, n]) => knobCell($('#k-cur-app'), l, appKnob(s, {steps: n})));
+knobCell($('#k-cur-app'), 'Pan 28', appKnob(28, {bipolar: true}));
+knobCell($('#k-cur-app'), 'Rubber 44 · bipolar', appKnob(44, {bipolar: true}));
+
+// ───────────────────────── knobs: history (generic builder) ─────────────────────────
+// spec: box, sweep, base(svg,stepped,id) under the scale, body(svg,stepped,id) over it,
+// scale(stepped) → {arc:{r,w,track}} | {dots:{r,off,on,offR,onR}} | null,
+// ptr(svg) → (angle) => void
+function histKnob(spec, stepped, size, value = .55) {
+  const svg = el('svg', {viewBox: `0 0 ${spec.box} ${spec.box}`, width: size, height: size, class: 'dial'}), C = spec.box / 2, S = spec.sweep || 135, id = 'h' + (++uid);
+  spec.base && spec.base(svg, stepped, id);
+  const sc = spec.scale(stepped); let act, dots = [];
+  if (sc && sc.arc) { el('path', {d: arcD(C, C, sc.arc.r, -S, S), fill: 'none', stroke: sc.arc.track, 'stroke-width': sc.arc.w, 'stroke-linecap': 'round'}, svg); act = el('path', {fill: 'none', stroke: 'var(--accent)', 'stroke-width': sc.arc.w, 'stroke-linecap': 'round'}, svg); }
+  if (sc && sc.dots) for (let i = 0; i < 9; i++) { const [x, y] = pol(C, C, sc.dots.r, -S + 2 * S * i / 8); dots.push(el('circle', {cx: x, cy: y}, svg)); }
+  spec.body && spec.body(svg, stepped, id);
+  const ptr = spec.ptr(svg, stepped, C);
+  const n = stepped ? 9 : 0;
+  const r = h('div', 'readout');
+  bindDial(svg, {steps: n, value: stepped ? .5 : value, draw: (t, i) => {
+    const a = -S + 2 * S * t; ptr(a);
+    if (act) act.setAttribute('d', arcD(C, C, sc.arc.r, -S, a));
+    dots.forEach((d, k) => { d.setAttribute('r', k === i ? sc.dots.onR : sc.dots.offR); d.setAttribute('fill', k === i ? 'var(--accent)' : sc.dots.off); });
+    r.textContent = pct(t, i, 9);
+  }});
+  return {svg, r};
+}
+const circ = (svg, C, r, fill, extra = {}) => el('circle', {cx: C, cy: C, r, fill, ...extra}, svg);
+const linePtr = (r1, r2, w, color = 'var(--accent)') => (svg, st, C) => { const l = el('line', {stroke: color, 'stroke-width': w, 'stroke-linecap': 'round'}, svg); return a => { const [x1, y1] = pol(C, C, r1, a), [x2, y2] = pol(C, C, r2, a); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); }; };
+const dotPtr = (r, size, color = 'var(--accent)') => (svg, st, C) => { const d = el('circle', {r: size, fill: color}, svg); return a => { const [x, y] = pol(C, C, r, a); d.setAttribute('cx', x); d.setAttribute('cy', y); }; };
+function histRow(host, specs) { for (const [label, spec, size] of specs) for (const st of [false, true]) { const k = histKnob(spec, st, size); const c = h('div', 'cell', $(host)); c.append(k.svg); h('div', 'cap-label', c, label + (st ? ' · 9 steps' : ' · continuous')); c.append(k.r); } }
+
+// v7: control library (300 box)
+const v7 = {
+  tiny: {box: 300, base: null, scale: s => s ? {dots: {r: 119, off: '#2f2f2f', offR: 5, onR: 7}} : {arc: {r: 119, w: 6, track: '#232323'}}, body: (g) => { circ(g, 150, 94, '#373737'); circ(g, 150, 85, '#3b3b3b'); }, ptr: dotPtr(61, 7)},
+  normal: {box: 300, scale: s => s ? {dots: {r: 124, off: '#2f2f2f', offR: 5, onR: 7}} : {arc: {r: 124, w: 6, track: '#232323'}}, body: g => { circ(g, 150, 108, '#1c1c1c'); circ(g, 150, 96, '#3f3f3f', {stroke: '#606060', 'stroke-width': 5}); circ(g, 150, 83, '#414141'); }, ptr: linePtr(47, 66, 8)},
+};
+// v6 / v7 large: the checker-lit polymer (track sits between the rings)
+const polymerHist = {box: 300, base: g => { circ(g, 150, 110, '#1c1c1c'); circ(g, 150, 106, '#373737'); },
+  scale: s => s ? {dots: {r: 125, off: '#2f2f2f', offR: 5, onR: 7}} : {arc: {r: 125, w: 7, track: '#1d1d1d'}},
+  body: (g, s, id) => { circ(g, 150, 101, '#1c1c1c'); circ(g, 150, 96, '#3b3b3b'); const cp = el('clipPath', {id}, el('defs', {}, g)); circ(cp, 150, 88, '#000'); const q = el('g', {'clip-path': `url(#${id})`}, g); [[62, 62, '#474747'], [150, 62, '#4d4d4d'], [62, 150, '#4d4d4d'], [150, 150, '#474747']].forEach(([x, y, f]) => el('rect', {x, y, width: 88, height: 88, fill: f}, q)); },
+  ptr: linePtr(65, 87, 10, '#aaaaaa')};
+histRow('#k-v7', [['Tiny · flat', v7.tiny, 104], ['Normal · rubber', v7.normal, 155], ['Large · polymer', polymerHist, 252]]);
+(() => { const k = histKnob(polymerHist, false, 300, .68); const c = h('div', 'cell', $('#k-v6')); c.append(k.svg); h('div', 'cap-label', c, 'Large RUIC · continuous'); c.append(k.r); })();
+// v5 (200 box)
+const v5 = {
+  small: {box: 200, scale: s => s ? {dots: {r: 83, off: '#646464', offR: 4, onR: 6}} : {arc: {r: 81, w: 4, track: '#4c4c4c'}}, base: g => { circ(g, 100, 67, '#373737'); circ(g, 100, 60, '#3b3b3b'); }, ptr: dotPtr(42, 5.5)},
+  normal: {box: 200, scale: s => s ? {dots: {r: 86, off: '#646464', offR: 4, onR: 6}} : {arc: {r: 85, w: 5, track: '#4c4c4c'}}, base: g => { circ(g, 100, 73, '#1c1c1c'); circ(g, 100, 65, '#3f3f3f', {stroke: '#606060', 'stroke-width': 4}); circ(g, 100, 56, '#414141'); }, ptr: linePtr(32, 44, 6)},
+  big: {box: 200, scale: s => s ? {dots: {r: 94, off: '#646464', offR: 4, onR: 6}} : {arc: {r: 93, w: 5, track: '#4c4c4c'}},
+    base: (g, s, id) => { const gr = el('linearGradient', {id, x1: 0, y1: 0, x2: 1, y2: 1}, el('defs', {}, g)); [['0%', '#717171'], ['23%', '#5b5b5b'], ['52%', '#444444'], ['78%', '#595959'], ['100%', '#393939']].forEach(([o, c]) => el('stop', {offset: o, 'stop-color': c}, gr));
+      circ(g, 100, 84, '#1a1a1a'); circ(g, 100, 75, `url(#${id})`, {stroke: '#7c7c7c', 'stroke-width': 2.5}); circ(g, 100, 64, '#494949'); circ(g, 100, 53, '#3c3c3c'); },
+    ptr: (g, s, C) => { const p = el('path', {fill: '#c4c4c4'}, g); return a => { const [x1, y1] = pol(C, C, 51, a), [x2, y2] = pol(C, C, 36, a); p.setAttribute('d', `M${x1 - 3} ${y1}L${x2 - 2} ${y2}L${x2 + 2} ${y2}L${x1 + 3} ${y1}Z`); }; }},
+};
+histRow('#k-v5', [['Small · flat encoder', v5.small, 88], ['Normal · rubber cap', v5.normal, 132], ['Big · machined dial', v5.big, 174]]);
+// v4 (200 box)
+const v4 = {
+  small: {box: 200, base: g => { circ(g, 100, 56, '#3b3b3b'); circ(g, 100, 48, '#3f3f3f'); }, scale: s => s ? {dots: {r: 72, off: '#606060', offR: 3, onR: 6}} : {arc: {r: 68, w: 3, track: '#494949'}}, ptr: linePtr(0, 33, 6)},
+  normal: {box: 200, base: g => { circ(g, 100, 73, '#1b1b1b'); circ(g, 100, 63, '#3c3c3c', {stroke: '#616161', 'stroke-width': 4}); }, scale: s => s ? {dots: {r: 83, off: '#606060', offR: 4, onR: 6}} : {arc: {r: 82, w: 5, track: '#494949'}}, ptr: linePtr(0, 48, 6)},
+  big: {box: 200, base: g => { circ(g, 100, 88, '#1c1c1c'); circ(g, 100, 79, '#484848'); el('rect', {x: 35, y: 72, width: 130, height: 56, rx: 24, fill: '#363636'}, g); el('path', {d: 'M44 77 Q100 61 156 77', stroke: '#595959', 'stroke-width': 2, fill: 'none'}, g); }, scale: s => s ? {dots: {r: 94, off: '#606060', offR: 4, onR: 6}} : {arc: {r: 94, w: 5, track: '#494949'}}, ptr: linePtr(0, 62, 7)},
+};
+histRow('#k-v4', [['Flat utility', v4.small, 130], ['Rubber cap', v4.normal, 140], ['Wide grip dial', v4.big, 150]]);
+// v3 (160 box, ±130°)
+const v3cap = '#414141', v3rim = '#5f5f5f';
+const v3 = {
+  small: {box: 160, sweep: 130, base: g => circ(g, 80, 51, '#1a1a1a'), scale: s => s ? {dots: {r: 55, off: '#5e5e5e', offR: 2.9, onR: 4.6}} : {arc: {r: 55, w: 4, track: '#4a4a4a'}}, body: g => { el('rect', {x: 43, y: 43, width: 74, height: 74, rx: 17, fill: v3cap, stroke: v3rim, 'stroke-width': 2}, g); el('rect', {x: 49, y: 49, width: 62, height: 62, rx: 13, fill: '#3c3c3c'}, g); }, ptr: linePtr(16, 29, 6)},
+  normal: {box: 160, sweep: 130, base: g => circ(g, 80, 61, '#1a1a1a'), scale: s => s ? {dots: {r: 65, off: '#5e5e5e', offR: 2.9, onR: 4.6}} : {arc: {r: 65, w: 5, track: '#4a4a4a'}}, body: g => { circ(g, 80, 50, v3cap, {stroke: v3rim, 'stroke-width': 3}); circ(g, 80, 41, '#404040'); }, ptr: linePtr(22, 37, 5)},
+  big: {box: 160, sweep: 130, base: g => circ(g, 80, 70, '#1a1a1a'), scale: s => s ? {dots: {r: 74, off: '#5e5e5e', offR: 3.3, onR: 4.6}} : {arc: {r: 74, w: 5, track: '#4a4a4a'}}, body: g => { circ(g, 80, 58, '#393939', {stroke: v3rim, 'stroke-width': 3}); el('rect', {x: 38, y: 50, width: 84, height: 60, rx: 21, fill: v3cap}, g); }, ptr: linePtr(21, 37, 5)},
+};
+histRow('#k-v3', [['Utility encoder', v3.small, 112], ['Rubber cap', v3.normal, 132], ['Instrument dial', v3.big, 156]]);
+// v2 (200 box): marks are printed, not live
+const v2 = kind => { const r = [56, 65, 72][kind], cap = [48, 56, 62][kind];
+  return {box: 200, scale: () => null,
+    base: (g, st) => { circ(g, 100, r + 9, '#181818'); circ(g, 100, r + 4, '#222222', {stroke: '#4e4e4e', 'stroke-width': 2});
+      if (st) for (let i = 0; i < 9; i++) { const [x, y] = pol(100, 100, [80, 85, 89][kind], -135 + i * 33.75); circ(g, 0, 0, '', {cx: x, cy: y, r: kind ? 3.2 : 2.7, fill: '#898989'}); }
+      else if (kind === 2) for (let i = 0; i < 11; i++) { const a = -135 + i * 27, [x1, y1] = pol(100, 100, 83, a), [x2, y2] = pol(100, 100, i % 5 ? 90 : 94, a); el('line', {x1, y1, x2, y2, stroke: '#898989', 'stroke-width': i % 5 ? 1.5 : 3, 'stroke-linecap': 'round'}, g); }
+      circ(g, 100, r, '#373737', {stroke: '#575757', 'stroke-width': 2}); circ(g, 100, cap, '#3e3e3e', {stroke: '#4c4c4c', 'stroke-width': 1.5}); if (kind === 2) circ(g, 100, 53, 'none', {stroke: '#484848', 'stroke-width': 4}); },
+    ptr: (g, st, C) => linePtr([23, 25, 29][kind], [34, 46, 55][kind], kind ? 6 : 5, st ? '#c1c1c1' : 'var(--accent)')(g, st, C)}; };
+histRow('#k-v2', [['Small · inset notch', v2(0), 76], ['Normal · soft-touch', v2(1), 112], ['Bigger · calibrated', v2(2), 160]]);
+// v1 (100 box)
+const v1k = {box: 100, base: g => circ(g, 50, 39, '#1a1a1a'), scale: () => ({arc: {r: 43, w: 4, track: '#171717'}}), body: g => { circ(g, 50, 36, '#3b3b3b', {stroke: '#4e4e4e', 'stroke-width': 1.3}); circ(g, 50, 29, '#373737'); }, ptr: linePtr(26, 36, 4, '#d8d8d8')};
+histRow('#k-v1', [['Small', v1k, 64], ['Normal', v1k, 94], ['Bigger', v1k, 132]]);
+
+// ───────────────────────── silicone keys ─────────────────────────
+const PIANO = '<svg viewBox="0 0 64 64" fill="none" style="width:70%;height:70%"><rect x="8" y="14" width="48" height="36" rx="3" stroke="currentColor" stroke-width="3"/><path d="M20 50V15M32 50V15M44 50V15" stroke="currentColor" stroke-width="2.5"/><path d="M17 14V34H23V14M29 14V34H35V14M41 14V34H47V14" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/></svg>';
+function key(size, light, legend, on = false, o = {}) { // theme::key + key_geom
+  const s = size, recess = clamp(s * .03, 1, 2), pad = clamp(s * .045, 1.5, 5), rOut = Math.min(s * .12 + 1.5, 11), rPad = Math.max(rOut - recess, 1), rFace = Math.max(rPad - pad * .8, 1.5);
+  const b = h('button', 'key' + (on ? ' on' : ''));
+  b.style.cssText = `width:${s}px;height:${s}px;padding:${recess}px;border-radius:${rOut}px`;
+  const lt = o.light || L(light); for (const k of ['hi', 'mid', 'low', 'edge', 'rim']) b.style.setProperty('--' + k, lt[k]);
+  b.innerHTML = `<span class="pad" style="padding:${pad}px;border-radius:${rPad}px"><span class="face" style="border-radius:${rFace}px;font-size:${Math.max(9, s * .2)}px"><span class="light"></span><span class="legend" style="width:100%;height:100%">${legend}</span></span></span>`;
+  if (o.pad) b.querySelector('.pad').style.background = o.pad;      // history overrides
+  if (o.facePlain) b.querySelector('.face').style.cssText += ';' + o.facePlain;
+  b.setAttribute('aria-pressed', on);
+  b.onclick = () => { const v = b.classList.toggle('on'); b.setAttribute('aria-pressed', v); o.onToggle && o.onToggle(v, b); };
+  return b;
+}
+(() => {
+  const host = $('#keys-cur');
+  ORDER.forEach((n, i) => { const c = h('div', 'cell', host); c.append(key(80, n, String(i + 1).padStart(2, '0'), true)); h('div', 'cap-label', c, n); });
+  const c = h('div', 'cell', host); c.append(key(80, 'mint', '00')); h('div', 'cap-label', c, 'unlit');
+  const p = h('div', 'cell', host); p.append(key(108, 'mint', PIANO, true)); h('div', 'cap-label', p, 'piano key 108');
+  const pk = $('#keys-packed'); for (let i = 0; i < 24; i++) pk.append(key(52, ORDER[i % 8], String(i + 1).padStart(2, '0'), [0, 1, 4, 8, 11, 14, 16, 19, 22].includes(i)));
+  const fl = $('#keys-flat'); // theme::flat_key, 16 steps, four beats
+  for (let i = 0; i < 16; i++) {
+    const b = h('button', 'flat', fl), lt = L('mint'); b.style.cssText = `width:24px;height:30px;border-radius:${Math.round(Math.min(24 * .12 + 1.5, 6))}px;margin-right:${i % 4 === 3 ? 4 : 0}px`;
+    const f = h('i', '', b); f.style.borderRadius = Math.max(Math.round(Math.min(24 * .12 + 1.5, 6) - 1), 1) + 'px';
+    let on = i % 4 === 0 || i === 10; const paint = () => f.style.background = on ? lt.mid : ''; paint();
+    b.onclick = () => { on = !on; paint(); };
+  }
+})();
+(() => { // v2: one mint face; v1: olive (kept as swatches only)
+  const v2pad = 'linear-gradient(#8fdcba,#7bcaa8 12%,#7bcaa8 88%,#5fab8b)';
+  const mk = (s, leg, on) => { const b = key(s, 'mint', leg, on); const set = () => { const v = b.classList.contains('on'); b.querySelector('.pad').style.background = v ? v2pad : ''; b.querySelector('.face').style.background = v ? '#83cdaa' : ''; b.querySelector('.face').style.color = v ? '#424242' : ''; };
+    const old = b.onclick; b.onclick = () => { old(); set(); }; set(); return b; };
+  const host = $('#keys-v2'); const c = h('div', 'cell', host); c.append(mk(108, PIANO, true)); h('div', 'cap-label', c, 'Piano button');
+  const arr = h('div', 'row', h('div', 'cell', host)); arr.style.cssText = 'gap:4px;max-width:460px'; for (let i = 1; i <= 8; i++) arr.append(mk(52, String(i).padStart(2, '0'), i % 3 === 1));
+  const v1 = $('#keys-v1'); const k = key(108, 'mint', PIANO, true); k.querySelector('.pad').style.cssText += ';background-image:none'; // 10/90 stops + face shadow
+  const fix = () => { const on = k.classList.contains('on'); k.querySelector('.pad').style.background = on ? `linear-gradient(${L('mint').rim},${L('mint').edge} 10%,${L('mint').edge} 90%,${L('mint').rim})` : 'linear-gradient(#494949,#383838 10%,#383838 90%,#292929)'; k.querySelector('.face').style.boxShadow = 'inset 0 2px 5px #00000024'; };
+  const o = k.onclick; k.onclick = () => { o(); fix(); }; fix();
+  const c1 = h('div', 'cell', v1); c1.append(k); h('div', 'cap-label', c1, 'Piano pad (now in mint)');
+  const sw = h('div', 'cell', v1); sw.innerHTML = '<div style="display:flex;gap:3px">' + ['#adbf7e', '#a1b574', '#879e67', '#778e5c', '#72865a'].map(c => `<i style="display:block;width:22px;height:22px;border-radius:3px;background:${c}" title="${c}"></i>`).join('') + '</div><div class="cap-label">original olive light (retired)</div>';
+})();
+
+// ───────────────────────── LEDs (theme::led) ─────────────────────────
+function led(d, light, on = true, o = {}) {
+  const svg = el('svg', {viewBox: `0 0 ${d} ${d}`, width: d, height: d, class: 'dial', style: 'cursor:pointer'}), c = d / 2, r = d / 2, ring = Math.max(d * .07, 1), bead = d * .3, id = 'l' + (++uid);
+  const well = el('circle', {cx: c, cy: c, r}, svg), rg = el('circle', {cx: c, cy: c, r: r - ring / 2, fill: 'none', 'stroke-width': ring}, svg);
+  const g = el('radialGradient', {id, cx: .5 - .1 * .5, cy: .5 - .16 * .5, r: .5, fx: .5 - .1 * .5, fy: .5 - .16 * .5}, el('defs', {}, svg));
+  const lt = o.light || L(light); [['0', lt.hi], ['.55', lt.mid], ['1', lt.edge]].forEach(([of, col]) => el('stop', {offset: of, 'stop-color': col}, g));
+  const b = el('circle', {cx: c, cy: c, r: bead}, svg);
+  const hl = el('path', {fill: 'none', 'stroke-width': .8, d: (() => { let p = ''; for (let i = 0; i <= 8; i++) { const a = Math.PI * (1.15 + .7 * i / 8); p += (i ? 'L' : 'M') + (c + Math.cos(a) * (bead - .8)) + ' ' + (c + Math.sin(a) * (bead - .8)); } return p; })()}, svg);
+  let hot = false;
+  const paint = () => {
+    if (on) { well.setAttribute('fill', o.wellOn || shade(lt.low, .4)); rg.setAttribute('stroke', o.ringOn || shade(lt.low, .55)); b.setAttribute('fill', `url(#${id})`); hl.style.display = 'none'; svg.style.filter = (hot ? 'brightness(1.05) ' : '') + (o.glow ? `drop-shadow(0 0 ${d * .25}px ${lt.mid}99)` : ''); }
+    else { well.setAttribute('fill', o.wellOff || '#161616'); rg.setAttribute('stroke', o.ringOff || '#1d1d1d'); const bc = o.beadOff || (hot ? '#535353' : '#484848'); b.setAttribute('fill', bc); hl.style.display = ''; hl.setAttribute('stroke', mix(bc, '#6b6b6b', .35)); svg.style.filter = ''; }
+  };
+  svg.addEventListener('pointerenter', () => { hot = true; paint(); }); svg.addEventListener('pointerleave', () => { hot = false; paint(); });
+  svg.addEventListener('click', () => { on = !on; paint(); }); paint(); return svg;
+}
+(() => {
+  const host = $('#led-cur');
+  ORDER.forEach(n => { const c = h('div', 'cell', host); c.append(led(22, n)); h('div', 'cap-label', c, n); });
+  const c = h('div', 'cell', host); c.append(led(22, 'mint', false)); h('div', 'cap-label', c, 'off');
+  const r = h('div', 'cell', host); const row = h('div', 'row', r); row.style.gap = '6px'; [1, 1, 0, 1, 0, 0, 1, 1].forEach((v, i) => row.append(led(18, ORDER[i], !!v))); h('div', 'cap-label', r, 'rack row, 18 px');
+  const cell2 = (host, d, on, o, label) => { const c = h('div', 'cell', $(host)); c.append(led(d, 'mint', on, o)); h('div', 'cap-label', c, label); };
+  const hist = {wellOff: '#171717', ringOff: '#1d1d1d', beadOff: '#494949'};
+  cell2('#led-v2', 28, true, {...hist, wellOn: '#3a5849', ringOn: '#4f7865'}, 'on'); cell2('#led-v2', 28, false, hist, 'off');
+  cell2('#led-v1', 28, true, {...hist, wellOn: '#171717', ringOn: '#1d1d1d', glow: true}, 'on'); cell2('#led-v1', 28, false, hist, 'off');
+})();
+
+// ───────────────────────── LCD & dropdown ─────────────────────────
+function lcd(w, hgt, value, caption, o = {}) {
+  const d = h('div', 'lcd'); d.style.cssText = `width:${w}px;height:${hgt}px;border-radius:${clamp(hgt * .11, 3, 7)}px` + (o.css || '');
+  const n = h('span', 'num', d, value); if (o.size) n.style.fontSize = o.size + 'px'; if (caption) h('small', '', d, caption); return {d, n};
+}
+function bpm(host, label, o = {}) { // drag / wheel the BPM like the app's LCD number
+  const {d, n} = lcd(o.w || 125, o.h || 62, '', o.cap ?? 'BPM', o); d.style.cursor = 'ns-resize'; d.style.touchAction = 'none';
+  bindDial(d, {value: (110 - 20) / 280, span: 600, wheel: 1 / 280, draw: t => n.textContent = (20 + t * 280).toFixed(1)});
+  const c = h('div', 'cell', host); c.append(d); if (label) h('div', 'cap-label', c, label);
+}
+function dropdown(items, o = {}) {
+  const wrap = h('div', 'well picker-dd'); let i = 0;
+  if (o.icon) wrap.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h7"/></svg>');
+  const name = h('span', '', wrap, items[0]);
+  wrap.insertAdjacentHTML('beforeend', `<svg viewBox="0 0 10 6" width="9" height="6" style="margin-left:${o.gap || 18}px"><path d="M1.5 1.5L5 4.5 8.5 1.5" fill="none" stroke="${o.chevron || 'var(--text-dim)'}" stroke-width="1.5"/></svg>`);
+  if (o.css) wrap.style.cssText += o.css;
+  wrap.onclick = () => { i = (i + 1) % items.length; name.textContent = items[i]; };
+  return wrap;
+}
+(() => {
+  const host = $('#disp-cur');
+  bpm(host, 'LCD number · BPM (drag)', {w: 100, h: 46});
+  { const c = h('div', 'cell', host); const {d} = lcd(110, 46, '1.1.1', 'BAR.BEAT.STEP'); c.append(d); h('div', 'cap-label', c, 'LCD text · playhead'); }
+  { const c = h('div', 'cell', host); c.append(dropdown(['Arrangement', 'Piano roll', 'Mixer', 'Recorder'], {icon: true})); h('div', 'cap-label', c, 'editor picker (click)'); }
+  { const c = h('div', 'cell', host); c.append(dropdown(['Bar', 'Beat', '1/2 beat', '1/4 beat'], {gap: 14})); h('div', 'cap-label', c, 'same, as a snap menu'); }
+  const v2 = $('#disp-v2');
+  { const c = h('div', 'cell', v2); c.append(dropdown(['Groove', 'Straight', 'Swing', 'Triplet'], {css: ';height:42px;min-width:145px;border-radius:7px;border-color:#141414;box-shadow:inset 0 2px 4px #0004;padding:0 13px', gap: 40, chevron: '#a4a4a4'})); h('div', 'cap-label', c, 'Recessed dropdown'); }
+  bpm(v2, 'Backlit LCD', {css: ';border-radius:7px;background:#dbdbdb;color:#303030', w: 125, h: 62});
+  { const c = h('div', 'cell', v2); const {d} = lcd(125, 62, '68%', 'LEVEL', {css: ';border-radius:7px;background:#dbdbdb;color:#303030'}); c.append(d); h('div', 'cap-label', c, 'Secondary LCD'); }
+  const v1 = $('#disp-v1'); v1.style.cssText = 'background:#2f2f2f;padding:28px;border-radius:14px;width:max-content;max-width:100%';
+  { const c = h('div', 'cell', v1); c.append(dropdown(['Groove', 'Straight', 'Swing'], {css: ';height:40px;min-width:132px;border-radius:7px;color:#c7c7c7;box-shadow:inset 0 2px 4px #00000047,0 1px 0 #ffffff09;padding:0 13px', gap: 34, chevron: '#a4a4a4'})); h('div', 'cap-label', c, 'Recessed dropdown'); }
+  bpm(v1, 'Backlit LCD', {css: ';border-radius:7px;background:#dbdbdb;color:#303030', w: 116, h: 58, size: 21});
+})();
+
+// ───────────────────────── meters ─────────────────────────
+const meters = [];
+function signal(t, seed, k = 0) { // synthetic, like the studies: a level in dB
+  const wave = .5 + .25 * Math.sin(t / 310 + seed * 1.7 + k * .37) + .17 * Math.sin(t / 103 + seed * 2.3 + k * .8) + .08 * Math.sin(t / 71 + seed * .9 + k * 2.1);
+  return Math.min(-.3, -55 + 65 * .48 + wave * 15);
+}
+function meterGrad(svg, id, y1, y2, user) {
+  const g = el('linearGradient', user ? {id, x1: 0, y1, x2: 0, y2, gradientUnits: 'userSpaceOnUse'} : {id, x1: 0, y1: 1, x2: 0, y2: 0}, el('defs', {}, svg));
+  METER_STOPS.forEach(([o, c]) => el('stop', {offset: o * 100 + '%', 'stop-color': c}, g));
+}
+// current: mixer::meter (22 × 210, bars follow the fader's travel 10..201)
+function appMeter(seed, scale = 1) {
+  const W = 22, H = 210, svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: W * scale, height: H * scale}), id = 'm' + (++uid);
+  const y0 = 10, y1 = 201; meterGrad(svg, id, y1 - 2, y0 + 2, true);
+  el('rect', {x: 1, y: y0 - 2, width: W - 2, height: y1 - y0 + 4, rx: 2, fill: '#151515'}, svg);
+  el('rect', {x: 3, y: y0, width: W - 6, height: y1 - y0, rx: 1, fill: '#1f1f1f'}, svg);
+  const bw = (W - 6 - 6) / 2, bars = [];
+  for (let k = 0; k < 2; k++) {
+    const x = 3 + 2 + k * (bw + 2), top = y0 + 2, bh = y1 - y0 - 4;
+    el('rect', {x, y: top, width: bw, height: bh, fill: '#282828'}, svg);
+    const fill = el('rect', {x, width: bw, fill: `url(#${id})`}, svg), peak = el('rect', {x, width: bw, height: 2, fill: '#e5e9b7', opacity: .9}, svg);
+    bars.push({fill, peak, top, bh, lvl: -60, held: 0, since: 0});
+  }
+  meters.push((t, dt) => bars.forEach((b, k) => {
+    const tgt = signal(t, seed, k); b.lvl += (tgt - b.lvl) * (tgt > b.lvl ? .53 : .18);
+    const f = clamp((b.lvl + 60) / 60, 0, 1), y = b.top + b.bh * (1 - f);
+    b.fill.setAttribute('y', y); b.fill.setAttribute('height', b.bh * f);
+    if (f >= b.held) { b.held = f; b.since = t; } else if (t - b.since > 400) b.held = Math.max(f, b.held - .2 * Math.min(dt, .1));
+    b.peak.setAttribute('y', b.top + b.bh * (1 - b.held) - 1); b.peak.setAttribute('opacity', b.held > .02 ? .9 : 0);
+  }));
+  return svg;
+}
+// widgets::meter_stereo_h (toolbar master)
+function hMeter(seed) {
+  const W = 120, H = 14, svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: W * 1.5, height: H * 1.5}), id = 'm' + (++uid);
+  const g = el('linearGradient', {id, x1: 2, y1: 0, x2: W - 2, y2: 0, gradientUnits: 'userSpaceOnUse'}, el('defs', {}, svg)); METER_STOPS.forEach(([o, c]) => el('stop', {offset: o * 100 + '%', 'stop-color': c}, g));
+  el('rect', {x: 0, y: 0, width: W, height: H, rx: 2, fill: '#151515'}, svg);
+  const bh = (H - 4 - 2) / 2, bars = [0, 1].map(k => { el('rect', {x: 2, y: 2 + k * (bh + 2), width: W - 4, height: bh, fill: '#282828'}, svg); return {r: el('rect', {x: 2, y: 2 + k * (bh + 2), height: bh, fill: `url(#${id})`}, svg), lvl: -60}; });
+  meters.push(t => bars.forEach((b, k) => { const tgt = signal(t, seed, k); b.lvl += (tgt - b.lvl) * (tgt > b.lvl ? .53 : .18); b.r.setAttribute('width', (W - 4) * clamp((b.lvl + 60) / 60, 0, 1)); }));
+  return svg;
+}
+// history: stereo (v2 stretched / v3 fixed), 39 × 350
+const TOP = 26, BOTTOM = 318, SPAN = BOTTOM - TOP;
+function stereoMeter(seed, fixed, hgt = 280) {
+  const svg = el('svg', {viewBox: '0 0 39 350', width: 39 * hgt / 350, height: hgt}), id = 'm' + (++uid);
+  meterGrad(svg, id, BOTTOM - 2, TOP + 2, fixed);
+  el('rect', {x: 1, y: TOP - 3, width: 37, height: SPAN + 6, rx: 3, fill: '#161616'}, svg); el('rect', {x: 4, y: TOP, width: 31, height: SPAN, rx: 1.5, fill: '#1f1f1f'}, svg);
+  const bars = [0, 1].map(k => { const x = 7 + k * 14; el('rect', {x, y: TOP + 2, width: 11, height: SPAN - 4, fill: '#292929'}, svg);
+    return {fill: el('rect', {x, width: 11, fill: `url(#${id})`}, svg), peak: el('rect', {x, width: 11, height: 2, fill: '#e5e9b7'}, svg), lvl: -60, held: -60, until: 0}; });
+  meters.push((t, dt) => bars.forEach((m, k) => {
+    const tgt = signal(t, seed, k); m.lvl += (tgt - m.lvl) * (tgt > m.lvl ? .53 : .18); const v = clamp(m.lvl, -60, 0), hh = (v + 60) / 60 * (SPAN - 4);
+    m.fill.setAttribute('y', BOTTOM - 2 - hh); m.fill.setAttribute('height', hh);
+    if (v >= m.held) { m.held = v; m.until = t + 400; } else if (t > m.until) m.held = Math.max(v, m.held - dt * 12);
+    m.peak.setAttribute('y', BOTTOM - 3 - (m.held + 60) / 60 * (SPAN - 4)); m.peak.setAttribute('opacity', m.held > -59 ? .9 : 0);
+  }));
+  return svg;
+}
+// history v1: segmented, 55 × 350 (signal colours brought to METER_STOPS)
+function segMeter(seed, hgt = 280) {
+  const svg = el('svg', {viewBox: '0 0 55 350', width: 55 * hgt / 350, height: hgt});
+  [[8, 12, 39, 326, 9, '#1c1c1c'], [11, 15, 33, 320, 7, '#393939'], [15, 19, 25, 312, 4, '#121212'], [18, 22, 19, 306, 2, '#191919']].forEach(([x, y, w, hh, rx, f]) => el('rect', {x, y, width: w, height: hh, rx, fill: f}, svg));
+  const segs = []; for (let s = 0; s < 30; s++) segs.push({r: el('rect', {x: 20, y: 321 - s * 10, width: 15, height: 7, rx: 1.3, fill: '#303030'}, svg), col: s >= 27 ? '#ee9996' : s >= 23 ? '#f0d28b' : '#9fe4a9'});
+  const peak = el('rect', {x: 20, y: 321, width: 15, height: 3, rx: 1, fill: '#e5e9b7', opacity: 0}, svg); let lvl = 0, held = 0, until = 0, last = 0;
+  meters.push(t => { if (t - last < 65) return; last = t; const tgt = clamp(Math.round((signal(t, seed) + 60) / 60 * 29), 0, 30); lvl += (tgt - lvl) * (tgt > lvl ? .66 : .22); const l = Math.round(lvl);
+    if (l >= held) { held = l; until = t + 420; } else if (t > until) held = Math.max(l, held - 1);
+    segs.forEach((s, k) => s.r.setAttribute('fill', k < l ? s.col : '#303030')); peak.setAttribute('y', 321 - (Math.max(1, held) - 1) * 10); peak.setAttribute('opacity', held > 0 ? .95 : 0); });
+  return svg;
+}
+function buildMeters() { // every meter registers a callback, so they're (re)built together with the strips
+  const cur = $('#met-cur'); cur.innerHTML = '';
+  { const c = h('div', 'cell', cur); const r = h('div', 'row', c); r.style.gap = '8px'; r.append(appMeter(1, 1), appMeter(2, 1.5)); h('div', 'cap-label', c, 'strip meter · 1× and 1.5×'); }
+  { const c = h('div', 'cell', cur); c.append(hMeter(3)); h('div', 'cap-label', c, 'toolbar master · 1.5×'); }
+  { const c = h('div', 'cell', cur); const bar = h('div', ''); bar.style.cssText = `width:24px;height:200px;background:linear-gradient(to top,${METER_STOPS.map(([o, col]) => col + ' ' + o * 100 + '%').join(',')})`; c.append(bar); h('div', 'cap-label', c, 'full scale'); }
+  [['#met-v3', true], ['#met-v2', false]].forEach(([s, fixed], i) => { const host = $(s); host.innerHTML = ''; for (let k = 0; k < 3; k++) host.append(stereoMeter(k + i * 3, fixed)); });
+  $('#met-v1').innerHTML = ''; for (let k = 0; k < 3; k++) $('#met-v1').append(segMeter(k));
+}
+
+// ───────────────────────── faders ─────────────────────────
+// current: mixer::fader, 40 × 210
+function appFader(light, scale = 1, value = .72) {
+  const W = 40, H = 210, svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: W * scale, height: H * scale, class: 'dial'}), y0 = 10, y1 = H - 9, span = y1 - y0, cx = W * .55;
+  for (let k = 0; k <= 10; k++) { const y = y0 + k * span / 10, major = k % 5 === 0; el('line', {x1: 3, x2: major ? 8 : 6, y1: y, y2: y, stroke: major ? '#737373' : '#505050', 'stroke-width': major ? 1.4 : 1}, svg); }
+  el('rect', {x: cx - 4, y: y0, width: 8, height: span, rx: 4, fill: '#161616'}, svg);
+  el('rect', {x: cx - 2, y: y0 + 2, width: 4, height: span - 4, rx: 2, fill: '#2b2b2b'}, svg);
+  const fill = el('rect', {x: cx - 2, width: 4, rx: 2, fill: light}, svg);
+  const cap = el('g', {}, svg), w = W - 6, r = (x, y, ww, hh, rx, f, p = cap) => el('rect', {x: cx - ww / 2 + x, y: y - hh / 2, width: ww, height: hh, rx, fill: f}, p);
+  r(0, 1.5, w, 17, 4, '#0000003c'); r(0, .5, w, 17, 4, '#202020'); const body = el('g', {class: 'lift'}, cap); r(0, 0, w - 2, 15, 3, '#444444', body); r(0, 0, w - 6, 11, 3, '#4f4f4f', body);
+  [-1, 0, 1].forEach(k => el('line', {x1: cx - 7, x2: cx + 7, y1: k * 2.5, y2: k * 2.5, stroke: mix('#4f4f4f', k ? '#727272' : '#818181', k ? .55 : .78), 'stroke-width': 1}, body));
+  const draw = t => { const y = y1 - t * span; cap.setAttribute('transform', `translate(0 ${y})`); fill.setAttribute('y', Math.max(y, y0 + 2)); fill.setAttribute('height', Math.max(0, y1 - 2 - Math.max(y, y0 + 2))); };
+  return {svg, bind: out => bindDial(svg, {value, def: .72, span: span * scale, wheel: .015, draw: t => { draw(t); out && (out.textContent = Math.round(t * 100) + '% travel'); }})};
+}
+// history: wide (fader-v1 kinds bar / ticks / plain; strips v1–v3 = bar)
+function wideFader(kind, {vb = 125, dx = 0, hgt = 280, value = .72, v1map = true} = {}) {
+  const svg = el('svg', {viewBox: `0 0 ${vb} 350`, width: vb * hgt / 350, height: hgt, class: 'dial'});
+  el('rect', {x: 58 + dx, y: 26, width: 9, height: 292, rx: 4.5, fill: '#171717'}, svg); el('rect', {x: 60 + dx, y: 29, width: 5, height: 286, rx: 2.5, fill: '#292929'}, svg);
+  if (kind === 'bar') el('rect', {x: 39 + dx, y: 26, width: 4, height: 292, rx: 2, fill: '#1b1b1b'}, svg);
+  for (let t = 0; t <= 10; t++) { const y = 26 + t * 29.2; el('line', {x1: (kind === 'plain' ? 35 : 31) + dx, x2: (kind === 'plain' ? 43 : 37) + dx, y1: y, y2: y, stroke: t % 5 ? '#505050' : '#727272', 'stroke-width': t % 5 ? 1 : 1.7}, svg); }
+  const prog = kind === 'bar' ? el('rect', {x: 39 + dx, width: 4, rx: 2, fill: 'var(--accent)'}, svg) : null;
+  const ticks = kind === 'ticks' ? Array.from({length: 11}, (_, t) => el('line', {x1: 39 + dx, x2: 43 + dx, y1: 26 + t * 29.2, y2: 26 + t * 29.2, 'stroke-width': 2.5}, svg)) : [];
+  const cap = el('g', {style: 'filter:drop-shadow(0 2px 1px #15151555)'}, svg);
+  el('rect', {x: 23 + dx, y: -15, width: 79, height: 30, rx: 7, fill: '#202020'}, cap); el('rect', {x: 25 + dx, y: -14, width: 75, height: 27, rx: 6, fill: '#444444'}, cap); el('rect', {x: 28 + dx, y: -11, width: 69, height: 20, rx: 4, fill: '#4f4f4f'}, cap);
+  [-1, 0, 1].forEach(k => el('line', {x1: 48 + dx, x2: 77 + dx, y1: k * 5, y2: k * 5, stroke: k ? '#727272' : '#808080', 'stroke-width': 1.3, 'stroke-linecap': 'round', opacity: k ? .55 : .78}, cap));
+  const r = h('div', 'readout');
+  bindDial(svg, {value, span: 264 * hgt / 350, draw: t => { const cy = v1map ? 303 - t * 264 : BOTTOM - t * SPAN; cap.setAttribute('transform', `translate(0 ${cy})`);
+    if (prog) { prog.setAttribute('y', cy); prog.setAttribute('height', Math.max(0, 318 - cy)); }
+    ticks.forEach((e, k) => e.setAttribute('stroke', t * 100 >= 100 - k * 10 ? 'var(--accent)' : '#474747')); r.textContent = Math.round(t * 100) + '%'; }});
+  return {svg, r};
+}
+// history: compact (strip v4 / single strips), 76 × 350
+function compactFader({hgt = 280, value = .72} = {}) {
+  const svg = el('svg', {viewBox: '0 0 76 350', width: 76 * hgt / 350, height: hgt, class: 'dial'}), cx = 38;
+  el('rect', {x: cx - 5, y: TOP, width: 10, height: SPAN, rx: 5, fill: '#171717'}, svg); el('rect', {x: cx - 3, y: TOP + 3, width: 6, height: SPAN - 6, rx: 3, fill: '#2c2c2c'}, svg);
+  for (let t = 0; t <= 10; t++) { const y = TOP + t * SPAN / 10; el('line', {x1: 11, x2: t % 5 ? 16 : 19, y1: y, y2: y, stroke: t % 5 ? '#505050' : '#727272', 'stroke-width': t % 5 ? 1 : 1.7}, svg); }
+  const prog = el('rect', {x: cx - 3, width: 6, rx: 3, fill: 'var(--accent)'}, svg), cap = el('g', {style: 'filter:drop-shadow(0 2px 1px #15151555)'}, svg);
+  el('rect', {x: 6, y: -13, width: 64, height: 27, rx: 6, fill: '#202020'}, cap); el('rect', {x: 8, y: -12, width: 60, height: 24, rx: 5, fill: '#444444'}, cap); el('rect', {x: 11, y: -9, width: 54, height: 18, rx: 4, fill: '#4f4f4f'}, cap);
+  [-1, 0, 1].forEach(k => el('line', {x1: 25, x2: 51, y1: k * 4, y2: k * 4, stroke: k ? '#727272' : '#808080', 'stroke-width': 1.2, 'stroke-linecap': 'round', opacity: k ? .55 : .78}, cap));
+  const r = h('div', 'readout');
+  bindDial(svg, {value, span: SPAN * hgt / 350, draw: t => { const y = BOTTOM - t * SPAN; cap.setAttribute('transform', `translate(0 ${y})`); prog.setAttribute('y', y); prog.setAttribute('height', Math.max(0, BOTTOM - 3 - y)); r.textContent = Math.round(t * 100) + '%'; }});
+  return {svg, r};
+}
+(() => {
+  const host = $('#fad-cur');
+  ['mint', 'pink', 'amber'].forEach((n, i) => { const f = appFader(L(n).mid, 1.5, [.72, .6, .8][i]); const c = h('div', 'cell', host); c.append(f.svg); h('div', 'cap-label', c, n + ' · 1.5×'); f.bind(h('div', 'readout', c)); });
+  { const f = appFader(L('blue').mid, 1); const c = h('div', 'cell', host); c.append(f.svg); h('div', 'cap-label', c, 'blue · 1×'); f.bind(h('div', 'readout', c)); }
+  { const f = compactFader(); const c = h('div', 'cell', $('#fad-v2')); c.append(f.svg); h('div', 'cap-label', c, 'Compact · light in the track'); c.append(f.r); }
+  [['bar', 'Channel · mint value strip'], ['ticks', 'Bus · lit ticks'], ['plain', 'Master · no strip']].forEach(([k, l]) => { const f = wideFader(k); const c = h('div', 'cell', $('#fad-v1')); c.append(f.svg); h('div', 'cap-label', c, l); c.append(f.r); });
+})();
+
+// ───────────────────────── mixer strips ─────────────────────────
+// current: mixer::strip, 73 × 400 (PAD_L 4, FADER_W 40, METER_W 22, PAD_R 7, FADER_H 210, LOWER_H 170)
+let stripZoom = 1.5;
+function appStrips() {
+  const host = $('#str-cur'); host.innerHTML = '';
+  const rack = h('div', '', host); rack.style.cssText = `display:flex;gap:2px;background:var(--bg);padding:2px;width:max-content;zoom:${stripZoom}`;
+  const tracks = [['Master', ['mint'], .8], ['Drums', ['mint'], .72], ['Bass', ['pink'], .6], ['Keys', ['blue', 'lavender'], .66], ['Lead', ['lavender'], .5], ['Pad · long atmosphere bus', ['peach', 'cyan', 'lime'], .7], ['Vox', ['amber'], .55]];
+  let selected = 1; const strips = [];
+  tracks.forEach(([name, routed, v], t) => {
+    const s = h('div', '', rack), light = L(routed[0]); s.style.cssText = 'position:relative;width:73px;height:400px;flex:none';
+    const top = h('div', '', s); top.style.cssText = `position:absolute;left:0;top:0;width:100%;height:2px;background:${light.mid}`;
+    const paint = () => { s.style.background = selected === t ? 'var(--panel-hi)' : 'var(--panel)'; top.style.display = selected === t ? '' : 'none'; }; strips.push(paint);
+    s.addEventListener('pointerdown', () => { selected = t; strips.forEach(p => p()); });
+    const f = appFader(light.mid, 1, v); f.svg.style.cssText = 'position:absolute;left:4px;top:8px'; s.append(f.svg); f.bind();
+    const m = appMeter(t + 4); m.style.cssText = 'position:absolute;left:44px;top:8px'; s.append(m);
+    // lower: name cell 24 wide, controls centred at x 47
+    const nm = h('div', '', s, name.toUpperCase()); nm.style.cssText = `position:absolute;left:4px;top:250px;width:24px;height:140px;writing-mode:vertical-rl;line-height:24px;transform:rotate(180deg);font:12px system-ui;letter-spacing:1.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--name)`;
+    routed.slice(0, 4).forEach((n, k) => { const d = h('i', '', s); d.style.cssText = `position:absolute;left:${16 - 2.2}px;top:${224 + 5 + k * 6 - 2.2}px;width:4.4px;height:4.4px;border-radius:50%;background:${L(n).mid}`; });
+    const pan = appKnob(28, {bipolar: true, color: 'var(--mint)'}); pan.svg.style.cssText = 'position:absolute;left:33px;top:226px'; s.append(pan.svg);
+    const lab = (txt, y, css) => { const d = h('div', '', s, txt); d.style.cssText = `position:absolute;left:28px;width:38px;top:${y}px;text-align:center;` + css; return d; };
+    lab('PAN', 258, 'font-size:9px;color:var(--label)'); pan.bind(lab('', 270, 'font-size:10.5px;color:var(--text)'));
+    const l = led(22, 'mint', t !== 4); l.style.cssText += ';position:absolute;left:36px;top:292px'; s.append(l);
+    lab('MUTE', 318, 'font-size:9px;color:var(--label)');
+    if (t === 0 || t === 3) lab(t ? '2 fx' : '1 fx', 382, 'font-size:9px;color:var(--text-dim)');
+    paint();
+  });
+}
+document.querySelectorAll('[data-z]').forEach(b => b.onclick = () => { stripZoom = +b.dataset.z; rebuildAll(); });
+// history racks
+function histRack(host, o) {
+  const rack = h('div', '', $(host)); rack.style.cssText = `display:flex;gap:${o.gap}px;padding:${o.pad}px;background:${o.bg};border-radius:${o.radius || 0}px;width:max-content;${o.css || ''}`;
+  [['DRUMS', .72], ['SYNTH', .6], ['MASTER', .8], ['AUX', .48]].slice(0, o.n || 4).forEach(([name, v], i) => {
+    const ch = h('section', '', rack); ch.style.cssText = `min-width:${o.minW}px;background:var(--panel);text-align:center;padding:11px 4px 12px;border-radius:${o.chRadius || 0}px;${o.chCss || ''}`;
+    h('div', '', ch, name).style.cssText = 'font-size:11px;letter-spacing:.13em;color:#b9b9b9;margin:4px 0 9px;font-weight:650';
+    const pair = h('div', '', ch); pair.style.cssText = 'display:flex;justify-content:center;align-items:center';
+    const f = o.fader(v); pair.append(f.svg, o.meter(i + 10 * (o.n || 4)));
+    ch.append(f.r); f.r.style.margin = '8px 0'; f.r.style.color = 'var(--text)';
+    const bs = h('div', '', ch); bs.style.cssText = `display:flex;gap:${o.btnGap}px;justify-content:center`;
+    ['M', 'S'].forEach(t => { const b = h('button', '', bs, t); b.style.cssText = `border:1px solid ${o.btnEdge};border-radius:${o.btnR}px;background:#3c3c3c;color:#d0d0d0;padding:7px 12px;cursor:pointer;${o.btnCss || ''}`; b.onclick = () => { const on = b.dataset.on !== '1'; b.dataset.on = on ? '1' : ''; b.style.background = on ? 'var(--mint-deep)' : '#3c3c3c'; b.style.color = on ? '#f7f7f7' : '#d0d0d0'; }; });
+  });
+}
+function rebuildAll() { meters.length = 0; appStrips(); buildMeters(); buildStatic(); }
+function buildStatic() {
+  ['#str-v4', '#str-v3', '#str-v2', '#str-v1', '#str-v5', '#str-v6'].forEach(s => $(s).innerHTML = '');
+  const btn = {btnEdge: '#1c1c1c', btnR: 4, btnGap: 5, btnCss: 'box-shadow:inset 0 1px #5e5e5e40'};
+  histRack('#str-v4', {...btn, gap: 4, pad: 4, bg: 'var(--bg)', minW: 115, fader: v => compactFader({value: v}), meter: s => stereoMeter(s, true)});
+  histRack('#str-v3', {...btn, gap: 4, pad: 4, bg: 'var(--bg)', minW: 162, fader: v => wideFader('bar', {vb: 115, dx: -2, value: v, v1map: false}), meter: s => stereoMeter(s, true)});
+  histRack('#str-v2', {...btn, gap: 2, pad: 3, bg: 'var(--bg)', minW: 162, css: 'border:1px solid var(--bg);box-shadow:0 3px 12px #0d0d0d50', chCss: 'border:1px solid #1a1a1a;box-shadow:inset 1px 0 #38383840,inset -2px 0 #1313134d', fader: v => wideFader('bar', {vb: 115, dx: -2, value: v, v1map: false}), meter: s => stereoMeter(s, false)});
+  histRack('#str-v1', {btnEdge: '#545454', btnR: 7, btnGap: 8, gap: 8, pad: 14, bg: '#262626', radius: 16, n: 3, minW: 195, chRadius: 11, chCss: 'border:1px solid #3a3a3a;padding:13px 8px 14px', fader: v => wideFader('bar', {value: v}), meter: s => segMeter(s)});
+  singleStrip('#str-v6', 2); singleStrip('#str-v5', 1);
+}
+// history: single channel strip v1 / v2 (120 wide; fader 72 + meter 39; lower cells)
+function singleStrip(host, ver) {
+  const rack = h('div', '', $(host)); rack.style.cssText = 'display:flex;background:var(--bg);padding:4px;gap:4px;width:max-content';
+  const ch = h('section', '', rack), lowH = ver === 1 ? 142 : 186; ch.style.cssText = 'width:120px;background:var(--panel);padding:7px 4px 8px;display:grid;grid-template-columns:72px 39px;grid-template-rows:350px auto;row-gap:4px';
+  const f = compactFader({hgt: 350}); f.svg.setAttribute('width', 72); const fs = h('div', '', ch); fs.append(f.svg); h('div', '', ch).append(stereoMeter(20 + ver, true, 350));
+  const nc = h('div', '', ch); nc.style.cssText = `min-height:${lowH}px;background:#262626;display:flex;align-items:center;justify-content:center;overflow:hidden`;
+  const nm = h('div', '', nc, 'SYNTH / ATMOSPHERE BUS'); nm.style.cssText = `writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:${lowH - 14}px;font-size:12px;letter-spacing:.1em;font-weight:650;color:#c0c0c0`;
+  const cc = h('div', '', ch); cc.style.cssText = `min-height:${lowH}px;background:#262626;display:flex;flex-direction:column;align-items:center;gap:${ver === 1 ? 5 : 11}px;padding:${ver === 1 ? 7 : 12}px 1px`;
+  // pan: 100 box, ±135°, v2 adds the arc from centre
+  const pan = el('svg', {viewBox: '0 0 100 100', width: 36, height: 36, class: 'dial'}, cc);
+  [[44, '#1a1a1a'], [39, '#464646'], [33, '#4e4e4e'], [28, '#484848']].forEach(([r, f]) => circ(pan, 50, r, f));
+  let pa; if (ver === 2) { el('path', {d: arcD(50, 50, 44.5, -135, 135), fill: 'none', stroke: '#262626', 'stroke-width': 5, 'stroke-linecap': 'round'}, pan); pa = el('path', {fill: 'none', stroke: 'var(--accent)', 'stroke-width': 5, 'stroke-linecap': 'round'}, pan); circ(pan, 50, 2.8, '#a2a2a2', {cy: 5.5}); }
+  const dot = circ(pan, 50, 4.2, '#c0c0c0');
+  h('div', '', cc, 'PAN').style.cssText = 'font-size:9px;letter-spacing:.1em;color:#a6a6a6';
+  const val = h('div', '', cc); val.style.cssText = 'font:11px ui-monospace,monospace;color:var(--text)';
+  bindDial(pan, {value: .5, span: 150, draw: t => { const a = (t - .5) * 270, [x, y] = pol(50, 50, 31, a); dot.setAttribute('cx', x); dot.setAttribute('cy', y); pa && pa.setAttribute('d', arcD(50, 50, 44.5, Math.min(0, a), Math.max(0, a))); val.textContent = panTxt(t); }});
+  cc.append(led(28, 'mint', true, ver === 2 ? {wellOff: '#171717', beadOff: '#494949', wellOn: '#3a5849', ringOn: '#4f7865'} : {wellOff: '#171717', beadOff: '#494949', wellOn: '#171717', ringOn: '#1d1d1d', glow: true}));
+  h('div', '', cc, 'MUTE').style.cssText = 'font-size:9px;letter-spacing:.1em;color:#a6a6a6';
+}
+rebuildAll();
+
+// ───────────────────────── no study yet ─────────────────────────
+(() => {
+  const ICON = {play: '<svg viewBox="0 0 16 16"><path d="M5 3l8 5-8 5z" fill="currentColor"/></svg>', stop: '<svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor"/></svg>', loop: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9V6a2 2 0 012-2h7m-2-2l2 2-2 2M13 7v3a2 2 0 01-2 2H4m2 2l-2-2 2-2"/></svg>'};
+  const host = $('#ns-btn');
+  const b = (label, o = {}) => { const x = h('button', 'btn' + (o.l ? ' l' : '') + (o.lit ? ' lit' : '')); x.innerHTML = label; if (o.lit) x.style.setProperty('--lit', L(o.lit).hi); if (o.toggle) x.onclick = () => { x.classList.toggle('lit'); x.style.setProperty('--lit', L(o.toggle).hi); }; return x; };
+  const add = (label, node) => { const c = h('div', 'cell', host); c.append(node); h('div', 'cap-label', c, label); };
+  add('text', b('Reverse', {toggle: 'mint'})); add('icon', b(ICON.loop, {toggle: 'mint'})); add('on (mint)', b('+ Link', {lit: 'mint'})); add('on (amber)', b('Rec', {lit: 'amber'}));
+  add('toolbar 34', b(ICON.play, {l: 1})); add('toolbar 34', b(ICON.stop, {l: 1})); add('toolbar, on', b(ICON.loop, {l: 1, lit: 'mint'}));
+  const m = $('#ns-misc'), addm = (label, node) => { const c = h('div', 'cell', m); c.append(node); h('div', 'cap-label', c, label); };
+  { const ch = h('div', 'choice'); const opts = [['SONG', 'mint'], ['PAT', 'amber']]; let cur = 0; const bs = opts.map(([t, l], i) => { const x = b(t, {l: 1}); x.style.minWidth = '54px'; x.onclick = () => { cur = i; paint(); }; ch.append(x); return x; });
+    const paint = () => bs.forEach((x, i) => { x.classList.toggle('lit', i === cur); x.style.setProperty('--lit', L(opts[i][1]).hi); }); paint(); addm('choice · SONG / PAT', ch); }
+  { const w = h('div', ''); const t = h('div', 'tabs', w); h('div', 'tab-body', w); ['Files', 'Instruments', 'Effects'].forEach((n, i) => { const x = h('button', '', t, n); x.setAttribute('aria-selected', i === 0); x.onclick = () => t.querySelectorAll('button').forEach(y => y.setAttribute('aria-selected', y === x)); }); addm('tab row (chosen = the panel below it)', w); }
+  { const w = h('div', ''); w.style.width = '260px'; const x = b('+ New pattern'); x.style.cssText = 'width:100%;height:30px'; w.append(x); addm('wide button', w); }
+  { const nw = h('div', 'well numwell'); let v = 3; nw.textContent = v; bindDial(nw, {value: 3 / 16, steps: 17, draw: (t, i) => nw.textContent = i === 0 ? 'M' : i}); addm('number well · insert', nw); }
+})();
+
+// ───────────────────────── one clock for every meter ─────────────────────────
+let lastT = 0;
+(function tick(t) { const dt = lastT ? Math.min(.12, (t - lastT) / 1000) : .016; lastT = t; meters.forEach(f => f(t, dt)); requestAnimationFrame(tick); })(0);
+</script>
+</body>
+</html>
