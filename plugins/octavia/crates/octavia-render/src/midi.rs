@@ -197,6 +197,8 @@ pub struct Pick {
     pub range: (f32, f32),
     /// Keep a second chord note as a double stop.
     pub doubles: bool,
+    /// Use MIDI velocities as they are, instead of centring them on mf.
+    pub raw_velocity: bool,
 }
 
 /// Turns the chosen notes into one line the performer can play.
@@ -257,6 +259,20 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
         }
     }
 
+    // Velocities in MIDI files are often never set (a whole song at 25 of
+    // 127). Unless asked not to, the line's typical velocity plays
+    // mezzo-forte and only the differences between notes are kept.
+    let mut vels: Vec<u8> = line.iter().map(|n| n.velocity).collect();
+    vels.sort();
+    let median = vels.get(vels.len() / 2).copied().unwrap_or(80) as f32;
+    let velocity = |v: u8| {
+        if pick.raw_velocity {
+            v as f32 / 127.0
+        } else {
+            (0.59 + (v as f32 - median) / 127.0).clamp(0.05, 1.0)
+        }
+    };
+
     // Overlaps: a small one is drawn legato (a slur hint for the performer);
     // a big one is another voice sustaining, so cut it.
     let mut notes = Vec::with_capacity(line.len());
@@ -265,8 +281,12 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
         let mut slur = None;
         if let Some(next) = line.get(i + 1) {
             if end > next.start {
-                // Same key twice can't be a slur: it's re-struck.
-                if end - next.start <= 0.15 && next.key != n.key {
+                // A real overlap is drawn legato: at least 30 ms, or an eighth
+                // of the step to the next note (fast notes overlap less). Less
+                // is the file's rounding; the same key twice is re-struck.
+                let overlap = end - next.start;
+                let meant = overlap >= 0.03_f64.min(0.12 * (next.start - n.start));
+                if meant && overlap <= 0.15 && next.key != n.key {
                     slur = Some(true);
                 } else {
                     end = next.start;
@@ -285,7 +305,7 @@ pub fn to_line(m: &MidiFile, pick: &Pick) -> Result<(Score, String), String> {
                     .reduce(f32::max)
             })
             .flatten();
-        let dynamic = velocity_to_dynamic(n.velocity as f32 / 127.0);
+        let dynamic = velocity_to_dynamic(velocity(n.velocity));
         notes.push(Note {
             start: n.start,
             dur: (end - n.start).max(0.03),
@@ -452,7 +472,7 @@ mod tests {
     #[test]
     fn makes_one_fitted_line() {
         let m = parse(&sample()).unwrap();
-        let pick = Pick { track: None, channel: None, voice: Voice::Top, transpose: None, range: (36.0, 76.0), doubles: true };
+        let pick = Pick { track: None, channel: None, voice: Voice::Top, transpose: None, range: (36.0, 76.0), doubles: true, raw_velocity: false };
         let (score, _) = to_line(&m, &pick).unwrap();
         let keys: Vec<f32> = score.notes.iter().map(|n| n.pitch).collect();
         // C4 D4 C5 (chord top), shifted down an octave toward the cello's middle.

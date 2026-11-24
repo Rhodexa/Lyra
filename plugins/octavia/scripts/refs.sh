@@ -22,6 +22,7 @@ refs=(
   "beethoven-virus|midi/beethoven2.mid|--track 5"
   "prelude-inferred|scores/prelude.roll|"
   "lament|scores/lament.txt|"
+  "megalovania|midi/megalovania.mid|"
 )
 
 changed=0
@@ -43,7 +44,7 @@ for r in "${refs[@]}"; do
   else
     n=$(diff "$dir/baseline.txt" "$dir/decisions.txt" | grep -c '^>' || true)
     echo "$name: $n notes played differently:"
-    diff "$dir/baseline.txt" "$dir/decisions.txt" | grep '^[<>]' | head -12 | sed 's/^/    /'
+    { diff "$dir/baseline.txt" "$dir/decisions.txt" | grep '^[<>]' | head -12 | sed 's/^/    /'; } || true
     changed=1
   fi
 done

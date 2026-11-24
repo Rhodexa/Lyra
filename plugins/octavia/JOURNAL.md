@@ -60,6 +60,11 @@ Claude reads this before choosing what to work on.
 - [x] *(Rhodexa, 2026-11-23)* "You have no idea how good Rainbow Tylenol sounds with this." Ran: `midi/rainbow.mid --instrument violin --bright 0.3 --transpose -12`.
   - Claude: now a reference piece. `scripts/refs.sh` re-renders every piece Rhodexa liked with its exact settings and lists the notes that are now played differently; `--accept` makes a run the new baseline. I run it after every performer change.
 
+- [ ] *(Rhodexa, 2026-11-23)* Megalovania: "too too DAH": the DAH isn't properly attacked. Bug or the track?
+  - Claude: a bug, two stacked. (1) The second "too" overlapped the DAH by 4 ms (the file's rounding) and the importer read it as a slur, so the DAH had no attack at all. Overlaps now count only when meant: at least 30 ms or an eighth of the step to the next note. (2) The whole file is velocity 25/127, so everything was pianissimo with slow, soft attacks. MIDI velocities are now centred on mf per line (`--raw-velocity` to keep them). Plus a new gentle rule: a leap up of a fifth or more out of a quick pickup gets an accent. Opening is now bounce, bounce, crisp accented DAH.
+  - Reference check: Rainbow Tylenol has one new bow change at 1:17.8 (a borderline overlap). Accepted as the new baseline; tell me if you hear it.
+- [ ] ~ Lyra can't open MIDI files yet: that would make A/B testing of tracks much easier (for Lyra's journal).
+
 ## Wishes
 
 - [ ]

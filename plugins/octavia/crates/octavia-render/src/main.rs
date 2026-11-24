@@ -27,6 +27,7 @@ usage: octavia <score.txt | curves.csv>... [options]
   --bottom           MIDI: in chords, keep the lowest note (default: highest)
   --transpose N      MIDI: shift by N semitones (default: fit the range by octaves)
   --no-doubles       MIDI: never keep a second chord note as a double stop
+  --raw-velocity     MIDI: use velocities as written (default: typical velocity = mf)
   --explain          print how each note was played
   --dry              no room reverb
   --sr N             sample rate (default 48000)
@@ -53,6 +54,7 @@ struct Args {
     transpose: Option<i32>,
     doubles: bool,
     explain: bool,
+    raw_velocity: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -70,6 +72,7 @@ fn parse_args() -> Result<Args, String> {
         transpose: None,
         doubles: true,
         explain: false,
+        raw_velocity: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -89,6 +92,7 @@ fn parse_args() -> Result<Args, String> {
             "--bottom" => a.bottom = true,
             "--no-doubles" => a.doubles = false,
             "--explain" => a.explain = true,
+            "--raw-velocity" => a.raw_velocity = true,
             "--track" => a.track = Some(val("--track")?.parse().map_err(|_| "bad --track")?),
             "--channel" => {
                 let c: u8 = val("--channel")?.parse().map_err(|_| "bad --channel")?;
@@ -204,6 +208,7 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
                 transpose: args.transpose,
                 range: (inst.open_strings[0], inst.open_strings[3] + 24.0),
                 doubles: args.doubles,
+                raw_velocity: args.raw_velocity,
             };
             let (score, what) = midi::to_line(&file, &pick)?;
             println!("{stem}: {what}");

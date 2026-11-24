@@ -17,7 +17,8 @@
 //!   in pairs. Zig-zag figures rocking across strings are bowed note by
 //!   note (and, being short, bounce). Other touching notes get separate bows.
 //! * **Staccato**: short notes followed by a clear gap.
-//! * **Accents**: notes clearly louder than their neighbours.
+//! * **Accents**: notes clearly louder than their neighbours, and (more
+//!   gently) notes reached by a leap up of a fifth or more from a quick note.
 //! * **Spiccato**: fast notes bowed separately bounce (a drop, a tick of
 //!   hair, then the string rings free). Repeated notes are never slurred.
 //!
@@ -503,9 +504,13 @@ impl Performer {
         let mean_pitch = if w > 0.0 { (wp / w) as f32 } else { n.pitch };
         let mean_dyn = if count > 0 { wd / count as f32 } else { n.dynamic };
 
+        // Leaping up a fifth or more out of a quick pickup note: lean into it.
+        let leap = entry != Entry::Legato
+            && prev.is_some_and(|(pn, _)| touching(pn, n) && pn.dur < 0.3 && n.pitch - pn.pitch >= 7.0);
         let accent = match n.articulation {
             Articulation::Accent => 1.0,
             Articulation::Auto if n.dynamic > mean_dyn + 0.12 => 1.0,
+            Articulation::Auto if leap => 0.7,
             Articulation::Tenuto => 0.0,
             _ if entry == Entry::Fresh => 0.2,
             _ => 0.0,
