@@ -14,7 +14,6 @@ no marks would default to not urgent or 'coding teams judges'
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
 // - [ ] ? bug or missing?
 - [ ] bug a pattern not on the timeline or not playing yet still shows a staff playing from the start, patterns clippy on the arranger not from their 0 tick show the staff playing from 0 despite playing further ahead in the arranger. might be related. 
-- [ ] ! The vertical viewport bar must be **exactly as wide as the horizontal overview bar is tall**, for consistency and predictability. Asked three times; 645ba6a only made it "a little wider". Spec: docs/design/catalog-next.html, Scrollbars (both 34 px: 20 px track + 14). Port with the UI cleanup.
 
 ## Wishes
 *Things you wish Lyra did.*
@@ -60,6 +59,9 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**UI port (2026-11-25)**
+- [x] ! The vertical viewport bar must be **exactly as wide as the horizontal overview bar is tall**. *→ both 34 px now, the thumb a see-through window with 14 px zoom handles (02a2f6c).*
 
 **Toolbar and panels (2026-11-23)**
 - [x] ~ Once the desktop icon works, drop the logo from the toolbar. *→ gone; a File menu sits there (b577fe3).*
