@@ -60,6 +60,9 @@ no marks would default to not urgent or 'coding teams judges'
 *Claude moves finished items here, with the commit that fixed them.*
 
 **UI port (2026-11-25)**
+- [x] Number pickers were missing their digit padding (the big click targets rule). *→ every LCD character in its own cell, the tuned digit a full-height inverse cell (39198f3).*
+- [x] All editors were missing the bottom border on their headers. *→ an engraved line in the ground colour, edge to edge (d8f98c0).*
+- [x] Mixer inserts could have their index on top in the middle or as a tag. *→ a tag hanging from each strip's top centre (d8f98c0).*
 - [x] The mixer's vertical names were cut off at the bottom ("ASTER", "NSERT 1"). *→ the strips fit the height they're given; names and fx counts whole again (92dc64a).*
 - [x] ! The vertical viewport bar must be **exactly as wide as the horizontal overview bar is tall**. *→ both 34 px now, the thumb a see-through window with 14 px zoom handles (02a2f6c).*
 
