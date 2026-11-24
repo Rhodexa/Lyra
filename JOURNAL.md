@@ -13,11 +13,12 @@ no marks would default to not urgent or 'coding teams judges'
 ## Friction
 *Things that feel wrong, slow, confusing, ugly, or make you stop playing.*
 // - [ ] ? bug or missing?
+- [ ] bug a pattern not on the timeline or not playing yet still shows a staff playing from the start, patterns clippy on the arranger not from their 0 tick show the staff playing from 0 despite playing further ahead in the arranger. might be related. 
 
 ## Wishes
 *Things you wish Lyra did.*
-- [ ] ~ Once the desktop icon works, drop the logo from the toolbar.
-- [ ] ~ *(from chat, 2026-11-22, deferred)* The top bar's buttons for opening sections came from FL and are now unneeded and confusing. Drop them; add a small bar at the bottom that opens and closes the bottom area; better keys (rough idea: F1 left panel, F4 right panel, F2/F3 bottom area).
+- [ ] *(from chat, 2026-11-23)* Loop regions are drawn with Alt+drag, but Alt also means "off the grid", so a loop can't be fine-tuned. Maybe Shift+drag instead? And a "clear selection" button in the context bar?
+- [ ] *(from chat, 2026-11-23, later)* Sit down and make reaching both areas (top and bottom) and their editors easy, now that the toolbar only opens panels.
 
 ## Questions for Claude
 
@@ -57,6 +58,10 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
+
+**Toolbar and panels (2026-11-23)**
+- [x] ~ Once the desktop icon works, drop the logo from the toolbar. *→ gone; a File menu sits there (b577fe3).*
+- [x] ~ The top bar's buttons for opening sections came from FL and are now unneeded and confusing… *→ three layout keys (left panel, bottom area, right panel) like a code editor's, `F4` `F5` `F6`; the folded bottom area leaves a strip with an arrow, like the side panels (1bdfe9b).*
 
 **Small visible things (2026-11-22)**
 - [x] vertical scroll bar could be slightly wider and zoom on the center
