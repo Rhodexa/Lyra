@@ -412,6 +412,30 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .clip svg{position:absolute;left:0;right:0;top:15px;bottom:2px;width:100%;height:calc(100% - 17px)}
 .playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--mid);pointer-events:none}
 .mx .strips{display:flex;gap:2px;background:var(--ground);padding:0;overflow:hidden}
+/* ═════════ SCROLLBARS (draft 1) ═════════
+   One look, two kinds. Plain: a sunken track, a button-plate thumb (≥ 28 px long), always
+   visible, never flashing. Viewport: the same track with a miniature of the content inside;
+   the thumb is a window over it; drag its ends to zoom. Thickness --sct (tunable).          */
+:root{--sct:16px}
+.sc{position:relative;--pad:calc(var(--sct) + 2px)}
+.sc.v{padding-right:var(--pad)} .sc.h{padding-bottom:var(--pad)}
+.sc-view{overflow:hidden;height:100%;width:100%}
+.sc-bar{position:absolute;background:var(--sunken);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--sunken),black var(--btn-ol));border-radius:4px}
+.sc.v>.sc-bar{top:0;right:0;bottom:0;width:var(--sct)} .sc.h>.sc-bar{left:0;right:0;bottom:0;height:var(--sct)}
+.sc-th{--b:var(--btn-body);position:absolute;background:var(--b);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-radius:3px;cursor:grab}
+.sc.v .sc-th{left:-2px;right:-2px} .sc.h .sc-th{top:-2px;bottom:-2px}
+.sc-th:hover{--b:var(--btn-hover)} .sc-th.drag{--b:var(--btn-press);cursor:grabbing}
+:root{--btn-hover:#525252;--btn-press:#383838}
+/* viewport bar */
+.vp{position:relative;height:calc(var(--sct) + 14px);background:var(--sunken);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--sunken),black var(--btn-ol));border-radius:4px;overflow:hidden}
+.vp .mini{position:absolute;inset:3px}
+.vp .mini i{position:absolute;height:2px;border-radius:1px}
+.vp .win{position:absolute;top:-2px;bottom:-2px;background:color-mix(in srgb,var(--btn-body) 45%,transparent);border:var(--btn-bw) solid color-mix(in srgb,var(--btn-body),black var(--btn-ol));border-radius:3px;cursor:grab}
+.vp .win:hover{background:color-mix(in srgb,var(--btn-hover) 50%,transparent)} .vp .win.drag{cursor:grabbing}
+.vp .win .end{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize}
+.vp .win .end::after{content:'';position:absolute;top:30%;bottom:30%;left:3px;width:2px;border-radius:1px;background:var(--ink-dim)}
+.vp .win .end.l{left:0} .vp .win .end.r{right:0}
+.sc-demo{display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;align-items:start}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -632,6 +656,19 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 <h2>Mock screen <span class="draft">DRAFT 3</span></h2>
 <p>A whole Lyra window, built only from catalog widgets and the kept ones: the toolbar, the left panel, the arrangement, the mixer and the context bar. This is where everything gets judged together. It's live: click, drag, open the dropdowns. <b>Draft 2:</b> the toolbar is a panel (the ground colour only shows in the gaps); the left panel <i>is</i> the tabbed panel (tabs on the ground strip, the chosen one flows into the whole area: no panel inside a panel); the toolbar's displays are a narrower M LCD with their label under it. <b>Draft 3:</b> FILE is a bare button; tabs lose their top outline where they touch the seam (an outline against a seam is redundant); square panels (rounded ones: deferred, not rejected: the cut corners and oval tabs came from how this mock was built; a proper version keeps content away from the corners). Tabs: one rule, square tops, rounded bottoms on the tabs that aren't chosen, all one height.</p>
 <div class="scroll" style="overflow-x:auto"><div class="mock" id="mock"></div></div>
+
+<!-- ═════════════════════════ SCROLLBARS ═════════════════════════ -->
+<h2>Scrollbars <span class="draft">UI-NEEDS 6 · DRAFT 1</span></h2>
+<p>One look, two kinds. <b>Plain</b> (lists, the browser, the mixer): a sunken track, the thumb a button plate (lighter on hover, pressed while dragging, never shorter than 28 px), always visible, never flashing. Click the track to jump a page toward the click; the wheel scrolls (over the mixer, a vertical wheel scrolls sideways). <b>Viewport</b> (the editors' overview bar): the same track with a miniature of the content inside; the thumb is a window over it: drag it to move, drag its ends to zoom. The mock screen's mixer now has a plain bar and its arrangement a viewport bar.</p>
+<div class="card">
+  <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Thickness</span><span id="sc-thick"></span></div>
+  <div class="sc-demo">
+    <div><div class="caps" style="margin-bottom:6px">Plain · vertical · a long list</div><div id="sc-list"></div></div>
+    <div><div class="caps" style="margin-bottom:6px">Plain · horizontal · the mixer</div><div id="sc-mixer"></div></div>
+  </div>
+  <div class="caps" style="margin:18px 0 6px">Viewport · the arrangement's overview (drag the window; drag its ends to zoom)</div>
+  <div id="sc-vp"></div>
+</div>
 </main>
 
 <script>
@@ -1408,6 +1445,72 @@ let lastT = 0;
   h('span', 'grow', ctx).style.flex = '1';
   h('span', 'caps', ctx, '2 clips'); ctx.append(button('S', 'Duplicate', {push: true}), button('S', 'Split', {push: true}), button('S', 'Quantize', {push: true}));
   m.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
+})();
+// ── scrollbars ──
+// plainScroll(content, 'v' | 'h', box size): returns the wrapper with its own bar.
+function plainScroll(content, axis, size) {
+  const V = axis === 'v', w = h('div', 'sc ' + axis), view = h('div', 'sc-view', w), bar = h('div', 'sc-bar', w), th = h('div', 'sc-th', bar);
+  view.append(content); Object.assign(w.style, size);
+  const len = () => V ? bar.clientHeight : bar.clientWidth;
+  const total = () => V ? view.scrollHeight : view.scrollWidth, shown = () => V ? view.clientHeight : view.clientWidth;
+  const pos = () => V ? view.scrollTop : view.scrollLeft, setPos = p => { V ? view.scrollTop = p : view.scrollLeft = p; draw(); };
+  const draw = () => { const L = len(), T = total(), S = shown(); const tl = Math.max(28, L * Math.min(1, S / T)); const off = T > S ? (L - tl) * pos() / (T - S) : 0;
+    th.style[V ? 'height' : 'width'] = tl + 'px'; th.style[V ? 'top' : 'left'] = off + 'px'; th.style.display = T > S + 1 ? '' : 'none'; };
+  th.addEventListener('pointerdown', e => { e.stopPropagation(); th.setPointerCapture(e.pointerId); th.classList.add('drag');
+    const start = V ? e.clientY : e.clientX, p0 = pos(), L = len(), tl = parseFloat(th.style[V ? 'height' : 'width']);
+    const mv = ev => setPos(p0 + ((V ? ev.clientY : ev.clientX) - start) * (total() - shown()) / Math.max(1, L - tl));
+    const up = () => { th.classList.remove('drag'); th.removeEventListener('pointermove', mv); th.removeEventListener('pointerup', up); };
+    th.addEventListener('pointermove', mv); th.addEventListener('pointerup', up); });
+  bar.addEventListener('pointerdown', e => { const r = th.getBoundingClientRect(), at = V ? e.clientY : e.clientX, before = at < (V ? r.top : r.left); setPos(pos() + (before ? -1 : 1) * shown() * .9); });
+  view.addEventListener('wheel', e => { e.preventDefault(); setPos(pos() + (V ? e.deltaY : (e.deltaY || e.deltaX))); }, {passive: false});
+  new ResizeObserver(draw).observe(view); requestAnimationFrame(draw);
+  return w;
+}
+// viewportBar(lanes, mini): a window over a miniature; drag to move, drag the ends to zoom.
+function viewportBar(onChange, minis) {
+  const vp = h('div', 'vp'), mini = h('div', 'mini', vp), win = h('div', 'win', vp);
+  h('div', 'end l', win); h('div', 'end r', win);
+  minis.forEach(([x, w, row, lt]) => { const i = h('i', '', mini); Object.assign(i.style, {left: x * 100 + '%', width: w * 100 + '%', top: row * 3.2 + 'px', background: LIGHTS[lt][1]}); });
+  let a = 0, b = .55;
+  const draw = () => { win.style.left = a * 100 + '%'; win.style.width = (b - a) * 100 + '%'; onChange(a, b); };
+  win.addEventListener('pointerdown', e => {
+    const mode = e.target.classList.contains('l') ? 'l' : e.target.classList.contains('r') ? 'r' : 'm';
+    win.setPointerCapture(e.pointerId); win.classList.add('drag'); const x0 = e.clientX, a0 = a, b0 = b, W = vp.clientWidth;
+    const mv = ev => { const d = (ev.clientX - x0) / W;
+      if (mode === 'm') { const w = b0 - a0; a = clamp(a0 + d, 0, 1 - w); b = a + w; }
+      if (mode === 'l') a = clamp(a0 + d, 0, b - .05); if (mode === 'r') b = clamp(b0 + d, a + .05, 1); draw(); };
+    const up = () => { win.classList.remove('drag'); win.removeEventListener('pointermove', mv); win.removeEventListener('pointerup', up); };
+    win.addEventListener('pointermove', mv); win.addEventListener('pointerup', up); });
+  requestAnimationFrame(draw); return vp;
+}
+(() => {
+  // thickness switch
+  const ts = [12, 16, 20], tsw = modeSwitch('B', 'S', ts.map(t => [t + ' px']), 1);
+  tsw.addEventListener('click', () => setTimeout(() => { const i = [...tsw.querySelectorAll('.btn')].findIndex(b => b.classList.contains('on')); document.documentElement.style.setProperty('--sct', ts[i] + 'px'); }));
+  $('#sc-thick').append(tsw);
+  // a long list
+  const lst = h('div', 'lst'); lst.style.width = '100%'; lst.classList.add('sel-lifted'); setLight(lst, light);
+  const rows = h('div', 'rows', lst);
+  for (let i = 1; i <= 40; i++) h('div', 'lr' + (i === 3 ? ' sel' : ''), rows, `${ICON.wave}<span class="nm">voice_sample_${i}</span><span class="dt">${(i * 1.7 % 16).toFixed(2)} s</span>`);
+  const pl = plainScroll(lst, 'v', {height: '260px', width: '260px'}); pl.style.background = 'var(--surface)'; $('#sc-list').append(pl);
+  // the mixer
+  const strips = h('div', ''); strips.style.cssText = 'display:flex;gap:2px;background:var(--ground);width:max-content';
+  for (let t = 0; t < 18; t++) { const st = h('div', '', strips); st.style.cssText = 'width:73px;height:150px;background:var(--surface);position:relative';
+    const me = stdMeter('v', 120, 40 + t); me.style.cssText = 'position:absolute;left:44px;top:8px'; st.append(me); const n = h('div', 'caps', st, t ? 'Insert ' + t : 'Master'); n.style.cssText = 'position:absolute;left:6px;bottom:6px'; }
+  $('#sc-mixer').append(plainScroll(strips, 'h', {height: '170px', width: '100%'}));
+  // viewport
+  const box = h('div', ''); box.style.cssText = 'height:120px;overflow:hidden;position:relative;background:var(--surface);border:2px solid var(--ground);margin-top:4px';
+  const lane = h('div', '', box); lane.style.cssText = 'position:absolute;top:0;bottom:0;left:0';
+  const clips = [[.05, .2, 0, 'mint'], [.3, .4, 0, 'mint'], [0, .25, 1, 'pink'], [.25, .5, 1, 'pink'], [.1, .3, 2, 'blue'], [.45, .2, 2, 'lavender'], [.6, .35, 3, 'amber'], [.2, .15, 4, 'cyan'], [.7, .25, 4, 'cyan']];
+  clips.forEach(([x, w, row, lt]) => { const c = h('div', 'clip', lane); setLight(c, lt); Object.assign(c.style, {left: x * 100 + '%', width: w * 100 + '%', top: row * 23 + 2 + 'px', height: '20px', bottom: 'auto'});
+    const ct = h('div', 'ct', c, lt); ct.style.background = shade(LIGHTS[lt][1], .5); ct.style.color = LIGHTS[lt][0]; });
+  const vp = viewportBar((a, b) => { const W = box.clientWidth / (b - a); lane.style.width = W + 'px'; lane.style.left = -a * W + 'px'; }, clips);
+  $('#sc-vp').append(vp, box);
+  // the mock screen: the mixer gets a plain bar, the arrangement a viewport bar
+  const mxs = document.querySelector('#mock .mx .strips');
+  if (mxs) { const parent = mxs.parentElement; const wrap = plainScroll(mxs, 'h', {width: '100%'}); parent.append(wrap); mxs.style.width = 'max-content'; }
+  const arrHdr = document.querySelector('#mock .arr .hdr');
+  if (arrHdr) { const lanes = document.querySelector('#mock .arr .lanes'); const mvp = viewportBar(() => {}, clips); mvp.style.margin = '4px 4px 0'; arrHdr.after(mvp); }
 })();
 </script>
 </body>
