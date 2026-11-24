@@ -704,8 +704,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ HINT + DIALOG ═════════════════════════ -->
-<h2>Hint · dialog <span class="draft">UI-NEEDS 14 · 24 · DRAFT 1</span></h2>
-<p>Both pop up over the UI, so: <b>H1 / D1 in the LCD's colours</b> (like the drawer: "this is on top, read me"), or <b>H2 / D2 dark</b> (a lifted plate; the dark dialog has its title on a corner tag, like the plates). A shortcut is a small tag. Hover the buttons (a hint appears after 0.4 s); open the dialogs (Enter = the lit action, Esc = cancel).</p>
+<h2>Hint · dialog <span class="draft">UI-NEEDS 14 · 24 · SETTLED</span></h2>
+<p>Both pop up over the UI, so: <b>H1 / D1 in the LCD's colours</b> (like the drawer: "this is on top, read me"), or <b>H2 / D2 dark</b> (a lifted plate; the dark dialog has its title on a corner tag, like the plates). <b>Settled:</b> hints are LCD. Dialogs by size: <b>D1 · LCD for short questions</b> ("Save changes?": a line and a few buttons, it pops up); <b>D2 · dark for big dialogs with content</b> (export, preferences: plates and fields inside, too large to be white). A shortcut is a small tag. Hover the buttons (a hint appears after 0.4 s); open the dialogs (Enter = the lit action, Esc = cancel).</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Hints</span><span id="tip-style"></span></div>
   <div class="caps" style="margin-bottom:6px">Hover these</div>
@@ -1598,7 +1598,7 @@ function dialog(kind, o) {
   const msg = {title: 'Save changes?', message: 'Night Runway has changes that aren\'t saved.', other: 'Don\'t save', ok: 'Save'};
   const msgEl = () => { const m = Object.assign({}, msg); return m; };
   const g = $('#dlg-static');
-  for (const [k, label] of [['lcd', 'D1 · LCD'], ['dark', 'D2 · dark, title on a tag']]) {
+  for (const [k, label] of [['lcd', 'D1 · LCD · short questions'], ['dark', 'D2 · dark, title on a tag · big dialogs with content']]) {
     const c = h('div', '', g); h('div', 'caps', c, label).style.marginBottom = '8px';
     const {d} = dialog(k + ' static', msgEl()); d.querySelector('.dm').innerHTML = '<b>Night Runway</b> has changes that aren\'t saved.'; c.append(d);
   }
