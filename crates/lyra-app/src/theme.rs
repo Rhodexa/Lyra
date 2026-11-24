@@ -117,12 +117,12 @@ impl Metrics {
     pub const DEFAULT: Metrics = Metrics {
         text: 14.0,
         text_small: 11.0,
-        control_h: 26.0,
+        control_h: 28.0,
         toolbar_h: 56.0,
         module_pad: 6.0,
         module_gap: 8.0,
         corner: 5.0,
-        tool_key: 34.0,
+        tool_key: 40.0,
         knob_small: 28.0,
         knob_large: 40.0,
         led: 18.0,
@@ -171,7 +171,6 @@ pub const SURFACE: Color32 = PANEL;
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const SURFACE_SEL: Color32 = PANEL_HI;
 /// A control's body: the button plate.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const PLATE: Color32 = Color32::from_rgb(0x45, 0x45, 0x45);
 /// Wells: dropdowns, fields, tracks.
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)
@@ -181,7 +180,6 @@ pub const INK: Color32 = TEXT;
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const INK_DIM: Color32 = TEXT_DIM;
 /// Idle legends on plates.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const LEGEND: Color32 = Color32::from_rgb(0xb0, 0xb0, 0xb0);
 /// Disabled.
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)
@@ -196,26 +194,21 @@ pub const LCD_DIM: Color32 = Color32::from_rgb(0xbc, 0xbc, 0xbc);
 /// Sizes: S · M · L. 28 is the floor for anything drawn or clicked.
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const SIZE_S: f32 = 28.0;
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const SIZE_M: f32 = 40.0;
 #[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const SIZE_L: f32 = 52.0;
 /// Outline width of every control.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const OUTLINE_W: f32 = 2.0;
 /// Corner radius of a control at M (S × 0.75, L × 1.25).
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub const CORNER: f32 = 4.0;
 
 /// A control's outline: its own colour, half as bright.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub fn outline_of(c: Color32) -> Color32 {
     mix(c, Color32::BLACK, 0.5)
 }
 
 /// A flat body with its outline: the outline shape first, then the fill inside
 /// it, never one on top of the other (no light fringe at rounded corners).
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub fn outlined(p: &Painter, r: Rect, radius: f32, fill: Color32) {
     p.rect_filled(r, cr(radius.round() as u8), outline_of(fill));
     let inner = (radius - OUTLINE_W).max(0.0);
@@ -231,13 +224,11 @@ const LABEL_BOLD: &str = "label-bold";
 const READ_BOLD: &str = "read-bold";
 
 /// The label font (Roboto Condensed SemiBold). Labels are written in caps.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub fn label(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name(LABEL.into()))
 }
 
 /// The bold label font (Roboto Condensed Bold): a backlit "on" legend.
-#[allow(dead_code)] // waiting for the port of its widgets (step 3)
 pub fn label_bold(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name(LABEL_BOLD.into()))
 }

@@ -774,48 +774,62 @@ pub fn tab_row(ui: &mut Ui, r: Rect, tabs: &[&str], chosen: usize, id: egui::Id)
 
 // ── Buttons ──
 //
-// Lyra's one button: a flat plate in the knobs' greys, a shade lighter than
-// what it sits on, a dark rim. Lighter under the mouse, darker while
-// pressed. A button that is *on* shows its legend in its light's colour.
-// Sizes come from `theme::m()`: `control_h` tall (square for an icon),
-// `tool_key` in the toolbar. (The big silicone keys, `key` and
-// `radio_keys`, are Fluttersine's and Chrysalis's own now.)
+// Lyra's one button (catalog-next.html, settled): a flat plate with a 2 px
+// outline in its own colour, half as bright; corners 3 · 4 · 5 by size; the
+// legend in caps, Roboto Condensed. Lighter under the mouse, darker while
+// pressed. ON = backlit: the body takes the light's low tone and the legend
+// becomes a dark stencil tinted by the light, bold.
+// Sizes: S (28, `control_h`) everywhere, M (40, `tool_key`) in the toolbar.
 
-const BUTTON: Color32 = Color32::from_rgb(0x3b, 0x3b, 0x3b);
-const BUTTON_RIM: Color32 = Color32::from_rgb(0x1c, 0x1c, 0x1c);
+/// Legend size for a button `h` tall: S 12, M 13, L 15.
+fn legend_size(h: f32) -> f32 {
+    if h < 34.0 {
+        12.0
+    } else if h < 46.0 {
+        13.0
+    } else {
+        15.0
+    }
+}
+
+/// A caps legend, letter-spaced, in the label font.
+fn legend_galley(ui: &Ui, text: &str, size: f32, bold: bool, color: Color32) -> std::sync::Arc<egui::Galley> {
+    let font = if bold { theme::label_bold(size) } else { theme::label(size) };
+    let job = egui::text::LayoutJob::single_section(
+        text.to_uppercase(),
+        egui::TextFormat { font_id: font, color, extra_letter_spacing: size * 0.04, ..Default::default() },
+    );
+    ui.fonts(|f| f.layout_job(job))
+}
 
 /// Paints a button's plate and legend in `r` for its response.
 fn paint_button(ui: &Ui, r: Rect, resp: &Response, legend: Legend, lit: Option<theme::Light>) {
-    let m = theme::m();
     let p = ui.painter();
     let pressed = resp.is_pointer_button_down_on();
-    let body = if pressed {
-        theme::shade(BUTTON, 0.85)
-    } else if resp.hovered() {
-        theme::shade(BUTTON, 1.12)
-    } else {
-        BUTTON
+    let hovered = resp.hovered();
+    let body = match (lit, pressed, hovered) {
+        (Some(l), true, _) => l.edge,
+        (Some(l), false, true) => l.mid,
+        (Some(l), false, false) => l.low,
+        (None, true, _) => theme::mix(theme::PLATE, Color32::BLACK, 0.18),
+        (None, false, true) => theme::mix(theme::PLATE, Color32::WHITE, 0.09),
+        (None, false, false) => theme::PLATE,
     };
-    p.rect_filled(r, cr(4), BUTTON_RIM);
-    p.rect_filled(r.shrink(1.0), cr(3), body);
+    let k = r.height() / theme::SIZE_M;
+    theme::outlined(p, r, (theme::CORNER * k).clamp(3.0, 5.0), body);
     let ink = match lit {
-        Some(l) => l.hi,
-        None if resp.hovered() => theme::TEXT,
-        None => theme::TEXT_DIM,
+        Some(l) => theme::mix(l.rim, Color32::BLACK, 0.68),
+        None if hovered => Color32::WHITE,
+        None => theme::LEGEND,
     };
     match legend {
         Legend::Icon(icon) => {
             let side = r.height().min(r.width());
-            paint_icon(p, Rect::from_center_size(r.center(), vec2(side, side)).shrink(side * 0.18), icon, ink, body);
+            paint_icon(p, Rect::from_center_size(r.center(), vec2(side, side)).shrink(side * 0.2), icon, ink, body);
         }
         Legend::Text(t) => {
-            p.with_clip_rect(r).text(
-                r.center(),
-                egui::Align2::CENTER_CENTER,
-                t,
-                egui::FontId::proportional(m.text_small + 1.0),
-                ink,
-            );
+            let g = legend_galley(ui, t, legend_size(r.height()), lit.is_some(), ink);
+            p.with_clip_rect(r.shrink(theme::OUTLINE_W)).galley(r.center() - g.size() * 0.5, g, ink);
         }
     }
 }
@@ -827,9 +841,8 @@ pub fn button(ui: &mut Ui, legend: Legend, lit: Option<theme::Light>, hint: &str
     let w = match legend {
         Legend::Icon(_) => m.control_h,
         Legend::Text(t) => {
-            let font = egui::FontId::proportional(m.text_small + 1.0);
-            let text_w = ui.fonts(|f| f.layout_no_wrap(t.to_string(), font, Color32::WHITE).size().x);
-            (text_w + 20.0).max(m.control_h)
+            let text_w = legend_galley(ui, t, legend_size(m.control_h), true, Color32::WHITE).size().x;
+            (text_w + m.control_h * 0.8).max(m.control_h)
         }
     };
     button_sized(ui, vec2(w, m.control_h), legend, lit, hint)
@@ -888,7 +901,7 @@ pub fn choice(
 /// A big key across the whole width (a rack's "+ New …"): easy to hit.
 pub fn wide_key(ui: &mut Ui, label: &str, hint: &str) -> Response {
     let m = theme::m();
-    button_sized(ui, vec2(ui.available_width(), m.control_h + 4.0), Legend::Text(label), None, hint)
+    button_sized(ui, vec2(ui.available_width(), m.control_h), Legend::Text(label), None, hint)
 }
 
 /// How a mixer insert is written in a number well: M for the master.
