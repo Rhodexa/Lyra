@@ -513,6 +513,31 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 /* quiet on purpose: the eight lights are the only bright things in it */
 .lp-pop{position:absolute;z-index:30;background:var(--surface-sel);border:var(--btn-bw) solid color-mix(in srgb,var(--surface-sel),black var(--btn-ol));border-radius:5px;box-shadow:0 6px 16px #0008;background-clip:padding-box;display:none}
 .lp-pop.open{display:block}
+/* ═════════ BUSY + DROP TARGET (draft 1) ═════════
+   Busy: never block, never spin. A progress track (the slider's recessed track, lit to the
+   progress); unknown length = a short lit segment sliding back and forth; an activity LED
+   pulses in the context bar. Drop: show the result (a ghost clip at the snapped spot);
+   non-timeline targets fill with a soft tint and a corner tag says what will happen.     */
+.pg{position:relative;height:8px;border-radius:4px;background:#161616;flex:none}
+.pg::before{content:'';position:absolute;inset:2px;border-radius:2px;background:#2b2b2b}
+.pg .f{position:absolute;left:2px;top:2px;bottom:2px;border-radius:2px;background:var(--mid)}
+.pg.scan .f{width:22%;animation:scan 1.4s ease-in-out infinite alternate}
+@keyframes scan{from{left:2px}to{left:calc(78% - 2px)}}
+.act{width:10px;height:10px;border-radius:50%;background:var(--mid);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--mid),black 45%);animation:pulse .45s ease-in-out infinite alternate}
+.ctxbar{display:flex;align-items:center;gap:8px;height:36px;padding:0 8px;background:var(--ground);font:12px var(--read-font);color:var(--ink-dim)}
+.ctxbar .pct{font:12px var(--t-num);min-width:3.5em;text-align:right}
+.lr .lp-line{position:absolute;left:6px;right:6px;bottom:2px;height:2px;border-radius:1px;background:#161616}
+.lr .lp-line i{display:block;height:100%;border-radius:1px;background:var(--mid)}
+.clip.busy::after{content:'';position:absolute;top:14px;bottom:0;width:40%;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--hi) 22%,transparent),transparent);animation:sweep 1.6s linear infinite}
+@keyframes sweep{from{left:-40%}to{left:100%}}
+.dz{position:relative;transition:background-color .08s}
+.dragging-any .dz{background-color:color-mix(in srgb,var(--mid) 5%,transparent)}
+.dz.over{background-color:color-mix(in srgb,var(--mid) 16%,transparent)}
+.dz .dtag{position:absolute;top:0;left:0;padding:4px 8px 4px 7px;background:var(--ground);color:var(--ink-dim);border-radius:0 0 5px 0;font:var(--btn-fw) 10px/1 var(--btn-font);letter-spacing:.1em;text-transform:uppercase;opacity:0}
+.dz.over .dtag{opacity:1;color:var(--mid)}
+.ghostclip{position:absolute;top:3px;bottom:3px;border-radius:var(--r-tile);background:color-mix(in srgb,var(--mid) 22%,transparent);pointer-events:none}
+.ghostclip .ct{height:14px;padding:0 5px;font:600 10px/14px var(--read-font);color:var(--hi);background:color-mix(in srgb,var(--mid) 45%,transparent)}
+.slot{height:64px;border-radius:5px;background:var(--sunken);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--sunken),black var(--btn-ol));display:grid;place-items:center;font:13px var(--read-font);color:var(--ink-faint)}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -780,6 +805,34 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <div class="row" style="align-items:flex-start;gap:48px">
     <div><div class="caps" style="margin-bottom:8px">Pop-up, drawn open</div><div id="lp-pop-demo" style="position:relative;height:110px;width:160px"></div></div>
     <div><div class="caps" style="margin-bottom:8px">Inline, in a settings plate</div><div id="lp-inline"></div></div>
+  </div>
+</div>
+
+<!-- ═════════════════════════ BUSY + DROP ═════════════════════════ -->
+<h2>Busy · drop target <span class="draft">UI-NEEDS 25 · 26 · DRAFT 1</span></h2>
+<p><b>Busy: never block, never spin.</b> A known length gets a progress track (the slider's track, lit to the progress) with a quiet percentage and a bare Cancel; an unknown length gets a short lit segment sliding back and forth. It lives in the context bar with a pulsing activity LED; the app stays usable. On the thing itself: a loading list row gets a thin line along its bottom; a clip being processed gets a slow light sweep. <b>Drop: show the result.</b> Drag a sample over a lane and a ghost clip appears at the snapped spot, at its real length; places that take things but aren't timelines fill with a soft tint and a corner tag says what will happen. While you drag, every valid place shows a faint tint; invalid ones do nothing.</p>
+<div class="card">
+  <h3>Busy</h3>
+  <div class="caps" style="margin-bottom:6px">The context bar · known length</div>
+  <div class="ctxbar" id="busy-known"></div>
+  <div class="caps" style="margin:12px 0 6px">The context bar · unknown length</div>
+  <div class="ctxbar" id="busy-scan"></div>
+  <div class="row" style="align-items:flex-start;gap:40px;margin-top:16px">
+    <div><div class="caps" style="margin-bottom:6px">A list row still loading</div><div id="busy-row"></div></div>
+    <div style="flex:1"><div class="caps" style="margin-bottom:6px">A clip being processed (time-stretch)</div><div id="busy-clip" style="position:relative;height:44px;background:var(--surface);border:2px solid var(--ground)"></div></div>
+  </div>
+</div>
+<div class="card">
+  <h3>Drop target · drag a sample from the list</h3>
+  <div class="row" style="align-items:flex-start;gap:24px">
+    <div id="drop-src" style="width:220px"></div>
+    <div style="flex:1;min-width:0">
+      <div id="drop-lanes"></div>
+      <div class="row" style="gap:12px;margin-top:12px;align-items:stretch">
+        <div style="flex:1"><div class="caps" style="margin-bottom:6px">A sampler slot</div><div class="slot dz" id="drop-slot"><span class="dtag">Drop to load</span><span class="txt">empty</span></div></div>
+        <div style="flex:1"><div class="caps" style="margin-bottom:6px">Not a target (does nothing)</div><div class="slot" style="color:var(--ink-faint)">a knob plate</div></div>
+      </div>
+    </div>
   </div>
 </div>
 </main>
@@ -1750,6 +1803,65 @@ function lightGrid(cur, onPick, row) {
   drag(sc, (dx, dy, w0) => { leftW = clamp(w0 + dx, 200, 480); m.style.gridTemplateColumns = leftW + 'px minmax(0,1fr)'; });
   drag(sr, (dx, dy, w0, h0) => { arrH = clamp(h0 + dy, 120, 420); arr.style.height = arrH + 'px'; arr.style.overflow = 'hidden'; });
   new ResizeObserver(place).observe(m); requestAnimationFrame(place);
+})();
+// ── busy + drop ──
+(() => {
+  // known length
+  const k = $('#busy-known'); setLight(k, light);
+  h('span', 'act', k); h('span', '', k, 'Rendering Night Runway…'); const pg = h('div', 'pg', k); pg.style.width = '220px'; const f = h('i', 'f', pg);
+  const pct = h('span', 'pct', k); k.append(button('S', 'Cancel', {push: true, bare: true})); h('span', '', k).style.flex = '1'; h('span', '', k, '● Alsa · 48000 Hz · DSP 16%');
+  let v = 0; setInterval(() => { v = (v + .7) % 101; f.style.width = `calc(${v}% - 4px * ${v / 100})`; pct.textContent = Math.round(v) + ' %'; }, 80);
+  // unknown length
+  const sc = $('#busy-scan'); setLight(sc, light);
+  h('span', 'act', sc); h('span', '', sc, 'Scanning Your library…'); const pg2 = h('div', 'pg scan', sc); pg2.style.width = '220px'; h('i', 'f', pg2);
+  sc.append(button('S', 'Cancel', {push: true, bare: true})); h('span', '', sc).style.flex = '1'; h('span', '', sc, '● Alsa · 48000 Hz · DSP 16%');
+  // a loading list row
+  const lst = h('div', 'lst'); lst.style.width = '260px'; lst.style.background = 'var(--surface)'; setLight(lst, light); const rows = h('div', 'rows', lst);
+  ['voice_sample_1', 'long_take_04.wav', 'voice_sample_2'].forEach((n, i) => { const r = h('div', 'lr', rows, `${ICON.wave}<span class="nm">${n}</span><span class="dt">${i === 1 ? '…' : '3.03 s'}</span>`);
+    if (i === 1) { r.querySelector('.nm').style.color = 'var(--ink-dim)'; const l = h('div', 'lp-line', r); const fi = h('i', '', l); let p = 0; setInterval(() => { p = (p + 1.3) % 100; fi.style.width = p + '%'; }, 60); } });
+  $('#busy-row').append(lst);
+  // a clip being processed
+  const bc = $('#busy-clip'); const c = h('div', 'clip busy', bc); setLight(c, 'amber'); Object.assign(c.style, {left: '40px', width: '320px'});
+  const ct = h('div', 'ct', c, 'voice_sample_12 · stretching'); ct.style.background = shade(LIGHTS.amber[1], .5); ct.style.color = LIGHTS.amber[0];
+  // drop: the source list
+  const src = h('div', 'lst'); src.style.width = '100%'; src.style.background = 'var(--surface)'; setLight(src, light); const sr = h('div', 'rows', src);
+  const samples = [['kick_round', 1], ['voice_sample_10', 4], ['long_take_04.wav', 7]];
+  // lanes
+  const lanesHost = $('#drop-lanes'); const BAR = 44; const lanes = [];
+  [['Drums', 'mint'], ['Vox', 'amber'], ['Pad', 'cyan']].forEach(([n, lt]) => {
+    const row = h('div', '', lanesHost); row.style.cssText = 'display:grid;grid-template-columns:100px 1fr;background:var(--surface);border-bottom:2px solid var(--ground)';
+    h('div', '', row, n).style.cssText = 'height:42px;display:flex;align-items:center;padding:0 8px;font:13px var(--read-font)';
+    const ln = h('div', 'ln dz', row); ln.style.cssText = `position:relative;height:42px;border-left:2px solid var(--ground);background-image:repeating-linear-gradient(90deg,transparent 0 ${BAR - 1}px,#2f2f2f ${BAR - 1}px ${BAR}px)`;
+    setLight(ln, lt); lanes.push(ln);
+  });
+  const slot = $('#drop-slot'); setLight(slot, light);
+  const zones = [...lanes, slot];
+  samples.forEach(([n, bars]) => {
+    const r = h('div', 'lr', sr, `${ICON.wave}<span class="nm">${n}</span><span class="dt">${bars} bar${bars > 1 ? 's' : ''}</span>`); r.style.cursor = 'grab';
+    r.addEventListener('pointerdown', e => {
+      e.preventDefault(); const gh = h('div', 'ghost', document.body, n); document.body.classList.add('dragging-any'); r.classList.add('dragging');
+      let ghostClip = null, over = null;
+      const mv = ev => {
+        gh.style.left = ev.clientX + 12 + 'px'; gh.style.top = ev.clientY + 8 + 'px';
+        const z = zones.find(z => { const b = z.getBoundingClientRect(); return ev.clientX >= b.left && ev.clientX <= b.right && ev.clientY >= b.top && ev.clientY <= b.bottom; });
+        if (over && over !== z) over.classList.remove('over'); over = z; if (z) z.classList.add('over');
+        if (ghostClip && (!z || z === slot || ghostClip.parentElement !== z)) { ghostClip.remove(); ghostClip = null; }
+        if (z && z !== slot) { if (!ghostClip) { ghostClip = h('div', 'ghostclip', z); h('div', 'ct', ghostClip, n); }
+          const b = z.getBoundingClientRect(); const at = clamp(Math.round((ev.clientX - b.left) / BAR), 0, 20); ghostClip.style.left = at * BAR + 1 + 'px'; ghostClip.style.width = bars * BAR - 2 + 'px'; }
+        gh.style.display = z && z !== slot ? 'none' : '';
+      };
+      const up = () => {
+        removeEventListener('pointermove', mv); removeEventListener('pointerup', up); gh.remove(); document.body.classList.remove('dragging-any'); r.classList.remove('dragging');
+        if (over) over.classList.remove('over');
+        if (ghostClip) { const lt = [...ghostClip.parentElement.style.cssText.matchAll(/--mid:\s*([^;]+)/g)]; const c = h('div', 'clip', ghostClip.parentElement); setLight(c, ['mint', 'amber', 'cyan'][lanes.indexOf(ghostClip.parentElement)]);
+          c.style.left = ghostClip.style.left; c.style.width = ghostClip.style.width; const L2 = L(['mint', 'amber', 'cyan'][lanes.indexOf(ghostClip.parentElement)]);
+          const t = h('div', 'ct', c, n); t.style.background = shade(L2.mid, .5); t.style.color = L2.hi; ghostClip.remove(); }
+        else if (over === slot) { slot.querySelector('.txt').textContent = n; slot.style.color = 'var(--ink)'; }
+      };
+      addEventListener('pointermove', mv); addEventListener('pointerup', up);
+    });
+  });
+  $('#drop-src').append(h('div', 'caps', null, 'Samples (drag one)'), src); $('#drop-src .caps').style.marginBottom = '6px';
 })();
 </script>
 </body>
