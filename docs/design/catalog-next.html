@@ -259,6 +259,10 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .rows-plated .lr.sel,.rows-striped .lr.sel{--b:var(--surface-sel)}
 .sel-backlit.rows-plated .lr.sel,.sel-backlit.rows-striped .lr.sel{--b:var(--low)}
 .sel-lifted.rows-plated .lr.sel,.sel-lifted.rows-striped .lr.sel{--b:#3d3d3d}
+.kids{display:grid;grid-template-rows:1fr;opacity:1;transition:grid-template-rows .12s ease-out,opacity .12s ease-out}
+.kids.shut{grid-template-rows:0fr;opacity:0}
+.kids>div{overflow:hidden;display:flex;flex-direction:column;min-height:0}
+@media (prefers-reduced-motion:reduce){.kids{transition:none}}
 .lst-legend{display:grid;grid-template-columns:120px 300px;gap:2px 16px;align-items:center}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
@@ -405,8 +409,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ LIST ROW ═════════════════════════ -->
-<h2>List row <span class="draft">UI-NEEDS 20 · DRAFT 1</span></h2>
-<p>The browser, files, presets, the Patterns tab. <b>Dark</b>: lists live in their own panels (the LCD drawer is only for things that pop up over the UI). 28 px rows; names in the reading font as written (file names keep their case), folder names in the label font, details in mono, dim, on the right. Click to select (Ctrl-click: several), double-click to preview (the <i>playing</i> state), drag a row; click a folder to open or close it. Compare the switches.</p>
+<h2>List row <span class="draft">UI-NEEDS 20 · SETTLED: FLAT + LIFTED</span></h2>
+<p>The browser, files, presets, the Patterns tab. <b>Dark</b>: lists live in their own panels (the LCD drawer is only for things that pop up over the UI). 28 px rows; names in the reading font as written (file names keep their case), folder names in the label font, details in mono, dim, on the right. Click to select (Ctrl-click: several), double-click to preview (the <i>playing</i> state), drag a row; click a folder: it folds open softly (0.12 s). <b>Settled: flat rows, lifted selection.</b> Stripes are for wide data tables (many values read across one row, CSV-style), not for browsers. The switches stay for comparison.</p>
 <div class="card">
   <div class="row" style="gap:24px;margin-bottom:14px">
     <span class="row" style="gap:6px"><span class="caps">Rows</span><span id="lst-rows"></span></span>
@@ -759,9 +763,9 @@ function browserList() {
       folder ? `${ICON.tw}<span class="nm">${name}</span><span class="dt">${a}</span>` : `${ICON.wave}<span class="nm">${name}</span><span class="dt">${a}</span>`);
     r.style.setProperty('--ind', depth); r.title = name; all.push(r);
     if (folder) {
-      const kids = h('div', '', parentKids || rows); kids.style.display = 'contents';
-      b.forEach(k => add(k, depth + 1, kids));
-      r.onclick = () => { r.classList.toggle('closed'); kids.style.display = r.classList.contains('closed') ? 'none' : 'contents'; };
+      const kids = h('div', 'kids', parentKids || rows), inner = h('div', '', kids);   // folds open softly
+      b.forEach(k => add(k, depth + 1, inner));
+      r.onclick = () => { r.classList.toggle('closed'); kids.classList.toggle('shut', r.classList.contains('closed')); };
     } else {
       r.onclick = e => { if (!(e.ctrlKey || e.metaKey)) all.forEach(x => x.classList.remove('sel')); r.classList.toggle('sel'); };
       r.ondblclick = () => { const on = !r.classList.contains('playing'); all.forEach(x => x.classList.remove('playing')); r.classList.toggle('playing', on); };
@@ -787,7 +791,7 @@ function browserList() {
   const setSel = v => ['edge', 'backlit', 'lifted'].forEach(k => lst.classList.toggle('sel-' + k, k === v));
   const sw = (host, names, set) => { const m = modeSwitch('B', 'S', names.map(n => [n]), 0); m.addEventListener('click', () => setTimeout(() => {
     const i = [...m.querySelectorAll('.btn')].findIndex(b => b.classList.contains('on')); set(names[i].toLowerCase()); })); $(host).append(m); };
-  sw('#lst-rows', ['Flat', 'Plated', 'Striped'], setRows); sw('#lst-sel', ['Edge', 'Backlit', 'Lifted'], setSel);
+  sw('#lst-rows', ['Flat', 'Plated', 'Striped'], setRows); sw('#lst-sel', ['Lifted', 'Edge', 'Backlit'], setSel); setSel('lifted');
   // the legend: one row per state, drawn statically
   const lg = $('#lst-legend');
   const st = (label, cls, extra = '') => { h('div', 'caps', lg, label); const w = h('div', 'lst', lg); w.classList.add('legend-row'); setLight(w, light);
@@ -797,6 +801,7 @@ function browserList() {
   // keep the legend in step with the switches
   const sync = () => lg.querySelectorAll('.lst').forEach(w => { w.className = lst.className; });
   ['#lst-rows', '#lst-sel'].forEach(id => $(id).addEventListener('click', () => setTimeout(sync, 10)));
+  sync();
   document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
