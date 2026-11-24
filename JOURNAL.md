@@ -16,8 +16,6 @@ no marks would default to not urgent or 'coding teams judges'
 - [ ] bug a pattern not on the timeline or not playing yet still shows a staff playing from the start, patterns clippy on the arranger not from their 0 tick show the staff playing from 0 despite playing further ahead in the arranger. might be related. 
 - [ ] Stretching viewport bar beyond used space enters a stretching loop that grows way too fast
 
-- [ ] *(UI port notes, 2026-11-25 — details in docs/design/PORT-STATUS.md)* Menus as LCD drawers (and the key root/scale pickers); the gap under editor headers (audio-clip editor tabs have no top edge); octave/scale buttons and FILE should react across the toolbar's full height; alignment in the audio-clip editor's transport row and the Recorder plate.
-
 ## Wishes
 *Things you wish Lyra did.*
 - [ ] *(from chat, 2026-11-23)* Loop regions are drawn with Alt+drag, but Alt also means "off the grid", so a loop can't be fine-tuned. Maybe Shift+drag instead? And a "clear selection" button in the context bar?
@@ -59,10 +57,18 @@ no marks would default to not urgent or 'coding teams judges'
   - Mod wheel, pitch bend and sustain pedal aren't wired (Lyra's events don't have them yet). Chorus/delay from Fluttersine presets now belong in mixer effects.
   - The Ratio knob is continuous (FM Bell needs 5.19). The editor could snap to common ratios unless Alt is held.
 
+
+*Director: should we move these to a different file so they stay tracked but don't eat  tokens during visits?*
 ## Done ✓
 *Claude moves finished items here, with the commit that fixed them.*
 
 **UI port (2026-11-25)**
+- [x] Menus as LCD drawers, and the key root/scale pickers. *→ FILE, VIEW and + Instrument open the dropdowns' drawer; root and scale are header dropdowns (6e18428).*
+- [x] Octave buttons and FILE should react across the toolbar's full height. *→ the octave keys do; FILE is as tall as the toolbar's keys (707a4ef).*
+- [x] The gap under editor headers; the audio-clip editor's tabs had no top edge. *→ EDITOR / RECORDER is a mode switch in the header now (73f38b9).*
+- [x] Alignment in the audio-clip editor's transport row and the Recorder plate. *→ one left edge, one width (73f38b9).*
+- [x] Tooltip prevents drawers from opening. *→ a menu key's hint sat on top of its own drawer; no hints while a drawer is open now (f82834a). If a drawer still won't open for you, tell me which one.*
+- [x] Viewport bar's content miniature overshadows the thumb. *→ the miniature is drawn under the window, and the window is see-through (9d08a6c).*
 - [x] Number pickers were missing their digit padding (the big click targets rule). *→ every LCD character in its own cell, the tuned digit a full-height inverse cell (39198f3).*
 - [x] All editors were missing the bottom border on their headers. *→ an engraved line in the ground colour, edge to edge (d8f98c0).*
 - [x] Mixer inserts could have their index on top in the middle or as a tag. *→ a tag hanging from each strip's top centre (d8f98c0).*

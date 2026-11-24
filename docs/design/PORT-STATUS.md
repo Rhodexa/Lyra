@@ -19,26 +19,24 @@ widget (Rhodexa reviews as it goes).
    labels, one standard meter, checkbox, splitter grip, busy (export progress,
    confirmed working by Rhodexa), drop ghost, header lines, mixer index tags.
 
-## To do (Rhodexa's notes, 2026-11-25)
+4. Rhodexa's notes (2026-11-25), each its own commit:
+   - **3s** Menus are LCD drawers (`widgets::menu_drawer`): FILE, the piano
+     roll's VIEW (toggle rows), + Instrument (headings; opens upward when
+     there's no room). The song key's root / scale are header dropdowns.
+   - **3t** Big targets: the octave keys react across the toolbar's height
+     (`button_reach`); FILE is as tall as the toolbar's keys.
+   - **3u** The audio-clip editor's EDITOR / RECORDER is a mode switch in its
+     header (what changes the whole panel sits outside it), so the tabs with
+     no top edge are gone. The Recorder plate is one column, one width.
+   - **3v** Floating windows: Lyra's frame and title row. The slider (SL1) and
+     the F12 panel on it, scrolling. COMPONENTS.md lists the new widget set.
 
-- **Menus become LCD drawers** (File, View, + Instrument), like the dropdowns:
-  "everything should be standardized". Then the song key's root / scale pickers
-  (still egui ComboBoxes inside the View menu) can switch to `widgets::dropdown`.
-- **The gap under editor headers** looks strange. Worst in the audio-clip editor:
-  its EDITOR / RECORDER tabs sit under the header line with no top border, so
-  they feel incomplete. Decide: tabs *inside* an editor may need their own top
-  edge, or the header line and the tabs should merge.
-- **Big targets**: the piano roll's octave and scale buttons are the right size
-  drawn, but should react across the toolbar's whole height. Same for FILE:
-  make it bigger (there's room), or move the toolbar's groups right and leave
-  the space.
-- **Alignment**: in the audio-clip editor, the transport row (play, stop, rec,
-  WAIT…) doesn't line up with the tabs above it. In the Recorder plate, the
-  labels, the (disabled) dropdown, PLAYS INTO and CLEAR THE TAPE don't share
-  one left edge / width. Rule: one row = one height, one column = one width.
-- Smaller: floating windows' frames, the F12 panel's sliders, update
-  COMPONENTS.md to the new widget set; remove `#[allow(dead_code)]` tokens as
-  they get used.
+## Still open
+
+- The egui leftovers listed at the end of [COMPONENTS.md](COMPONENTS.md):
+  right-click menus, the F3 menu, the Presets menu (needs a drawer that
+  holds a text field).
+- `SURFACE_SEL`, `SIZE_S`, `SIZE_L` are still unused (`#[allow(dead_code)]`).
 
 ## Pass two (after the port)
 
