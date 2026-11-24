@@ -1152,6 +1152,81 @@ pub fn insert_label(n: usize) -> String {
     }
 }
 
+/// The text field (catalog-next.html, settled): a sunken well; while you type
+/// it becomes the LCD (pale, dark text), since there are no focus rings. Text
+/// is the reading font, as typed. `search`: a search mark on the left and,
+/// once there's text, a clear key the field's whole height.
+pub fn text_field_at(ui: &mut Ui, r: Rect, text: &mut String, id: egui::Id, hint: &str, search: bool) -> Response {
+    let focused = ui.memory(|m| m.has_focus(id));
+    let hover = ui.rect_contains_pointer(r);
+    let bw = theme::OUTLINE_W;
+    let rad = (theme::CORNER * r.height() / theme::SIZE_M).clamp(3.0, 5.0);
+    let (fill, edge) = if focused {
+        (theme::LCD_DIM, theme::mix(theme::LCD_INK, Color32::BLACK, 0.5))
+    } else {
+        let f = if hover { theme::mix(theme::SUNKEN, Color32::WHITE, 0.03) } else { theme::SUNKEN };
+        (f, theme::outline_of(f))
+    };
+    let p = ui.painter();
+    p.rect_filled(r, cr(rad as u8), edge);
+    p.rect_filled(r.shrink(bw), cr((rad - bw).max(1.0) as u8), fill);
+    let ink = if focused { theme::LCD_INK } else { theme::INK };
+    let dim = if focused { theme::LCD_INK_DIM } else { theme::INK_DIM };
+    let mut x0 = r.left() + 9.0;
+    if search {
+        let c = pos2(x0 + 5.0, r.center().y - 1.0);
+        p.circle_stroke(c, 4.2, stroke(1.5, dim));
+        p.line_segment([c + vec2(3.0, 3.0), c + vec2(6.5, 6.5)], stroke(1.6, dim));
+        x0 += 18.0;
+    }
+    let clear = search && !text.is_empty();
+    let clear_r = Rect::from_min_max(pos2(r.right() - bw - (r.height() - 2.0 * bw), r.top() + bw), r.max - vec2(bw, bw));
+    let right = if clear { clear_r.left() - 2.0 } else { r.right() - 8.0 };
+    let edit_r = Rect::from_min_max(pos2(x0, r.top() + bw), pos2(right, r.bottom() - bw));
+    let resp = ui
+        .scope(|ui| {
+            let v = ui.visuals_mut();
+            v.override_text_color = Some(ink);
+            v.extreme_bg_color = Color32::TRANSPARENT;
+            v.text_cursor.stroke = stroke(2.0, if focused { theme::LCD_INK } else { theme::L_MINT.mid });
+            v.selection.bg_fill = if focused { theme::mix(theme::LCD_DIM, theme::LCD_INK, 0.35) } else { theme::L_MINT.rim };
+            v.selection.stroke = stroke(1.0, ink);
+            let edit = egui::TextEdit::singleline(text)
+                .id(id)
+                .frame(false)
+                .margin(egui::Margin::ZERO)
+                .vertical_align(egui::Align::Center)
+                .font(theme::read(13.0))
+                .hint_text(egui::RichText::new(hint).color(if focused { theme::LCD_INK_DIM } else { theme::INK_FAINT }))
+                .desired_width(edit_r.width());
+            ui.put(edit_r, edit)
+        })
+        .inner;
+    if clear {
+        let c = ui.interact(clear_r, id.with("clear"), Sense::click());
+        if c.hovered() {
+            let hov = if focused { theme::mix(theme::LCD_DIM, Color32::BLACK, 0.12) } else { theme::PLATE };
+            ui.painter().rect_filled(clear_r, egui::CornerRadius { nw: 0, sw: 0, ne: (rad - bw) as u8, se: (rad - bw) as u8 }, hov);
+        }
+        let (cc, k) = (clear_r.center(), 3.5);
+        let xi = if c.hovered() && !focused { theme::INK } else { dim };
+        ui.painter().line_segment([cc - vec2(k, k), cc + vec2(k, k)], stroke(1.6, xi));
+        ui.painter().line_segment([cc + vec2(-k, k), cc + vec2(k, -k)], stroke(1.6, xi));
+        if c.on_hover_text("Clear").clicked() {
+            text.clear();
+            ui.memory_mut(|m| m.request_focus(id));
+        }
+    }
+    resp
+}
+
+/// A text field `width` wide and S tall, laid out in the flow.
+pub fn text_field(ui: &mut Ui, text: &mut String, width: f32, id_salt: impl std::hash::Hash, hint: &str) -> Response {
+    let (r, _) = ui.allocate_exact_size(vec2(width, theme::m().control_h), Sense::hover());
+    let id = ui.make_persistent_id(("text-field", id_salt));
+    text_field_at(ui, r, text, id, hint, false)
+}
+
 /// A name typed into [`name_field`].
 pub struct Renamed {
     pub text: String,
@@ -1163,7 +1238,7 @@ pub struct Renamed {
 /// A one-line name field. Returns the new text when it changed.
 pub fn name_field(ui: &mut Ui, current: &str, width: f32) -> Option<Renamed> {
     let mut text = current.to_string();
-    let edit = ui.add(egui::TextEdit::singleline(&mut text).desired_width(width).font(egui::TextStyle::Body));
+    let edit = text_field(ui, &mut text, width, ui.next_auto_id(), "");
     let step = edit.id.with("undo-step");
     if edit.lost_focus() {
         ui.data_mut(|d| d.remove::<bool>(step));

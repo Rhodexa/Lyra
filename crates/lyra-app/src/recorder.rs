@@ -471,7 +471,7 @@ pub fn header(ui: &mut Ui, rec: &mut Recorder, can_append: bool) {
         let s = rec.shared.lock().unwrap_or_else(|e| e.into_inner());
         (s.tape.seconds(), s.state, s.tape.frames() > 0)
     };
-    ui.add(egui::TextEdit::singleline(&mut rec.prefix).desired_width(160.0))
+    widgets::text_field(ui, &mut rec.prefix, 160.0, "recorder-prefix", "Take name")
         .on_hover_text("A kept take is called this, plus the date and time");
     let status = match state {
         State::Recording => "recording",

@@ -39,17 +39,19 @@ fn files(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
     let (row_r, _) = ui.allocate_exact_size(vec2(ui.available_width(), m.control_h), Sense::hover());
     let [field, again] = crate::flex::row(row_r, [crate::flex::Grow(1.0), crate::flex::Px(m.control_h)], 4.0);
     // (A text field's width doesn't count its inner margin: take it off.)
-    let search = egui::TextEdit::singleline(&mut st.search)
-        .hint_text("Search samples")
-        .margin(egui::Margin::symmetric(4, 2))
-        .desired_width((field.width() - 10.0).max(20.0));
-    ui.put(field, search);
-    // ↻ as a drawn key: an egui button with that glyph came out wider than
-    // its slot, and the panel kept growing to fit it.
+    crate::widgets::text_field_at(ui, field, &mut st.search, ui.id().with("search"), "Search samples", true);
+    // ↻ as a button, drawn: the glyph from a font came out wider than its slot.
     let resp = ui.interact(again, ui.id().with("rescan"), Sense::click());
-    theme::well(ui.painter(), again);
-    let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
-    let (c, rad) = (again.center(), again.height() * 0.24);
+    let body = if resp.is_pointer_button_down_on() {
+        theme::mix(theme::PLATE, egui::Color32::BLACK, 0.18)
+    } else if resp.hovered() {
+        theme::mix(theme::PLATE, egui::Color32::WHITE, 0.09)
+    } else {
+        theme::PLATE
+    };
+    theme::outlined(ui.painter(), again, 3.0, body);
+    let ink = if resp.hovered() { egui::Color32::WHITE } else { theme::LEGEND };
+    let (c, rad) = (again.center(), again.height() * 0.22);
     let arc: Vec<egui::Pos2> = (0..=20)
         .map(|i| {
             let a = -0.6 + i as f32 / 20.0 * 4.9;
