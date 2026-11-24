@@ -340,6 +340,33 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .p3 .pl{padding:0 0 10px;border:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:calc(var(--btn-r) + var(--btn-bw));overflow:hidden}
 .p3 .pl .pt{padding:6px 10px;background:#232323;border-bottom:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol))}
 .p3 .pl .fields{padding:0 10px}
+/* ═════════ TEXT FIELD (draft 1) ═════════
+   A sunken well like the closed dropdown; typed text in the reading font, as typed.
+   While typing (no rings, no glows): E1 it becomes an LCD (light, dark text) · E2 it stays
+   dark, a step lighter, the caret in the light colour.                                   */
+.tf{--h:var(--m);--k:1;--b:var(--sunken);height:var(--h);display:inline-flex;align-items:center;gap:7px;padding:0 6px 0 9px;vertical-align:top;
+  background:var(--b);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-radius:calc(var(--btn-r) * var(--k));
+  color:var(--ink);cursor:text}
+.tf.S{--h:var(--s);--k:.75;padding:0 4px 0 7px} .tf.L{--h:var(--l);--k:1.25}
+.tf input{flex:1;min-width:0;background:transparent;border:0;outline:0;padding:0;color:inherit;font:13px/1 var(--read-font);caret-color:var(--mid)}
+.tf.L input{font-size:15px}
+.tf input::placeholder{color:var(--ink-faint)}
+.tf input::selection{background:var(--low);color:var(--ink-on-light)}
+.tf svg{width:14px;height:14px;flex:none;color:var(--ink-dim)}
+.tf .clr{display:none;width:20px;height:20px;border:0;border-radius:3px;background:transparent;color:var(--ink-dim);cursor:pointer;padding:0;place-items:center}
+.tf .clr:hover{background:var(--btn-body);color:var(--ink)}
+.tf.has .clr{display:grid}
+.tf:hover{--b:#1e1e1e}
+.tf.e2:focus-within{--b:#232323}
+.tf.e1:focus-within{--b:var(--lcd);color:var(--lcd-ink);border-color:color-mix(in srgb,var(--lcd-ink),black 50%)}
+.tf.e1:focus-within input{caret-color:var(--lcd-ink)}
+.tf.e1:focus-within input::placeholder{color:#7a7a7a}
+.tf.e1:focus-within svg,.tf.e1:focus-within .clr{color:var(--lcd-dim)}
+.tf.e1:focus-within .clr:hover{background:#a8a8a8;color:var(--lcd-ink)}
+.tf-grid{display:grid;grid-template-columns:170px 1fr 1fr;gap:14px 24px;align-items:center}
+.lr input.rn{flex:1;min-width:0;height:22px;margin:0 -4px;padding:0 4px;border:var(--btn-bw) solid color-mix(in srgb,var(--lcd-ink),black 50%);border-radius:3px;
+  background:var(--lcd);color:var(--lcd-ink);font:13px var(--read-font);outline:0}
+.lr input.rn::selection{background:var(--lcd-ink);color:var(--lcd)}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -522,7 +549,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ HEADER, PLATE, FIELD ═════════════════════════ -->
-<h2>Header row · plate · field <span class="draft">UI-NEEDS 7 · 8 · 9 · DRAFT 2</span></h2>
+<h2>Header row · plate · field <span class="draft">UI-NEEDS 7 · 8 · 9 · SETTLED: ENGRAVED + TAG</span></h2>
 <p>The pieces an editor is built from, shown as a real one: the audio-clip editor. <b>Header</b>: name on the left, actions on the right, groups apart with an engraved divider; one height per header (compact = S, normal = M). <b>Plate</b>: a titled group of fields. <b>Draft 2: engraved + tag</b> is the default (compact and readable: no boxes, the dividers and title tags hang from the header's line); <b>Tag (boxed)</b> or <b>Raised</b> (no border, a step lighter: a third surface level, so rare) are for bigger, explicitly modular things; Engraved and Strip stay for comparison. Every separation line is the <b>ground</b> colour: a slit showing the background, like the seams between modules. <b>Field</b>: a small caps label above its control. Small numbers use the LCD (the strategy from the number picker).</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Plates</span><span id="pl-style"></span></div>
@@ -530,6 +557,20 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <div class="area p4" id="ed-compact"></div>
   <div class="caps" style="margin:18px 0 6px">Normal header · M (40) · the same editor, the Recorder page</div>
   <div class="area p4" id="ed-normal"></div>
+</div>
+
+<!-- ═════════════════════════ TEXT FIELD ═════════════════════════ -->
+<h2>Text field <span class="draft">UI-NEEDS 11 · DRAFT 1</span></h2>
+<p>Search and names. A sunken well like the closed dropdown; what you type is in the reading font, as typed. There are no focus rings, so while you type: <b>E1</b> the field becomes an LCD (light, dark text: like the open drawer, "the thing you're working with now"), or <b>E2</b> it stays dark, a step lighter, the caret in the light colour. Click into them. A search shows a clear × once it has text. Renaming a list row happens in place: double-click a name below.</p>
+<div class="card">
+  <div class="tf-grid" id="tf-grid"></div>
+</div>
+<div class="card">
+  <h3>In context</h3>
+  <div class="row" style="align-items:flex-start;gap:40px">
+    <div><div class="caps" style="margin-bottom:6px">Rename in place (double-click a name)</div><div id="tf-rename"></div></div>
+    <div style="flex:1;min-width:420px"><div class="caps" style="margin-bottom:6px">A header with a name field · M</div><div class="area p4" id="tf-header"></div></div>
+  </div>
 </div>
 </main>
 
@@ -998,7 +1039,7 @@ const sep = () => h('span', 'sep');
 function editor(host, size, page) {
   const hd = h('div', 'hdr', host);
   const clips = [['voice_sample_10'], ['voice_sample_11'], ['kick_round']];
-  hd.append(dropdown(size, [['Audio clip', 'wave'], ['Arrangement', 'arr'], ['Piano roll', 'roll'], ['Mixer', 'mixer']], 0, {width: size === 'S' ? '150px' : '180px'}));
+  hd.append(dropdown(size, [['Audio clip', 'wave'], ['Arrangement', 'arr'], ['Piano roll', 'roll'], ['Mixer', 'mixer']], 0, {width: size === 'S' ? '150px' : '180px', lcd: true}));
   hd.append(modeSwitch('B', size, [['Editor'], ['Recorder']], page, {minw: size === 'S' ? '72px' : '92px'}));
   hd.append(sep());
   hd.append(dropdown(size, clips, 0, {width: size === 'S' ? '150px' : '180px', lcd: true, names: true}));
@@ -1025,6 +1066,45 @@ function editor(host, size, page) {
   sw.addEventListener('click', () => setTimeout(() => { const i = [...sw.querySelectorAll('.btn')].findIndex(b => b.classList.contains('on'));
     document.querySelectorAll('.area').forEach(a => { cls.forEach(c => a.classList.remove(c)); a.classList.add(cls[i]); }); }));
   $('#pl-style').append(sw);
+  document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
+})();
+
+// ── text field ──
+const XICON = '<svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.6" style="width:12px;height:12px"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+function textField(size, o = {}) {
+  const f = h('label', 'tf ' + size + ' ' + (o.mode || 'e1'));
+  if (o.width) f.style.width = o.width;
+  if (o.icon) f.insertAdjacentHTML('beforeend', ICON[o.icon]);
+  const inp = h('input', '', f); inp.placeholder = o.placeholder || ''; inp.value = o.value || ''; inp.spellcheck = false;
+  if (o.clear) { const x = h('button', 'clr', f, XICON); x.type = 'button'; x.onclick = e => { e.preventDefault(); inp.value = ''; f.classList.remove('has'); inp.focus(); }; }
+  const upd = () => f.classList.toggle('has', !!inp.value); inp.oninput = upd; upd();
+  inp.onkeydown = e => { if (e.key === 'Escape') inp.blur(); if (e.key === 'Enter') inp.blur(); };
+  return f;
+}
+(() => {
+  const g = $('#tf-grid');
+  ['', 'E1 · becomes an LCD while typing', 'E2 · stays dark'].forEach(t => h('div', 'caps', g, t));
+  const rows = [
+    ['S · 28 · search', 'S', {icon: 'search', placeholder: 'Search samples', clear: true, width: '240px'}],
+    ['M · 40 · a name', 'M', {value: 'Night Runway', width: '240px'}],
+    ['M · 40 · empty', 'M', {placeholder: 'Take name', width: '240px'}],
+    ['L · 52 · search', 'L', {icon: 'search', placeholder: 'Search plugins', clear: true, value: 'rev', width: '300px'}],
+  ];
+  for (const [label, size, o] of rows) { h('div', 'caps', g, label); for (const m of ['e1', 'e2']) { const c = h('div', '', g); c.append(textField(size, {...o, mode: m})); } }
+  // rename in place: a list, double-click a name
+  const lst = h('div', 'lst'); lst.style.background = 'var(--surface)'; setLight(lst, light); lst.classList.add('sel-lifted'); $('#tf-rename').append(lst);
+  const rows2 = h('div', 'rows', lst);
+  ['Pattern 24', 'Pattern 25', 'Overglider bass', 'Night Runway lead'].forEach((n, i) => {
+    const r = h('div', 'lr' + (i === 2 ? ' sel' : ''), rows2, `${ICON.roll}<span class="nm">${n}</span><span class="dt">${4 + i} bars</span>`);
+    r.ondblclick = () => { const nm = r.querySelector('.nm'); const inp = h('input', 'rn'); inp.value = nm.textContent; nm.replaceWith(inp); inp.focus(); inp.select();
+      const done = keep => { if (!inp.isConnected) return; if (keep && inp.value.trim()) nm.textContent = inp.value.trim(); inp.replaceWith(nm); };
+      inp.onkeydown = e => { if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); }; inp.onblur = () => done(true); };
+  });
+  // header with a name field
+  const area = $('#tf-header'); const hd = h('div', 'hdr', area);
+  hd.append(dropdown('M', [['Piano roll', 'roll'], ['Arrangement', 'arr']], 0, {width: '170px', lcd: true}), h('span', 'sep'), textField('M', {value: 'Overglider bass', width: '200px'}),
+            h('span', 'grow'), button('M', 'plus', {push: true}), button('M', 'trash', {push: true}));
+  const b = h('div', 'bodyrow', area); h('div', 'wave', b).style.minHeight = '60px';
   document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
