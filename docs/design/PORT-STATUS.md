@@ -25,9 +25,10 @@ widget (Rhodexa reviews as it goes).
      there's no room). The song key's root / scale are header dropdowns.
    - **3t** Big targets: the octave keys react across the toolbar's height
      (`button_reach`); FILE is as tall as the toolbar's keys.
-   - **3u** The audio-clip editor's EDITOR / RECORDER is a mode switch in its
-     header (what changes the whole panel sits outside it), so the tabs with
-     no top edge are gone. The Recorder plate is one column, one width.
+   - **3u** The Recorder plate is one column, one width. (Its mode switch for
+     EDITOR / RECORDER was wrong: they're tools, so they're tabs again.)
+   - **Areas have no padding** (6119d98): the real cause of the gap under
+     every editor's header. The header pads itself; editors run edge to edge.
    - **3v** Floating windows: Lyra's frame and title row. The slider (SL1) and
      the F12 panel on it, scrolling. COMPONENTS.md lists the new widget set.
 
