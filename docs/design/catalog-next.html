@@ -567,7 +567,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 <body>
 <main>
 <h1>Lyra · catalog next <span class="draft">SETTLED SET</span></h1>
-<p>The simplified widget set, designed here before anything changes in the app. Everything below is built only from the foundations. Nothing is approved yet; every number is there to be argued with. The app as it is today: <a href="widget-catalog.html" style="color:var(--ink)">widget-catalog.html</a>. Not for Fluttersine or Chrysalis.</p>
+<p>The simplified widget set, designed here before anything changes in the app. Everything below is built only from the foundations. Every section is now settled with Rhodexa; the index below is the spec in one screen. The app as it is today: <a href="widget-catalog.html" style="color:var(--ink)">widget-catalog.html</a>. Not for Fluttersine or Chrysalis.</p>
 
 
 <!-- ═════════════════════════ SETTLED INDEX ═════════════════════════ -->
@@ -912,9 +912,9 @@ function button(size, legend, o = {}) {
 (() => {
   const roles = [
     ['ground','#161616','BG','behind everything; the seams between modules'], ['surface','#292929','PANEL','panels, strips, plates'],
-    ['surface-sel','#303030','PANEL_HI','a selected surface'], ['raised','#3b3b3b','RAISED · BUTTON','a control\'s body'],
-    ['raised-hover','#424242','—','×1.12'], ['raised-press','#323232','—','×0.85'], ['sunken','#1a1a1a','WELL · INSET','wells: dropdowns, fields, tracks'],
-    ['edge','#111111','LINE','an engraved line'], ['edge-raised','#1c1c1c','BUTTON_RIM','a control\'s rim'],
+    ['surface-sel','#303030','PANEL_HI','a selected surface'], ['raised','#454545','RAISED · BUTTON','a control\'s body (the button plate)'],
+    ['raised-hover','#525252','—','the body mixed 9 % toward white'], ['raised-press','#393939','—','the body mixed 18 % toward black'], ['sunken','#1a1a1a','WELL · INSET','wells: dropdowns, fields, tracks'],
+    ['edge','#161616','LINE → ground','separation lines inside panels are the ground colour (a slit showing the background)'], ['edge-raised','own colour −50 %','BUTTON_RIM','a control\'s outline: its own colour mixed 50 % toward black'],
     ['ink','#cfcfcf','TEXT','text, icons'], ['ink-dim','#969696','TEXT_DIM','secondary text, idle legends'],
     ['ink-faint','#5c5c5c','new','disabled'], ['ink-on-light','#2c2c2c','key ink lit','text on a lit body or an LCD'],
   ];
