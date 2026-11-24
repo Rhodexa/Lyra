@@ -11,15 +11,21 @@ A real budget LCD, not a smooth screen:
 
 - **Dot matrix** for the performer view: a coarse pixel grid (on the order
   of 128×48), square dots with visible gaps, unlit dots faintly ghosted on
-  the cream glass, dark dots only, no anti-aliasing, no gradients. The note
+  the cream glass, no anti-aliasing, no gradients. **Four shades** (the
+  Game Boy's own palette, fittingly, given where Octavia's sound started):
+  off/ghost, light, mid, dark. The note
   lane, strings, hand and bow traces are drawn *in dots*, which suits
   them: the curves are already stepped at 250 frames a second.
 - **Segment digits** (7/14-segment, with the faint unlit segments showing)
   for numbers and short words: knob values, the preset number, "ARCO" /
   "PIZZ".
-- Decision colours can't exist on a one-colour LCD, so on the screen they
-  become dot *patterns* (solid, hollow, dotted, a bouncing dot for
-  spiccato…). Colour stays for the plots and the knobs' pink.
+- Decision colours become **shade + pattern**: the shade carries weight
+  (dark = the bow is working: new bow, accent; mid = slurred, flowing;
+  light = ringing on: strings left behind, the open-string ghost), and a
+  pattern carries the kind (solid bowed, hollow slurred, a hopping dot for
+  spiccato, a tick for staccato, a single dot for a pluck). Fading
+  strings dim through the shades as they die away. Colour stays for the
+  plots and the knobs' pink.
 
 ## What it should show: the performer thinking
 
