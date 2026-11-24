@@ -41,12 +41,8 @@ pub fn show(
         // The File menu: everything about the song as a file.
         module(ui, |ui| {
             // A bare button: no plate, the legend in caps (catalog-next, settled).
-            let label = egui::RichText::new("FILE").font(theme::label(13.0)).color(theme::LEGEND);
-            egui::menu::menu_custom_button(ui, egui::Button::new(label).frame(false), |ui| {
-                file_menu(ui, actions);
-            })
-            .response
-            .hint("New, open, save, import, export");
+            let resp = widgets::bare_button(ui, "FILE", false, "New, open, save, import, export");
+            file_menu(ui, &resp, actions);
         });
 
         // The deck: what plays, play / stop, where we are, the beat.
@@ -162,8 +158,8 @@ pub fn show(
 }
 
 /// The File menu's items.
-fn file_menu(ui: &mut Ui, actions: &mut Vec<Action>) {
-    for (label, keys, action) in [
+fn file_menu(ui: &mut Ui, resp: &egui::Response, actions: &mut Vec<Action>) {
+    let items = [
         ("New", "", Action::NewProject),
         ("Open…", "Ctrl+O", Action::OpenProject),
         ("Save", "Ctrl+S", Action::Save),
@@ -173,15 +169,10 @@ fn file_menu(ui: &mut Ui, actions: &mut Vec<Action>) {
         ("Export WAV…", "Ctrl+E", Action::ExportWav),
         ("Export stems…", "Ctrl+Shift+E", Action::ExportStems),
         ("Export data…", "", Action::ExportData),
-    ] {
-        if ui.add(egui::Button::new(label).shortcut_text(keys)).clicked() {
-            actions.push(action);
-            ui.close_menu();
-        }
-    }
-    ui.separator();
-    if ui.button("Open backup").hint("The copy Lyra keeps of your latest work").clicked() {
-        actions.push(Action::OpenBackup);
-        ui.close_menu();
+        ("Open backup", "", Action::OpenBackup),
+    ];
+    let rows: Vec<_> = items.iter().map(|(l, k, _)| widgets::DropRow::action(*l, *k)).collect();
+    if let Some(i) = widgets::menu_drawer(ui, resp, "file", 330.0, &rows) {
+        actions.push(items[i].2);
     }
 }

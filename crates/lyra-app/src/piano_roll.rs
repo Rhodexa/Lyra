@@ -659,38 +659,34 @@ impl PianoRoll {
                 self.chord = Chord::ALL[i];
             }
 
-            // Key + view options live in one menu, out of the way.
-            let key_label = format!("{} {}", theory::NOTE_NAMES[p.key_root as usize], p.scale.name().to_lowercase());
-            ui.menu_button(format!("View · {key_label}"), |ui| {
-                ui.label(egui::RichText::new("SONG KEY").small().color(theme::TEXT_DIM));
-                let (mut root, mut scale) = (p.key_root, p.scale);
-                ui.horizontal(|ui| {
-                    egui::ComboBox::from_id_salt("pr-root")
-                        .width(44.0)
-                        .selected_text(theory::NOTE_NAMES[root as usize])
-                        .show_ui(ui, |ui| {
-                            for (i, name) in theory::NOTE_NAMES.iter().enumerate() {
-                                ui.selectable_value(&mut root, i as u8, *name);
-                            }
-                        });
-                    egui::ComboBox::from_id_salt("pr-scale").width(120.0).selected_text(scale.name()).show_ui(
-                        ui,
-                        |ui| {
-                            for s in Scale::ALL {
-                                ui.selectable_value(&mut scale, s, s.name());
-                            }
-                        },
-                    );
-                });
-                if (root, scale) != (p.key_root, p.scale) {
-                    h.checkpoint(p);
-                    p.key_root = root;
-                    p.scale = scale;
-                }
-                ui.separator();
-                widgets::checkbox(ui, &mut self.show_scale, "Shade notes outside the key");
-                widgets::checkbox(ui, &mut self.show_ghosts, "Show other channels (ghost notes)");
-            });
+            // The song's key: root and scale, dropdowns like the rest.
+            ui.label(egui::RichText::new("key").small().color(theme::TEXT_DIM));
+            let (mut root, mut scale) = (p.key_root, p.scale);
+            let rows: Vec<_> = theory::NOTE_NAMES.iter().map(|n| widgets::DropRow::text(*n)).collect();
+            if let Some(i) = widgets::dropdown(ui, "pr-root", 56.0, &rows, root as usize, false, "The song's key: its root note") {
+                root = i as u8;
+            }
+            let rows: Vec<_> = Scale::ALL.iter().map(|s| widgets::DropRow::text(s.name())).collect();
+            let at = Scale::ALL.iter().position(|s| *s == scale).unwrap_or(0);
+            if let Some(i) = widgets::dropdown(ui, "pr-scale", 130.0, &rows, at, false, "The song's key: its scale") {
+                scale = Scale::ALL[i];
+            }
+            if (root, scale) != (p.key_root, p.scale) {
+                h.checkpoint(p);
+                p.key_root = root;
+                p.scale = scale;
+            }
+            // View options: a menu drawer with toggles.
+            let resp = widgets::bare_button(ui, "VIEW", false, "What the piano roll shows");
+            let rows = [
+                widgets::DropRow::toggle("Shade notes outside the key", self.show_scale),
+                widgets::DropRow::toggle("Show other channels (ghost notes)", self.show_ghosts),
+            ];
+            match widgets::menu_drawer(ui, &resp, "pr-view", 300.0, &rows) {
+                Some(0) => self.show_scale = !self.show_scale,
+                Some(1) => self.show_ghosts = !self.show_ghosts,
+                _ => {}
+            }
         });
     }
 

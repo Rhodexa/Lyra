@@ -142,16 +142,44 @@ fn add_channel_menu(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiSt
 /// A wide "+ Instrument" key; its list opens under it.
 fn add_instrument_key(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
     let resp = widgets::wide_key(ui, "+ Instrument", "Add an instrument at the end of the rack");
-    let popup = ui.make_persistent_id("add-instrument");
-    if resp.clicked() {
-        ui.memory_mut(|m| m.toggle_popup(popup));
-    }
-    egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-        ui.set_min_width(180.0);
-        if add_channel_menu(ui, p, h, st, None) {
-            ui.memory_mut(|m| m.close_popup());
+    instrument_drawer(ui, &resp, "add-instrument", p, h, st, None);
+}
+
+/// The instrument list as an LCD drawer under `resp`; a pick adds that
+/// instrument at `at` (a rack index), or at the end.
+fn instrument_drawer(
+    ui: &mut Ui,
+    resp: &egui::Response,
+    id_salt: &str,
+    p: &mut Project,
+    h: &mut History,
+    st: &mut UiState,
+    at: Option<usize>,
+) {
+    let mut rows = Vec::new();
+    let mut ids = Vec::new();
+    for (title, melodic) in [("DRUMS", false), ("INSTRUMENTS", true)] {
+        rows.push(widgets::DropRow::heading(title));
+        ids.push(None);
+        for inst in lyra_catalog::instruments().iter().filter(|i| i.melodic == melodic) {
+            rows.push(widgets::DropRow::text(inst.name));
+            ids.push(Some(inst));
         }
-    });
+    }
+    let width = resp.rect.width().max(180.0);
+    let Some(inst) = widgets::menu_drawer(ui, resp, id_salt, width, &rows).and_then(|i| ids[i]) else { return };
+    h.checkpoint(p);
+    p.add_channel(inst.name, inst.id, lyra_catalog::default_params(inst.id));
+    let mut i = p.channels.len() - 1;
+    if let Some(at) = at.filter(|&a| a < i) {
+        let ch = p.channels.pop().expect("just added");
+        p.channels.insert(at, ch);
+        i = at;
+    }
+    st.selected = i;
+    if inst.melodic {
+        st.show = Some(Editor::PianoRoll);
+    }
 }
 
 /// FL-style solo: mute everyone else. Soloing the channel that is already the
@@ -191,11 +219,8 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pla
             h.checkpoint(p);
             p.patterns[pat].min_length = new_len;
         }
-        ui.menu_button("+ Instrument", |ui| {
-            if add_channel_menu(ui, p, h, st, None) {
-                ui.close_menu();
-            }
-        });
+        let resp = widgets::button(ui, widgets::Legend::Text("+ INSTRUMENT"), None, "Add an instrument at the end of the rack");
+        instrument_drawer(ui, &resp, "add-instrument-steps", p, h, st, None);
     });
     if steps {
         ui.add_space(4.0);
@@ -423,7 +448,7 @@ fn row(
         let mut insert = p.channels[ci].mixer;
         let inserts = p.mixer.len().saturating_sub(1);
         let rows: Vec<_> = (0..=inserts)
-            .map(|t| widgets::DropRow { label: widgets::insert_label(t), icon: None, detail: p.mixer[t].name.clone() })
+            .map(|t| widgets::DropRow { label: widgets::insert_label(t), icon: None, detail: p.mixer[t].name.clone(), ..Default::default() })
             .collect();
         let (mut resp, picked) =
             widgets::dropdown_compact(ui, ("insert", ci), vec2(m.step_h, m.step_h), &rows, insert, 200.0);

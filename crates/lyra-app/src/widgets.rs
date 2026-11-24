@@ -1181,6 +1181,7 @@ pub fn field_label(ui: &Ui, at: Pos2, text: &str) {
 /// The checkbox (catalog-next, settled: C2): a sunken box, backlit with a dark
 /// tick when on; the label in Roboto beside it; the whole row (box and label,
 /// S tall) is the target. Returns the response (`changed()` when flipped).
+#[allow(dead_code)] // settled in the catalog; the View menu became toggle rows
 pub fn checkbox(ui: &mut Ui, on: &mut bool, label: &str) -> Response {
     let h = theme::m().control_h;
     let g = ui.fonts(|f| f.layout_no_wrap(label.to_string(), theme::read(13.0), theme::INK));
@@ -1215,12 +1216,40 @@ pub struct DropRow {
     pub icon: Option<Icon>,
     /// Shown dim on the right (a shortcut, a count).
     pub detail: String,
+    /// A section title (a menu's DRUMS / INSTRUMENTS): dim caps, not pickable.
+    pub heading: bool,
+    /// A toggle (a menu's view option): a box on the right, ticked when on.
+    /// Picking it keeps the drawer open.
+    pub check: Option<bool>,
 }
 
 impl DropRow {
     pub fn text(label: impl Into<String>) -> Self {
         DropRow { label: label.into(), ..Default::default() }
     }
+
+    pub fn action(label: impl Into<String>, shortcut: impl Into<String>) -> Self {
+        DropRow { label: label.into(), detail: shortcut.into(), ..Default::default() }
+    }
+
+    pub fn heading(label: impl Into<String>) -> Self {
+        DropRow { label: label.into(), heading: true, ..Default::default() }
+    }
+
+    pub fn toggle(label: impl Into<String>, on: bool) -> Self {
+        DropRow { label: label.into(), check: Some(on), ..Default::default() }
+    }
+}
+
+/// A menu as an LCD drawer (the dropdown's, for every menu: "everything
+/// standardized"): opens under `resp` when it's clicked. `rows` are actions
+/// (a shortcut in `detail`), headings and toggles. Returns the row picked.
+pub fn menu_drawer(ui: &mut Ui, resp: &Response, id_salt: impl std::hash::Hash, width: f32, rows: &[DropRow]) -> Option<usize> {
+    let id = ui.make_persistent_id(("menu", id_salt));
+    if resp.clicked() {
+        ui.memory_mut(|mem| mem.toggle_popup(id));
+    }
+    drawer(ui, id, resp.rect, width, rows, usize::MAX, true)
 }
 
 /// Rows per column before a drawer wraps into the next column.
@@ -1287,9 +1316,19 @@ fn drawer(ui: &mut Ui, id: egui::Id, anchor: Rect, width: f32, rows: &[DropRow],
     let cols = rows.len().div_ceil(DRAWER_ROWS).max(1);
     let per_col = rows.len().div_ceil(cols).max(1);
     let col_w = if cols == 1 { width.max(120.0) } else { (width * 0.8).max(130.0) };
+    // Under the anchor, or over it when there's no room below (a key at the
+    // bottom of a panel).
+    let full_h = per_col as f32 * h + 2.0 * (theme::OUTLINE_W + 2.0);
+    let screen = ui.ctx().screen_rect();
+    let below = r.left_bottom() + vec2(0.0, 3.0);
+    let drawer_pos = if below.y + full_h > screen.bottom() && r.top() - 3.0 - full_h >= screen.top() {
+        r.left_top() - vec2(0.0, 3.0 + full_h)
+    } else {
+        below
+    };
     let area = egui::Area::new(id.with("drawer"))
         .order(egui::Order::Foreground)
-        .fixed_pos(r.left_bottom() + vec2(0.0, 3.0))
+        .fixed_pos(drawer_pos)
         .show(ui.ctx(), |ui| {
             let pad = theme::OUTLINE_W + 2.0;
             let bg = ui.painter().add(Shape::Noop);
@@ -1297,6 +1336,11 @@ fn drawer(ui: &mut Ui, id: egui::Id, anchor: Rect, width: f32, rows: &[DropRow],
             for (i, row) in rows.iter().enumerate() {
                 let (c, k) = (i / per_col, i % per_col);
                 let rr = Rect::from_min_size(top + vec2(c as f32 * col_w, k as f32 * h), vec2(col_w, h));
+                if row.heading {
+                    let g = legend_galley(ui, &row.label, 11.0, false, theme::LCD_INK_DIM);
+                    ui.painter().galley(pos2(rr.left() + 8.0, rr.bottom() - 5.0 - g.size().y), g, theme::LCD_INK_DIM);
+                    continue;
+                }
                 let it = ui.interact(rr, id.with(("row", i)), Sense::click());
                 let on = i == chosen;
                 let fill = if on {
@@ -1315,6 +1359,19 @@ fn drawer(ui: &mut Ui, id: egui::Id, anchor: Rect, width: f32, rows: &[DropRow],
                     paint_icon(ui.painter(), ir, icon, theme::LCD_INK, theme::LCD_DIM);
                     tx += h * 0.5 + 6.0;
                 }
+                let mut right = rr.right();
+                if let Some(on) = row.check {
+                    let b = Rect::from_center_size(pos2(right - 8.0 - 7.0, rr.center().y), vec2(14.0, 14.0));
+                    ui.painter().rect_stroke(b, cr(3), stroke(1.6, theme::LCD_INK), egui::StrokeKind::Inside);
+                    if on {
+                        let c = b.center();
+                        let tick = vec![c + vec2(-3.5, 0.5), c + vec2(-1.0, 3.0), c + vec2(3.5, -3.0)];
+                        ui.painter().add(Shape::line(tick, stroke(2.0, theme::LCD_INK)));
+                    }
+                    right -= 22.0;
+                }
+                let rr_text = Rect::from_min_max(rr.min, pos2(right, rr.max.y));
+                let rr = rr_text;
                 let dw = if row.detail.is_empty() {
                     0.0
                 } else {
@@ -1353,7 +1410,8 @@ fn drawer(ui: &mut Ui, id: egui::Id, anchor: Rect, width: f32, rows: &[DropRow],
     let outside = ui.input(|i| {
         i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|p| !area.response.rect.contains(p) && !r.contains(p))
     });
-    if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+    let toggled = picked.is_some_and(|i| rows[i].check.is_some());
+    if (picked.is_some() && !toggled) || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         ui.memory_mut(|mem| mem.close_popup());
     }
     picked

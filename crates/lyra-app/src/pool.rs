@@ -248,7 +248,7 @@ pub fn audio(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pl
             let mut insert = p.audio[i].mixer;
             let inserts = p.mixer.len().saturating_sub(1);
             let rows: Vec<_> = (0..=inserts)
-                .map(|t| widgets::DropRow { label: widgets::insert_label(t), icon: None, detail: p.mixer[t].name.clone() })
+                .map(|t| widgets::DropRow { label: widgets::insert_label(t), icon: None, detail: p.mixer[t].name.clone(), ..Default::default() })
                 .collect();
             let (mut r, picked) =
                 widgets::dropdown_compact(ui, ("audio-insert", i), vec2(m.step_h, m.step_h), &rows, insert, 200.0);

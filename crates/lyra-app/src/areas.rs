@@ -126,7 +126,7 @@ fn picker_list(ui: &mut Ui, editor: &mut Editor) {
     let h = theme::m().control_h;
     let rows: Vec<widgets::DropRow> = Editor::ALL
         .iter()
-        .map(|e| widgets::DropRow { label: e.name().into(), icon: Some(e.icon()), detail: e.key().into() })
+        .map(|e| widgets::DropRow { label: e.name().into(), icon: Some(e.icon()), detail: e.key().into(), ..Default::default() })
         .collect();
     let chosen = Editor::ALL.iter().position(|e| e == editor).unwrap_or(0);
     if let Some(i) = widgets::dropdown(ui, "editor-picker", h * 5.6, &rows, chosen, false, "Which editor this area shows") {
