@@ -139,7 +139,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .track .btn.on,.track .hit:hover .btn.on{--b:transparent;border-color:transparent;color:color-mix(in srgb,var(--rim),black 68%)}
 /* the one lit plate, which slides to the chosen option */
 .track .ind{position:absolute;z-index:0;border-radius:calc(var(--btn-r) * var(--k));background:var(--low);
-  border:var(--btn-bw) solid color-mix(in srgb,var(--low),black var(--btn-ol));transition:left .14s ease-out,top .14s ease-out,width .14s ease-out,height .14s ease-out,background-color .14s}
+  border:var(--btn-bw) solid color-mix(in srgb,var(--low),black var(--btn-ol));transition:left .08s ease-out,top .08s ease-out,width .08s ease-out,height .08s ease-out,background-color .08s}
 .track:has(.hit:hover .btn.on) .ind{background:var(--mid);border-color:color-mix(in srgb,var(--mid),black var(--btn-ol))}
 @media (prefers-reduced-motion:reduce){.track .ind{transition:none}}
 .track.S{--h:var(--s);--k:.75} .track.M{--h:var(--m)} .track.L{--h:var(--l);--k:1.25}
@@ -147,6 +147,29 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .track.vert .hit{display:flex}
 .track.vert .btn{flex:1;min-width:0;width:auto;height:calc(var(--h) - 4px);padding:0}
 .ms-grid{display:grid;grid-template-columns:150px 1fr 1fr 1fr;gap:16px 20px;align-items:center}
+/* ═════════ TABS (draft 1) ═════════
+   A tab row belongs to the panel under it. Equal cells across the panel, labels
+   in the label font (caps), clipped with an ellipsis, never touching the edges.
+   T1 · track: the settled mode switch, stretched across the panel's header.
+   T2 · folder: the chosen tab IS the panel's surface and flows into it (no line
+        between them); the others sit back on the ground, darker; outlines as buttons. */
+.panel{background:var(--surface);border:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:var(--btn-r)}
+.panel .body{padding:10px;color:var(--ink-dim);font-size:13px;min-height:110px}
+.panel.flat{border-top-left-radius:0;border-top-right-radius:0}
+.t1 .head{padding:6px 6px 0}
+.t1 .track{display:flex;width:100%} .t1 .track .hit{flex:1 1 0;min-width:0} .t1 .track .btn{width:100%;min-width:0;padding:0 6px}
+.t1 .track .btn span,.ftab span{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ftabs{display:flex;gap:2px;align-items:flex-end;position:relative;z-index:1;margin-bottom:calc(var(--btn-bw) * -1)}
+.ftab{--b:var(--tab-off);flex:1;min-width:0;display:flex;align-items:center;justify-content:center;height:var(--h);padding:0 8px;cursor:pointer;
+  background:var(--b);color:var(--ink-dim);font:var(--btn-fw) var(--fs)/1 var(--btn-font);letter-spacing:.04em;text-transform:var(--btn-case);white-space:nowrap;user-select:none;
+  border:var(--btn-bw) solid color-mix(in srgb,var(--b),black var(--btn-ol));border-bottom-color:color-mix(in srgb,var(--surface),black var(--btn-ol));
+  border-radius:var(--btn-r) var(--btn-r) 0 0}
+.ftab:hover{--b:#262626;color:var(--ink)}
+.ftab.on{--b:var(--surface);color:var(--ink);border-bottom-color:var(--surface);height:calc(var(--h) + 3px)}
+.ftabs.S{--h:var(--s);--fs:12px} .ftabs.M{--h:var(--m);--fs:13px}
+.tab-demo{display:grid;grid-template-columns:repeat(2,minmax(0,300px));gap:24px 48px}
+.tab-demo .caps{margin-bottom:6px}
+:root{--tab-off:#202020}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -245,8 +268,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ MODE SWITCH ═════════════════════════ -->
-<h2>Mode switch <span class="draft">UI-NEEDS 2 · DRAFT 3</span></h2>
-<p>One choice among a few: a radio group, joined into one object so it reads as "pick one" before you click. Two options <b>toggle</b> when you click either one (SONG / PAT, as you like it); three or more behave as a radio. The chosen option is backlit, like a button that's on. <b>Draft 3:</b> B (the track) is the favourite: it reads best and matches the dropdowns. The lit plate now meets the track's outline (no padding), each option reacts across its whole share of the track, and one lit plate slides to the choice. A (joined) stays as the alternative for tool palettes. C is rejected.</p>
+<h2>Mode switch <span class="draft">UI-NEEDS 2 · SETTLED</span></h2>
+<p>One choice among a few: a radio group, joined into one object so it reads as "pick one" before you click. Two options <b>toggle</b> when you click either one (SONG / PAT, as you like it); three or more behave as a radio. The chosen option is backlit, like a button that's on. <b>Settled: B, the track, for every case.</b> A sunken well; the chosen option is one lit plate that meets the outline (no padding) and slides there in 0.08 s; each option reacts across its whole share of the track. A (joined) and C (loose) are kept below only for the record.</p>
 <div class="card">
   <div class="ms-grid" id="ms-matrix"></div>
 </div>
@@ -260,6 +283,13 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <div class="plate" id="ms-plate"></div>
   <div class="caps" style="margin:14px 0 6px">Vertical · a tool column</div>
   <div class="row" id="ms-vert" style="align-items:flex-start"></div>
+</div>
+
+<!-- ═════════════════════════ TABS ═════════════════════════ -->
+<h2>Tabs <span class="draft">UI-NEEDS 3 · DRAFT 1</span></h2>
+<p>A tab row belongs to the panel under it: switching tabs changes the whole panel, not a setting. Equal cells across the panel, caps labels that clip with an ellipsis instead of colliding with the edges. Two ways; click the tabs. The panels are the real ones: the left panel (300 px wide, like the app's) and the audio-clip editor.</p>
+<div class="card">
+  <div class="tab-demo" id="tabs-demo"></div>
 </div>
 </main>
 
@@ -445,7 +475,7 @@ function modeSwitch(kind, size, opts, chosen = 0, o = {}) {
 }
 (() => {
   const m = $('#ms-matrix');
-  ['', 'A · joined (tools?)', 'B · track (the favourite)', 'C · loose buttons (rejected)'].forEach(t => h('div', 'caps', m, t));
+  ['', 'A · joined (retired)', 'B · track (SETTLED)', 'C · loose buttons (rejected)'].forEach(t => h('div', 'caps', m, t));
   const rows = [
     ['S · 28 · text', 'S', [['Song'], ['Pat', 'amber']], {minw: '56px'}],
     ['M · 40 · text', 'M', [['Editor'], ['Recorder']], {}],
@@ -471,6 +501,33 @@ function modeSwitch(kind, size, opts, chosen = 0, o = {}) {
   const g3 = h('span', '', pl); g3.style.width = '24px'; pl.append(modeSwitch('B', 'M', [['Editor'], ['Recorder']], 1, {minw: '96px'}));
   const v = $('#ms-vert');
   for (const [k, l] of [['A', 'A'], ['B', 'B']]) { const c = h('div', 'cell', v); c.append(modeSwitch(k, 'M', [['pointer'], ['pencil'], ['slice'], ['mute']], 1, {vert: true})); h('div', 'caps', c, l); }
+  document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
+})();
+
+// ── tabs ──
+function tabsT1(size, labels, chosen = 0, body = '') {
+  const w = h('div', 't1 panel');
+  const head = h('div', 'head', w); head.append(modeSwitch('B', size, labels.map(l => [`<span>${l}</span>`]), chosen));
+  head.querySelector('.track').style.display = 'flex';
+  h('div', 'body', w, body); return w;
+}
+function tabsT2(size, labels, chosen = 0, body = '') {
+  const w = h('div', '');
+  const row = h('div', 'ftabs ' + size, w);
+  const tabs = labels.map((l, i) => { const t = h('div', 'ftab' + (i === chosen ? ' on' : ''), row, `<span>${l}</span>`); t.title = l;
+    t.onclick = () => tabs.forEach((x, k) => x.classList.toggle('on', k === i)); return t; });
+  h('div', 'body', h('div', 'panel flat', w), body); return w;
+}
+(() => {
+  const d = $('#tabs-demo');
+  const add = (label, node) => { const c = h('div', '', d); h('div', 'caps', c, label); c.append(node); c.style.maxWidth = '300px'; };
+  const left = ['Files', 'Instruments', 'Effects'], clip = ['This clip', 'Recorder'], long = ['Files', 'Instruments', 'Effects', 'Automation'];
+  add('T1 · track · S · left panel', tabsT1('S', left, 0, 'Lyra · Starter Kit · Your library…'));
+  add('T2 · folder · S · left panel', tabsT2('S', left, 0, 'Lyra · Starter Kit · Your library…'));
+  add('T1 · track · M · audio-clip editor', tabsT1('M', clip, 0, 'Gain · Fades · Reverse…'));
+  add('T2 · folder · M · audio-clip editor', tabsT2('M', clip, 0, 'Gain · Fades · Reverse…'));
+  add('T1 · four tabs in 300 px', tabsT1('S', long, 3, 'Squeezed: labels clip with an ellipsis.'));
+  add('T2 · four tabs in 300 px', tabsT2('S', long, 3, 'Squeezed: labels clip with an ellipsis.'));
   document.querySelectorAll('.btn').forEach(x => x.style.getPropertyValue('--mid') || setLight(x, light));
 })();
 </script>
