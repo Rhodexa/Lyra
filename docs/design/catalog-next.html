@@ -70,7 +70,7 @@ body{margin:0;color:var(--ink);font:var(--t-body)/1.45 var(--read-font)}
 :focus,:focus-visible{outline:none}
 main{max-width:1180px;margin:auto;padding:24px 16px 60px}
 h1{font-size:24px;font-weight:650;margin:0 0 4px}
-h2{font-size:18px;font-weight:650;margin:30px 0 4px}
+h2{font-size:18px;font-weight:650;margin:30px 0 4px;scroll-margin-top:12px}
 h3{font-size:13px;font-weight:600;margin:0 0 10px;color:var(--ink)}
 p{margin:6px 0;color:var(--ink-dim);max-width:820px}
 code{font:12px var(--t-num);color:var(--ink-dim)}
@@ -78,6 +78,9 @@ code{font:12px var(--t-num);color:var(--ink-dim)}
 .caps{font:var(--t-caps);font-family:var(--btn-font);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)}
 .row{display:flex;flex-wrap:wrap;gap:var(--gap-out);align-items:center}
 .cell{display:grid;justify-items:center;gap:6px}
+.idx td:first-child{white-space:nowrap;font-family:var(--btn-font);letter-spacing:.04em}
+.idx td+td{font-family:var(--read-font);color:var(--ink)}
+.idx a{color:var(--ink)}
 .draft{display:inline-block;font:700 10px var(--t-num);letter-spacing:.08em;padding:2px 7px;border-radius:3px;background:#f5dba5;color:var(--ink-on-light);vertical-align:3px;margin-left:8px}
 table{border-collapse:collapse;font:12px var(--t-num)}
 td,th{padding:5px 10px;text-align:left;border-bottom:1px solid var(--edge);vertical-align:middle}
@@ -563,11 +566,36 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </head>
 <body>
 <main>
-<h1>Lyra · catalog next <span class="draft">DRAFT 8</span></h1>
+<h1>Lyra · catalog next <span class="draft">SETTLED SET</span></h1>
 <p>The simplified widget set, designed here before anything changes in the app. Everything below is built only from the foundations. Nothing is approved yet; every number is there to be argued with. The app as it is today: <a href="widget-catalog.html" style="color:var(--ink)">widget-catalog.html</a>. Not for Fluttersine or Chrysalis.</p>
 
+
+<!-- ═════════════════════════ SETTLED INDEX ═════════════════════════ -->
+<div class="card" id="index">
+  <h3>Settled · the index (2026-11-25)</h3>
+  <p style="margin-top:0">Everything below was designed here with Rhodexa, one draft at a time, and approved. This index is the spec in one screen; each name links to its section, which holds the live widget and the exact CSS. <b>Rules for porting:</b> HTML first, the app last; decouple Fluttersine and Chrysalis before touching any shared widget (they keep their own look); use the tokens in :root, never a typed colour.</p>
+  <table class="idx">
+    <tr><th>piece</th><th>settled as</th></tr>
+    <tr><td><a href="#foundations">Foundations</a></td><td>Colour roles (ground #161616, surface #292929, …), states, sizes S · M · L = 28 · 40 · 52 (28 is the floor for drawing and hit areas), one row = one height, one column = one width. Fonts: Roboto Condensed for labels (caps), Roboto for reading text, mono for numbers. No gradients, no glows, no focus rings, no light outlines.</td></tr>
+    <tr><td><a href="#button">Button</a></td><td>A flat plate (#454545), a 2 px outline in its own colour 50 % darker, corners 4 px, caps legend. ON = backlit: the light's low tone with a dark stencil legend. Disabled: no outline. BARE variant (no plate until hovered) for menu buttons like FILE.</td></tr>
+    <tr><td><a href="#mode-switch">Mode switch</a></td><td>A sunken track; the chosen option is one lit plate meeting the outline (no padding) that slides there in 0.08 s; every option reacts across its whole share; two options toggle on any click.</td></tr>
+    <tr><td><a href="#tabs">Tabs</a></td><td>Folder tabs, packed (shared outlines), equal cells, ellipsis. Square tops; unchosen tabs have rounded bottoms; all one height; the chosen tab flows into its panel. A tabbed area IS the panel. Outlines that touch a seam are dropped.</td></tr>
+    <tr><td><a href="#dropdown">Dropdown</a></td><td>Closed: the dark well (bold caps; file names keep their case). Open: the drawer in the LCD's colours, the chosen row slightly grey. Long lists wrap into columns with headings (big drawer).</td></tr>
+    <tr><td><a href="#list-row">List row</a></td><td>Dark, flat rows, 28 px; the lifted selection; names as written; details dim mono on the right; folders fold open softly. Stripes only for wide data tables.</td></tr>
+    <tr><td><a href="#number-picker">Number picker</a></td><td>Usable as is: one big cell per digit, hover to aim (the aimed digit in inverse video), drag / wheel, double-click to type. Dim LCD (#bcbcbc), outline the ink darkened, an inner shadow. Units beside (S, M) or under (L, toolbar: a narrower M LCD with its label below).</td></tr>
+    <tr><td><a href="#header-plate">Header · plate · field</a></td><td>Headers: name left, actions right, one height (S compact, M tall), dividers. Plates: engraved + tag (no boxes; title tags and dividers hang from the header's line). Fields: a caps label above. Every separation line is the ground colour.</td></tr>
+    <tr><td><a href="#text-field">Text field</a></td><td>A sunken well; becomes an LCD while typing (E1). Clear × = the field's full height, square.</td></tr>
+    <tr><td><a href="#scrollbars">Scrollbars</a></td><td>20 px, one family: the viewport bar (a miniature, a window, 14 px zoom handles), the vertical viewport bar (no miniature, exactly as wide as the horizontal one is tall), the plain bar (the window alone).</td></tr>
+    <tr><td><a href="#hint-dialog">Hint · dialog</a></td><td>Hints are LCD, with shortcut tags. Dialogs: LCD for short questions, dark with a corner-tag title for big ones.</td></tr>
+    <tr><td><a href="#checkbox-slider">Checkbox · slider</a></td><td>Checkbox: a sunken well, backlit with a dark tick when on; the whole row is the target. Slider: the fader cap on a recessed track; the readout a quiet flat number.</td></tr>
+    <tr><td><a href="#light-picker">Light picker · splitter</a></td><td>A pop-up of the eight lights (square plates, the chosen one ticked) on a quiet grey. Splitters behave as today; a grip plate appears on hover.</td></tr>
+    <tr><td><a href="#busy-drop">Busy · drop target</a></td><td>Never block, never spin: a progress track (or a sliding segment) in the context bar with a pulsing activity LED; a line under a loading row; a sweep over a processing clip. Drops show the result (a ghost clip); other targets tint and show a corner tag.</td></tr>
+    <tr><td><a href="#kept">Kept from today</a></td><td>Knobs, faders, LEDs, clips as in the app. Meters: one standard meter, vertical and horizontal.</td></tr>
+    <tr><td><a href="#mock-screen">Mock screen</a></td><td>Everything together. The toolbar is a panel; the ground shows only in the gaps. Open: the chip beside the LED doubles the track's colour; rounded docked panels deferred (not rejected).</td></tr>
+  </table>
+</div>
 <!-- ═════════════════════════ FOUNDATIONS ═════════════════════════ -->
-<h2>Foundations</h2>
+<h2 id="foundations">Foundations</h2>
 <p>Widgets ask for a <i>role</i> (a control's body, a well, dim ink), never a colour. Today's app has about 40 greys typed inside widgets; these 13 roles plus the light replace them.</p>
 <div class="card">
   <h3>Colour roles</h3>
@@ -605,7 +633,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ BUTTON ═════════════════════════ -->
-<h2>Button <span class="draft">UI-NEEDS 1</span></h2>
+<h2 id="button">Button <span class="draft">UI-NEEDS 1 · SETTLED</span></h2>
 <p><b>Draft 5</b>, from your tuning: a flat plate (no gradient, ever), a <b>2 px outline in the button's own colour, darkened 50 %</b>. Disabled buttons have no outline, so a grey plate gets a dark grey line and a lit green one a dark green line, like vector art. Corners 4 px (fine up to 6). Roboto Condensed, semibold, caps. "On" is <b>backlit</b>: the body lights up and the legend turns dark, like a stencil in front of a light (settled; the tuner keeps "backlit + bright outline" and "deep" as ideas for themes). The tuner still works; Copy gives me the numbers.</p>
 <div class="card">
   <div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">Tuner</h3>
@@ -646,7 +674,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ MODE SWITCH ═════════════════════════ -->
-<h2>Mode switch <span class="draft">UI-NEEDS 2 · SETTLED</span></h2>
+<h2 id="mode-switch">Mode switch <span class="draft">UI-NEEDS 2 · SETTLED</span></h2>
 <p>One choice among a few: a radio group, joined into one object so it reads as "pick one" before you click. Two options <b>toggle</b> when you click either one (SONG / PAT, as you like it); three or more behave as a radio. The chosen option is backlit, like a button that's on. <b>Settled: B, the track, for every case.</b> A sunken well; the chosen option is one lit plate that meets the outline (no padding) and slides there in 0.08 s; each option reacts across its whole share of the track. A (joined) and C (loose) are kept below only for the record.</p>
 <div class="card">
   <div class="ms-grid" id="ms-matrix"></div>
@@ -664,14 +692,14 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ TABS ═════════════════════════ -->
-<h2>Tabs <span class="draft">UI-NEEDS 3 · SETTLED</span></h2>
+<h2 id="tabs">Tabs <span class="draft">UI-NEEDS 3 · SETTLED</span></h2>
 <p>A tab row belongs to the panel under it: switching tabs changes the whole panel, not a setting. Equal cells across the panel, caps labels that clip with an ellipsis instead of colliding with the edges. <b>The rule (Rhodexa):</b> what changes the whole panel sits <i>outside</i> it; what changes a setting sits inside. <b>Settled: T2, folder tabs</b>, packed (neighbours share one outline, 4 px inside), equal cells, ellipsis. Modern, with a touch of old X Windows. T3, the track <i>above</i> something, is kept for switching content that isn't a panel, if we ever need it. T1, the track inside the panel, is retired. Click the tabs. The panels are the real ones: the left panel (300 px wide, like the app's) and the audio-clip editor.</p>
 <div class="card">
   <div class="tab-demo" id="tabs-demo"></div>
 </div>
 
 <!-- ═════════════════════════ DROPDOWN ═════════════════════════ -->
-<h2>Dropdown <span class="draft">UI-NEEDS 4 · SETTLED: D3</span></h2>
+<h2 id="dropdown">Dropdown <span class="draft">UI-NEEDS 4 · SETTLED: D3</span></h2>
 <p>Today's area picker, on the new foundations: the 2 px outline in its own colour, the label font in caps, S · M · L. <b>D1 · well</b>: a sunken well, like the track (it shows a value). <b>D2 · plate</b>: a button with a chevron (it reads as "press me"). The popup is a panel of rows; the chosen row is either <b>lit</b> (backlit, like "on") or <b>sel</b> (the foundations' selected: lifted, with a lit edge). <b>Settled: D3 · well + LCD drawer</b> (Rhodexa's idea): closed it's the dark well; open, the drawer is the opposite colour, the LCD's pale panel with dark ink, the chosen row slightly grey, so the list you're reading can't blend into the UI behind it. The first three are drawn open; the rest open on click.</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Chosen row</span><span id="pop-style"></span></div>
@@ -692,7 +720,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ LIST ROW ═════════════════════════ -->
-<h2>List row <span class="draft">UI-NEEDS 20 · SETTLED: FLAT + LIFTED</span></h2>
+<h2 id="list-row">List row <span class="draft">UI-NEEDS 20 · SETTLED: FLAT + LIFTED</span></h2>
 <p>The browser, files, presets, the Patterns tab. <b>Dark</b>: lists live in their own panels (the LCD drawer is only for things that pop up over the UI). 28 px rows; names in the reading font as written (file names keep their case), folder names in the label font, details in mono, dim, on the right. Click to select (Ctrl-click: several), double-click to preview (the <i>playing</i> state), drag a row; click a folder: it folds open softly (0.12 s). <b>Settled: flat rows, lifted selection.</b> Stripes are for wide data tables (many values read across one row, CSV-style), not for browsers. The switches stay for comparison.</p>
 <div class="card">
   <div class="row" style="gap:24px;margin-bottom:14px">
@@ -706,7 +734,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ NUMBER PICKER ═════════════════════════ -->
-<h2>Number picker <span class="draft">UI-NEEDS 5 · SETTLED: USABLE AS IS</span></h2>
+<h2 id="number-picker">Number picker <span class="draft">UI-NEEDS 5 · SETTLED: USABLE AS IS</span></h2>
 <p>The BPM display's behaviour as a widget, for tempo, swing, gain, pitch, lengths. <b>Hover a digit</b>: it's marked, and <b>drag up / down</b> or <b>wheel</b> change that place (tens, ones, tenths…); the drag keeps the raw value and only the display snaps. <b>Double-click</b> to type (Enter keeps, Esc cancels). <b>Draft 2:</b> every digit is its own bigger cell (easier to aim at), less padding around the panel; hovering the blank part or the unit aims at the ones; at L the unit is a <b>tag</b>: a dark label inside the screen's bottom-left corner (square where it meets the edges, rounded at its free corner). <b>Draft 3:</b> the LCD is dim by default; its outline is the ink colour, with an inner shadow, so the screen sits <i>in</i> the panel. Two looks: <b>NP1 · LCD</b> (the pale panel: "a number you can change", like today's BPM) and <b>NP2 · well</b> (dark, like the closed dropdown).</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">LCD tone (also the drawers)</span><span id="lcd-tone"></span></div>
@@ -725,7 +753,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ HEADER, PLATE, FIELD ═════════════════════════ -->
-<h2>Header row · plate · field <span class="draft">UI-NEEDS 7 · 8 · 9 · SETTLED: ENGRAVED + TAG</span></h2>
+<h2 id="header-plate">Header row · plate · field <span class="draft">UI-NEEDS 7 · 8 · 9 · SETTLED: ENGRAVED + TAG</span></h2>
 <p>The pieces an editor is built from, shown as a real one: the audio-clip editor. <b>Header</b>: name on the left, actions on the right, groups apart with an engraved divider; one height per header (compact = S, normal = M). <b>Plate</b>: a titled group of fields. <b>Draft 2: engraved + tag</b> is the default (compact and readable: no boxes, the dividers and title tags hang from the header's line); <b>Tag (boxed)</b> or <b>Raised</b> (no border, a step lighter: a third surface level, so rare) are for bigger, explicitly modular things; Engraved and Strip stay for comparison. Every separation line is the <b>ground</b> colour: a slit showing the background, like the seams between modules. <b>Field</b>: a small caps label above its control. Small numbers use the LCD (the strategy from the number picker).</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Plates</span><span id="pl-style"></span></div>
@@ -736,7 +764,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ TEXT FIELD ═════════════════════════ -->
-<h2>Text field <span class="draft">UI-NEEDS 11 · SETTLED: E1</span></h2>
+<h2 id="text-field">Text field <span class="draft">UI-NEEDS 11 · SETTLED: E1</span></h2>
 <p>Search and names. A sunken well like the closed dropdown; what you type is in the reading font, as typed. There are no focus rings, so while you type <b>(settled: E1)</b>: <b>E1</b> the field becomes an LCD (light, dark text: like the open drawer, "the thing you're working with now"), or <b>E2</b> it stays dark, a step lighter, the caret in the light colour. Click into them. A search shows a clear × once it has text. Renaming a list row happens in place: double-click a name below.</p>
 <div class="card">
   <div class="tf-grid" id="tf-grid"></div>
@@ -750,17 +778,17 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ KEPT + STANDARD METER ═════════════════════════ -->
-<h2>Kept from today <span class="draft">KNOBS · FADER · LED · CLIPS · METER</span></h2>
+<h2 id="kept">Kept from today <span class="draft">KNOBS · FADER · LED · CLIPS · METER</span></h2>
 <p>Knobs, faders, LEDs and clips stay exactly as they are in the app (copied from widget-catalog.html). Meters become <b>one standard meter</b>, the strip's (a dark well, two bars, the fixed full-scale gradient, a pale peak line), used vertically <i>and</i> horizontally, replacing the toolbar's own horizontal one.</p>
 <div class="card"><div class="row" id="kept" style="align-items:flex-end;gap:28px"></div></div>
 
 <!-- ═════════════════════════ MOCK SCREEN ═════════════════════════ -->
-<h2>Mock screen <span class="draft">DRAFT 3</span></h2>
+<h2 id="mock-screen">Mock screen <span class="draft">DRAFT 3</span></h2>
 <p>A whole Lyra window, built only from catalog widgets and the kept ones: the toolbar, the left panel, the arrangement, the mixer and the context bar. This is where everything gets judged together. It's live: click, drag, open the dropdowns. <b>Draft 2:</b> the toolbar is a panel (the ground colour only shows in the gaps); the left panel <i>is</i> the tabbed panel (tabs on the ground strip, the chosen one flows into the whole area: no panel inside a panel); the toolbar's displays are a narrower M LCD with their label under it. <b>Draft 3:</b> FILE is a bare button; tabs lose their top outline where they touch the seam (an outline against a seam is redundant); square panels (rounded ones: deferred, not rejected: the cut corners and oval tabs came from how this mock was built; a proper version keeps content away from the corners). Tabs: one rule, square tops, rounded bottoms on the tabs that aren't chosen, all one height.</p>
 <div class="scroll" style="overflow-x:auto"><div class="mock" id="mock"></div></div>
 
 <!-- ═════════════════════════ SCROLLBARS ═════════════════════════ -->
-<h2>Scrollbars <span class="draft">UI-NEEDS 6 · SETTLED</span></h2>
+<h2 id="scrollbars">Scrollbars <span class="draft">UI-NEEDS 6 · SETTLED</span></h2>
 <p><b>Draft 2:</b> 20 px; one family. The <b>viewport</b> bar keeps its miniature and gets wide (14 px) zoom handles; the <b>vertical viewport</b> bar is exactly as wide as the horizontal one is tall (34 px), the same window and handles without a miniature (rows: drag to scroll, drag its ends to zoom the rows); the <b>plain</b> bar is the viewport's window alone, no miniature, no handles. One look, two kinds. <b>Plain</b> (lists, the browser, the mixer): a sunken track, the thumb a button plate (lighter on hover, pressed while dragging, never shorter than 28 px), always visible, never flashing. Click the track to jump a page toward the click; the wheel scrolls (over the mixer, a vertical wheel scrolls sideways). <b>Viewport</b> (the editors' overview bar): the same track with a miniature of the content inside; the thumb is a window over it: drag it to move, drag its ends to zoom. The mock screen's mixer now has a plain bar and its arrangement a viewport bar.</p>
 <div class="card">
   <div class="sc-demo">
@@ -772,7 +800,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ HINT + DIALOG ═════════════════════════ -->
-<h2>Hint · dialog <span class="draft">UI-NEEDS 14 · 24 · SETTLED</span></h2>
+<h2 id="hint-dialog">Hint · dialog <span class="draft">UI-NEEDS 14 · 24 · SETTLED</span></h2>
 <p>Both pop up over the UI, so: <b>H1 / D1 in the LCD's colours</b> (like the drawer: "this is on top, read me"), or <b>H2 / D2 dark</b> (a lifted plate; the dark dialog has its title on a corner tag, like the plates). <b>Settled:</b> hints are LCD. Dialogs by size: <b>D1 · LCD for short questions</b> ("Save changes?": a line and a few buttons, it pops up); <b>D2 · dark for big dialogs with content</b> (export, preferences: plates and fields inside, too large to be white). A shortcut is a small tag. Hover the buttons (a hint appears after 0.4 s); open the dialogs (Enter = the lit action, Esc = cancel).</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Hints</span><span id="tip-style"></span></div>
@@ -788,7 +816,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 <div class="veil" id="veil"></div>
 
 <!-- ═════════════════════════ CHECKBOX + SLIDER ═════════════════════════ -->
-<h2>Checkbox · slider <span class="draft">UI-NEEDS 12 · 22 · SETTLED: C2 + SL1</span></h2>
+<h2 id="checkbox-slider">Checkbox · slider <span class="draft">UI-NEEDS 12 · 22 · SETTLED: C2 + SL1</span></h2>
 <p><b>Settled: C2 (the well) and SL1 (the fader cap); the readout is a quiet flat number.</b> <b>Checkbox</b>: the toggle button, small and square: off = empty, on = backlit with a dark tick. C1 is a plate like a button; C2 is a sunken well. The whole row (box and label) is the target, at least 28 px tall. <b>Slider</b> (settings, the F12 panel): a recessed track lit by the light up to the thumb. SL1's thumb is a small fader cap (the kept fader, sideways); SL2's is a button plate. Drag (Shift = fine), scroll, double-click resets; an LCD readout can sit at the end.</p>
 <div class="card">
   <div class="cs-grid" id="cs-grid"></div>
@@ -799,7 +827,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ LIGHT PICKER ═════════════════════════ -->
-<h2>Light picker · splitter grip <span class="draft">UI-NEEDS 21 · 23 · SETTLED</span></h2>
+<h2 id="light-picker">Light picker · splitter grip <span class="draft">UI-NEEDS 21 · 23 · SETTLED</span></h2>
 <p><b>Splitter</b>: the behaviour stays; on hover a small grip plate appears on the seam, with a resize cursor, and the target is 8 px wide. Try it in the mock screen: between the left panel and the arrangement, and between the arrangement and the mixer. <b>Light picker</b> (settled: the pop-up): a quiet grey drawer (the lights are colourful enough on their own) with the eight lights as square plates; the chosen one has the checkbox's dark tick. It opens from the colour chip in a track header (in the mock too: the clips and the light follow). Inline, for settings plates, it's one row of eight.</p>
 <div class="card">
   <div class="row" style="align-items:flex-start;gap:48px">
@@ -809,7 +837,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ BUSY + DROP ═════════════════════════ -->
-<h2>Busy · drop target <span class="draft">UI-NEEDS 25 · 26 · DRAFT 1</span></h2>
+<h2 id="busy-drop">Busy · drop target <span class="draft">UI-NEEDS 25 · 26 · SETTLED</span></h2>
 <p><b>Busy: never block, never spin.</b> A known length gets a progress track (the slider's track, lit to the progress) with a quiet percentage and a bare Cancel; an unknown length gets a short lit segment sliding back and forth. It lives in the context bar with a pulsing activity LED; the app stays usable. On the thing itself: a loading list row gets a thin line along its bottom; a clip being processed gets a slow light sweep. <b>Drop: show the result.</b> Drag a sample over a lane and a ghost clip appears at the snapped spot, at its real length; places that take things but aren't timelines fill with a soft tint and a corner tag says what will happen. While you drag, every valid place shows a faint tint; invalid ones do nothing.</p>
 <div class="card">
   <h3>Busy</h3>

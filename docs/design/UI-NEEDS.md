@@ -6,6 +6,12 @@ questions only you can answer. Each has my suggestion. The inventory of
 what exists is in [COMPONENTS.md](COMPONENTS.md).
 
 
+
+> **Status 2026-11-25:** every widget and view on this list is designed and
+> approved in [catalog-next.html](catalog-next.html); its "Settled" index at the
+> top is the spec in one screen. Nothing is ported to the app yet (HTML first,
+> the app last; decouple the plugins first).
+
 > **Hands off the plugins.** Fluttersine (`fm_editor.rs`) and Chrysalis
 > (`chrysalis_editor.rs`, `chrysalis_table.rs`) are independent projects with
 > their own visual language. The cleanup and the widget catalog must not change
