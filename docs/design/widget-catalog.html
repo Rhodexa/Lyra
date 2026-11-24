@@ -11,9 +11,10 @@
   Taken from the code on 2026-11-24 (crates/lyra-app/src/theme.rs, widgets.rs, mixer.rs).
 
   How to read it
-  - Every family shows CURRENT first: drawn with the exact numbers the app uses today.
-  - Below it, the HISTORY: every study from HTMLSamples15112026, newest first, with
-    its version, source file and what it changed. Shapes and sizes are the study's own;
+  - Every family shows CURRENT first: the app's numbers, corrected where the notes say so.
+    This page is the source of truth: where it differs from the app, the app changes.
+  - Below it, the HISTORY: the studies worth keeping from HTMLSamples15112026, newest
+    first, with their version, source file and what they changed. Shapes and sizes are the study's own;
     only the colours are brought up to today's palette:
       * tinted blue-slate greys → the neutral grey of the same brightness (luma);
       * accents → the light tokens (mint = --accent);
@@ -154,8 +155,8 @@ ul.todo li{margin:3px 0}
 <div class="top">
   <div>
     <h1>Lyra · widget catalog</h1>
-    <p>Taken from the code on 2026-11-24. <b>Current</b> = what the app draws today, with its exact numbers.
-    <b>History</b> = every HTML study (HTMLSamples15112026), newest first, recoloured to today's palette with its shapes untouched.</p>
+    <p>Taken from the code on 2026-11-24. <b>Current</b> = what the app draws, with its own numbers, corrected where noted.
+    <b>History</b> = the studies worth keeping (from HTMLSamples15112026), newest first, recoloured with their shapes untouched. <b>This page is the source of truth:</b> where it and the app differ, the app changes.</p>
   </div>
   <div class="picker" id="accent-picker"><span>Light:</span></div>
 </div>
@@ -188,15 +189,11 @@ ul.todo li{margin:3px 0}
     <div class="row" id="k-cur-app"></div>
     <p class="note">The arc is the channel's light (mid tone); the mixer's pan uses MINT. Hover lifts the body 8 %. In the app, values show on hover/drag, not under every knob.</p>
   </article>
-  <details class="history" open><summary>History · 7 versions</summary>
+  <details class="history" open><summary>History · 3 versions</summary>
     <article class="ver"><header><span class="badge">v7</span><h3>Control library: the three final knobs</h3><span class="src">lyra-control-library(-mint-v2).html · 2026-11-15</span></header><div class="row" id="k-v7"></div><p class="note">Became the app's Tiny / Rubber / Polymer almost number for number.</p></article>
     <article class="ver"><header><span class="badge">v6</span><h3>Large RUIC: checker-lit polymer</h3><span class="src">lyra-large-ruic-v6.html · 2026-11-15</span></header><div class="row" id="k-v6"></div><p class="note">Fixed checker lighting, recessed arc, a rotating pointer with no border. Absolute drag (angle follows the mouse) in the study.</p></article>
-    <article class="ver"><header><span class="badge">v5</span><h3>Flat encoder · rubber cap · machined dial</h3><span class="src">lyra-knobs-v5.html · 2026-11-14</span></header><div class="row" id="k-v5"></div><p class="note">The big dial's brushed-metal gradient was dropped (no chrome); v6 replaced it.</p></article>
-    <article class="ver"><header><span class="badge">v4</span><h3>Distinct families: flat disc · rubber rim · grip dial</h3><span class="src">lyra-knobs-v4.html · 2026-11-14</span></header><div class="row" id="k-v4"></div></article>
-    <article class="ver"><header><span class="badge">v3</span><h3>Cap constructions: rounded square · ring · pill</h3><span class="src">lyra-knobs-v3.html = lyra-knobs-v3-1.html · 2026-11-14</span></header><div class="row" id="k-v3"></div><p class="note">The two v3 files are byte-identical. 260° sweep.</p></article>
-    <article class="ver"><header><span class="badge">v2</span><h3>Matte, marker only (no lit arc)</h3><span class="src">lyra-knobs-v2.html · 2026-11-14</span></header><div class="row" id="k-v2"></div></article>
-    <article class="ver"><header><span class="badge">v1</span><h3>One material, three sizes</h3><span class="src">lyra-knobs.html · 2026-11-14</span></header><div class="row" id="k-v1"></div></article>
-  </details>
+            <article class="ver"><header><span class="badge">v3</span><h3>Cap constructions: rounded square · ring · pill</h3><span class="src">lyra-knobs-v3.html = lyra-knobs-v3-1.html · 2026-11-14</span></header><div class="row" id="k-v3"></div><p class="note">The two v3 files are byte-identical. 260° sweep.</p></article>
+          </details>
 </section>
 
 <!-- ═════════════════════════════ KEYS ═════════════════════════════ -->
@@ -227,10 +224,9 @@ ul.todo li{margin:3px 0}
     <div class="row" id="led-cur"></div>
     <p class="note">22 px in the mixer, led 18 px in the rack. Unlit: well #161616, ring #1d1d1d, bead #484848 (hover #535353). Lit: well = low × 0.4, ring = low × 0.55, bead hi → mid → edge.</p>
   </article>
-  <details class="history" open><summary>History · 2 versions</summary>
+  <details class="history" open><summary>History · 1 version</summary>
     <article class="ver"><header><span class="badge">v2</span><h3>Mute with a softly tinted recess</h3><span class="src">lyra-single-channel-strip-v2.html · 2026-11-15</span></header><div class="row" id="led-v2"></div></article>
-    <article class="ver"><header><span class="badge">v1</span><h3>Mute with a glow</h3><span class="src">lyra-single-channel-strip.html (v1) · 2026-11-15</span></header><div class="row" id="led-v1"></div><p class="note">The outer glow went away in v2 (no glows).</p></article>
-  </details>
+    </details>
 </section>
 
 <!-- ═════════════════════════════ DISPLAYS ═════════════════════════════ -->
@@ -242,11 +238,7 @@ ul.todo li{margin:3px 0}
     <div class="row" id="disp-cur"></div>
     <p class="note">The editor picker is the model dropdown (UI-NEEDS #4); 12 plain egui ComboBoxes are still to switch to it.</p>
   </article>
-  <details class="history" open><summary>History · 2 versions</summary>
-    <article class="ver"><header><span class="badge">v2</span><h3>Control library: dropdown, two LCDs</h3><span class="src">lyra-control-library-mint-v2.html · 2026-11-15</span></header><div class="row" id="disp-v2"></div></article>
-    <article class="ver"><header><span class="badge">v1</span><h3>Recess &amp; backlit LCD</h3><span class="src">lyra-recess-lcd.html · 2026-11-14</span></header><div class="row" id="disp-v1"></div></article>
-  </details>
-</section>
+  </section>
 
 <!-- ═════════════════════════════ FADERS ═════════════════════════════ -->
 <section class="family" id="faders">
@@ -272,11 +264,9 @@ ul.todo li{margin:3px 0}
     <div class="row" id="met-cur"></div>
     <p class="note">The Recorder's calm, eased, one-colour meter is liked too and should become a widget (UI-NEEDS #10); it isn't drawn here.</p>
   </article>
-  <details class="history" open><summary>History · 3 versions</summary>
+  <details class="history" open><summary>History · 1 version</summary>
     <article class="ver"><header><span class="badge">v3</span><h3>Fixed full-scale gradient</h3><span class="src">lyra-mixer-strip-v3.html · 2026-11-15</span></header><div class="row" id="met-v3"></div></article>
-    <article class="ver"><header><span class="badge">v2</span><h3>Stereo, gradient stretched over the fill</h3><span class="src">lyra-mixer-strip-v2.html · 2026-11-15</span></header><div class="row" id="met-v2"></div><p class="note">The whole gradient squeezes into the lit part, so quiet signals already show rose at their top. v3 fixed that.</p></article>
-    <article class="ver"><header><span class="badge">v1</span><h3>Segmented LED meter, thick bevel</h3><span class="src">lyra-mixer-fader-vu-v1.html · 2026-11-15</span></header><div class="row" id="met-v1"></div></article>
-  </details>
+    </details>
 </section>
 
 <!-- ═════════════════════════════ STRIPS ═════════════════════════════ -->
@@ -289,15 +279,7 @@ ul.todo li{margin:3px 0}
     <div class="scroll"><div id="str-cur"></div></div>
     <p class="note">Click a strip to select it (PANEL_HI and a 2 px line in its light). Coloured dots above the name = channels routed here. Mute LED: lit = audible; Alt-click = solo.</p>
   </article>
-  <details class="history" open><summary>History · 6 versions</summary>
-    <article class="ver"><header><span class="badge">v6</span><h3>Single channel strip 02: pan arc, tinted mute</h3><span class="src">lyra-single-channel-strip-v2.html · 2026-11-15</span></header><div class="row" id="str-v6"></div><p class="note">The direct ancestor. The app made it ~60 % as wide, dropped the darker lower cells (two levels only), and moved the name to the floor.</p></article>
-    <article class="ver"><header><span class="badge">v5</span><h3>Single channel strip 01</h3><span class="src">lyra-single-channel-strip.html · 2026-11-15</span></header><div class="row" id="str-v5"></div></article>
-    <article class="ver"><header><span class="badge">v4</span><h3>Mixer strip 04: compact faders</h3><span class="src">lyra-mixer-strip-v4.html · 2026-11-15</span></header><div class="scroll" id="str-v4"></div></article>
-    <article class="ver"><header><span class="badge">v3</span><h3>Mixer strip 03: flat modules, chassis gap</h3><span class="src">lyra-mixer-strip-v3.html · 2026-11-15</span></header><div class="scroll" id="str-v3"></div></article>
-    <article class="ver"><header><span class="badge">v2</span><h3>Mixer strip 02: square, tightly packed</h3><span class="src">lyra-mixer-strip-v2.html · 2026-11-15</span></header><div class="scroll" id="str-v2"></div></article>
-    <article class="ver"><header><span class="badge">v1</span><h3>Fader + VU: rounded channel cards</h3><span class="src">lyra-mixer-fader-vu-v1.html · 2026-11-15</span></header><div class="scroll" id="str-v1"></div><p class="note">Rounded floating cards: the "Android" layout the rack idiom replaced.</p></article>
-  </details>
-</section>
+  </section>
 
 <!-- ═════════════════════════════ NO STUDY ═════════════════════════════ -->
 <section class="family" id="nostudy">
@@ -320,7 +302,7 @@ ul.todo li{margin:3px 0}
   <p>Things found while matching this page to the code.</p>
   <div class="ver">
     <ul class="todo">
-      <li><b>Tinted greys still in the app:</b> the Polymer knob's checker (#41494b / #474f51, neutral would be #474747 / #4d4d4d), the pan knob's centre tick (#91a79e) and pointer (#a6c9b8), and the LCD's top shadow (#19231e, harmless). Everything else is neutral.</li>
+      <li><b>App to correct (this page already shows the fix):</b> the Polymer knob's checker #41494b / #474f51 → #474747 / #4d4d4d; the pan knob's centre tick #91a79e → #a2a2a2 and pointer #a6c9b8 → #c0c0c0. The LCD's top shadow (#19231e) is tinted too but harmless.</li>
       <li><b>Two mints:</b> MINT #a6e7c9 (pan, egui selection) and L_MINT.mid #b7f3d3 (channel 1). Pick one for "the" mint.</li>
       <li><b>Colours typed in place, not tokens:</b> knob greys (widgets.rs), fader and meter greys, strip label #a6a6a6 and name #c0c0c0 (mixer.rs), button #3b3b3b / #1c1c1c (a copy of RAISED), meter background #282828, keyboard map #454545 / #6e6e6e. Name them in theme.rs, as this page does in :root.</li>
       <li><b>WELL and INSET</b> are the same colour (#1a1a1a) under two names.</li>
@@ -413,7 +395,7 @@ const panTxt = t => { const v = Math.round((t - .5) * 200); return v === 0 ? 'C'
     ['Flat button', [['BUTTON', '#3b3b3b'], ['hover ×1.12', '#424242'], ['pressed ×0.85', '#323232'], ['BUTTON_RIM', '#1c1c1c']]],
     ['LCD', [['LCD', '#dadada'], ['LCD_INK', '#2f2f2f'], ['LCD_INK_DIM', '#5e5e5e'], ['top shadow', '#19231e']]],
     ['Meter', [['0 %', '#9fe4a9'], ['70 %', '#c8e5a3'], ['86 %', '#f0d28b'], ['100 %', '#ee9996'], ['peak hold', '#e5e9b7'], ['bar off', '#282828'], ['well', '#151515'], ['well inner', '#1f1f1f']]],
-    ['Knob greys', [['tiny body', '#363636'], ['tiny face', '#3b3b3b'], ['rubber socket', '#1b1b1b'], ['rubber rim', '#5f5f5f'], ['rubber body', '#3f3f3f'], ['rubber face', '#414141'], ['polymer ring', '#363636'], ['polymer body', '#3b3b3b'], ['polymer pointer', '#a9a9a9'], ['arc track', '#222222'], ['dot off', '#2d2d2d'], ['pan body', '#454545']]],
+    ['Knob greys', [['tiny body', '#363636'], ['tiny face', '#3b3b3b'], ['rubber socket', '#1b1b1b'], ['rubber rim', '#5f5f5f'], ['rubber body', '#3f3f3f'], ['rubber face', '#414141'], ['polymer ring', '#363636'], ['polymer body', '#3b3b3b'], ['polymer pointer', '#a9a9a9'], ['polymer checker', '#474747'], ['polymer checker lit', '#4d4d4d'], ['arc track', '#222222'], ['dot off', '#2d2d2d'], ['pan body', '#454545'], ['pan centre tick', '#a2a2a2'], ['pan pointer', '#c0c0c0']]],
     ['Fader', [['track', '#161616'], ['track inner', '#2b2b2b'], ['cap rim', '#202020'], ['cap body', '#444444'], ['cap face', '#4f4f4f'], ['tick major', '#737373'], ['tick minor', '#505050']]],
     ['Piano roll', [['ROLL_WHITE_ROW', '#282828'], ['ROLL_BLACK_ROW', '#212121'], ['ROLL_OUT_ROW', '#1b1b1b'], ['KEY_WHITE', '#c9c9c9'], ['KEY_BLACK', '#1d1d1d'], ['KEY_EDGE', '#949494']]],
   ];
@@ -453,7 +435,7 @@ function appKnob(size, {steps = 0, bipolar = false, value = .55, color = 'var(--
     disc(110, '#1c1c1c'); const a = el('g', {class: 'lift'}, svg); disc(106, '#363636', a); disc(101, '#1c1c1c'); svg.append(lift); disc(96, '#3b3b3b', lift);
     const id = 'q' + (++uid), cp = el('clipPath', {id}, el('defs', {}, svg)); el('circle', {cx: C, cy: C, r: 88}, cp);
     const g = el('g', {'clip-path': `url(#${id})`}, lift);
-    [[62, 62, '#41494b'], [150, 62, '#474f51'], [62, 150, '#474f51'], [150, 150, '#41494b']].forEach(([x, y, f]) => el('rect', {x, y, width: 88, height: 88, fill: f}, g)); // app keeps these tinted (see notes)
+    [[62, 62, '#474747'], [150, 62, '#4d4d4d'], [62, 150, '#4d4d4d'], [150, 150, '#474747']].forEach(([x, y, f]) => el('rect', {x, y, width: 88, height: 88, fill: f}, g)); // the app still has #41494b / #474f51 (see notes)
   }
   let act, dots = [];
   if (steps >= 2 && steps <= 12) {
@@ -461,10 +443,10 @@ function appKnob(size, {steps = 0, bipolar = false, value = .55, color = 'var(--
   } else {
     el('path', {d: arcD(C, C, arcR, -135, 135), fill: 'none', stroke: trackC, 'stroke-width': arcW}, svg);
     act = el('path', {fill: 'none', stroke: color, 'stroke-width': arcW, 'stroke-linecap': 'round'}, svg);
-    if (bipolar) { const [x, y] = pol(C, C, arcR, 0); el('circle', {cx: x, cy: y, r: Math.max(8.4, px(1.2)), fill: '#91a79e'}, svg); }
+    if (bipolar) { const [x, y] = pol(C, C, arcR, 0); el('circle', {cx: x, cy: y, r: Math.max(8.4, px(1.2)), fill: '#a2a2a2'}, svg); }
   }
   let ptr;
-  if (style === 'pan') ptr = el('circle', {r: Math.max(12.6, px(1.6)), fill: '#a6c9b8'}, svg);
+  if (style === 'pan') ptr = el('circle', {r: Math.max(12.6, px(1.6)), fill: '#c0c0c0'}, svg);
   if (style === 'tiny') ptr = el('circle', {r: Math.max(7, px(1.5)), fill: color}, svg);
   if (style === 'rubber') ptr = el('line', {stroke: color, 'stroke-width': Math.max(8, px(1.5)), 'stroke-linecap': 'round'}, svg);
   if (style === 'polymer') ptr = el('line', {stroke: '#a9a9a9', 'stroke-width': 10, 'stroke-linecap': 'round', class: 'lift'}, svg);
@@ -525,23 +507,6 @@ const polymerHist = {box: 300, base: g => { circ(g, 150, 110, '#1c1c1c'); circ(g
   ptr: linePtr(65, 87, 10, '#aaaaaa')};
 histRow('#k-v7', [['Tiny · flat', v7.tiny, 104], ['Normal · rubber', v7.normal, 155], ['Large · polymer', polymerHist, 252]]);
 (() => { const k = histKnob(polymerHist, false, 300, .68); const c = h('div', 'cell', $('#k-v6')); c.append(k.svg); h('div', 'cap-label', c, 'Large RUIC · continuous'); c.append(k.r); })();
-// v5 (200 box)
-const v5 = {
-  small: {box: 200, scale: s => s ? {dots: {r: 83, off: '#646464', offR: 4, onR: 6}} : {arc: {r: 81, w: 4, track: '#4c4c4c'}}, base: g => { circ(g, 100, 67, '#373737'); circ(g, 100, 60, '#3b3b3b'); }, ptr: dotPtr(42, 5.5)},
-  normal: {box: 200, scale: s => s ? {dots: {r: 86, off: '#646464', offR: 4, onR: 6}} : {arc: {r: 85, w: 5, track: '#4c4c4c'}}, base: g => { circ(g, 100, 73, '#1c1c1c'); circ(g, 100, 65, '#3f3f3f', {stroke: '#606060', 'stroke-width': 4}); circ(g, 100, 56, '#414141'); }, ptr: linePtr(32, 44, 6)},
-  big: {box: 200, scale: s => s ? {dots: {r: 94, off: '#646464', offR: 4, onR: 6}} : {arc: {r: 93, w: 5, track: '#4c4c4c'}},
-    base: (g, s, id) => { const gr = el('linearGradient', {id, x1: 0, y1: 0, x2: 1, y2: 1}, el('defs', {}, g)); [['0%', '#717171'], ['23%', '#5b5b5b'], ['52%', '#444444'], ['78%', '#595959'], ['100%', '#393939']].forEach(([o, c]) => el('stop', {offset: o, 'stop-color': c}, gr));
-      circ(g, 100, 84, '#1a1a1a'); circ(g, 100, 75, `url(#${id})`, {stroke: '#7c7c7c', 'stroke-width': 2.5}); circ(g, 100, 64, '#494949'); circ(g, 100, 53, '#3c3c3c'); },
-    ptr: (g, s, C) => { const p = el('path', {fill: '#c4c4c4'}, g); return a => { const [x1, y1] = pol(C, C, 51, a), [x2, y2] = pol(C, C, 36, a); p.setAttribute('d', `M${x1 - 3} ${y1}L${x2 - 2} ${y2}L${x2 + 2} ${y2}L${x1 + 3} ${y1}Z`); }; }},
-};
-histRow('#k-v5', [['Small · flat encoder', v5.small, 88], ['Normal · rubber cap', v5.normal, 132], ['Big · machined dial', v5.big, 174]]);
-// v4 (200 box)
-const v4 = {
-  small: {box: 200, base: g => { circ(g, 100, 56, '#3b3b3b'); circ(g, 100, 48, '#3f3f3f'); }, scale: s => s ? {dots: {r: 72, off: '#606060', offR: 3, onR: 6}} : {arc: {r: 68, w: 3, track: '#494949'}}, ptr: linePtr(0, 33, 6)},
-  normal: {box: 200, base: g => { circ(g, 100, 73, '#1b1b1b'); circ(g, 100, 63, '#3c3c3c', {stroke: '#616161', 'stroke-width': 4}); }, scale: s => s ? {dots: {r: 83, off: '#606060', offR: 4, onR: 6}} : {arc: {r: 82, w: 5, track: '#494949'}}, ptr: linePtr(0, 48, 6)},
-  big: {box: 200, base: g => { circ(g, 100, 88, '#1c1c1c'); circ(g, 100, 79, '#484848'); el('rect', {x: 35, y: 72, width: 130, height: 56, rx: 24, fill: '#363636'}, g); el('path', {d: 'M44 77 Q100 61 156 77', stroke: '#595959', 'stroke-width': 2, fill: 'none'}, g); }, scale: s => s ? {dots: {r: 94, off: '#606060', offR: 4, onR: 6}} : {arc: {r: 94, w: 5, track: '#494949'}}, ptr: linePtr(0, 62, 7)},
-};
-histRow('#k-v4', [['Flat utility', v4.small, 130], ['Rubber cap', v4.normal, 140], ['Wide grip dial', v4.big, 150]]);
 // v3 (160 box, ±130°)
 const v3cap = '#414141', v3rim = '#5f5f5f';
 const v3 = {
@@ -550,19 +515,6 @@ const v3 = {
   big: {box: 160, sweep: 130, base: g => circ(g, 80, 70, '#1a1a1a'), scale: s => s ? {dots: {r: 74, off: '#5e5e5e', offR: 3.3, onR: 4.6}} : {arc: {r: 74, w: 5, track: '#4a4a4a'}}, body: g => { circ(g, 80, 58, '#393939', {stroke: v3rim, 'stroke-width': 3}); el('rect', {x: 38, y: 50, width: 84, height: 60, rx: 21, fill: v3cap}, g); }, ptr: linePtr(21, 37, 5)},
 };
 histRow('#k-v3', [['Utility encoder', v3.small, 112], ['Rubber cap', v3.normal, 132], ['Instrument dial', v3.big, 156]]);
-// v2 (200 box): marks are printed, not live
-const v2 = kind => { const r = [56, 65, 72][kind], cap = [48, 56, 62][kind];
-  return {box: 200, scale: () => null,
-    base: (g, st) => { circ(g, 100, r + 9, '#181818'); circ(g, 100, r + 4, '#222222', {stroke: '#4e4e4e', 'stroke-width': 2});
-      if (st) for (let i = 0; i < 9; i++) { const [x, y] = pol(100, 100, [80, 85, 89][kind], -135 + i * 33.75); circ(g, 0, 0, '', {cx: x, cy: y, r: kind ? 3.2 : 2.7, fill: '#898989'}); }
-      else if (kind === 2) for (let i = 0; i < 11; i++) { const a = -135 + i * 27, [x1, y1] = pol(100, 100, 83, a), [x2, y2] = pol(100, 100, i % 5 ? 90 : 94, a); el('line', {x1, y1, x2, y2, stroke: '#898989', 'stroke-width': i % 5 ? 1.5 : 3, 'stroke-linecap': 'round'}, g); }
-      circ(g, 100, r, '#373737', {stroke: '#575757', 'stroke-width': 2}); circ(g, 100, cap, '#3e3e3e', {stroke: '#4c4c4c', 'stroke-width': 1.5}); if (kind === 2) circ(g, 100, 53, 'none', {stroke: '#484848', 'stroke-width': 4}); },
-    ptr: (g, st, C) => linePtr([23, 25, 29][kind], [34, 46, 55][kind], kind ? 6 : 5, st ? '#c1c1c1' : 'var(--accent)')(g, st, C)}; };
-histRow('#k-v2', [['Small · inset notch', v2(0), 76], ['Normal · soft-touch', v2(1), 112], ['Bigger · calibrated', v2(2), 160]]);
-// v1 (100 box)
-const v1k = {box: 100, base: g => circ(g, 50, 39, '#1a1a1a'), scale: () => ({arc: {r: 43, w: 4, track: '#171717'}}), body: g => { circ(g, 50, 36, '#3b3b3b', {stroke: '#4e4e4e', 'stroke-width': 1.3}); circ(g, 50, 29, '#373737'); }, ptr: linePtr(26, 36, 4, '#d8d8d8')};
-histRow('#k-v1', [['Small', v1k, 64], ['Normal', v1k, 94], ['Bigger', v1k, 132]]);
-
 // ───────────────────────── silicone keys ─────────────────────────
 const PIANO = '<svg viewBox="0 0 64 64" fill="none" style="width:70%;height:70%"><rect x="8" y="14" width="48" height="36" rx="3" stroke="currentColor" stroke-width="3"/><path d="M20 50V15M32 50V15M44 50V15" stroke="currentColor" stroke-width="2.5"/><path d="M17 14V34H23V14M29 14V34H35V14M41 14V34H47V14" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/></svg>';
 function key(size, light, legend, on = false, o = {}) { // theme::key + key_geom
@@ -628,7 +580,6 @@ function led(d, light, on = true, o = {}) {
   const cell2 = (host, d, on, o, label) => { const c = h('div', 'cell', $(host)); c.append(led(d, 'mint', on, o)); h('div', 'cap-label', c, label); };
   const hist = {wellOff: '#171717', ringOff: '#1d1d1d', beadOff: '#494949'};
   cell2('#led-v2', 28, true, {...hist, wellOn: '#3a5849', ringOn: '#4f7865'}, 'on'); cell2('#led-v2', 28, false, hist, 'off');
-  cell2('#led-v1', 28, true, {...hist, wellOn: '#171717', ringOn: '#1d1d1d', glow: true}, 'on'); cell2('#led-v1', 28, false, hist, 'off');
 })();
 
 // ───────────────────────── LCD & dropdown ─────────────────────────
@@ -656,13 +607,6 @@ function dropdown(items, o = {}) {
   { const c = h('div', 'cell', host); const {d} = lcd(110, 46, '1.1.1', 'BAR.BEAT.STEP'); c.append(d); h('div', 'cap-label', c, 'LCD text · playhead'); }
   { const c = h('div', 'cell', host); c.append(dropdown(['Arrangement', 'Piano roll', 'Mixer', 'Recorder'], {icon: true})); h('div', 'cap-label', c, 'editor picker (click)'); }
   { const c = h('div', 'cell', host); c.append(dropdown(['Bar', 'Beat', '1/2 beat', '1/4 beat'], {gap: 14})); h('div', 'cap-label', c, 'same, as a snap menu'); }
-  const v2 = $('#disp-v2');
-  { const c = h('div', 'cell', v2); c.append(dropdown(['Groove', 'Straight', 'Swing', 'Triplet'], {css: ';height:42px;min-width:145px;border-radius:7px;border-color:#141414;box-shadow:inset 0 2px 4px #0004;padding:0 13px', gap: 40, chevron: '#a4a4a4'})); h('div', 'cap-label', c, 'Recessed dropdown'); }
-  bpm(v2, 'Backlit LCD', {css: ';border-radius:7px;background:#dbdbdb;color:#303030', w: 125, h: 62});
-  { const c = h('div', 'cell', v2); const {d} = lcd(125, 62, '68%', 'LEVEL', {css: ';border-radius:7px;background:#dbdbdb;color:#303030'}); c.append(d); h('div', 'cap-label', c, 'Secondary LCD'); }
-  const v1 = $('#disp-v1'); v1.style.cssText = 'background:#2f2f2f;padding:28px;border-radius:14px;width:max-content;max-width:100%';
-  { const c = h('div', 'cell', v1); c.append(dropdown(['Groove', 'Straight', 'Swing'], {css: ';height:40px;min-width:132px;border-radius:7px;color:#c7c7c7;box-shadow:inset 0 2px 4px #00000047,0 1px 0 #ffffff09;padding:0 13px', gap: 34, chevron: '#a4a4a4'})); h('div', 'cap-label', c, 'Recessed dropdown'); }
-  bpm(v1, 'Backlit LCD', {css: ';border-radius:7px;background:#dbdbdb;color:#303030', w: 116, h: 58, size: 21});
 })();
 
 // ───────────────────────── meters ─────────────────────────
@@ -722,24 +666,12 @@ function stereoMeter(seed, fixed, hgt = 280) {
   }));
   return svg;
 }
-// history v1: segmented, 55 × 350 (signal colours brought to METER_STOPS)
-function segMeter(seed, hgt = 280) {
-  const svg = el('svg', {viewBox: '0 0 55 350', width: 55 * hgt / 350, height: hgt});
-  [[8, 12, 39, 326, 9, '#1c1c1c'], [11, 15, 33, 320, 7, '#393939'], [15, 19, 25, 312, 4, '#121212'], [18, 22, 19, 306, 2, '#191919']].forEach(([x, y, w, hh, rx, f]) => el('rect', {x, y, width: w, height: hh, rx, fill: f}, svg));
-  const segs = []; for (let s = 0; s < 30; s++) segs.push({r: el('rect', {x: 20, y: 321 - s * 10, width: 15, height: 7, rx: 1.3, fill: '#303030'}, svg), col: s >= 27 ? '#ee9996' : s >= 23 ? '#f0d28b' : '#9fe4a9'});
-  const peak = el('rect', {x: 20, y: 321, width: 15, height: 3, rx: 1, fill: '#e5e9b7', opacity: 0}, svg); let lvl = 0, held = 0, until = 0, last = 0;
-  meters.push(t => { if (t - last < 65) return; last = t; const tgt = clamp(Math.round((signal(t, seed) + 60) / 60 * 29), 0, 30); lvl += (tgt - lvl) * (tgt > lvl ? .66 : .22); const l = Math.round(lvl);
-    if (l >= held) { held = l; until = t + 420; } else if (t > until) held = Math.max(l, held - 1);
-    segs.forEach((s, k) => s.r.setAttribute('fill', k < l ? s.col : '#303030')); peak.setAttribute('y', 321 - (Math.max(1, held) - 1) * 10); peak.setAttribute('opacity', held > 0 ? .95 : 0); });
-  return svg;
-}
 function buildMeters() { // every meter registers a callback, so they're (re)built together with the strips
   const cur = $('#met-cur'); cur.innerHTML = '';
   { const c = h('div', 'cell', cur); const r = h('div', 'row', c); r.style.gap = '8px'; r.append(appMeter(1, 1), appMeter(2, 1.5)); h('div', 'cap-label', c, 'strip meter · 1× and 1.5×'); }
   { const c = h('div', 'cell', cur); c.append(hMeter(3)); h('div', 'cap-label', c, 'toolbar master · 1.5×'); }
   { const c = h('div', 'cell', cur); const bar = h('div', ''); bar.style.cssText = `width:24px;height:200px;background:linear-gradient(to top,${METER_STOPS.map(([o, col]) => col + ' ' + o * 100 + '%').join(',')})`; c.append(bar); h('div', 'cap-label', c, 'full scale'); }
-  [['#met-v3', true], ['#met-v2', false]].forEach(([s, fixed], i) => { const host = $(s); host.innerHTML = ''; for (let k = 0; k < 3; k++) host.append(stereoMeter(k + i * 3, fixed)); });
-  $('#met-v1').innerHTML = ''; for (let k = 0; k < 3; k++) $('#met-v1').append(segMeter(k));
+  const v3 = $('#met-v3'); v3.innerHTML = ''; for (let k = 0; k < 3; k++) v3.append(stereoMeter(k, true));
 }
 
 // ───────────────────────── faders ─────────────────────────
@@ -820,49 +752,8 @@ function appStrips() {
     paint();
   });
 }
+function rebuildAll() { meters.length = 0; appStrips(); buildMeters(); }
 document.querySelectorAll('[data-z]').forEach(b => b.onclick = () => { stripZoom = +b.dataset.z; rebuildAll(); });
-// history racks
-function histRack(host, o) {
-  const rack = h('div', '', $(host)); rack.style.cssText = `display:flex;gap:${o.gap}px;padding:${o.pad}px;background:${o.bg};border-radius:${o.radius || 0}px;width:max-content;${o.css || ''}`;
-  [['DRUMS', .72], ['SYNTH', .6], ['MASTER', .8], ['AUX', .48]].slice(0, o.n || 4).forEach(([name, v], i) => {
-    const ch = h('section', '', rack); ch.style.cssText = `min-width:${o.minW}px;background:var(--panel);text-align:center;padding:11px 4px 12px;border-radius:${o.chRadius || 0}px;${o.chCss || ''}`;
-    h('div', '', ch, name).style.cssText = 'font-size:11px;letter-spacing:.13em;color:#b9b9b9;margin:4px 0 9px;font-weight:650';
-    const pair = h('div', '', ch); pair.style.cssText = 'display:flex;justify-content:center;align-items:center';
-    const f = o.fader(v); pair.append(f.svg, o.meter(i + 10 * (o.n || 4)));
-    ch.append(f.r); f.r.style.margin = '8px 0'; f.r.style.color = 'var(--text)';
-    const bs = h('div', '', ch); bs.style.cssText = `display:flex;gap:${o.btnGap}px;justify-content:center`;
-    ['M', 'S'].forEach(t => { const b = h('button', '', bs, t); b.style.cssText = `border:1px solid ${o.btnEdge};border-radius:${o.btnR}px;background:#3c3c3c;color:#d0d0d0;padding:7px 12px;cursor:pointer;${o.btnCss || ''}`; b.onclick = () => { const on = b.dataset.on !== '1'; b.dataset.on = on ? '1' : ''; b.style.background = on ? 'var(--mint-deep)' : '#3c3c3c'; b.style.color = on ? '#f7f7f7' : '#d0d0d0'; }; });
-  });
-}
-function rebuildAll() { meters.length = 0; appStrips(); buildMeters(); buildStatic(); }
-function buildStatic() {
-  ['#str-v4', '#str-v3', '#str-v2', '#str-v1', '#str-v5', '#str-v6'].forEach(s => $(s).innerHTML = '');
-  const btn = {btnEdge: '#1c1c1c', btnR: 4, btnGap: 5, btnCss: 'box-shadow:inset 0 1px #5e5e5e40'};
-  histRack('#str-v4', {...btn, gap: 4, pad: 4, bg: 'var(--bg)', minW: 115, fader: v => compactFader({value: v}), meter: s => stereoMeter(s, true)});
-  histRack('#str-v3', {...btn, gap: 4, pad: 4, bg: 'var(--bg)', minW: 162, fader: v => wideFader('bar', {vb: 115, dx: -2, value: v, v1map: false}), meter: s => stereoMeter(s, true)});
-  histRack('#str-v2', {...btn, gap: 2, pad: 3, bg: 'var(--bg)', minW: 162, css: 'border:1px solid var(--bg);box-shadow:0 3px 12px #0d0d0d50', chCss: 'border:1px solid #1a1a1a;box-shadow:inset 1px 0 #38383840,inset -2px 0 #1313134d', fader: v => wideFader('bar', {vb: 115, dx: -2, value: v, v1map: false}), meter: s => stereoMeter(s, false)});
-  histRack('#str-v1', {btnEdge: '#545454', btnR: 7, btnGap: 8, gap: 8, pad: 14, bg: '#262626', radius: 16, n: 3, minW: 195, chRadius: 11, chCss: 'border:1px solid #3a3a3a;padding:13px 8px 14px', fader: v => wideFader('bar', {value: v}), meter: s => segMeter(s)});
-  singleStrip('#str-v6', 2); singleStrip('#str-v5', 1);
-}
-// history: single channel strip v1 / v2 (120 wide; fader 72 + meter 39; lower cells)
-function singleStrip(host, ver) {
-  const rack = h('div', '', $(host)); rack.style.cssText = 'display:flex;background:var(--bg);padding:4px;gap:4px;width:max-content';
-  const ch = h('section', '', rack), lowH = ver === 1 ? 142 : 186; ch.style.cssText = 'width:120px;background:var(--panel);padding:7px 4px 8px;display:grid;grid-template-columns:72px 39px;grid-template-rows:350px auto;row-gap:4px';
-  const f = compactFader({hgt: 350}); f.svg.setAttribute('width', 72); const fs = h('div', '', ch); fs.append(f.svg); h('div', '', ch).append(stereoMeter(20 + ver, true, 350));
-  const nc = h('div', '', ch); nc.style.cssText = `min-height:${lowH}px;background:#262626;display:flex;align-items:center;justify-content:center;overflow:hidden`;
-  const nm = h('div', '', nc, 'SYNTH / ATMOSPHERE BUS'); nm.style.cssText = `writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:${lowH - 14}px;font-size:12px;letter-spacing:.1em;font-weight:650;color:#c0c0c0`;
-  const cc = h('div', '', ch); cc.style.cssText = `min-height:${lowH}px;background:#262626;display:flex;flex-direction:column;align-items:center;gap:${ver === 1 ? 5 : 11}px;padding:${ver === 1 ? 7 : 12}px 1px`;
-  // pan: 100 box, ±135°, v2 adds the arc from centre
-  const pan = el('svg', {viewBox: '0 0 100 100', width: 36, height: 36, class: 'dial'}, cc);
-  [[44, '#1a1a1a'], [39, '#464646'], [33, '#4e4e4e'], [28, '#484848']].forEach(([r, f]) => circ(pan, 50, r, f));
-  let pa; if (ver === 2) { el('path', {d: arcD(50, 50, 44.5, -135, 135), fill: 'none', stroke: '#262626', 'stroke-width': 5, 'stroke-linecap': 'round'}, pan); pa = el('path', {fill: 'none', stroke: 'var(--accent)', 'stroke-width': 5, 'stroke-linecap': 'round'}, pan); circ(pan, 50, 2.8, '#a2a2a2', {cy: 5.5}); }
-  const dot = circ(pan, 50, 4.2, '#c0c0c0');
-  h('div', '', cc, 'PAN').style.cssText = 'font-size:9px;letter-spacing:.1em;color:#a6a6a6';
-  const val = h('div', '', cc); val.style.cssText = 'font:11px ui-monospace,monospace;color:var(--text)';
-  bindDial(pan, {value: .5, span: 150, draw: t => { const a = (t - .5) * 270, [x, y] = pol(50, 50, 31, a); dot.setAttribute('cx', x); dot.setAttribute('cy', y); pa && pa.setAttribute('d', arcD(50, 50, 44.5, Math.min(0, a), Math.max(0, a))); val.textContent = panTxt(t); }});
-  cc.append(led(28, 'mint', true, ver === 2 ? {wellOff: '#171717', beadOff: '#494949', wellOn: '#3a5849', ringOn: '#4f7865'} : {wellOff: '#171717', beadOff: '#494949', wellOn: '#171717', ringOn: '#1d1d1d', glow: true}));
-  h('div', '', cc, 'MUTE').style.cssText = 'font-size:9px;letter-spacing:.1em;color:#a6a6a6';
-}
 rebuildAll();
 
 // ───────────────────────── no study yet ─────────────────────────

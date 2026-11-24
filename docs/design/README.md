@@ -4,12 +4,12 @@ How we design Lyra together without either of us having to describe pixels in wo
 
 ## The widget catalog
 
-[widget-catalog.html](widget-catalog.html) is the design reference: every widget
-Lyra draws, in today's colours (the palette is named in its `:root`, after the
-Rust constants). Each family shows the current version first, drawn with the
-app's own numbers, then every earlier study (from `HTMLSamples15112026/`) with
-its version, source file and what it changed, recoloured but with its shape
-untouched. Open it in a browser; every control is live.
+[widget-catalog.html](widget-catalog.html) is the design reference and the source
+of truth: where it and the app differ, the app changes. The palette is named in
+its `:root`, after the Rust constants. Each family shows the current version
+first (the app's own numbers, corrected where the page's notes say), then the
+earlier studies worth keeping, recoloured with their shapes untouched. Open it
+in a browser; every control is live.
 
 ## Sizes: the Design panel (F12)
 
