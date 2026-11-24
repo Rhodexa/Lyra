@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lyra Catalog Next</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&family=Ubuntu:wght@300;400;500;700&family=Noto+Sans:wght@400;500;600;700&family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&family=Ubuntu:wght@300;400;500;700&family=Noto+Sans:wght@400;500;600;700&family=Roboto+Condensed:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
   Lyra · catalog NEXT — the simplified widget set, being designed here.
   Workflow (UI-NEEDS.md): HTML first, iterate until approved, the app last.
@@ -163,7 +163,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
     <tr><th>token</th><th>value</th><th>for</th></tr>
     <tr><td>S · M · L</td><td>28 · 40 · 52 px</td><td>drawn height of every control; knobs Tiny · Rubber · Polymer</td></tr>
     <tr><td>hit-min</td><td>28 px</td><td>nothing is drawn or reacts smaller than S</td></tr>
-    <tr><td>font</td><td style="font-family:Inter">Inter</td><td>the one font for all of Lyra's own UI. SIL Open Font License: free to bundle inside an MIT / Apache app (the font keeps its own licence file), and bundled it looks the same on every system. Tabular numbers; Blender uses it. Mono only for numbers.</td></tr>
+    <tr><td>font</td><td style="font-family:Inter">Inter</td><td>the one font for all of Lyra's own UI (or Roboto Condensed: see the density test). SIL Open Font License: free to bundle inside an MIT / Apache app (the font keeps its own licence file), and bundled it looks the same on every system. Tabular numbers; Blender uses it. Mono only for numbers.</td></tr>
     <tr><td>caps label</td><td><span class="caps">Input · Pan · Mute</span></td><td>10 px, 600, letter-spaced, above the thing it names</td></tr>
     <tr><td>legend</td><td>12 · 13 · 15 px</td><td>button legends at S · M · L: caps, 600, letter-spaced .06em</td></tr>
     <tr><td>small · body</td><td>11 · 14 px</td><td>details · names and reading text</td></tr>
@@ -197,6 +197,11 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   <div class="plate" id="ctx-header"></div>
   <div class="caps" style="margin:14px 0 6px">Dense row · S</div>
   <div class="plate" style="height:36px" id="ctx-dense"></div>
+</div>
+<div class="card">
+  <h3>Density test: the same labels in every candidate font</h3>
+  <p style="margin-top:0">Each cell is a fixed 96 px wide, like a tab or a toolbar key; a label that doesn't fit turns rose. Weight and case follow the tuner.</p>
+  <div id="density" style="display:grid;gap:6px;overflow-x:auto"></div>
 </div>
 <div class="card">
   <h3>The drafts so far, at 40 px</h3>
@@ -291,7 +296,7 @@ document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.
     ['corner radius', 'range', '--btn-r', 4, [0, 8, .5], v => v + 'px'],
     ['plate grey', 'range', '--btn-body', 0x45, [0x30, 0x60, 1], grey],
     ['legend grey', 'range', '--legend', 0xb0, [0x99, 0xff, 1], grey],
-    ['font', 'select', '--btn-font', 'Inter', ['Inter', 'IBM Plex Sans', 'Barlow', 'Roboto Condensed', 'Noto Sans', 'Ubuntu', 'system-ui'], v => v === 'system-ui' ? v : `'${v}',system-ui,sans-serif`],
+    ['font', 'select', '--btn-font', 'Inter', ['Inter', 'Roboto Condensed', 'Inter Tight', 'IBM Plex Sans Condensed', 'Barlow Semi Condensed', 'IBM Plex Sans', 'Barlow', 'Noto Sans', 'Ubuntu', 'system-ui'], v => v === 'system-ui' ? v : `'${v}',system-ui,sans-serif`],
     ['weight', 'select', '--btn-fw', '600', ['400', '500', '600', '700'], v => v],
     ['case', 'select', '--btn-case', 'uppercase', ['uppercase', 'none'], v => v],
     ['on', 'select', null, 'deep', ['deep', 'rim', 'edge', 'pastel'], v => v],
@@ -319,6 +324,25 @@ document.querySelectorAll('[data-state]').forEach(td => { const st = td.dataset.
   cp.onclick = () => { const txt = controls.map(c => `${c[0]}: ${c[1] === 'range' ? c[5](+state[c[0]]) : state[c[0]]}`).join('\n');
     const box = $('#copyout'); box.style.display = 'block'; box.textContent = txt; navigator.clipboard?.writeText(txt); };
   rs.onclick = () => { for (const c of controls) { const inp = [...host.querySelectorAll('label')].find(l => l.firstChild.textContent === c[0]).querySelector('input,select'); inp.value = c[3]; apply(c[0], c[3]); } };
+})();
+// density test
+(() => {
+  const fonts = ['Inter', 'Roboto Condensed', 'Inter Tight', 'IBM Plex Sans Condensed', 'Barlow Semi Condensed'];
+  const labels = ['Files', 'Instruments', 'Effects', 'Plugins', 'Arrangement', 'Piano roll', 'Automation', 'Recorder', '+ New pattern', 'Bar.beat.step'];
+  const host = $('#density');
+  host.style.gridTemplateColumns = `170px repeat(${labels.length}, 96px)`;
+  const cells = [];
+  for (const f of fonts) {
+    h('div', 'caps', host, f).style.alignSelf = 'center';
+    for (const l of labels) {
+      const c = h('span', 'btn S', host, l);
+      c.style.cssText = `width:96px;min-width:0;padding:0 6px;overflow:hidden;justify-content:center;font-family:'${f}',system-ui`;
+      setLight(c, 'mint'); cells.push(c);
+    }
+  }
+  const check = () => cells.forEach(c => { const over = c.scrollWidth > c.clientWidth + 0.5; c.style.color = over ? '#ee9996' : ''; });
+  document.fonts && document.fonts.ready.then(check); setTimeout(check, 1500);
+  $('#tuner').addEventListener('input', () => setTimeout(check, 50));
 })();
 // in context
 (() => {
