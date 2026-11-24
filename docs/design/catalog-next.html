@@ -291,8 +291,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ TABS ═════════════════════════ -->
-<h2>Tabs <span class="draft">UI-NEEDS 3 · DRAFT 2</span></h2>
-<p>A tab row belongs to the panel under it: switching tabs changes the whole panel, not a setting. Equal cells across the panel, caps labels that clip with an ellipsis instead of colliding with the edges. <b>The rule (Rhodexa):</b> what changes the whole panel sits <i>outside</i> it; what changes a setting sits inside. So: T2, folder tabs, packed (neighbours share one outline, little padding), or T3, the settled track <i>above</i> the panel. T1, the track inside the panel, is retired. Click the tabs. The panels are the real ones: the left panel (300 px wide, like the app's) and the audio-clip editor.</p>
+<h2>Tabs <span class="draft">UI-NEEDS 3 · SETTLED</span></h2>
+<p>A tab row belongs to the panel under it: switching tabs changes the whole panel, not a setting. Equal cells across the panel, caps labels that clip with an ellipsis instead of colliding with the edges. <b>The rule (Rhodexa):</b> what changes the whole panel sits <i>outside</i> it; what changes a setting sits inside. <b>Settled: T2, folder tabs</b>, packed (neighbours share one outline, 4 px inside), equal cells, ellipsis. Modern, with a touch of old X Windows. T3, the track <i>above</i> something, is kept for switching content that isn't a panel, if we ever need it. T1, the track inside the panel, is retired. Click the tabs. The panels are the real ones: the left panel (300 px wide, like the app's) and the audio-clip editor.</p>
 <div class="card">
   <div class="tab-demo" id="tabs-demo"></div>
 </div>
@@ -532,8 +532,8 @@ function tabsT2(size, labels, chosen = 0, body = '') {
   const d = $('#tabs-demo');
   const add = (label, node) => { const c = h('div', '', d); h('div', 'caps', c, label); c.append(node); c.style.maxWidth = '300px'; };
   const left = ['Files', 'Instruments', 'Effects'], clip = ['This clip', 'Recorder'], long = ['Files', 'Instruments', 'Effects', 'Automation'];
-  add('T2 · folder · S · left panel', tabsT2('S', left, 0, 'Lyra · Starter Kit · Your library…'));
-  add('T3 · track above · S · left panel', tabsT3('S', left, 0, 'Lyra · Starter Kit · Your library…'));
+  add('T2 · folder · S · left panel (SETTLED)', tabsT2('S', left, 0, 'Lyra · Starter Kit · Your library…'));
+  add('T3 · track above · S (kept for non-panel content)', tabsT3('S', left, 0, 'Lyra · Starter Kit · Your library…'));
   add('T2 · folder · M · audio-clip editor', tabsT2('M', clip, 0, 'Gain · Fades · Reverse…'));
   add('T3 · track above · M · audio-clip editor', tabsT3('M', clip, 0, 'Gain · Fades · Reverse…'));
   add('T2 · four tabs in 300 px', tabsT2('S', long, 3, 'Squeezed: labels clip with an ellipsis.'));
