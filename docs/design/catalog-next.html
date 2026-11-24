@@ -495,6 +495,23 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .sl .ro{min-width:4.2em;font:12px var(--t-num);color:var(--ink-dim);text-align:right;white-space:nowrap}   /* a quiet number, fixed width */
 .sl:hover .ro{color:var(--ink)}
 .cs-grid{display:grid;grid-template-columns:170px 1fr 1fr;gap:12px 24px;align-items:center}
+/* ═════════ SPLITTER GRIP + LIGHT PICKER (draft 1) ═════════ */
+.split{position:absolute;z-index:8}
+.split.col{width:8px;margin-left:-5px;cursor:col-resize} .split.row{height:8px;margin-top:-5px;cursor:row-resize}
+.split::after{content:'';position:absolute;opacity:0;transition:opacity .08s;background:var(--btn-body);background-clip:padding-box;
+  border:var(--btn-bw) solid color-mix(in srgb,var(--btn-body),black var(--btn-ol));border-radius:3px}
+.split.col::after{left:0;width:8px;top:50%;height:36px;margin-top:-18px} .split.row::after{top:0;height:8px;left:50%;width:36px;margin-left:-18px}
+.split:hover::after,.split.drag::after{opacity:1}
+.chip{width:16px;height:16px;flex:none;border-radius:3px;cursor:pointer;background:var(--mid);background-clip:padding-box;border:var(--btn-bw) solid color-mix(in srgb,var(--mid),black 50%)}
+.chip:hover{background:var(--hi)}
+.lp{display:grid;grid-template-columns:repeat(4,28px);gap:4px;padding:4px}
+.lp.row{grid-template-columns:repeat(8,28px);padding:0}
+.lp .sw{width:28px;height:28px;display:grid;place-items:center;border-radius:4px;cursor:pointer;background:var(--low);background-clip:padding-box;
+  border:var(--btn-bw) solid color-mix(in srgb,var(--low),black var(--btn-ol));color:color-mix(in srgb,var(--rim),black 68%)}
+.lp .sw:hover{background:var(--mid)}
+.lp .sw svg{width:16px;height:16px;opacity:0} .lp .sw.on svg{opacity:1}
+.lp-pop{position:absolute;z-index:30;background:var(--lcd);border:var(--btn-bw) solid color-mix(in srgb,var(--lcd-ink),black 50%);border-radius:5px;box-shadow:0 6px 16px #0008;background-clip:padding-box;display:none}
+.lp-pop.open{display:block}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
 .key2{display:inline-flex;height:40px;padding:1px;border-radius:7px;background:#141414}
@@ -753,6 +770,16 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 <div class="card">
   <h3>In context: a settings plate</h3>
   <div class="area p4" id="cs-ctx"></div>
+</div>
+
+<!-- ═════════════════════════ LIGHT PICKER ═════════════════════════ -->
+<h2>Light picker · splitter grip <span class="draft">UI-NEEDS 21 · 23 · DRAFT 1</span></h2>
+<p><b>Splitter</b>: the behaviour stays; on hover a small grip plate appears on the seam, with a resize cursor, and the target is 8 px wide. Try it in the mock screen: between the left panel and the arrangement, and between the arrangement and the mixer. <b>Light picker</b>: it pops up, so it's an LCD drawer with the eight lights as square plates; the chosen one has the checkbox's dark tick. It opens from the colour chip in a track header (in the mock too: the clips and the light follow). Inline, for settings plates, it's one row of eight.</p>
+<div class="card">
+  <div class="row" style="align-items:flex-start;gap:48px">
+    <div><div class="caps" style="margin-bottom:8px">Pop-up, drawn open</div><div id="lp-pop-demo" style="position:relative;height:110px;width:160px"></div></div>
+    <div><div class="caps" style="margin-bottom:8px">Inline, in a settings plate</div><div id="lp-inline"></div></div>
+  </div>
 </div>
 </main>
 
@@ -1685,6 +1712,43 @@ function slider(kind, o = {}) {
     field('Text size', slider('sl1', {value: .3, width: '180px', readout: true, unit: 'px', fmt: v => Math.round(11 + v * 6)}))]));
   body.append(plate('Audio', [checkbox('Silent engine', false), checkbox('Monitor while recording', true)]));
   body.querySelector('.pl:last-child .fields').style.cssText = 'flex-direction:column;align-items:flex-start;gap:0';
+})();
+// ── light picker + splitter grip ──
+function lightGrid(cur, onPick, row) {
+  const g = h('div', 'lp' + (row ? ' row' : ''));
+  const sws = ORDER.map(n => { const s = h('div', 'sw' + (n === cur ? ' on' : ''), g, TICK); setLight(s, n); s.title = n;
+    s.onclick = e => { e.stopPropagation(); sws.forEach(x => x.classList.toggle('on', x === s)); onPick(n); }; return s; });
+  return g;
+}
+(() => {
+  const demo = $('#lp-pop-demo'); const chip = h('div', 'chip', demo); setLight(chip, 'pink');
+  const pop = h('div', 'lp-pop open', demo); pop.style.top = '24px'; pop.append(lightGrid('pink', n => setLight(chip, n)));
+  const inl = $('#lp-inline'); inl.append(plate('Channel', [field('Light', lightGrid('mint', () => {}, true))]));
+  // the mock: colour chips in the track headers, a pop-up picker
+  const pp = h('div', 'lp-pop', document.body); pp.style.position = 'absolute';
+  document.addEventListener('click', () => pp.classList.remove('open'));
+  document.querySelectorAll('#mock .arr .th').forEach((th, i) => {
+    const ln = th.nextElementSibling, cur = () => th.dataset.light || ORDER[[0, 1, 2, 3, 5, 6][i] ?? 0];
+    const c = h('div', 'chip'); th.insertBefore(c, th.querySelector('.nm')); setLight(c, cur());
+    c.onclick = e => { e.stopPropagation(); pp.innerHTML = ''; pp.append(lightGrid(cur(), n => {
+        th.dataset.light = n; setLight(c, n); const L2 = L(n);
+        ln.querySelectorAll('.clip').forEach(cl => { setLight(cl, n); const ct = cl.querySelector('.ct'); ct.style.background = shade(L2.mid, .5); ct.style.color = L2.hi; });
+        const old = th.querySelector('svg'); if (old) old.replaceWith(led(18, n, true)); pp.classList.remove('open'); }));
+      const r = c.getBoundingClientRect(); pp.style.left = r.left + scrollX + 'px'; pp.style.top = r.bottom + scrollY + 4 + 'px'; pp.classList.add('open'); };
+  });
+  // the mock: splitters (left | arrangement, arrangement / mixer)
+  const m = $('#mock'); if (!m) return; m.style.position = 'relative';
+  const arr = m.querySelector('.arr'), left = m.querySelector('.left');
+  const sc = h('div', 'split col', m), sr = h('div', 'split row', m);
+  let leftW = 300, arrH = arr.offsetHeight;
+  const place = () => { sc.style.left = left.offsetLeft + left.offsetWidth + 1 + 'px'; sc.style.top = left.offsetTop + 'px'; sc.style.height = left.offsetHeight + 'px';
+    sr.style.top = arr.offsetTop + arr.offsetHeight + 1 + 'px'; sr.style.left = arr.offsetLeft + 'px'; sr.style.width = arr.offsetWidth + 'px'; };
+  const drag = (el, fn) => el.addEventListener('pointerdown', e => { el.setPointerCapture(e.pointerId); el.classList.add('drag'); const x0 = e.clientX, y0 = e.clientY, w0 = leftW, h0 = arrH;
+    const mv = ev => { fn(ev.clientX - x0, ev.clientY - y0, w0, h0); place(); }; const up = () => { el.classList.remove('drag'); el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); };
+    el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); });
+  drag(sc, (dx, dy, w0) => { leftW = clamp(w0 + dx, 200, 480); m.style.gridTemplateColumns = leftW + 'px minmax(0,1fr)'; });
+  drag(sr, (dx, dy, w0, h0) => { arrH = clamp(h0 + dy, 120, 420); arr.style.height = arrH + 'px'; arr.style.overflow = 'hidden'; });
+  new ResizeObserver(place).observe(m); requestAnimationFrame(place);
 })();
 </script>
 </body>
