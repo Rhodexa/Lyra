@@ -171,7 +171,6 @@ pub struct LyraApp {
     playhead: f64,
     /// Decoded samples (shared with samplers on the audio thread).
     samples: crate::samples::Samples,
-    textures: theme::Textures,
     frame_count: u64,
     /// A window being raised, and for how many more frames (see `windows`).
     raising: Option<(Focus, u8)>,
@@ -288,7 +287,6 @@ impl LyraApp {
             key_area: 0,
             playhead: 0.0,
             samples: crate::samples::Samples::default(),
-            textures: theme::Textures::new(&cc.egui_ctx),
             frame_count: 0,
             raising: None,
             pending_seek: None,
@@ -989,7 +987,6 @@ impl eframe::App for LyraApp {
             .frame(egui::Frame::default().fill(theme::TOOLBAR).inner_margin(Margin::ZERO))
             .show(ctx, |ui| {
                 let bar = ui.max_rect();
-                let logo = self.textures.logo();
                 let octave = self.keyboard.octave;
                 transport::show(
                     ui,
@@ -998,7 +995,6 @@ impl eframe::App for LyraApp {
                     &mut self.ui,
                     playing,
                     playhead,
-                    logo,
                     octave,
                     &mut actions,
                 );

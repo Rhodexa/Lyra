@@ -221,36 +221,13 @@ pub fn apply(ctx: &Context) {
     ctx.set_style(style);
 }
 
-/// Textures: the logo. (The workspace's grain and seigaiha wave textures
-/// went away when the docked panels came to cover the whole workspace;
-/// they live in git history before the docking commit.)
-pub struct Textures {
-    logo: TextureHandle,
-}
-
-/// Raw RGBA pixels, pre-converted from `docs/artwork/lyra/logo_simple_color.png` so the app needs no
-/// image-decoding library. Regenerate with Pillow if the icon changes:
-/// trim to the drawing, pad square, then
-/// `.convert("RGBA").resize((48, 48), Image.LANCZOS).tobytes()` (and 128 for the
-/// window icon, 256 as `icon_256.png` for `lyra --install-desktop`).
-pub const LOGO_48: &[u8] = include_bytes!("../assets/logo_48.rgba");
+/// The window icon: raw RGBA pixels, pre-converted from
+/// `docs/artwork/lyra/logo_simple_color.png` so the app needs no
+/// image-decoding library. Regenerate with Pillow if the logo changes: trim to
+/// the drawing, pad square, then `.convert("RGBA").resize((128, 128),
+/// Image.LANCZOS).tobytes()` (and 256 as `icon_256.png` for
+/// `lyra --install-desktop`).
 pub const ICON_128: &[u8] = include_bytes!("../assets/icon_128.rgba");
-
-impl Textures {
-    pub fn new(ctx: &Context) -> Self {
-        Self {
-            logo: ctx.load_texture(
-                "lyra-logo",
-                ColorImage::from_rgba_unmultiplied([48, 48], LOGO_48),
-                egui::TextureOptions::LINEAR,
-            ),
-        }
-    }
-
-    pub fn logo(&self) -> egui::TextureId {
-        self.logo.id()
-    }
-}
 
 // ── The Fluttersine logo ─────────────────────────────────────────────────────
 //

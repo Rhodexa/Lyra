@@ -1,6 +1,6 @@
 //! The top bar, built from captioned *modules* so everything lines up:
 //!
-//! `[logo] [deck] [tempo] [pattern] [typing keys] [windows] ……… [master]`
+//! `[File] [deck] [tempo] [pattern] [typing keys] [windows] ……… [master]`
 //!
 //! Each module is a flat panel mounted in the dark chassis, uncaptioned:
 //! the controls say what they are, and every one has a hover hint.
@@ -26,7 +26,6 @@ pub fn show(
     st: &mut UiState,
     playing: bool,
     playhead: f64,
-    logo: egui::TextureId,
     octave: i32,
     actions: &mut Vec<Action>,
 ) {
@@ -38,33 +37,14 @@ pub fn show(
         let small = (big * 0.9).round();
         let gap = 4.0;
 
-        // The logo module, which is also the project menu.
+        // The File menu: everything about the song as a file.
         module(ui, |ui| {
-            let button = egui::Button::image(egui::Image::new((logo, vec2(big, big)))).frame(false);
-            egui::menu::menu_custom_button(ui, button, |ui| {
-                for (label, keys, action) in [
-                    ("New", "", Action::NewProject),
-                    ("Open…", "Ctrl+O", Action::OpenProject),
-                    ("Save", "Ctrl+S", Action::Save),
-                    ("Save as…", "Ctrl+Shift+S", Action::SaveAs),
-                    ("Collect audio into the song's folder", "", Action::Collect),
-                    ("Export WAV…", "Ctrl+E", Action::ExportWav),
-                    ("Export stems…", "Ctrl+Shift+E", Action::ExportStems),
-                    ("Export data…", "", Action::ExportData),
-                ] {
-                    if ui.add(egui::Button::new(label).shortcut_text(keys)).clicked() {
-                        actions.push(action);
-                        ui.close_menu();
-                    }
-                }
-                ui.separator();
-                if ui.button("Open backup").on_hover_text("The copy Lyra keeps of your latest work").clicked() {
-                    actions.push(Action::OpenBackup);
-                    ui.close_menu();
-                }
+            let label = egui::RichText::new("File").size(theme::m().text_small * 1.25).color(theme::TEXT);
+            egui::menu::menu_custom_button(ui, egui::Button::new(label).frame(false), |ui| {
+                file_menu(ui, actions);
             })
             .response
-            .on_hover_text("Project: new, open, save, export");
+            .on_hover_text("New, open, save, import, export");
         });
 
         // The deck: what plays, play / stop, where we are, the beat.
@@ -192,4 +172,28 @@ pub fn show(
             ui.painter().rect_filled(r, theme::cr(0), theme::PANEL);
         });
     });
+}
+
+/// The File menu's items.
+fn file_menu(ui: &mut Ui, actions: &mut Vec<Action>) {
+    for (label, keys, action) in [
+        ("New", "", Action::NewProject),
+        ("Open…", "Ctrl+O", Action::OpenProject),
+        ("Save", "Ctrl+S", Action::Save),
+        ("Save as…", "Ctrl+Shift+S", Action::SaveAs),
+        ("Collect audio into the song's folder", "", Action::Collect),
+        ("Export WAV…", "Ctrl+E", Action::ExportWav),
+        ("Export stems…", "Ctrl+Shift+E", Action::ExportStems),
+        ("Export data…", "", Action::ExportData),
+    ] {
+        if ui.add(egui::Button::new(label).shortcut_text(keys)).clicked() {
+            actions.push(action);
+            ui.close_menu();
+        }
+    }
+    ui.separator();
+    if ui.button("Open backup").on_hover_text("The copy Lyra keeps of your latest work").clicked() {
+        actions.push(Action::OpenBackup);
+        ui.close_menu();
+    }
 }
