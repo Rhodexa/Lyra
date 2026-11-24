@@ -1644,7 +1644,14 @@ impl LyraApp {
                     _ => {}
                 }
             });
-            ui.add_space(4.0);
+            // The header's bottom edge: an engraved line in the ground colour,
+            // edge to edge across the area (its frame has an 8 px margin).
+            ui.add_space(5.0);
+            let y = ui.cursor().top() - 3.0;
+            let x = ui.max_rect().x_range();
+            let line = egui::Rect::from_min_max(egui::pos2(x.min - 8.0, y), egui::pos2(x.max + 8.0, y + theme::OUTLINE_W));
+            ui.painter().with_clip_rect(line).rect_filled(line, theme::cr(0), theme::GROUND);
+            ui.add_space(3.0);
             match area.editor {
                 Editor::Arrangement => {
                     let song_playhead = if st.song_mode { playhead } else { 0.0 };

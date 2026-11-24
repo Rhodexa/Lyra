@@ -30,7 +30,9 @@ const STRIP_W: f32 = PAD_L + FADER_W + METER_W + PAD_R;
 const FADER_H: f32 = 210.0;
 /// The lower part: vertical name on the left, pan and mute on the right.
 const LOWER_H: f32 = 170.0;
-pub const STRIP_H: f32 = 8.0 + FADER_H + 6.0 + LOWER_H + 6.0;
+/// Room at the strip's top for its index tag.
+const TOP: f32 = 22.0;
+pub const STRIP_H: f32 = TOP + FADER_H + 6.0 + LOWER_H + 6.0;
 
 /// Width of the effect rack beside the strips (inside its padding).
 const RACK_W: f32 = 240.0;
@@ -49,7 +51,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
         // the fader keeps its size, the lower part takes what's left, so the
         // names, anchored at the bottom, always end inside the strip.
         let gutter = ui.spacing().scroll.bar_width + ui.spacing().scroll.bar_inner_margin + ui.spacing().scroll.bar_outer_margin;
-        let strip_h = (ui.available_height() - gutter).clamp(8.0 + FADER_H + 6.0 + 110.0, STRIP_H);
+        let strip_h = (ui.available_height() - gutter).clamp(TOP + FADER_H + 6.0 + 110.0, STRIP_H);
         egui::ScrollArea::horizontal().id_salt("mixer-strips").max_width(strips_w).show(ui, |ui| {
             // The window's own background is the rack frame; strips are
             // plates on it, a seam apart.
@@ -101,11 +103,16 @@ fn strip(ui: &mut Ui, r: Rect, p: &mut Project, h: &mut History, st: &mut UiStat
     }
     let painter = ui.painter().clone();
     painter.rect_filled(r, cr(0), if selected { theme::PANEL_HI } else { theme::PANEL });
+    // The insert's index (M, 1, 2, …): a tag hanging from the top centre.
+    let g = ui.fonts(|f| f.layout_no_wrap(widgets::insert_label(t), theme::label(11.0), theme::INK_DIM));
+    let tag = Rect::from_center_size(pos2(r.center().x, r.top() + 8.5), vec2((g.size().x + 14.0).max(26.0), 17.0));
+    painter.rect_filled(tag, egui::CornerRadius { nw: 0, ne: 0, sw: 5, se: 5 }, theme::GROUND);
+    painter.galley(tag.center() - g.size() * 0.5, g, if selected { theme::INK } else { theme::INK_DIM });
     if selected {
         painter.rect_filled(Rect::from_min_size(r.min, vec2(r.width(), 2.0)), cr(0), fill);
     }
 
-    let fader_r = Rect::from_min_size(pos2(r.left() + PAD_L, r.top() + 8.0), vec2(FADER_W, FADER_H));
+    let fader_r = Rect::from_min_size(pos2(r.left() + PAD_L, r.top() + TOP), vec2(FADER_W, FADER_H));
     let meter_r = Rect::from_min_size(pos2(fader_r.right(), fader_r.top()), vec2(METER_W, FADER_H));
     let lower =
         Rect::from_min_max(pos2(r.left() + PAD_L, fader_r.bottom() + 6.0), pos2(r.right() - PAD_R, r.bottom() - 6.0));
