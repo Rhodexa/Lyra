@@ -510,7 +510,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
   border:var(--btn-bw) solid color-mix(in srgb,var(--low),black var(--btn-ol));color:color-mix(in srgb,var(--rim),black 68%)}
 .lp .sw:hover{background:var(--mid)}
 .lp .sw svg{width:16px;height:16px;opacity:0} .lp .sw.on svg{opacity:1}
-.lp-pop{position:absolute;z-index:30;background:var(--lcd);border:var(--btn-bw) solid color-mix(in srgb,var(--lcd-ink),black 50%);border-radius:5px;box-shadow:0 6px 16px #0008;background-clip:padding-box;display:none}
+/* quiet on purpose: the eight lights are the only bright things in it */
+.lp-pop{position:absolute;z-index:30;background:var(--surface-sel);border:var(--btn-bw) solid color-mix(in srgb,var(--surface-sel),black var(--btn-ol));border-radius:5px;box-shadow:0 6px 16px #0008;background-clip:padding-box;display:none}
 .lp-pop.open{display:block}
 /* earlier drafts, kept only for the comparison row */
 .flat1{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 15px;border-radius:4px;background:#3b3b3b;box-shadow:inset 0 0 0 1px #1c1c1c;color:#969696;font:500 12px system-ui}
@@ -773,8 +774,8 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ LIGHT PICKER ═════════════════════════ -->
-<h2>Light picker · splitter grip <span class="draft">UI-NEEDS 21 · 23 · DRAFT 1</span></h2>
-<p><b>Splitter</b>: the behaviour stays; on hover a small grip plate appears on the seam, with a resize cursor, and the target is 8 px wide. Try it in the mock screen: between the left panel and the arrangement, and between the arrangement and the mixer. <b>Light picker</b>: it pops up, so it's an LCD drawer with the eight lights as square plates; the chosen one has the checkbox's dark tick. It opens from the colour chip in a track header (in the mock too: the clips and the light follow). Inline, for settings plates, it's one row of eight.</p>
+<h2>Light picker · splitter grip <span class="draft">UI-NEEDS 21 · 23 · SETTLED</span></h2>
+<p><b>Splitter</b>: the behaviour stays; on hover a small grip plate appears on the seam, with a resize cursor, and the target is 8 px wide. Try it in the mock screen: between the left panel and the arrangement, and between the arrangement and the mixer. <b>Light picker</b> (settled: the pop-up): a quiet grey drawer (the lights are colourful enough on their own) with the eight lights as square plates; the chosen one has the checkbox's dark tick. It opens from the colour chip in a track header (in the mock too: the clips and the light follow). Inline, for settings plates, it's one row of eight.</p>
 <div class="card">
   <div class="row" style="align-items:flex-start;gap:48px">
     <div><div class="caps" style="margin-bottom:8px">Pop-up, drawn open</div><div id="lp-pop-demo" style="position:relative;height:110px;width:160px"></div></div>
