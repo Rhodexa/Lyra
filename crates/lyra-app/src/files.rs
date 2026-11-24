@@ -203,6 +203,27 @@ pub fn pick_export(suggested: &str) -> Option<PathBuf> {
 }
 
 /// "Export stems" dialog: the folder the stems go into.
+/// "Export … as MIDI": where the `.mid` goes.
+pub fn pick_save_midi(suggested: &str) -> Option<PathBuf> {
+    let path = rfd::FileDialog::new()
+        .set_title("Export MIDI")
+        .add_filter("MIDI file", &["mid", "midi"])
+        .set_directory(default_dir())
+        .set_file_name(format!("{suggested}.mid"))
+        .save_file()?;
+    let midi = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("mid") || e.eq_ignore_ascii_case("midi"));
+    Some(if midi { path } else { path.with_extension("mid") })
+}
+
+/// "Import MIDI…": a `.mid` to read.
+pub fn pick_open_midi() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .set_title("Import MIDI")
+        .add_filter("MIDI file", &["mid", "midi"])
+        .set_directory(default_dir())
+        .pick_file()
+}
+
 pub fn pick_folder(title: &str) -> Option<PathBuf> {
     rfd::FileDialog::new().set_title(title).set_directory(default_dir()).pick_folder()
 }

@@ -205,6 +205,72 @@ impl PianoRoll {
         self.last_len[self.melodic as usize] = len;
     }
 
+    /// The selected notes of (pattern, channel), if the roll is showing them.
+    fn selected<'a>(&self, p: &'a Project, pat: usize, ch: usize) -> Vec<&'a Note> {
+        let id = p.channels[ch].id;
+        if self.editing != Some((pat, id)) {
+            return Vec::new();
+        }
+        let notes = p.patterns[pat].notes(id);
+        self.selection.iter().filter_map(|&i| notes.get(i)).collect()
+    }
+
+    /// The bars an export of "these bars" covers: the loop region, else the
+    /// whole bars the selected notes are in.
+    fn bars(&self, p: &Project, pat: usize, ch: usize) -> Option<(u32, u32)> {
+        if let Some(range) = self.looped {
+            return Some(range);
+        }
+        let sel = self.selected(p, pat, ch);
+        let from = sel.iter().map(|n| n.start).min()?;
+        let to = sel.iter().map(|n| n.start + n.len).max()?;
+        Some((from / TICKS_PER_BAR * TICKS_PER_BAR, to.div_ceil(TICKS_PER_BAR).max(1) * TICKS_PER_BAR))
+    }
+
+    /// What the context bar (and F3) offers here right now.
+    pub fn context(&self, p: &Project, pat: usize, ch: usize) -> Vec<(Action, String)> {
+        let mut out = Vec::new();
+        if !self.selected(p, pat, ch).is_empty() {
+            out.push((Action::ExportNotesMidi, "Export notes as MIDI".to_string()));
+        }
+        if let Some((a, b)) = self.bars(p, pat, ch) {
+            out.push((Action::ExportBarsMidi, format!("Export {} as MIDI", crate::midi::bars_label(a, b))));
+        }
+        out.push((Action::ExportPatternMidi, "Export pattern as MIDI".to_string()));
+        if self.looped.is_some() {
+            out.push((Action::ClearLoop, "Clear loop".to_string()));
+        }
+        out
+    }
+
+    /// The MIDI an export action asks for (None: nothing to export).
+    pub fn midi_export(&self, a: Action, p: &Project, pat: usize, ch: usize) -> Option<crate::midi::Export> {
+        use crate::midi::{bars_label, section, Export};
+        let pattern = &p.patterns[pat];
+        let every = |from: u32, to: u32| {
+            p.channels.iter().map(move |c| (c.name.clone(), section(pattern.notes(c.id), from, to))).collect::<Vec<_>>()
+        };
+        match a {
+            Action::ExportNotesMidi => {
+                // From the bar the first note is in, so the notes keep their place in the beat.
+                let sel: Vec<Note> = self.selected(p, pat, ch).into_iter().cloned().collect();
+                let from = sel.iter().map(|n| n.start).min()? / TICKS_PER_BAR * TICKS_PER_BAR;
+                let to = sel.iter().map(|n| n.start + n.len).max()?;
+                let name = format!("{} {}", pattern.name, p.channels[ch].name);
+                Export::new(name, to - from, [(p.channels[ch].name.clone(), section(&sel, from, to))])
+            }
+            Action::ExportBarsMidi => {
+                let (from, to) = self.bars(p, pat, ch)?;
+                Export::new(format!("{} {}", pattern.name, bars_label(from, to)), to - from, every(from, to))
+            }
+            Action::ExportPatternMidi => {
+                let len = pattern.play_length() * TICKS_PER_STEP;
+                Export::new(pattern.name.clone(), len, every(0, len))
+            }
+            _ => None,
+        }
+    }
+
     /// Keyboard commands routed here by the app. Returns true if handled.
     pub fn action(&mut self, a: Action, p: &mut Project, h: &mut History, pat: usize, ch: usize) -> bool {
         let id = p.channels[ch].id;
@@ -1027,5 +1093,40 @@ impl PianoRoll {
             painter.vline(x + 0.5, top..=r.bottom(), stroke(1.5, c.gamma_multiply(0.8)));
             painter.circle_filled(pos2(x + 0.5, top), 2.5, c);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exports_take_the_selection_its_bars_or_the_pattern() {
+        let mut p = Project::default();
+        let lead = p.add_channel("Lead", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
+        let bass = p.add_channel("Bass", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
+        let bar = TICKS_PER_BAR;
+        let n = |start, key| Note { start, len: 96, key, velocity: 0.8 };
+        p.patterns[0].notes_mut(lead).extend([n(0, 60), n(bar + 96, 64), n(2 * bar, 67)]);
+        p.patterns[0].notes_mut(bass).extend([n(bar, 36), n(2 * bar, 38)]);
+        let mut roll = PianoRoll { editing: Some((0, lead)), selection: vec![1], ..Default::default() };
+
+        // The selected note, from the start of its bar (so it keeps its beat).
+        let notes = roll.midi_export(Action::ExportNotesMidi, &p, 0, 0).unwrap();
+        assert_eq!(notes.tracks.len(), 1);
+        assert_eq!(notes.tracks[0].notes[0].start, 96);
+        // Its bar, every instrument.
+        let bars = roll.midi_export(Action::ExportBarsMidi, &p, 0, 0).unwrap();
+        assert_eq!(bars.name, "Pattern 1 bar 2");
+        let keys: Vec<Vec<u8>> = bars.tracks.iter().map(|t| t.notes.iter().map(|n| n.key).collect()).collect();
+        assert_eq!(keys, vec![vec![64], vec![36]], "only bar 2, lead and bass");
+        assert_eq!(bars.tracks[1].notes[0].start, 0, "moved to the start");
+        // A loop region wins over the selection.
+        roll.looped = Some((2 * bar, 3 * bar));
+        let looped = roll.midi_export(Action::ExportBarsMidi, &p, 0, 0).unwrap();
+        assert_eq!(looped.tracks.iter().map(|t| t.notes[0].key).collect::<Vec<_>>(), vec![67, 38]);
+        // The whole pattern.
+        let all = roll.midi_export(Action::ExportPatternMidi, &p, 0, 0).unwrap();
+        assert_eq!(all.tracks.iter().map(|t| t.notes.len()).sum::<usize>(), 5);
     }
 }

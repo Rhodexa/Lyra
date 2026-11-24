@@ -85,6 +85,19 @@ pub enum Action {
     ExportStems,
     /// MIDI, notes, chords and mix measurements in a "<song> data" folder.
     ExportData,
+    /// The context menu (F3): what the context bar offers, at the mouse.
+    ContextMenu,
+    /// The selected notes as a MIDI file (piano roll).
+    ExportNotesMidi,
+    /// A span of bars, every instrument: the loop region, or the bars the
+    /// selected notes are in (piano roll, arrangement).
+    ExportBarsMidi,
+    /// The whole pattern, every instrument.
+    ExportPatternMidi,
+    /// Take the loop region away.
+    ClearLoop,
+    /// Read a MIDI file into the song.
+    ImportMidi,
 }
 
 #[derive(Default)]
@@ -240,6 +253,7 @@ impl Keyboard {
                 Key::F7 => out.push(Action::TogglePiano),
                 Key::F8 => out.push(Action::ToggleEditor),
                 Key::F12 => out.push(Action::ToggleDesign),
+                Key::F3 => out.push(Action::ContextMenu),
                 Key::F4 => out.push(Action::ToggleBrowser),
                 Key::F5 => out.push(Action::TogglePlaylist),
                 Key::F9 => out.push(Action::ToggleMixer),

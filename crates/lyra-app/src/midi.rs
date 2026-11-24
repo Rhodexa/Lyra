@@ -95,6 +95,51 @@ pub fn varlen(t: &mut Vec<u8>, mut v: u32) {
     }
 }
 
+/// The notes that start in `from..to` (ticks), moved to start at 0 and cut
+/// at `to`: a section of a pattern or a song, ready to write.
+pub fn section(notes: &[Note], from: u32, to: u32) -> Vec<Note> {
+    let mut out: Vec<Note> = notes
+        .iter()
+        .filter(|n| (from..to).contains(&n.start))
+        .map(|n| Note { start: n.start - from, len: n.len.min(to - n.start).max(1), ..n.clone() })
+        .collect();
+    out.sort_by_key(|n| (n.start, n.key));
+    out
+}
+
+/// What an editor hands over to be written as a MIDI file: a suggested
+/// file name, the length in ticks, and the tracks.
+pub struct Export {
+    pub name: String,
+    pub length: u32,
+    pub tracks: Vec<TrackOut>,
+}
+
+impl Export {
+    /// One plain track per (name, notes) that has any notes, MIDI channels
+    /// in order (no drum channel, no programs).
+    pub fn new(name: String, length: u32, parts: impl IntoIterator<Item = (String, Vec<Note>)>) -> Option<Self> {
+        let tracks: Vec<TrackOut> = parts
+            .into_iter()
+            .filter(|(_, notes)| !notes.is_empty())
+            .enumerate()
+            .map(|(i, (name, notes))| TrackOut { name, channel: (i % 16) as u8, notes })
+            .collect();
+        (!tracks.is_empty()).then_some(Self { name, length, tracks })
+    }
+}
+
+/// "bars 3–4" for a span in ticks (bars counted from 1).
+pub fn bars_label(from: u32, to: u32) -> String {
+    let bar = lyra_model::TICKS_PER_BAR;
+    let (a, b) = (from / bar + 1, to.div_ceil(bar).max(from / bar + 1));
+    if a == b {
+        format!("bar {a}")
+    } else {
+        format!("bars {a}–{b}")
+    }
+}
+
 /// A MIDI file read back: its first tempo, and its tracks (one per track
 /// and channel that has notes), notes in Lyra ticks.
 pub struct Song {

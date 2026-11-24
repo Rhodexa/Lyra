@@ -180,6 +180,8 @@ pub struct LyraApp {
     pending_seek: Option<f64>,
     /// The loop region the engine has (song or pattern ticks).
     sent_loop: Option<(u32, u32)>,
+    /// Where the context menu (F3) is open, if it is.
+    context_menu: Option<egui::Pos2>,
     /// Where the project lives on disk (None = never saved).
     path: Option<std::path::PathBuf>,
     /// The project as last saved/opened: differs from `project` = unsaved changes.
@@ -293,6 +295,7 @@ impl LyraApp {
             raising: None,
             pending_seek: None,
             sent_loop: None,
+            context_menu: None,
             path,
             saved: project_for_saved,
             backed_up: project_for_backup,
@@ -526,6 +529,79 @@ impl LyraApp {
             }
         });
         self.export = Some(Export { progress, thread });
+    }
+
+    /// What the context bar and the context menu (F3) offer: the editing
+    /// area's actions for what's selected there.
+    fn context_items(&self) -> Vec<(Action, String)> {
+        let area = &self.areas[self.key_area];
+        match area.editor {
+            Editor::PianoRoll if !self.project.channels.is_empty() => {
+                let ch = self.ui.selected.min(self.project.channels.len() - 1);
+                let pat = self.ui.pattern.min(self.project.patterns.len() - 1);
+                area.piano.context(&self.project, pat, ch)
+            }
+            Editor::Arrangement => area.playlist.context(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Export the selected notes, a span of bars, or the pattern as a MIDI file.
+    fn export_midi(&mut self, a: Action) {
+        let area = &self.areas[self.key_area];
+        let export = match area.editor {
+            Editor::PianoRoll if !self.project.channels.is_empty() => {
+                let ch = self.ui.selected.min(self.project.channels.len() - 1);
+                let pat = self.ui.pattern.min(self.project.patterns.len() - 1);
+                area.piano.midi_export(a, &self.project, pat, ch)
+            }
+            Editor::Arrangement => {
+                area.playlist.midi_export(a, &self.project, &files::display_name(self.path.as_deref()))
+            }
+            _ => None,
+        };
+        let Some(export) = export else {
+            self.notify("No notes there to export", true);
+            return;
+        };
+        let Some(path) = files::pick_save_midi(&crate::render::file_safe(&export.name)) else { return };
+        let bytes = crate::midi::write(&export.name, self.project.bpm, export.length, &export.tracks);
+        match std::fs::write(&path, bytes) {
+            Ok(()) => {
+                let notes: usize = export.tracks.iter().map(|t| t.notes.len()).sum();
+                self.notify(&format!("Exported {notes} notes to {}", path.display()), false);
+            }
+            Err(e) => self.notify(&format!("Couldn't write {}: {e}", path.display()), true),
+        }
+    }
+
+    /// The context menu (F3): the context bar's actions, at the mouse.
+    fn context_menu(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        let Some(at) = self.context_menu else { return };
+        let items = self.context_items();
+        let mut chosen = None;
+        let area =
+            egui::Area::new(Id::new("context-menu")).order(egui::Order::Foreground).fixed_pos(at).show(ctx, |ui| {
+                egui::Frame::menu(ui.style()).show(ui, |ui| {
+                    ui.set_min_width(180.0);
+                    if items.is_empty() {
+                        ui.label(RichText::new("Nothing to do here").small().color(theme::TEXT_DIM));
+                    }
+                    for (action, label) in &items {
+                        if ui.button(label).clicked() {
+                            chosen = Some(*action);
+                        }
+                    }
+                });
+            });
+        let away = ctx.input(|i| i.pointer.any_pressed() || i.key_pressed(egui::Key::Escape))
+            && !ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| area.response.rect.contains(p));
+        if let Some(a) = chosen {
+            actions.push(a);
+            self.context_menu = None;
+        } else if away {
+            self.context_menu = None;
+        }
     }
 
     /// Export data: a saved song gets "<song> data" next to it, an unsaved
@@ -883,6 +959,12 @@ impl LyraApp {
             Action::Collect => self.collect(),
             Action::ExportWav | Action::ExportStems => self.export(a == Action::ExportStems),
             Action::ExportData => self.export_data(),
+            Action::ExportNotesMidi | Action::ExportBarsMidi | Action::ExportPatternMidi => self.export_midi(a),
+            Action::ContextMenu => self.context_menu = ctx.input(|i| i.pointer.hover_pos()),
+            Action::ClearLoop => {
+                let area = &mut self.areas[self.key_area];
+                (area.piano.looped, area.playlist.looped) = (None, None);
+            }
             Action::Arrow { dy, .. } if dy != 0 => {
                 let last = self.project.channels.len().saturating_sub(1);
                 self.ui.selected =
@@ -1006,9 +1088,10 @@ impl eframe::App for LyraApp {
                 ui.painter().rect_filled(rule, cr(0), egui::Color32::from_rgb(0x0b, 0x0b, 0x0b));
             });
 
-        self.status_bar(ctx);
+        self.status_bar(ctx, &mut actions);
         // ── Docked: browser (left), plugin rack (right), the two areas (centre) ──
         self.docked(ctx, playing, playhead, &mut actions);
+        self.context_menu(ctx, &mut actions);
 
         // ── Windows ──
         // The zoom factor set in `new()` only applies from the 2nd frame. Windows
@@ -1395,7 +1478,8 @@ impl LyraApp {
         }
     }
 
-    fn status_bar(&mut self, ctx: &egui::Context) {
+    fn status_bar(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        let items = self.context_items();
         egui::TopBottomPanel::bottom("status")
             .exact_height(theme::m().text_small + 12.0)
             .frame(egui::Frame::default().fill(theme::TOOLBAR).inner_margin(Margin::symmetric(8, 0)))
@@ -1442,6 +1526,16 @@ impl LyraApp {
                         }
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // The context bar: what you can do with what's selected (F3 shows the same, at the mouse).
+                        for (action, label) in items.iter().rev() {
+                            let text = RichText::new(label).small().color(theme::TEXT);
+                            if ui.add(egui::Button::new(text).corner_radius(3.0)).clicked() {
+                                actions.push(*action);
+                            }
+                        }
+                        if !items.is_empty() {
+                            ui.add_space(8.0);
+                        }
                         ui.label(
                             RichText::new(format!(
                                 "Z-M Q-P play · -/= octave {:+} · [ ] pattern · F5 F7 F9 bottom area · F4 F6 panels",

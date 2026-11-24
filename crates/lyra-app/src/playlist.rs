@@ -334,6 +334,31 @@ impl Playlist {
         View { grid, time: self.time, scroll_y: self.scroll_y, track_h: self.track_h }
     }
 
+    /// What the context bar (and F3) offers here right now.
+    pub fn context(&self) -> Vec<(Action, String)> {
+        let Some((a, b)) = self.looped else { return Vec::new() };
+        vec![
+            (Action::ExportBarsMidi, format!("Export {} as MIDI", crate::midi::bars_label(a, b))),
+            (Action::ClearLoop, "Clear loop".to_string()),
+        ]
+    }
+
+    /// The MIDI an export action asks for: the song's notes inside the loop region.
+    pub fn midi_export(&self, a: Action, p: &Project, title: &str) -> Option<crate::midi::Export> {
+        let (Action::ExportBarsMidi, Some((from, to))) = (a, self.looped) else { return None };
+        let song = crate::bridge::compile_song(p);
+        let parts = p.channels.iter().enumerate().map(|(i, c)| {
+            let notes: Vec<lyra_model::Note> = song
+                .notes
+                .iter()
+                .filter(|n| n.channel as usize == i)
+                .map(|n| lyra_model::Note { start: n.start, len: n.len, key: n.key, velocity: n.velocity })
+                .collect();
+            (c.name.clone(), crate::midi::section(&notes, from, to))
+        });
+        crate::midi::Export::new(format!("{title} {}", crate::midi::bars_label(from, to)), to - from, parts)
+    }
+
     /// Keyboard commands routed here by the app. Returns true if handled.
     pub fn action(&mut self, a: Action, p: &mut Project, h: &mut History) -> bool {
         self.selection.retain(|&i| i < p.clips.len());
