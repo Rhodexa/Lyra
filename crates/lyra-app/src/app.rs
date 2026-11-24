@@ -248,7 +248,7 @@ struct Export {
 
 impl LyraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        crate::plugin_look::install_fonts(&cc.egui_ctx);
+        theme::install_fonts(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx);
         // The synths keep today's look whatever Lyra's style becomes (plugin_look.rs).
         crate::plugin_look::capture_style(&cc.egui_ctx);

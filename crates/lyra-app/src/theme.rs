@@ -1,12 +1,14 @@
 //! Lyra's look, in one place.
 //!
-//! The control library from the user's HTML studies (see the "Material"
-//! section): neutral charcoal surfaces on a dark background, silicone keys,
-//! round LEDs, backlit LCDs, recessed wells. Pastel lights with mint as the
-//! hero; text is soft white, never mint (mint text reads like a VFD).
-//! No wood, no chrome.
+//! The spec is docs/design/catalog-next.html (its "Settled" index): neutral
+//! charcoal surfaces on a dark ground, flat plates with a dark outline in their
+//! own colour, backlit "on", the dim LCD for things you change or that pop up,
+//! Roboto Condensed for labels and Roboto for reading text. The "Foundations"
+//! section below holds its tokens; older constants are being replaced widget by
+//! widget during the port. Fluttersine and Chrysalis don't use this module
+//! (they have their own frozen look in plugin_look.rs).
 
-use egui::{Color32, Context, FontId, Painter, Rect, Stroke, TextStyle};
+use egui::{Color32, Context, FontFamily, FontId, Painter, Rect, Stroke, TextStyle};
 
 // ── Two levels: background and surface, both neutral charcoal ──
 // The keys from the studies are neutral greys, so every surface is too: a
@@ -152,6 +154,130 @@ pub fn m() -> Metrics {
 pub fn set_metrics(ctx: &Context, metrics: Metrics) {
     *METRICS.write().unwrap_or_else(|e| e.into_inner()) = metrics;
     apply(ctx);
+}
+
+// ── Foundations (catalog-next.html, settled 2026-11-25) ─────────────────────
+//
+// Widgets ask for a role, never a colour. Separation lines inside panels are the
+// ground colour; a control's outline is its own colour mixed toward black.
+
+/// Behind everything; shows only in the gaps between panels.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const GROUND: Color32 = BG;
+/// Panels, strips, plates.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const SURFACE: Color32 = PANEL;
+/// A selected surface (a strip, a row).
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const SURFACE_SEL: Color32 = PANEL_HI;
+/// A control's body: the button plate.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const PLATE: Color32 = Color32::from_rgb(0x45, 0x45, 0x45);
+/// Wells: dropdowns, fields, tracks.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const SUNKEN: Color32 = WELL;
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const INK: Color32 = TEXT;
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const INK_DIM: Color32 = TEXT_DIM;
+/// Idle legends on plates.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const LEGEND: Color32 = Color32::from_rgb(0xb0, 0xb0, 0xb0);
+/// Disabled.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const INK_FAINT: Color32 = Color32::from_rgb(0x5c, 0x5c, 0x5c);
+/// Text on a lit body or an LCD.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const INK_ON_LIGHT: Color32 = Color32::from_rgb(0x2c, 0x2c, 0x2c);
+/// The dim LCD (settled): pale panel, dark ink.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const LCD_DIM: Color32 = Color32::from_rgb(0xbc, 0xbc, 0xbc);
+
+/// Sizes: S · M · L. 28 is the floor for anything drawn or clicked.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const SIZE_S: f32 = 28.0;
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const SIZE_M: f32 = 40.0;
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const SIZE_L: f32 = 52.0;
+/// Outline width of every control.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const OUTLINE_W: f32 = 2.0;
+/// Corner radius of a control at M (S × 0.75, L × 1.25).
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub const CORNER: f32 = 4.0;
+
+/// A control's outline: its own colour, half as bright.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub fn outline_of(c: Color32) -> Color32 {
+    mix(c, Color32::BLACK, 0.5)
+}
+
+/// A flat body with its outline: the outline shape first, then the fill inside
+/// it, never one on top of the other (no light fringe at rounded corners).
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub fn outlined(p: &Painter, r: Rect, radius: f32, fill: Color32) {
+    p.rect_filled(r, cr(radius.round() as u8), outline_of(fill));
+    let inner = (radius - OUTLINE_W).max(0.0);
+    p.rect_filled(r.shrink(OUTLINE_W), cr(inner.round() as u8), fill);
+}
+
+// ── Fonts ──
+// Roboto Condensed for labels (buttons, tabs, caps labels: it fits the most and
+// stays readable), Roboto for reading text, egui's monospace for numbers. Both
+// are bundled (SIL OFL, assets/fonts/OFL.txt), so Lyra looks the same everywhere.
+const LABEL: &str = "label";
+const LABEL_BOLD: &str = "label-bold";
+const READ_BOLD: &str = "read-bold";
+
+/// The label font (Roboto Condensed SemiBold). Labels are written in caps.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub fn label(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Name(LABEL.into()))
+}
+
+/// The bold label font (Roboto Condensed Bold): a backlit "on" legend.
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub fn label_bold(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Name(LABEL_BOLD.into()))
+}
+
+/// Reading text (Roboto).
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub fn read(size: f32) -> FontId {
+    FontId::proportional(size)
+}
+
+/// Bold reading text (Roboto SemiBold).
+#[allow(dead_code)] // waiting for the port of its widgets (step 3)
+pub fn read_bold(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Name(READ_BOLD.into()))
+}
+
+/// Lyra's fonts, with the synths' families (copies of egui's own defaults)
+/// kept as they were. Call once at startup.
+pub fn install_fonts(ctx: &Context) {
+    use egui::{FontData, FontDefinitions};
+    use std::sync::Arc;
+    let mut defs = FontDefinitions::default();
+    crate::plugin_look::add_font_families(&mut defs);
+    let fonts: [(&str, &'static [u8]); 4] = [
+        ("Roboto-Regular", include_bytes!("../assets/fonts/Roboto-Regular.ttf")),
+        ("Roboto-SemiBold", include_bytes!("../assets/fonts/Roboto-SemiBold.ttf")),
+        ("RobotoCondensed-SemiBold", include_bytes!("../assets/fonts/RobotoCondensed-SemiBold.ttf")),
+        ("RobotoCondensed-Bold", include_bytes!("../assets/fonts/RobotoCondensed-Bold.ttf")),
+    ];
+    for (name, bytes) in fonts {
+        defs.font_data.insert(name.into(), Arc::new(FontData::from_static(bytes)));
+    }
+    // egui's own fonts stay behind ours as fallbacks (emoji, symbols Roboto lacks).
+    let fallback = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    let with = |first: &str| std::iter::once(first.to_string()).chain(fallback.iter().cloned()).collect::<Vec<_>>();
+    defs.families.insert(FontFamily::Proportional, with("Roboto-Regular"));
+    defs.families.insert(FontFamily::Name(READ_BOLD.into()), with("Roboto-SemiBold"));
+    defs.families.insert(FontFamily::Name(LABEL.into()), with("RobotoCondensed-SemiBold"));
+    defs.families.insert(FontFamily::Name(LABEL_BOLD.into()), with("RobotoCondensed-Bold"));
+    ctx.set_fonts(defs);
 }
 
 /// A DAW is a cockpit: dense, but every target comfortably hittable.

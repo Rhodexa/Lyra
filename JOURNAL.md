@@ -29,6 +29,7 @@ no marks would default to not urgent or 'coding teams judges'
 
 ## Noticed by Claude
 *My own small to-dos, kept here so they don't get lost.*
+- [ ] The mixer's vertical names are cut off at the bottom ("ASTER", "NSERT 1"): the first letters fall below the strip. Seen 2026-11-25; fix with the mixer strip's port.
 
 - [ ] *(from chat, 2026-11-16)* The instrument window's top bar (name field, "Lyra FM", mixer dropdown) looks out of place above the Fluttersine rack: restyle it in the plate language, later. Also still open: rename "Lyra FM" to Fluttersine (one word in `lyra-dsp`).
 - [ ] Remember sizes / zoom between runs? You'd rather Lyra remembered as little as possible (2026-11-22), so this waits until a size really bothers you. "Copy as code" in F12 and I'll make your numbers the defaults.

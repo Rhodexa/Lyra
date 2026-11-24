@@ -600,14 +600,13 @@ const FONT: &str = "plugin";
 const FONT_MONO: &str = "plugin-mono";
 static STYLE: OnceLock<Arc<egui::Style>> = OnceLock::new();
 
-/// The synths' font families: copies of egui's defaults. Call once at startup.
-pub fn install_fonts(ctx: &Context) {
-    let mut defs = egui::FontDefinitions::default();
+/// The synths' font families: copies of egui's own defaults, added to `defs`
+/// before Lyra puts its fonts in (theme::install_fonts).
+pub fn add_font_families(defs: &mut egui::FontDefinitions) {
     let prop = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
     let mono = defs.families.get(&FontFamily::Monospace).cloned().unwrap_or_default();
     defs.families.insert(FontFamily::Name(FONT.into()), prop);
     defs.families.insert(FontFamily::Name(FONT_MONO.into()), mono);
-    ctx.set_fonts(defs);
 }
 
 /// Keep today's style (call right after `theme::apply` at startup), with the
