@@ -8,6 +8,7 @@
 //! 5. `bridge.sync` pushes whatever changed to the engine
 
 use crate::areas::{self, Area, Editor};
+use crate::widgets::Hint;
 use crate::bridge::{Bridge, Playing};
 use crate::keys::{Action, Keyboard};
 use crate::theme::{self, cr};
@@ -1222,7 +1223,7 @@ fn folded_bottom(ctx: &egui::Context, open: &mut bool) {
         let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
         let pts = vec![c + egui::vec2(-4.0, 1.5), c + egui::vec2(0.0, -2.5), c + egui::vec2(4.0, 1.5)];
         ui.painter().add(egui::Shape::line(pts, theme::stroke(1.5, ink)));
-        if resp.on_hover_text("Unfold the bottom area  (F5)").clicked() {
+        if resp.hint("Unfold the bottom area  (F5)").clicked() {
             *open = true;
         }
     });
@@ -1238,7 +1239,7 @@ fn folded_strip(ctx: &egui::Context, id: &'static str, left: bool, hint: &str, o
         let d = if left { 1.0 } else { -1.0 }; // the arrow points to where the panel unfolds
         let pts = vec![c + egui::vec2(-1.5 * d, -4.0), c + egui::vec2(2.5 * d, 0.0), c + egui::vec2(-1.5 * d, 4.0)];
         ui.painter().add(egui::Shape::line(pts, theme::stroke(1.5, ink)));
-        if resp.on_hover_text(hint).clicked() {
+        if resp.hint(hint).clicked() {
             *open = true;
         }
     });
@@ -1748,10 +1749,10 @@ impl LyraApp {
                                 .small()
                                 .color(theme::TEXT_DIM),
                             )
-                            .on_hover_text(format!("Output device: {}", a.device_name));
+                            .hint(format!("Output device: {}", a.device_name));
                             if late > 0 {
                                 ui.label(RichText::new(format!("· {late} underruns")).small().color(theme::ROSE))
-                                    .on_hover_text(
+                                    .hint(
                                         "Callbacks that arrived too late: the sound card ran dry (clicks/crackles).",
                                     );
                             }

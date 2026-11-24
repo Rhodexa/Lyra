@@ -18,6 +18,7 @@
 //! moves turns its own knob that far (the readout shows the first one's value).
 
 use crate::app::UiState;
+use crate::widgets::Hint;
 use crate::flex::{self, Grow, Px};
 use crate::keys::Action;
 use crate::playlist::SNAPS;
@@ -163,7 +164,7 @@ fn outputs_rack(
             let resp = ui.interact(x_r, ui.id().with(("auto-out-x", k)), Sense::click());
             let ink = if resp.hovered() { theme::TEXT } else { theme::TEXT_DIM };
             ui.painter().text(x_r.center(), Align2::CENTER_CENTER, "×", FontId::proportional(m.text), ink);
-            if resp.on_hover_text("Stop moving this one").clicked() {
+            if resp.hint("Stop moving this one").clicked() {
                 remove = Some(k);
             }
         }
@@ -207,7 +208,7 @@ fn outputs_rack(
             );
             let hint =
                 if end == 0 { "Where the curve's bottom puts the control" } else { "Where the curve's top puts it" };
-            resp.on_hover_text(format!("{hint} · drag up/down (Shift: fine) · double-click: reset"));
+            resp.hint(format!("{hint} · drag up/down (Shift: fine) · double-click: reset"));
         }
         if let Some((end, v)) = changed {
             let l = &mut p.automations[ai].links[k];
@@ -230,7 +231,7 @@ fn outputs_rack(
             let tri = vec![tip, pos2(x - 2.4 * s, c.y + 2.5 * s * dir), pos2(x + 2.4 * s, c.y + 2.5 * s * dir)];
             ui.painter().add(egui::Shape::convex_polygon(tri, ink, egui::Stroke::NONE));
         }
-        if flip.on_hover_text("Turn it around (up on the curve = down on the control)").clicked() {
+        if flip.hint("Turn it around (up on the curve = down on the control)").clicked() {
             h.checkpoint(p);
             let l = &mut p.automations[ai].links[k];
             std::mem::swap(&mut l.from, &mut l.to);

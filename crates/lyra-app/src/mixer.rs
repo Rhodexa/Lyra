@@ -7,6 +7,7 @@
 //! to reset. Strip lights mute. Effects run top to bottom.
 
 use crate::app::UiState;
+use crate::widgets::Hint;
 use crate::rack::tracked;
 use crate::theme::{self, cr, hex};
 use crate::widgets;
@@ -162,7 +163,7 @@ fn strip(ui: &mut Ui, r: Rect, p: &mut Project, h: &mut History, st: &mut UiStat
             None => {}
         }
     }
-    led.on_hover_text("Mute (lit = on) · Alt-click: solo");
+    led.hint("Mute (lit = on) · Alt-click: solo");
     painter.text(pos2(cx, led_r.bottom() + 4.0), Align2::CENTER_TOP, "MUTE", small, label);
 
     let fx = p.mixer[t].effects.len();
@@ -275,7 +276,7 @@ fn fader(ui: &mut Ui, id: egui::Id, rect: Rect, value: &mut f32, fill: Color32) 
             theme::mix(lift(0x4f4f4f), hex(if k == 0 { 0x818181 } else { 0x727272 }), if k == 0 { 0.78 } else { 0.55 });
         p.hline(cx - 7.0..=cx + 7.0, y + k as f32 * 2.5, theme::stroke(1.0, c));
     }
-    resp.on_hover_text(db_text(*value))
+    resp.hint(db_text(*value))
 }
 
 fn db_text(v: f32) -> String {
@@ -372,7 +373,7 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
                     Some(widgets::Sweep::Continue(on)) => action = Some(SlotAction::Bypass(i, on, false)),
                     None => {}
                 }
-                led.on_hover_text("On / bypass");
+                led.hint("On / bypass");
                 let name = lyra_catalog::effects::info(&s.effect).map_or("Missing effect", |e| e.name);
                 let fill = if open || resp.hovered() {
                     theme::PANEL_HI
@@ -422,7 +423,7 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
                         ui.close_menu();
                     }
                 });
-                resp.on_hover_text("Click: open · drag: move · right-click: more");
+                resp.hint("Click: open · drag: move · right-click: more");
             }
             None => {
                 theme::led(&painter, led_c, m.led * 0.7, None, false);

@@ -33,6 +33,7 @@
 //! after), Ctrl+U (the selected audio clips get their own copy, to change apart), ←→ move by snap (Ctrl = 4 bars), ↑↓ move to the track above/below, Esc.
 
 use crate::app::UiState;
+use crate::widgets::Hint;
 use crate::browser::SampleDrag;
 use crate::keys::Action;
 use crate::pool::{AudioDrag, AutomationDrag, PatternDrag};
@@ -818,12 +819,12 @@ impl Playlist {
                 let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                 ui.painter().circle_filled(r.center(), 4.0, theme::channel_color(a.color));
                 ui.label(egui::RichText::new(format!("click places: {}", a.name)).color(theme::TEXT_DIM))
-                    .on_hover_text("Click a pattern clip (or pick a pattern in the top bar) to place patterns again.");
+                    .hint("Click a pattern clip (or pick a pattern in the top bar) to place patterns again.");
             } else if let Some(pat) = p.patterns.get(st.pattern) {
                 let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                 ui.painter().circle_filled(r.center(), 4.0, theme::channel_color(st.pattern));
                 ui.label(egui::RichText::new(format!("click places: {}", pat.name)).color(theme::TEXT_DIM))
-                    .on_hover_text("Pick another pattern in the top bar (or click a clip) to place that one.");
+                    .hint("Pick another pattern in the top bar (or click a clip) to place that one.");
             }
             ui.add_space(10.0);
             let bars = p.song_length() / TICKS_PER_BAR;

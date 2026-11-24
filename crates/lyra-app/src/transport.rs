@@ -6,6 +6,7 @@
 //! the controls say what they are, and every one has a hover hint.
 
 use crate::app::UiState;
+use crate::widgets::Hint;
 use crate::keys::Action;
 use crate::rack::tracked;
 use crate::theme;
@@ -44,7 +45,7 @@ pub fn show(
                 file_menu(ui, actions);
             })
             .response
-            .on_hover_text("New, open, save, import, export");
+            .hint("New, open, save, import, export");
         });
 
         // The deck: what plays, play / stop, where we are, the beat.
@@ -73,7 +74,7 @@ pub fn show(
             let step = (playhead / TICKS_PER_STEP as f64) as u32;
             let pos = format!("{}.{}.{}", step / STEPS_PER_BAR + 1, (step % STEPS_PER_BAR) / 4 + 1, step % 4 + 1);
             widgets::lcd_text(ui, &pos, "BAR . BEAT . STEP", vec2(big * 2.6, big))
-                .on_hover_text("Song position: bar . beat . step");
+                .hint("Song position: bar . beat . step");
             // One beat light: it flashes on every beat, gold on the downbeat (Lyra's eyes).
             let d = (big * 0.36).round();
             let (r, _) = ui.allocate_exact_size(vec2(d + 4.0, big), Sense::hover());
@@ -178,7 +179,7 @@ fn file_menu(ui: &mut Ui, actions: &mut Vec<Action>) {
         }
     }
     ui.separator();
-    if ui.button("Open backup").on_hover_text("The copy Lyra keeps of your latest work").clicked() {
+    if ui.button("Open backup").hint("The copy Lyra keeps of your latest work").clicked() {
         actions.push(Action::OpenBackup);
         ui.close_menu();
     }

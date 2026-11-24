@@ -16,6 +16,7 @@
 //! right panel instead: see `pool.rs`.
 
 use crate::app::{Focus, LeftTab, UiState};
+use crate::widgets::Hint;
 use crate::samples::{self, Folder};
 use crate::theme::{self, cr};
 use egui::{pos2, vec2, Align2, FontId, Rect, Response, Sense, Ui};
@@ -62,7 +63,7 @@ fn files(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
     ui.painter().add(egui::Shape::line(arc, theme::stroke(1.5, ink)));
     let head = vec![tip + vec2(-3.5, 0.5), tip + vec2(1.5, -3.0), tip + vec2(2.0, 2.5)];
     ui.painter().add(egui::Shape::convex_polygon(head, ink, egui::Stroke::NONE));
-    if resp.on_hover_text("Look again for new files").clicked() {
+    if resp.hint("Look again for new files").clicked() {
         st.rescan = true;
     }
     ui.add_space(4.0);
@@ -147,13 +148,13 @@ fn instruments(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
             if arrow {
                 open ^= true;
                 ui.data_mut(|d| d.insert_temp(open_id, open));
-            } else if r.on_hover_text("Click: add to the instrument rack").clicked() {
+            } else if r.hint("Click: add to the instrument rack").clicked() {
                 add_instrument(p, h, st, inst.name, inst.id, lyra_catalog::default_params(inst.id));
             }
             if open {
                 for preset in &presets {
                     let r = row(ui, preset.name, None, false, 14.0, 0.0);
-                    if r.on_hover_text("Click: add this preset to the instrument rack").clicked() {
+                    if r.hint("Click: add this preset to the instrument rack").clicked() {
                         add_instrument(p, h, st, preset.name, inst.id, preset.params());
                     }
                 }
@@ -174,7 +175,7 @@ fn effects(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
             } else {
                 format!("Click: plug into {} (the selected mixer track)", p.mixer[t].name)
             };
-            if row(ui, e.name, None, false, 0.0, 0.0).on_hover_text(hint).clicked() && !full {
+            if row(ui, e.name, None, false, 0.0, 0.0).hint(hint).clicked() && !full {
                 h.checkpoint(p);
                 p.mixer[t].effects.push(EffectSlot::new(e.id, lyra_catalog::effects::default_params(e.id)));
                 st.effect = Some((t, p.mixer[t].effects.len() - 1));
@@ -267,7 +268,7 @@ fn file_row(ui: &mut Ui, file: &Path, indent: f32, p: &mut Project, h: &mut Hist
     if resp.drag_started() {
         egui::DragAndDrop::set_payload(ui.ctx(), SampleDrag(name.clone()));
     }
-    let resp = resp.on_hover_text(format!(
+    let resp = resp.hint(format!(
         "{}\nClick: hear it · double-click: new sampler · drag: onto the plugin rack, or onto a track",
         file.display()
     ));
@@ -303,7 +304,7 @@ fn midi_row(ui: &mut Ui, file: &Path, indent: f32, st: &mut UiState) {
     if resp.drag_started() {
         egui::DragAndDrop::set_payload(ui.ctx(), crate::midi::MidiDrag(file.to_path_buf()));
     }
-    let resp = resp.on_hover_text(format!(
+    let resp = resp.hint(format!(
         "{}\nDrag: onto the piano roll (into this instrument) or a track (every part, from there down) · double-click: bring it all in",
         file.display()
     ));
@@ -373,7 +374,7 @@ fn row_with_arrow(ui: &mut Ui, name: &str, has_arrow: bool, open: bool) -> (Resp
     }
     chevron(ui.painter(), arrow.center(), open, if over { theme::TEXT } else { theme::TEXT_DIM });
     let clicked = resp.clicked() && over;
-    (resp.on_hover_text("Presets: the arrow"), clicked)
+    (resp.hint("Presets: the arrow"), clicked)
 }
 
 /// A list row (catalog-next.html, settled): flat, a soft lift under the

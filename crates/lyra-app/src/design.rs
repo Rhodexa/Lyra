@@ -3,6 +3,7 @@
 //! to Claude or into JOURNAL.md — it drops straight into `Metrics::DEFAULT`.
 
 use crate::theme::{self, Metrics};
+use crate::widgets::Hint;
 use egui::{RichText, Slider, Ui};
 
 pub fn show(ui: &mut Ui) {
@@ -65,7 +66,7 @@ pub fn show(ui: &mut Ui) {
 
     ui.add_space(6.0);
     ui.horizontal(|ui| {
-        if ui.button("Copy as code").on_hover_text("Puts the numbers on the clipboard").clicked() {
+        if ui.button("Copy as code").hint("Puts the numbers on the clipboard").clicked() {
             let zoom_line = format!("// UI zoom: {:.2}\n", ctx.zoom_factor());
             ctx.copy_text(zoom_line + &theme::m().as_code());
         }

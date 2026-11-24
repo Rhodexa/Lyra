@@ -21,6 +21,7 @@
 //!   **middle-drag** — pan · double-click a knob — back to its default
 
 use crate::app::{Listening, UiState};
+use crate::widgets::Hint;
 use crate::flex::{self, Grow, Px};
 use crate::keys::Action;
 use crate::recorder::Recorder;
@@ -313,7 +314,7 @@ impl AudioEditor {
         let copies = p.clips.iter().filter(|c| c.source == Source::Audio(id)).count();
         let file = crate::samples::path_for(&p.audio[i].sample);
         ui.label(RichText::new(format!("{copies}× on the playlist")).small().color(theme::TEXT_DIM))
-            .on_hover_text(file.display().to_string());
+            .hint(file.display().to_string());
     }
 
     /// The editor: at the left the tabs, the transport row (▶ ■ stay put in

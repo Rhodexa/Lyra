@@ -18,6 +18,7 @@
 //!   click it to open the piano roll.
 
 use crate::app::{Focus, UiState};
+use crate::widgets::Hint;
 use crate::areas::Editor;
 use crate::theme::{self, cr, stroke};
 use crate::widgets;
@@ -371,7 +372,7 @@ fn row(
                 }
             });
             ui.separator();
-            if ui.button("Clone channel").on_hover_text("Same instrument and settings, no notes").clicked() {
+            if ui.button("Clone channel").hint("Same instrument and settings, no notes").clicked() {
                 h.checkpoint(p);
                 let mut copy = p.channels[ci].clone();
                 copy.name = format!("{} 2", copy.name);
@@ -426,7 +427,7 @@ fn row(
         if tracked(&r, h, p) {
             p.channels[ci].mixer = insert;
         }
-        r.on_hover_text("Mixer insert: drag or scroll to route (M = master)");
+        r.hint("Mixer insert: drag or scroll to route (M = master)");
         if !steps {
             return;
         }
@@ -444,7 +445,7 @@ fn row(
                 st.selected = ci;
                 st.show = Some(Editor::PianoRoll);
             }
-            strip_resp.on_hover_text("Melody: click to open the piano roll");
+            strip_resp.hint("Melody: click to open the piano roll");
             return;
         }
 

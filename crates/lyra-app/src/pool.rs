@@ -13,6 +13,7 @@
 //!   many controls it moves. Click, double-click, drag: the same.
 
 use crate::app::UiState;
+use crate::widgets::Hint;
 use crate::flex::{self, Grow, Px};
 use crate::theme::{self, cr, stroke};
 use crate::widgets;
@@ -92,7 +93,7 @@ pub fn patterns(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState)
         if resp.drag_started() {
             egui::DragAndDrop::set_payload(ui.ctx(), PatternDrag(p.patterns[i].id));
         }
-        let resp = resp.on_hover_text(
+        let resp = resp.hint(
             "Click: the next click on the arrangement places it · double-click: open · drag: onto a track · right-click: clone",
         );
         if resp.clicked() {
@@ -231,7 +232,7 @@ pub fn audio(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pl
             if resp.drag_started() {
                 egui::DragAndDrop::set_payload(ui.ctx(), AudioDrag(id));
             }
-            let resp = resp.on_hover_text(
+            let resp = resp.hint(
                 "Click: the next click on the arrangement places it · double-click: open · drag: onto a track",
             );
             if resp.clicked() {
@@ -248,7 +249,7 @@ pub fn audio(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, pl
             let inserts = p.mixer.len().saturating_sub(1);
             let r =
                 widgets::number_well(ui, &mut insert, 0..=inserts, 0, vec2(m.step_h, m.step_h), widgets::insert_label)
-                    .on_hover_text("The mixer insert it plays into (M = master)");
+                    .hint("The mixer insert it plays into (M = master)");
             if crate::rack::tracked(&r, h, p) {
                 p.audio[i].mixer = insert;
             }
@@ -299,7 +300,7 @@ pub fn automations(ui: &mut Ui, p: &mut Project, st: &mut UiState) {
         }
         let what: Vec<String> =
             a.links.iter().filter_map(|l| crate::automation::control(p, l.target).map(|c| c.2)).collect();
-        let resp = resp.on_hover_text(format!(
+        let resp = resp.hint(format!(
             "Moves {} · click: current · double-click: open · drag: onto a track",
             if what.is_empty() { "nothing".to_string() } else { what.join(", ") }
         ));

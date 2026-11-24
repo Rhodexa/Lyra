@@ -448,6 +448,7 @@ where
 // what you do with a take: its name, Append, Send.
 
 use crate::theme;
+use crate::widgets::Hint;
 use crate::widgets::{self, Icon, Legend};
 use egui::{pos2, vec2, Align, Align2, FontId, Layout, Rect, Sense, Ui, UiBuilder};
 
@@ -472,7 +473,7 @@ pub fn header(ui: &mut Ui, rec: &mut Recorder, can_append: bool) {
         (s.tape.seconds(), s.state, s.tape.frames() > 0)
     };
     widgets::text_field(ui, &mut rec.prefix, 160.0, "recorder-prefix", "Take name")
-        .on_hover_text("A kept take is called this, plus the date and time");
+        .hint("A kept take is called this, plus the date and time");
     let status = match state {
         State::Recording => "recording",
         State::Waiting => "waiting for a sound…",
@@ -636,7 +637,7 @@ pub fn plate(ui: &mut Ui, r: Rect, rec: &mut Recorder, tracks: &[String]) {
             rec.shared.lock().unwrap_or_else(|e| e.into_inner()).threshold = lyra_plugin::db_to_gain(f * 60.0 - 60.0);
         }
         ui.painter().hline(meter.expand2(vec2(3.0, 0.0)).x_range(), y, theme::stroke(2.0, theme::GOLD));
-        resp.on_hover_text(format!("Starts above {:.0} dB: drag", lyra_plugin::gain_to_db(threshold)));
+        resp.hint(format!("Starts above {:.0} dB: drag", lyra_plugin::gain_to_db(threshold)));
     }
 }
 

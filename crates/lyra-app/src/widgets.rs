@@ -40,7 +40,7 @@ pub fn knob_at(ui: &mut Ui, id: egui::Id, rect: Rect, value: &mut f32, info: &Pa
 fn knob_with(ui: &mut Ui, resp: Response, rect: Rect, value: &mut f32, info: &ParamInfo, color: Color32) -> Response {
     let (resp, hot) = knob_turn(ui, resp, value, info);
     paint_knob(ui.painter(), rect, info, *value, color, hot);
-    resp.on_hover_text(format!("{}: {}", info.name, info.format(*value)))
+    resp.hint(format!("{}: {}", info.name, info.format(*value)))
 }
 
 /// What every knob does with the mouse; returns the response and whether it is "hot".
@@ -234,7 +234,7 @@ pub fn led(ui: &mut Ui, on: bool, light: theme::Light, hint: &str) -> Response {
     let size = theme::m().led;
     let (rect, resp) = ui.allocate_exact_size(vec2(size, size), Sense::click_and_drag());
     theme::led(ui.painter(), rect.center(), size, on.then_some(light), resp.hovered());
-    resp.on_hover_text(hint)
+    resp.hint(hint)
 }
 
 #[derive(Clone, Copy)]
@@ -586,7 +586,7 @@ pub fn lcd_number(
     if *value != before {
         resp.mark_changed();
     }
-    resp.on_hover_text(hint)
+    resp.hint(hint)
 }
 
 /// A small read-only LCD (song position and such).
@@ -680,7 +680,7 @@ pub fn keyboard_map(ui: &mut Ui, first_key: u8, last_key: u8) -> Option<i32> {
         p.rect_filled(r, cr(0), if lit(k) { Color32::from_rgb(0x6e, 0x6e, 0x6e) } else { theme::WELL });
     }
     let resp =
-        resp.on_hover_text("Where your typing keyboard plays (Z…P rows). Click left / right to shift an octave.");
+        resp.hint("Where your typing keyboard plays (Z…P rows). Click left / right to shift an octave.");
     if resp.clicked() {
         let x = resp.interact_pointer_pos().map_or(rect.center().x, |p| p.x);
         return Some(if x < rect.center().x { -1 } else { 1 });
@@ -756,7 +756,7 @@ pub fn panel_header(
     let icon = if fold_on_left { Icon::Next } else { Icon::Prev };
     let ink = if resp.hovered() { theme::INK } else { theme::INK_DIM };
     paint_icon(ui.painter(), fold.shrink(h * 0.26).translate(vec2(0.0, -1.0)), icon, ink, body);
-    let folded = resp.on_hover_text(fold_hint).clicked();
+    let folded = resp.hint(fold_hint).clicked();
     (clicked, folded)
 }
 
@@ -824,7 +824,7 @@ pub fn tab_row(ui: &mut Ui, r: Rect, tabs: &[&str], chosen: usize, id: egui::Id)
         let at = cell.center() - g.size() * 0.5 - vec2(0.0, if on { 0.0 } else { theme::OUTLINE_W * 0.5 });
         ui.painter().galley(at, g, ink);
         let resp = if fitted_caps(ui, tabs[i], legend_size(cell.height()), f32::MAX, ink).size().x > cell.width() - 10.0 {
-            resp.on_hover_text(tabs[i])
+            resp.hint(tabs[i])
         } else {
             resp
         };
@@ -924,7 +924,7 @@ pub fn button_sized(ui: &mut Ui, size: egui::Vec2, legend: Legend, lit: Option<t
     if hint.is_empty() {
         resp
     } else {
-        resp.on_hover_text(hint)
+        resp.hint(hint)
     }
 }
 
@@ -942,7 +942,7 @@ pub fn button_at(
     if hint.is_empty() {
         resp
     } else {
-        resp.on_hover_text(hint)
+        resp.hint(hint)
     }
 }
 
@@ -971,7 +971,7 @@ pub fn choice(
     let mut hovered = None;
     for i in 0..n {
         let resp = ui.interact(cell(i), id.with(i), Sense::click());
-        let resp = if hint.is_empty() { resp } else { resp.on_hover_text(hint) };
+        let resp = if hint.is_empty() { resp } else { resp.hint(hint) };
         if resp.hovered() {
             hovered = Some(i);
         }
@@ -1000,6 +1000,85 @@ pub fn choice(
         paint_legend(ui, cell(i), *legend, ink, if on { body } else { theme::SUNKEN }, on);
     }
     clicked
+}
+
+/// Hints (catalog-next.html, settled): an LCD box under the thing you hover,
+/// after 0.4 s, gone as soon as you press. A key written at the end after two
+/// spaces, like "Play / stop  (Space)", shows as a dark tag. Lyra's own hint
+/// instead of egui's tooltip, whose frame is shared with windows.
+pub trait Hint {
+    fn hint(self, text: impl Into<String>) -> Self;
+}
+
+impl Hint for Response {
+    fn hint(self, text: impl Into<String>) -> Self {
+        let text = text.into();
+        if text.is_empty() || !self.hovered() || self.ctx.input(|i| i.pointer.any_down()) {
+            return self;
+        }
+        let ctx = self.ctx.clone();
+        let key = egui::Id::new("lyra-hint");
+        let (now, pass) = (ctx.input(|i| i.time), ctx.cumulative_pass_nr());
+        // (whose hint, hovered since, last pass seen): a new widget, or one
+        // hovered again after a break, starts the wait over.
+        let (who, since, last): (egui::Id, f64, u64) = ctx.data(|d| d.get_temp(key)).unwrap_or((egui::Id::NULL, now, 0));
+        let since = if who == self.id && last + 1 >= pass { since } else { now };
+        ctx.data_mut(|d| d.insert_temp(key, (self.id, since, pass)));
+        if now - since < 0.4 {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(0.4 - (now - since) + 0.01));
+            return self;
+        }
+        show_hint(&ctx, self.id, self.rect, &text);
+        self
+    }
+}
+
+fn show_hint(ctx: &egui::Context, id: egui::Id, under: Rect, text: &str) {
+    // "Text  (Key)" → the text and a key tag.
+    let (body, key) = match text.rfind("  (") {
+        Some(i) if text.ends_with(')') && text.len() - i <= 16 => (&text[..i], Some(&text[i + 3..text.len() - 1])),
+        _ => (text, None),
+    };
+    let mut job = egui::text::LayoutJob::single_section(
+        body.to_string(),
+        egui::TextFormat { font_id: theme::read(12.5), color: theme::LCD_INK, ..Default::default() },
+    );
+    job.wrap.max_width = 260.0;
+    let g = ctx.fonts(|f| f.layout_job(job));
+    let tag = key.map(|k| {
+        ctx.fonts(|f| f.layout_no_wrap(k.trim().to_uppercase(), theme::label(10.0), theme::INK))
+    });
+    let pad = vec2(9.0, 6.0);
+    let tag_w = tag.as_ref().map_or(0.0, |t| t.size().x + 10.0 + 8.0);
+    let size = vec2(g.size().x + tag_w, g.size().y.max(16.0)) + pad * 2.0;
+    let screen = ctx.screen_rect();
+    let mut at = under.left_bottom() + vec2(0.0, 6.0);
+    if at.y + size.y > screen.bottom() {
+        at.y = under.top() - 6.0 - size.y;
+    }
+    at.x = at.x.min(screen.right() - size.x - 4.0).max(screen.left() + 4.0);
+    egui::Area::new(id.with("lyra-hint"))
+        .order(egui::Order::Tooltip)
+        .fixed_pos(at)
+        .interactable(false)
+        .show(ctx, |ui| {
+            let r = Rect::from_min_size(at, size);
+            ui.allocate_rect(r, Sense::hover());
+            let p = ui.painter();
+            p.rect_filled(r.translate(vec2(0.0, 4.0)).expand(2.0), cr(7), Color32::from_black_alpha(70));
+            p.rect_filled(r, cr(5), theme::mix(theme::LCD_INK, Color32::BLACK, 0.5));
+            p.rect_filled(r.shrink(theme::OUTLINE_W), cr(3), theme::LCD);
+            let ty = r.top() + pad.y + (size.y - pad.y * 2.0 - g.size().y) * 0.5;
+            p.galley(pos2(r.left() + pad.x, ty), g.clone(), theme::LCD_INK);
+            if let Some(t) = tag {
+                let tr = Rect::from_min_size(
+                    pos2(r.right() - pad.x - t.size().x - 10.0, r.center().y - (t.size().y + 4.0) * 0.5),
+                    vec2(t.size().x + 10.0, t.size().y + 4.0),
+                );
+                p.rect_filled(tr, cr(3), theme::LCD_INK);
+                p.galley(tr.center() - t.size() * 0.5, t, theme::INK);
+            }
+        });
 }
 
 /// One row of a [`dropdown`].
@@ -1061,7 +1140,7 @@ pub fn dropdown(
     let (a, b) = if open { (1.5, -2.0) } else { (-1.5, 2.0) };
     let chevron = vec![c + vec2(-3.5, a), c + vec2(0.0, b), c + vec2(3.5, a)];
     ui.painter().add(Shape::line(chevron, stroke(1.6, if enabled { theme::INK_DIM } else { theme::INK_FAINT })));
-    let resp = if hint.is_empty() { resp } else { resp.on_hover_text(hint) };
+    let resp = if hint.is_empty() { resp } else { resp.hint(hint) };
     if resp.clicked() && enabled {
         ui.memory_mut(|mem| mem.toggle_popup(id));
     }
@@ -1234,7 +1313,7 @@ pub fn text_field_at(ui: &mut Ui, r: Rect, text: &mut String, id: egui::Id, hint
         let xi = if c.hovered() && !focused { theme::INK } else { dim };
         ui.painter().line_segment([cc - vec2(k, k), cc + vec2(k, k)], stroke(1.6, xi));
         ui.painter().line_segment([cc + vec2(-k, k), cc + vec2(k, -k)], stroke(1.6, xi));
-        if c.on_hover_text("Clear").clicked() {
+        if c.hint("Clear").clicked() {
             text.clear();
             ui.memory_mut(|m| m.request_focus(id));
         }
