@@ -284,7 +284,7 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 .np:hover{--b:#1e1e1e}
 /* the LCD screen: outline in the ink colour, an inner shadow: it sits IN the panel; its radius
    adds back the outline's width, so the inside curve is what the outer one was meant to be */
-.np.lcd{--np-r:calc(var(--btn-r) * var(--k) + var(--btn-bw));--b:var(--lcd);color:var(--lcd-ink);border-color:var(--lcd-ink);box-shadow:inset 0 2px 4px #0000005c,inset 0 0 0 1px #00000026}
+.np.lcd{--np-r:calc(var(--btn-r) * var(--k) + var(--btn-bw));--b:var(--lcd);color:var(--lcd-ink);border-color:color-mix(in srgb,var(--lcd-ink),black 50%);box-shadow:inset 0 2px 4px #0000005c,inset 0 0 0 1px #00000026}
 .np.lcd:hover{--b:color-mix(in srgb,var(--lcd),white 18%)}
 .np.lcd .unit{color:var(--lcd-dim)}
 /* the aimed digit on an LCD: inverse video, like a cheap device's cursor */
@@ -325,6 +325,13 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 /* P2 boxed, title on a corner tag */
 .p2 .pl{padding:28px 10px 10px;border:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:calc(var(--btn-r) + var(--btn-bw))}
 .p2 .pl .pt{position:absolute;top:0;left:0;padding:4px 8px 4px 7px;background:color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:var(--btn-r) 0 5px 0}
+/* P4 engraved + tag: no boxes; the dividers and the title tags hang from the header's line */
+.p4 .bodyrow{padding-top:0}
+.p4 .pl{padding:30px 12px 4px}
+.p4 .pl+.pl{border-left:var(--btn-bw) solid var(--edge)}
+.p4 .pl .pt{position:absolute;top:0;left:0;padding:4px 8px 4px 7px;background:color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:0 0 5px 0}
+.p4 .pl+.pl .pt{left:0}
+.p4 .wave{margin-top:10px}
 /* P3 title strip */
 .p3 .pl{padding:0 0 10px;border:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol));border-radius:calc(var(--btn-r) + var(--btn-bw));overflow:hidden}
 .p3 .pl .pt{padding:6px 10px;background:#232323;border-bottom:var(--btn-bw) solid color-mix(in srgb,var(--surface),black var(--btn-ol))}
@@ -511,14 +518,14 @@ td i{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-alig
 </div>
 
 <!-- ═════════════════════════ HEADER, PLATE, FIELD ═════════════════════════ -->
-<h2>Header row · plate · field <span class="draft">UI-NEEDS 7 · 8 · 9 · DRAFT 1</span></h2>
-<p>The pieces an editor is built from, shown as a real one: the audio-clip editor. <b>Header</b>: name on the left, actions on the right, groups apart with an engraved divider; one height per header (compact = S, normal = M). <b>Plate</b>: a titled group of fields, three ways on the switch. <b>Field</b>: a small caps label above its control. Small numbers use the LCD (the strategy from the number picker).</p>
+<h2>Header row · plate · field <span class="draft">UI-NEEDS 7 · 8 · 9 · DRAFT 2</span></h2>
+<p>The pieces an editor is built from, shown as a real one: the audio-clip editor. <b>Header</b>: name on the left, actions on the right, groups apart with an engraved divider; one height per header (compact = S, normal = M). <b>Plate</b>: a titled group of fields. <b>Draft 2: engraved + tag</b> is the default (compact and readable: no boxes, the dividers and title tags hang from the header's line); <b>Tag (boxed)</b> is for bigger, explicitly modular things; Engraved and Strip stay for comparison. <b>Field</b>: a small caps label above its control. Small numbers use the LCD (the strategy from the number picker).</p>
 <div class="card">
   <div class="row" style="justify-content:flex-end;margin-bottom:10px"><span class="caps" style="margin-right:6px">Plates</span><span id="pl-style"></span></div>
   <div class="caps" style="margin-bottom:6px">Compact header · S (28) · the audio-clip editor</div>
-  <div class="area p2" id="ed-compact"></div>
+  <div class="area p4" id="ed-compact"></div>
   <div class="caps" style="margin:18px 0 6px">Normal header · M (40) · the same editor, the Recorder page</div>
-  <div class="area p2" id="ed-normal"></div>
+  <div class="area p4" id="ed-normal"></div>
 </div>
 </main>
 
@@ -1009,8 +1016,8 @@ function editor(host, size, page) {
 }
 (() => {
   editor($('#ed-compact'), 'S', 0); editor($('#ed-normal'), 'M', 1);
-  const names = ['Engraved', 'Tag', 'Strip'], cls = ['p1', 'p2', 'p3'];
-  const sw = modeSwitch('B', 'S', names.map(n => [n]), 1);
+  const names = ['Engraved + tag', 'Engraved', 'Tag (boxed)', 'Strip'], cls = ['p4', 'p1', 'p2', 'p3'];
+  const sw = modeSwitch('B', 'S', names.map(n => [n]), 0);
   sw.addEventListener('click', () => setTimeout(() => { const i = [...sw.querySelectorAll('.btn')].findIndex(b => b.classList.contains('on'));
     document.querySelectorAll('.area').forEach(a => { cls.forEach(c => a.classList.remove(c)); a.classList.add(cls[i]); }); }));
   $('#pl-style').append(sw);
