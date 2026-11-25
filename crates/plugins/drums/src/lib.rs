@@ -80,7 +80,7 @@ impl Kick {
 impl MonoSource for Kick {
     fn handle(&mut self, e: Event) {
         match e {
-            Event::NoteOn { key, velocity } => {
+            Event::NoteOn { key, velocity, .. } => {
                 let p = &self.p;
                 self.voices[self.next] = KickVoice {
                     active: true,
@@ -196,7 +196,7 @@ impl Snare {
 impl MonoSource for Snare {
     fn handle(&mut self, e: Event) {
         match e {
-            Event::NoteOn { key, velocity } => {
+            Event::NoteOn { key, velocity, .. } => {
                 let p = &self.p;
                 let snap = p[2];
                 self.voices[self.next] = SnareVoice {
@@ -311,7 +311,7 @@ impl Clap {
 impl MonoSource for Clap {
     fn handle(&mut self, e: Event) {
         match e {
-            Event::NoteOn { key, velocity } => {
+            Event::NoteOn { key, velocity, .. } => {
                 let p = &self.p;
                 self.voices[self.next] = ClapVoice {
                     active: true,
@@ -427,7 +427,7 @@ impl Hat {
 impl MonoSource for Hat {
     fn handle(&mut self, e: Event) {
         match e {
-            Event::NoteOn { key, velocity } => {
+            Event::NoteOn { key, velocity, .. } => {
                 let p = &self.p;
                 self.voices[self.next] = HatVoice {
                     active: true,

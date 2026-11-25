@@ -1120,11 +1120,11 @@ impl LyraApp {
             }
             Action::NoteOn(key) => {
                 self.ui.live_keys.push(key);
-                self.live(Event::NoteOn { key, velocity: 0.8 });
+                self.live(Event::note_on(key, 0.8));
             }
             Action::NoteOff(key) => {
                 self.ui.live_keys.retain(|&k| k != key);
-                self.live(Event::NoteOff { key });
+                self.live(Event::note_off(key));
             }
             Action::Seek(tick) => self.pending_seek = Some(tick),
             Action::SeekPattern(tick) => self.seek_pattern(tick),

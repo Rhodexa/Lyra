@@ -1290,8 +1290,8 @@ impl Chrysalis {
 
     fn handle(&mut self, e: Event) {
         match e {
-            Event::NoteOn { key, velocity } => self.note_on(key, velocity.clamp(0.0, 1.0)),
-            Event::NoteOff { key } => self.note_off(key),
+            Event::NoteOn { key, velocity, .. } => self.note_on(key, velocity.clamp(0.0, 1.0)),
+            Event::NoteOff { key, .. } => self.note_off(key),
             Event::AllNotesOff => {
                 self.stack_len = 0;
                 for v in self.voices.iter_mut().filter(|v| v.active) {

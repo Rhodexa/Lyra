@@ -372,8 +372,8 @@ impl Synth {
 
     fn handle(&mut self, e: Event) {
         match e {
-            Event::NoteOn { key, velocity } => self.note_on(key, velocity),
-            Event::NoteOff { key } => {
+            Event::NoteOn { key, velocity, .. } => self.note_on(key, velocity),
+            Event::NoteOff { key, .. } => {
                 for v in self.voices.iter_mut().filter(|v| v.key == key && v.stage != Stage::Off) {
                     if v.stage != Stage::Release {
                         v.stage = Stage::Release;
@@ -527,10 +527,10 @@ mod preset_tests {
     }
 
     fn on(key: u8) -> TimedEvent {
-        TimedEvent { offset: 0, event: Event::NoteOn { key, velocity: 0.9 } }
+        TimedEvent { offset: 0, event: Event::note_on(key, 0.9) }
     }
     fn off(key: u8) -> TimedEvent {
-        TimedEvent { offset: 0, event: Event::NoteOff { key } }
+        TimedEvent { offset: 0, event: Event::note_off(key) }
     }
 
     #[test]

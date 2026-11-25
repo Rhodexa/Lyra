@@ -417,7 +417,7 @@ mod sampler_tests {
         s.set_sample(data);
         s.activate(48_000.0);
         let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
-        let on = [TimedEvent { offset: 0, event: Event::NoteOn { key: 48, velocity: 0.8 } }];
+        let on = [TimedEvent { offset: 0, event: Event::note_on(48, 0.8) }];
         let mut peak = 0.0f32;
         for block in 0..40 {
             let ev: &[TimedEvent] = if block == 0 { &on } else { &[] };

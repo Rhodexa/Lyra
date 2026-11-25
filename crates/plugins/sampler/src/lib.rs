@@ -148,9 +148,9 @@ impl Plugin for Sampler {
         for i in 0..ctx.out_l.len() {
             while let Some(e) = ctx.events.get(next).filter(|e| e.offset as usize <= i) {
                 match e.event {
-                    Event::NoteOn { key, velocity } => self.note_on(key, velocity),
+                    Event::NoteOn { key, velocity, .. } => self.note_on(key, velocity),
                     // One-shots ignore note-off: drums ring out.
-                    Event::NoteOff { key } if hold => self.release(Some(key), release_s),
+                    Event::NoteOff { key, .. } if hold => self.release(Some(key), release_s),
                     Event::AllNotesOff => self.release(None, QUICK_FADE),
                     _ => {}
                 }
@@ -212,7 +212,7 @@ mod tests {
     }
 
     fn on(key: u8) -> TimedEvent {
-        TimedEvent { offset: 0, event: Event::NoteOn { key, velocity: 1.0 } }
+        TimedEvent { offset: 0, event: Event::note_on(key, 1.0) }
     }
 
     /// How long the output keeps sounding, in frames.
@@ -248,7 +248,7 @@ mod tests {
         s.activate(48_000.0);
         assert!(run(&mut s, &[on(60)], 2_048).iter().all(|x| *x == 0.0));
         s.set_sample(sine(0.1, 48_000.0));
-        let off = TimedEvent { offset: 10, event: Event::NoteOff { key: 60 } };
+        let off = TimedEvent { offset: 10, event: Event::note_off(60) };
         let out = run(&mut s, &[on(60), off], 9_600);
         assert!(sounding(&out) > 4_000, "one-shot was cut by its note-off");
     }

@@ -18,18 +18,60 @@
 //! forever too: saved projects find their instruments by it. The catalog's
 //! `params.lock` test holds both to that.
 
+/// Which note an event is about, like CLAP's `note_id`: the host numbers
+/// every note it plays, and its on and off carry the same number, so two
+/// notes on one key (or a forecast and the note itself, see
+/// [`UpcomingNote`]) can't be confused. Notes the host can't number (played
+/// live) carry [`NO_ID`]; match those by key.
+pub type NoteId = u32;
+
+/// "No id" (CLAP's -1): match the note by its key.
+pub const NO_ID: NoteId = u32::MAX;
+
 /// Something that happens to a plugin at a precise sample inside a block.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
     NoteOn {
         key: u8,
         velocity: f32,
+        id: NoteId,
     },
     NoteOff {
         key: u8,
+        id: NoteId,
     },
     /// Silence everything quickly (transport stop, choke groups, panic).
     AllNotesOff,
+}
+
+impl Event {
+    /// A note-on without an id (a live note).
+    pub const fn note_on(key: u8, velocity: f32) -> Self {
+        Self::NoteOn { key, velocity, id: NO_ID }
+    }
+
+    /// A note-off without an id (a live note).
+    pub const fn note_off(key: u8) -> Self {
+        Self::NoteOff { key, id: NO_ID }
+    }
+}
+
+/// A note the host knows is coming: the `lyra.note-lookahead` extension
+/// (see [`Plugin::note_lookahead`]). CLAP has no such thing, but allows
+/// custom extensions; a plugin that needs one second of the future and
+/// doesn't get it delays itself instead and says so ([`Plugin::latency`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UpcomingNote {
+    /// Seconds from the first sample of this block to its start (at the
+    /// current tempo). Under one block = it starts in this block, and its
+    /// note-on is in this block's events too.
+    pub start: f64,
+    /// Seconds, at the current tempo.
+    pub len: f64,
+    pub key: u8,
+    pub velocity: f32,
+    /// The id its note-on and note-off will carry.
+    pub id: NoteId,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -101,7 +143,8 @@ pub struct ParamInfo {
     pub min: f32,
     pub max: f32,
     pub default: f32,
-    /// "Hz", "s", "%", "pan", "st" (semitones), "gain" (linear, shown in dB) or "" — display only.
+    /// "Hz", "s", "%", "pan", "st" (semitones), "gain" (linear, shown in dB),
+    /// "#" (a whole number) or "" — display only.
     pub unit: &'static str,
     pub curve: Curve,
     /// Non-empty = a choice parameter: the value is an index into these labels.
@@ -185,6 +228,7 @@ impl ParamInfo {
             "ct" => format!("{v:+.0} ct"),
             "oct" => format!("{v:+.2} oct"),
             "dB" => format!("{v:+.1} dB"),
+            "#" => format!("{:.0}", v.round()),
             // A linear gain, shown as what it does.
             "gain" if v <= 1e-5 => "−inf dB".to_string(),
             "gain" => format!("{:+.1} dB", gain_to_db(v)),
@@ -280,6 +324,26 @@ pub trait Plugin: Send {
     /// the same thing for editors Lyra draws itself.)
     fn telemetry(&self) -> Option<std::sync::Arc<dyn std::any::Any + Send + Sync>> {
         None
+    }
+    /// Extension `lyra.note-lookahead`: how many seconds of upcoming notes
+    /// this plugin wants to see (0, the default: none). Asked once, after
+    /// `activate`, on the UI thread.
+    fn note_lookahead(&self) -> f64 {
+        0.0
+    }
+    /// REAL-TIME. Extension `lyra.note-lookahead`: for plugins that asked,
+    /// called right before every `process` with every sequenced note
+    /// starting within the look-ahead, in start order: a complete, fresh list
+    /// each block (empty while stopped), so edits show up at once. It is a
+    /// **forecast**: the events in `process` stay the truth. A forecast note
+    /// can still be deleted before it starts, and live notes are never
+    /// forecast.
+    fn upcoming(&mut self, _notes: &[UpcomingNote]) {}
+    /// `clap.latency`: how many samples late this plugin's output is (a
+    /// plugin that needs look-ahead and isn't given it delays itself).
+    /// Lyra doesn't compensate yet; it gives look-ahead instead.
+    fn latency(&self) -> u32 {
+        0
     }
 }
 

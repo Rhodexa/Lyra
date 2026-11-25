@@ -22,6 +22,7 @@ pub fn instruments() -> &'static [&'static PluginInfo] {
             .chain(lyra_fluttersine::PLUGINS)
             .chain(lyra_chrysalis::PLUGINS.iter())
             .chain(lyra_sampler::PLUGINS)
+            .chain(octavia_lyra::PLUGINS)
             .collect()
     })
 }

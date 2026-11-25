@@ -17,10 +17,10 @@ fn with(values: &[(usize, f32)]) -> Chrysalis {
 }
 
 fn on(key: u8) -> TimedEvent {
-    TimedEvent { offset: 0, event: Event::NoteOn { key, velocity: 0.9 } }
+    TimedEvent { offset: 0, event: Event::note_on(key, 0.9) }
 }
 fn off(key: u8) -> TimedEvent {
-    TimedEvent { offset: 0, event: Event::NoteOff { key } }
+    TimedEvent { offset: 0, event: Event::note_off(key) }
 }
 
 /// Render both sides, 256-frame blocks; `events` go in the first block.
@@ -196,7 +196,7 @@ fn a_square_lfo_on_volume_gates_the_sound() {
 #[test]
 fn velocity_sets_the_loudness() {
     let at = |velocity: f32| {
-        let e = TimedEvent { offset: 0, event: Event::NoteOn { key: 60, velocity } };
+        let e = TimedEvent { offset: 0, event: Event::note_on(60, velocity) };
         peak(&render(&mut with(&[(p::osc(0, p::RAND), 0.0)]), &[e], 0.2).0)
     };
     let ratio = at(1.0) / at(0.25);
@@ -292,11 +292,11 @@ fn via_scales_a_route_by_a_second_source() {
         (p::slot(0, p::S_AMT), 0.5),
         (p::slot(0, p::S_VIA), crate::params::src::VELOCITY as f32),
     ];
-    let soft = TimedEvent { offset: 0, event: Event::NoteOn { key: 60, velocity: 0.0 } };
+    let soft = TimedEvent { offset: 0, event: Event::note_on(60, 0.0) };
     let a = render(&mut with(&v), &[soft], 0.2).0;
     let b = render(&mut with(&[(p::osc(0, p::RAND), 0.0), (p::AMP_VEL, 0.0)]), &[soft], 0.2).0;
     assert!(a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 1e-5));
-    let loud = TimedEvent { offset: 0, event: Event::NoteOn { key: 60, velocity: 1.0 } };
+    let loud = TimedEvent { offset: 0, event: Event::note_on(60, 1.0) };
     let c = render(&mut with(&v), &[loud], 0.2).0;
     assert!(c.iter().zip(&b).any(|(x, y)| (x - y).abs() > 0.05));
 }
@@ -328,7 +328,7 @@ fn velocity_can_set_a_note_lfos_speed() {
     let after = |velocity: f32| {
         let mut c = with(&v);
         c.transport(Transport { tempo: 120.0, playing: false, position: 0.0 });
-        let note = TimedEvent { offset: 0, event: Event::NoteOn { key: 48, velocity } };
+        let note = TimedEvent { offset: 0, event: Event::note_on(48, velocity) };
         render(&mut c, &[note], 0.125);
         c.voice_lfo(0, 0)
     };

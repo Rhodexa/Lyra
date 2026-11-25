@@ -1852,8 +1852,8 @@ impl Fm {
 
     fn handle(&mut self, e: Event) {
         match e {
-            Event::NoteOn { key, velocity } => self.note_on(key, velocity.clamp(0.0, 1.0)),
-            Event::NoteOff { key } => self.note_off(key),
+            Event::NoteOn { key, velocity, .. } => self.note_on(key, velocity.clamp(0.0, 1.0)),
+            Event::NoteOff { key, .. } => self.note_off(key),
             Event::AllNotesOff => {
                 self.stack_len = 0;
                 for v in self.voices.iter_mut().filter(|v| v.active) {
@@ -2040,10 +2040,10 @@ mod tests {
     }
 
     fn on(key: u8) -> TimedEvent {
-        TimedEvent { offset: 0, event: Event::NoteOn { key, velocity: 0.9 } }
+        TimedEvent { offset: 0, event: Event::note_on(key, 0.9) }
     }
     fn off(key: u8) -> TimedEvent {
-        TimedEvent { offset: 0, event: Event::NoteOff { key } }
+        TimedEvent { offset: 0, event: Event::note_off(key) }
     }
 
     fn with(values: &[(usize, f32)]) -> Fm {
@@ -2121,7 +2121,7 @@ mod tests {
     #[test]
     fn fm_in_scales_what_the_matrix_sends() {
         use p::*;
-        let loud = TimedEvent { offset: 0, event: Event::NoteOn { key: 60, velocity: 1.0 } };
+        let loud = TimedEvent { offset: 0, event: Event::note_on(60, 1.0) };
         let plain = render(&mut with(&[(op(0, OP_VEL), 0.0)]), &[loud], 0.2);
         // Op 2 modulates op 1, but velocity × -0.5 on "Op 1 FM in" scales that to zero.
         let cancelled = render(
@@ -2242,7 +2242,7 @@ mod tests {
     #[test]
     fn velocity_sets_the_loudness() {
         let at = |velocity: f32| {
-            let e = TimedEvent { offset: 0, event: Event::NoteOn { key: 60, velocity } };
+            let e = TimedEvent { offset: 0, event: Event::note_on(60, velocity) };
             peak(&render_lr(&mut with(&[]), &[e], 0.2).0)
         };
         let ratio = at(1.0) / at(0.25);

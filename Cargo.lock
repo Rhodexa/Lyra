@@ -1450,6 +1450,7 @@ dependencies = [
  "lyra-plugin",
  "lyra-sampler",
  "lyra-synth",
+ "octavia-lyra",
 ]
 
 [[package]]
@@ -2116,6 +2117,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8bb09a4a2b1d668170cfe0a7d5bc103f8999fb316c98099b6a9939c9f2e79d"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "octavia-core"
+version = "0.1.0"
+
+[[package]]
+name = "octavia-lyra"
+version = "0.1.0"
+dependencies = [
+ "lyra-plugin",
+ "octavia-core",
 ]
 
 [[package]]

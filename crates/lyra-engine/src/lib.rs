@@ -25,7 +25,7 @@
 //!
 //! That's the whole threading model: two threads, three one-way pipes.
 
-use lyra_plugin::{Event, ParamInfo, Plugin, ProcessContext, SampleData, TimedEvent, Transport};
+use lyra_plugin::{Event, NoteId, ParamInfo, Plugin, ProcessContext, SampleData, TimedEvent, Transport, UpcomingNote};
 use rtrb::{Consumer, Producer, RingBuffer};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::sync::Arc;
@@ -45,6 +45,8 @@ const MAX_EVENTS_PER_BLOCK: usize = 256;
 const MAX_PENDING_LIVE: usize = 64;
 /// Sequenced notes that can sound at once on one channel (chords + tails).
 const MAX_HELD: usize = 64;
+/// Most notes one forecast holds (see `Plugin::upcoming`).
+const MAX_UPCOMING: usize = 256;
 /// Gain smoothing per sample (avoids zipper noise when a fader moves).
 const SMOOTH: f32 = 0.002;
 
@@ -272,6 +274,10 @@ pub struct ChannelSlot {
     /// The engine releases these itself, so deleting a note mid-play (or
     /// swapping the whole sequence) can never leave it hanging.
     held: Vec<Held>,
+    /// Seconds of upcoming notes the plugin asked for (0 = none), and the
+    /// forecast handed to it each block.
+    lookahead: f64,
+    upcoming: Vec<UpcomingNote>,
     buf_l: Vec<f32>,
     buf_r: Vec<f32>,
     volume: f32,
@@ -288,8 +294,11 @@ impl ChannelSlot {
     /// Allocates everything this channel will ever need. UI thread only.
     pub fn new(mut plugin: Box<dyn Plugin>, sample_rate: f32) -> Box<Self> {
         plugin.activate(sample_rate);
+        let lookahead = plugin.note_lookahead().clamp(0.0, 10.0);
         Box::new(Self {
             plugin,
+            lookahead,
+            upcoming: Vec::with_capacity(if lookahead > 0.0 { MAX_UPCOMING } else { 0 }),
             events: Vec::with_capacity(MAX_EVENTS_PER_BLOCK),
             pending: Vec::with_capacity(MAX_PENDING_LIVE),
             held: Vec::with_capacity(MAX_HELD),
@@ -370,6 +379,7 @@ struct MixerTrack {
 #[derive(Clone, Copy)]
 struct Held {
     key: u8,
+    id: NoteId,
     /// Ticks from the start of the *next* block until note-off.
     remaining: f64,
 }
@@ -528,6 +538,18 @@ impl Shared {
 }
 
 /// Raise an atomic peak meter. Works because positive f32 bit patterns sort like the floats.
+/// A sequenced note's id on one pass of the loop: the same for its
+/// forecast, its note-on and its note-off, and stable while other notes are
+/// edited (it comes from the note's own key and place, not its index).
+fn note_id(note: &SeqNote, lap: u32) -> NoteId {
+    let mut x = (note.key as u64) | (note.start as u64) << 8 | (lap as u64) << 40;
+    // splitmix64's finaliser
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+    (x as u32).min(lyra_plugin::NO_ID - 1)
+}
+
 fn raise_peak(a: &AtomicU32, v: f32) {
     a.fetch_max(v.to_bits(), Relaxed);
 }
@@ -612,6 +634,9 @@ pub struct Engine {
     pos: f64,
     /// Where Play starts and Stop returns to (set by Seek).
     start_marker: f64,
+    /// Times round the loop (and transport jumps), so each pass of a note
+    /// gets its own id.
+    laps: u32,
     tempo: f64,
     swing: f32,
     master: f32,
@@ -649,6 +674,7 @@ pub fn create(sample_rate: f32) -> (Engine, EngineHandle) {
         looped: None,
         pos: 0.0,
         start_marker: 0.0,
+        laps: 0,
         tempo: 124.0,
         swing: 0.0,
         master: 0.8,
@@ -712,6 +738,7 @@ impl Engine {
             match cmd {
                 Command::Play => {
                     self.playing = true;
+                    self.laps = self.laps.wrapping_add(1);
                     self.pos = self.start_marker;
                 }
                 Command::SetLoop(range) => self.looped = range,
@@ -719,6 +746,7 @@ impl Engine {
                     let len = self.seq.length.max(1) as f64;
                     self.start_marker = tick.clamp(0.0, len - 1.0);
                     self.pos = self.start_marker;
+                    self.laps = self.laps.wrapping_add(1);
                 }
                 Command::Stop => {
                     self.playing = false;
@@ -815,7 +843,7 @@ impl Engine {
                     }
                 }
                 Command::Preview { mut slot, key } => {
-                    slot.pending.push(Event::NoteOn { key, velocity: 0.9 }); // capacity reserved
+                    slot.pending.push(Event::note_on(key, 0.9)); // capacity reserved
                     if let Some(old) = self.preview.replace(slot) {
                         self.discard(Trash::Channel(old));
                     }
@@ -879,6 +907,7 @@ impl Engine {
             }
         }
         let block_pos = self.pos;
+        let block_laps = self.laps; // before scheduling wraps the loop
         if self.playing && self.seq.length > 0 {
             // Automation first: this slice plays with the values the song has here.
             for i in 0..self.automation.lanes.len() {
@@ -888,6 +917,7 @@ impl Engine {
             }
             self.schedule(n);
         }
+        self.forecast(block_pos, block_laps);
         self.apply_chokes();
 
         // 2. Run every instrument, apply volume/pan, add it into its mixer track.
@@ -896,11 +926,14 @@ impl Engine {
             t.buf_r[..n].fill(0.0);
         }
         for (i, ch) in self.channels.iter_mut().enumerate() {
-            let ChannelSlot { plugin, events, buf_l, buf_r, .. } = &mut **ch;
+            let ChannelSlot { plugin, events, buf_l, buf_r, lookahead, upcoming, .. } = &mut **ch;
             // AllNotesOff sorts before a NoteOn at the same sample, so a choke
             // never kills the note that's starting right then. (In-place sort: no allocation.)
             events.sort_unstable_by_key(|e| (e.offset, !matches!(e.event, Event::AllNotesOff)));
             plugin.transport(transport);
+            if *lookahead > 0.0 {
+                plugin.upcoming(upcoming);
+            }
             plugin.process(ProcessContext {
                 sample_rate: self.sr,
                 events,
@@ -1052,7 +1085,7 @@ impl Engine {
                 if h.remaining < block_ticks {
                     let off = ((h.remaining / ticks_per_sample) as u32).min(n as u32 - 1);
                     if ch.events.len() < ch.events.capacity() {
-                        ch.events.push(TimedEvent { offset: off, event: Event::NoteOff { key: h.key } });
+                        ch.events.push(TimedEvent { offset: off, event: Event::NoteOff { key: h.key, id: h.id } });
                     }
                     ch.held.swap_remove(i); // no allocation
                 } else {
@@ -1064,21 +1097,23 @@ impl Engine {
 
         // A tick `t` in the loop sounds in this block if `t` or `t + len`
         // (after wrapping around the loop end) lies in [start, end).
-        let offset_of = |t: f64| -> Option<u32> {
+        // Also says which pass it is: 0 this one, 1 the next (wrapped).
+        let offset_of = |t: f64| -> Option<(u32, u32)> {
             if !(from..to).contains(&t) {
                 return None;
             }
-            [t, t + len]
+            [(t, 0), (t + len, 1)]
                 .into_iter()
-                .find(|&c| c >= start && c < end)
-                .map(|c| (((c - start) / ticks_per_sample) as u32).min(n as u32 - 1))
+                .find(|&(c, _)| c >= start && c < end)
+                .map(|(c, lap)| ((((c - start) / ticks_per_sample) as u32).min(n as u32 - 1), lap))
         };
 
         for note in &self.seq.notes {
             let Some(ch) = self.channels.get_mut(note.channel as usize) else { continue };
             let on = note.start as f64 + if (note.start / TICKS_PER_STEP) % 2 == 1 { swing_ticks } else { 0.0 };
 
-            if let Some(o) = offset_of(on) {
+            if let Some((o, lap)) = offset_of(on) {
+                let id = note_id(note, self.laps.wrapping_add(lap));
                 // Ticks from block start to this note's end (exact, before rounding to a sample).
                 let since_start = if on >= start { on - start } else { on + len - start };
                 let end_tick = since_start + note.len as f64;
@@ -1086,15 +1121,15 @@ impl Engine {
                     // Ends inside this very block.
                     let off = ((end_tick / ticks_per_sample) as u32).min(n as u32 - 1).max(o);
                     if ch.events.len() < ch.events.capacity() {
-                        ch.events.push(TimedEvent { offset: off, event: Event::NoteOff { key: note.key } });
+                        ch.events.push(TimedEvent { offset: off, event: Event::NoteOff { key: note.key, id } });
                     }
                 } else if ch.held.len() < ch.held.capacity() {
-                    ch.held.push(Held { key: note.key, remaining: end_tick - block_ticks });
+                    ch.held.push(Held { key: note.key, id, remaining: end_tick - block_ticks });
                 }
                 if ch.events.len() < ch.events.capacity() {
                     ch.events.push(TimedEvent {
                         offset: o,
-                        event: Event::NoteOn { key: note.key, velocity: note.velocity },
+                        event: Event::NoteOn { key: note.key, velocity: note.velocity, id },
                     });
                 }
                 self.shared.triggers[note.channel as usize].fetch_add(1, Relaxed);
@@ -1104,7 +1139,60 @@ impl Engine {
             }
         }
 
+        if end >= to {
+            self.laps = self.laps.wrapping_add(1);
+        }
         self.pos = from + (end - from) % len;
+    }
+
+    /// The `lyra.note-lookahead` forecast for every channel that asked:
+    /// each note starting in the next `lookahead` seconds from song tick
+    /// `start` (in pass `laps`), round the loop as often as it fits. Ids match what
+    /// `schedule` will give the notes. Empty while stopped. REAL-TIME.
+    fn forecast(&mut self, start: f64, laps: u32) {
+        let rolling = self.playing && self.seq.length > 0;
+        let ticks_per_second = self.tempo * PPQ as f64 / 60.0;
+        let (from, to) = self.span();
+        let len = to - from;
+        let swing_ticks = self.swing as f64 * TICKS_PER_STEP as f64 / 3.0;
+        for (c, ch) in self.channels.iter_mut().enumerate() {
+            if ch.lookahead <= 0.0 {
+                continue;
+            }
+            ch.upcoming.clear();
+            if !rolling {
+                continue;
+            }
+            let horizon = start + ch.lookahead * ticks_per_second;
+            for note in self.seq.notes.iter().filter(|n| n.channel as usize == c) {
+                let on = note.start as f64 + if (note.start / TICKS_PER_STEP) % 2 == 1 { swing_ticks } else { 0.0 };
+                if !(from..to).contains(&on) {
+                    continue;
+                }
+                // Its first pass at or after `start`, then every loop after.
+                let (mut at, mut lap) = if on >= start { (on, 0u32) } else { (on + len, 1) };
+                while at < horizon && ch.upcoming.len() < ch.upcoming.capacity() {
+                    ch.upcoming.push(UpcomingNote {
+                        start: (at - start) / ticks_per_second,
+                        len: note.len as f64 / ticks_per_second,
+                        key: note.key,
+                        velocity: note.velocity,
+                        id: note_id(note, laps.wrapping_add(lap)),
+                    });
+                    at += len;
+                    lap += 1;
+                }
+            }
+            // In place, no allocation (insertion sort: nearly sorted already).
+            let u = &mut ch.upcoming;
+            for i in 1..u.len() {
+                let mut j = i;
+                while j > 0 && u[j - 1].start > u[j].start {
+                    u.swap(j - 1, j);
+                    j -= 1;
+                }
+            }
+        }
     }
 
     /// Mix the listened-to sound's next `n` samples into its track. REAL-TIME.
@@ -1252,6 +1340,115 @@ mod tests {
         eng.process(&mut out, 2);
     }
 
+    /// (absolute sample, id, key) of every forecast entry seen.
+    type Said = Arc<Mutex<Vec<(u64, NoteId, u8)>>>;
+
+    /// Asks for one second of upcoming notes and remembers, per id, when the
+    /// forecasts said it would start (absolute sample), plus every event.
+    struct Seer {
+        log: Log,
+        said: Said,
+        clock: u64,
+    }
+
+    impl Plugin for Seer {
+        fn name(&self) -> &'static str {
+            "seer"
+        }
+        fn params(&self) -> &'static [ParamInfo] {
+            &[]
+        }
+        fn set_param(&mut self, _: u32, _: f32) {}
+        fn activate(&mut self, _: f32) {}
+        fn note_lookahead(&self) -> f64 {
+            1.0
+        }
+        fn upcoming(&mut self, notes: &[UpcomingNote]) {
+            let mut said = self.said.lock().unwrap();
+            for w in notes.windows(2) {
+                assert!(w[0].start <= w[1].start, "in start order");
+            }
+            for n in notes {
+                assert!(n.start >= 0.0 && n.start < 1.0, "inside the look-ahead: {n:?}");
+                said.push((self.clock + (n.start * 48_000.0).round() as u64, n.id, n.key));
+            }
+        }
+        fn process(&mut self, ctx: ProcessContext<'_>) {
+            let mut log = self.log.lock().unwrap();
+            for e in ctx.events {
+                log.push((self.clock + e.offset as u64, e.event));
+            }
+            self.clock += ctx.out_l.len() as u64;
+            ctx.out_l.fill(0.0);
+        }
+    }
+
+    #[test]
+    fn the_forecast_names_every_note_before_it_plays_even_round_the_loop() {
+        let (mut eng, mut h, _) = setup();
+        let (log, said): (Log, Said) = Default::default();
+        let seer = Seer { log: log.clone(), said: said.clone(), clock: 0 };
+        h.send(Command::Arrange(Arrangement::new(vec![Place::Fresh(Some(ChannelSlot::new(
+            Box::new(seer),
+            48_000.0,
+        )))])));
+        // A one-bar loop (2 s at 120 bpm) of four quarter notes.
+        let notes = (0..4).map(|b| SeqNote { key: 60 + b as u8, ..note(b * 96, 48) }).collect();
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes })));
+        h.send(Command::Play);
+        run(&mut eng, 48_000 * 5); // two and a half passes
+        let (log, said) = (log.lock().unwrap(), said.lock().unwrap());
+        let ons: Vec<(u64, NoteId, u8)> = log
+            .iter()
+            .filter_map(|&(at, e)| match e {
+                Event::NoteOn { key, id, .. } => Some((at, id, key)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ons.len(), 11, "{ons:?}");
+        let mut ids: Vec<NoteId> = ons.iter().map(|o| o.1).collect();
+        ids.dedup();
+        assert_eq!(ids.len(), 11, "every pass of a note is a new id");
+        for &(at, id, key) in &ons {
+            let seen: Vec<&(u64, NoteId, u8)> = said.iter().filter(|s| s.1 == id).collect();
+            assert!(!seen.is_empty(), "note {key} at {at} was never forecast");
+            // Seen in advance (a full second for all but the first notes),
+            // at the right time, and with the right key.
+            assert!(seen.iter().all(|s| s.2 == key && s.0.abs_diff(at) <= 1), "{key} at {at}: {seen:?}");
+            if at > 48_000 {
+                assert!(seen.len() > 100, "seen for a second ahead, {} blocks", seen.len());
+            }
+            let off = log.iter().find(|(_, e)| matches!(e, Event::NoteOff { id: i, .. } if *i == id));
+            assert!(off.is_none_or(|o| o.0 > at), "its note-off carries the same id");
+        }
+    }
+
+    #[test]
+    fn a_stopped_song_forecasts_nothing_and_an_edit_shows_at_once() {
+        let (mut eng, mut h, _) = setup();
+        let (log, said): (Log, Said) = Default::default();
+        let seer = Seer { log, said: said.clone(), clock: 0 };
+        h.send(Command::Arrange(Arrangement::new(vec![Place::Fresh(Some(ChannelSlot::new(
+            Box::new(seer),
+            48_000.0,
+        )))])));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(192, 48)] })));
+        run(&mut eng, 10_000);
+        assert!(said.lock().unwrap().is_empty(), "stopped");
+        h.send(Command::Play);
+        run(&mut eng, 512);
+        assert!(said.lock().unwrap().iter().all(|s| s.2 == 60), "the note one second ahead");
+        assert!(!said.lock().unwrap().is_empty());
+        said.lock().unwrap().clear();
+        h.send(Command::SetSequence(Box::new(Sequence {
+            length: 384,
+            notes: vec![SeqNote { key: 62, ..note(192, 48) }],
+        })));
+        run(&mut eng, 512);
+        let said = said.lock().unwrap();
+        assert!(!said.is_empty() && said.iter().skip(1).all(|s| s.2 == 62), "edited: {said:?}");
+    }
+
     #[test]
     fn note_off_lands_at_note_end() {
         let (mut eng, mut h, log) = setup();
@@ -1274,7 +1471,7 @@ mod tests {
         h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] }))); // user deletes it
         run(&mut eng, 30_000);
         let log = log.lock().unwrap();
-        assert!(log.iter().any(|(_, e)| matches!(e, Event::NoteOff { key: 60 })), "the note must not hang");
+        assert!(log.iter().any(|(_, e)| matches!(e, Event::NoteOff { key: 60, .. })), "the note must not hang");
     }
 
     #[test]
@@ -1360,7 +1557,7 @@ mod tests {
         h.send(Command::AddChannel(ChannelSlot::new(Box::new(Recorder { log: open.clone(), clock: 0 }), 48_000.0)));
         h.send(Command::SetMix { channel: 0, volume: 0.8, pan: 0.0, mute: false, choke: 1 });
         h.send(Command::SetMix { channel: 1, volume: 0.8, pan: 0.0, mute: false, choke: 1 });
-        h.send(Command::Live { channel: 0, event: Event::NoteOn { key: 42, velocity: 1.0 } });
+        h.send(Command::Live { channel: 0, event: Event::note_on(42, 1.0) });
         run(&mut eng, 256);
         assert!(open.lock().unwrap().iter().any(|(_, e)| matches!(e, Event::AllNotesOff)), "the open hat is cut");
         assert!(!log.lock().unwrap().iter().any(|(_, e)| matches!(e, Event::AllNotesOff)), "not the one played");

@@ -20,6 +20,8 @@ lyra-drums       = { path = "crates/plugins/drums" }
 lyra-synth       = { path = "crates/plugins/synth" }
 lyra-sampler     = { path = "crates/plugins/sampler" }
 lyra-effects     = { path = "crates/plugins/effects" }
+# Plugins living in their own repos next door, listed by path.
+octavia-lyra     = { path = "../LyraRelated/Octavia/crates/octavia-lyra" }
 # Editors live beside their plugin; the two synths share a frozen look.
 lyra-shared-look        = { path = "crates/plugins/shared-look" }
 lyra-fluttersine-editor = { path = "crates/plugins/fluttersine/editor" }

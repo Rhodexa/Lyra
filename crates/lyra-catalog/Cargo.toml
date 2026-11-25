@@ -13,3 +13,4 @@ lyra-drums.workspace = true
 lyra-synth.workspace = true
 lyra-sampler.workspace = true
 lyra-effects.workspace = true
+octavia-lyra.workspace = true

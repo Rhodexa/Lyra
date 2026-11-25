@@ -859,3 +859,16 @@ lyra.chrysalis	578	LFO 3 style
 lyra.chrysalis	579	LFO 4 style
 lyra.fluttersine	193	Tone
 lyra.fluttersine	194	Time
+lyra.octavia	0	Intonation
+lyra.octavia	1	Dexterity
+lyra.octavia	2	Bowing
+lyra.octavia	3	Composure
+lyra.octavia	4	Expression
+lyra.octavia	5	Vibrato
+lyra.octavia	6	Breath
+lyra.octavia	7	Performer
+lyra.octavia	8	Character
+lyra.octavia	9	Instrument
+lyra.octavia	10	Patch
+lyra.octavia	11	Double stops
+lyra.octavia	12	Take
