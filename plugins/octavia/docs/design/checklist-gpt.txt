@@ -1,0 +1,63 @@
+OCTAVIA — REMAINING REALISM AND INTERFACE CHECKLIST
+
+Only outstanding work and design proposals; already implemented features
+omitted.
+
+BOW–STRING INTERACTION [ ] Pre-attack grit: model friction as the bow
+engages before stable oscillation, where the gesture warrants it. [ ]
+Imperfect starts: occasional scratch, hesitation or unstable attack
+followed by recovery; depend on preparation, force and speed. [ ]
+Correlated friction variability rather than independent random noise. [
+] Model bow contact position: sul tasto (warm), ordinario (balanced),
+sul ponticello (bright/glassy). [ ] Use relative contact position beta =
+distance from bridge / vibrating string length; account for fingering
+changes. [ ] Coordinate bow position, force and velocity to maintain
+stable oscillation; allow instability when coordination fails. [ ]
+Reinterpret existing brightness knob as a tonal target for the
+performer; avoid treating brightness solely as filtering. Preserve
+harmonic changes and natural timbral variation.
+
+LEFT HAND [ ] Finger sliding noise during legato and position shifts,
+especially on wound strings. [ ] Subtle hand/neck repositioning friction
+where physically appropriate. [ ] Pitch overshoot/undershoot after
+difficult or hurried shifts. [ ] Progressive intonation correction after
+inaccurate placement.
+
+VIBRATO [ ] Be more selective: straight notes are valid expressive
+choices. [ ] Make rate, depth and evolution respond to phrasing and
+intent. [ ] Expose stylistic vibrato preference separately from
+performer authority. [ ] Double-stop vibrato: shared hand gesture,
+correlated motion, potentially different pitch depths. [ ] Reduce or
+omit vibrato for awkward stretches, high workload and difficult double
+stops. [ ] No direct finger vibrato on open strings; indirect coupling
+may still occur.
+
+PERFORMER [ ] Estimate workload from gesture difficulty, stretches,
+shifts and preparation time. [ ] Introduce workload-dependent motor
+errors and recovery (the skill issue). [ ] Correlate motor errors over
+time rather than independent jitter. [ ] Allow physically valid
+variation between performances. [ ] Expose skill dimensions: intonation,
+dexterity, bowing, composure (proposed categories).
+
+FACEPLATE / UX [ ] Performer-first, slider-based interface; no miniature
+piano. [ ] Separate musicianship (ability), character/decorations
+(stylistic preference), and artistic freedom (decision authority). [ ]
+Character sliders: vibrato, slides, rubato, ornaments (proposed;
+rubato/ornaments require implementation decisions). [ ] Per-feature I
+choose / You choose sliders: vibrato, articulation, phrasing,
+portamento, dynamics, tone. [ ] Define intermediate authority as
+constrained interpretation, not random obedience. Specify how explicit
+MIDI/automation instructions take precedence. [ ] Keep brightness as a
+tonal target; consider body, dynamics and incidental noise controls in
+secondary voice section. [ ] LCD telemetry: string/fingering, bow
+contact, workload, composure, intonation, vibrato and gesture; optional
+event log and spectrum for debugging. [ ] Performer profiles (proposed):
+concert cellist, student, virtuoso, session player. [ ] Visual language:
+coat gray #777079, charcoal #343039, bow pink #D98CB4, ivory LCD
+#F0E7E6; four-tone monochrome display, flat chassis, retro Mario Paint
+character, no pony illustration.
+
+DESIGN PRINCIPLE Imperfections should arise from physical actions,
+expressive choices and performer limitations, not arbitrary
+randomization. Skill and stylistic preference are independent. Proposed
+controls and priorities are not confirmed DSP architecture.
