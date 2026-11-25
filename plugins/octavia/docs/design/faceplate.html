@@ -72,7 +72,7 @@ th{color:var(--page-dim);font-weight:600}
 .plate.nopurf .purf{display:none}
 .head{display:flex;align-items:center;gap:12px;margin-bottom:14px;position:relative}
 .mark{display:flex;align-items:center;gap:10px}
-.mark svg{display:block}
+.logo{display:block;height:54px;margin:-6px 0 0 -6px}
 .word{font:900 38px/1 var(--mark-font);letter-spacing:-.02em;color:var(--text-primary)}
 .sub{font:600 9px/1 var(--label-font);letter-spacing:.2em;text-transform:uppercase;color:var(--text-secondary);margin-top:6px}
 .head .grow{flex:1}
@@ -122,7 +122,7 @@ th{color:var(--page-dim);font-weight:600}
 </head>
 <body>
 <main>
-<h1>Octavia · faceplate <span class="draft">DRAFT 2</span></h1>
+<h1>Octavia · faceplate <span class="draft">APPROVED</span></h1>
 <p>The instrument page Octavia shows inside Lyra: a synth made to be cheap. Drawn from <code>colors.css</code> and the brief in <code>docs/FACEPLATE.md</code>. Press <b>Play</b>: the LCD is driven by a <b>real render</b> (the engine's decisions, ringing strings and curves, plus its sound), the same data the telemetry will carry. Touch a control and its value shows on the LCD.</p>
 
 <div class="card">
@@ -132,7 +132,10 @@ th{color:var(--page-dim);font-weight:600}
     <li>LCD colours: <code>--lcd-0…3</code> (the lavender set).</li>
     <li>The LCD cheats: plain text with LCD shadows (the colours and shadows sell it, not segment shapes); segments only for the take. Unlit things are off or barely there, never half-lit.</li>
     <li>Meters are BIOS-style outlined boxes with blocks taller than wide; no curves.</li>
-    <li>Knobs round, with an arc. Logo: later, probably a raster.</li>
+    <li>Knobs round, in a wide dark groove with the pink value inside; faders for the four skills.</li>
+    <li>The neck along the bottom, seen from the side: fingers at the engine's real pitch, solid when played, hollow when held, slide trails; the hand's reach as a bracket.</li>
+    <li>The plate: screen at 0.68 beside style; player and voice below. Every tuner default here is settled (2026-11-25).</li>
+    <li>Logo: <code>logo.palette.png</code> (Rhodexa's art on the palette). Port guide: <code>docs/FACEPLATE.md</code>.</li>
   </ul>
 </div>
 
@@ -149,12 +152,8 @@ th{color:var(--page-dim);font-weight:600}
   <div class="purf"></div>
   <div class="head">
     <div class="mark">
-      <svg width="46" height="28" viewBox="0 0 46 28" aria-hidden="true">
-        <path d="M2 3 L20 11 L20 17 L2 25 Z M44 3 L26 11 L26 17 L44 25 Z" fill="var(--bow-tie)" stroke="var(--mane-outline)" stroke-width="2.5" stroke-linejoin="miter"/>
-        <rect x="18" y="8.5" width="10" height="11" fill="var(--bow-tie-outline)" stroke="var(--mane-outline)" stroke-width="2.5"/>
-      </svg>
       <div>
-        <div class="word">octavia</div>
+        <img class="logo" src="logo.palette.png" alt="octavia">
         <div class="sub">string performer · model 01</div>
       </div>
     </div>

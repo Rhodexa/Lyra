@@ -9,3 +9,5 @@ Cargo.lock.bak
 /midi
 # Faceplate tapes made from MIDI files (may be copyrighted)
 /docs/design/tapes/local
+# editor backups (Krita and friends)
+*~

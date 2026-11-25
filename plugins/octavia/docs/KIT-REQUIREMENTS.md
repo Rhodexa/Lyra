@@ -65,20 +65,47 @@ layout (they move into their plugins), nor anything from Lyra's own theme.
 
 ## C. Octavia's telemetry (so the kit can carry it)
 
-Updated by the audio thread at the end of each block, atomics only, the
-UI only reads:
+Settled by the faceplate mock (2026-11-25), which plays real renders: this
+is what its LCD actually reads (`docs/FACEPLATE.md`). Written by the audio
+thread at the end of each block, read by the UI at up to 60 Hz; atomics or
+a seqlock, never a lock the audio thread waits on. The mock had to
+*reconstruct* some of it from events (finger lifts from taps, held fingers
+from ring events); the engine knows these directly and should say them.
 
-* **the note being played**: how it's played (from silence, new bow, slurred,
-  staccato, bounced, tremolo, plucked), down/up bow, string, open or
-  stopped, double stop + its second note, hand position and last shift;
-* **the bow, now**: loudness, brightness, grit, noise (the frame values);
-* **the player, now**: workload, composure;
-* **the strings**: for each of the four, whether it's bowed, ringing on
-  (crossing / finger lift) and how loud;
-* **recent decisions**: a small ring buffer (the last ~16 notes with their
-  decisions) for the LCD's note lane and event log;
-* **pitch vs. target**: how far the current note is from the written pitch
-  (intonation, vibrato), for a tuner-like readout.
+```rust
+// a sketch, not an API: names and packing are the Octavia session's call
+struct Telemetry {
+    // now (latest frame)
+    loudness: f32, brightness: f32, grit: f32,       // 0..1
+    pitch: f32, pitch2: f32,                         // fractional MIDI (0 = none)
+    string: u8, string2: u8,                         // 0 = lowest
+    // the tuner, computed by the engine so the UI needn't sample 250 Hz frames:
+    // where the note sits vs. written (cents, onset glide excluded, ~0.15 s
+    // mean) and how far the vibrato swings
+    cents: Option<f32>, vib_lo: f32, vib_hi: f32,
+    // the left hand
+    hand: f32,                                       // lowest semitone it covers
+    strings: [StringState; 4],
+    // the player
+    workload: f32, composure: f32,                   // 0..1
+    // decisions: the last ~10 played and the next 4 planned (the look-ahead)
+    recent: Ring<NoteDecision, 10>, upcoming: [Option<NoteDecision>; 4],
+    seq: u64,                                        // bumps when anything changes
+}
+struct StringState {
+    sound: Silent | Bowed | Plucked | Ringing { level: f32 },
+    finger: Option<f32>,     // stopped pitch (fractional MIDI) if a finger is down
+    sliding_from: Option<f32>, // set while a legato shift slides along it
+}
+struct NoteDecision {
+    start: f64, len: f64, pitch: u8, pitch2: Option<u8>,
+    played: Played, down: bool, string: u8, open: bool,
+    hand: f32, shift: f32, workload: f32, composure: f32,
+}
+```
+
+Static, once per instrument: open-string pitches, `hand_span`, the names of
+the strings (C G D A / G D A E).
 
 ## D. Order of work
 
@@ -88,4 +115,4 @@ UI only reads:
    audio out; playable with Lyra's generic editor.
 3. Upcoming-notes extension + latency (Lyra + Octavia).
 4. Telemetry (Octavia).
-5. Faceplate (from `docs/FACEPLATE.md` and Rhodexa's design).
+5. Faceplate port (`docs/FACEPLATE.md`, approved; spec `docs/design/faceplate.html`).

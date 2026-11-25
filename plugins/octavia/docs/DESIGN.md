@@ -96,6 +96,8 @@ automatically during playback. Notes whose length is unknown until note-off
    bow planning (hooked bowing), rubato.
 5. **Lyra**: plugin kit (Lyra session, `KIT-REQUIREMENTS.md`), adapter,
    upcoming-notes extension, telemetry, faceplate (`FACEPLATE.md`).
+   Faceplate designed and approved 2026-11-25; the three sessions that
+   remain are in `HANDOFF.md`.
 6. Timbre model trained on clean-licensed solo recordings (Iowa MIS first).
    Small: curves in, overtone levels out. CPU inference written by hand.
 7. Maybe a learned performer, if the rules plateau.
