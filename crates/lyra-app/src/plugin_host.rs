@@ -11,7 +11,8 @@ use lyra_plugin::SampleData;
 use std::path::{Path, PathBuf};
 
 /// Every plugin with its own editor. The rest get the generic one (editor.rs).
-pub const EDITORS: &[Editor] = &[lyra_fluttersine_editor::EDITOR, lyra_chrysalis_editor::EDITOR];
+pub const EDITORS: &[Editor] =
+    &[lyra_fluttersine_editor::EDITOR, lyra_chrysalis_editor::EDITOR, octavia_editor::EDITOR];
 
 /// The hand-made editor for `plugin`, if it has one.
 pub fn editor_for(plugin: &str) -> Option<&'static Editor> {

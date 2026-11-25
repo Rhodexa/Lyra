@@ -52,7 +52,7 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
         }
         // Factory presets and yours, and "Save as" (hand-made editors have their own pickers).
         let melodic_or_drum = lyra_catalog::info(&instrument).is_some();
-        if melodic_or_drum && instrument != "lyra.fluttersine" && instrument != "lyra.chrysalis" {
+        if melodic_or_drum && crate::plugin_host::editor_for(&instrument).is_none() {
             ui.add_space(8.0);
             ui.label(RichText::new("preset").small().color(theme::TEXT_DIM));
             let params = p.channels[ch].params.clone();

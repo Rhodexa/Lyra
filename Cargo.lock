@@ -1432,6 +1432,7 @@ dependencies = [
  "lyra-sampler",
  "lyra-synth",
  "midly",
+ "octavia-editor",
  "png",
  "rfd",
  "rtrb",
@@ -2122,6 +2123,17 @@ dependencies = [
 [[package]]
 name = "octavia-core"
 version = "0.1.0"
+
+[[package]]
+name = "octavia-editor"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "lyra-kit",
+ "lyra-plugin",
+ "octavia-core",
+ "octavia-lyra",
+]
 
 [[package]]
 name = "octavia-lyra"

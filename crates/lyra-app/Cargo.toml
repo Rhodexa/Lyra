@@ -15,6 +15,7 @@ lyra-catalog.workspace = true
 lyra-kit.workspace = true
 lyra-fluttersine-editor.workspace = true
 lyra-chrysalis-editor.workspace = true
+octavia-editor.workspace = true
 lyra-fluttersine.workspace = true
 lyra-chrysalis.workspace = true
 lyra-dsp.workspace = true
