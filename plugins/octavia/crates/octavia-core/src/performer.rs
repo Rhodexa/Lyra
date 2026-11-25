@@ -132,9 +132,12 @@ impl Skill {
 
     /// How large a player's mistakes in one skill are right now: a little
     /// from the skill itself, more under load, more still when rattled.
+    /// Grows much faster than the skill drops: a good player barely moves,
+    /// a student's misses are plain to hear (15–30 cents, loose strokes).
     fn error(skill: f32, workload: f32, composure: f32) -> f32 {
         let stress = workload * (1.5 - composure);
-        (1.0 - skill) + 0.8 * stress * (1.1 - skill)
+        let base = (1.0 - skill) + 0.8 * stress * (1.1 - skill);
+        base + 4.0 * base * base
     }
 }
 
