@@ -36,10 +36,10 @@
 
     /* LCD — GAME BOY INSPIRED */
 
-    --lcd-0:            #BEC5B2;
-    --lcd-1:            #9CA58F;
-    --lcd-2:            #707B65;
-    --lcd-3:            #283126;
+    --lcd-0: #C4C3CF;
+    --lcd-1: #A4A2B2;
+    --lcd-2: #777584;
+    --lcd-3: #292830;
 
     --lcd-background:   var(--lcd-0);
     --lcd-inactive:     var(--lcd-1);
