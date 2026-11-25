@@ -23,7 +23,11 @@ Everything lands in `renders/`:
 The written notes are coloured by how Octavia chose to play them:
 **blue** from silence · **teal** new bow stroke · **purple** slurred ·
 **red** staccato · **orange** bounced (spiccato) · **green** plucked.
-`--explain` prints the same thing as text, note by note.
+`--explain` prints the same thing as text, note by note, with the bow
+direction (↓ down, ↑ up), string, hand position, workload and composure.
+
+The player: `--player concert|student|virtuoso|session`, or one skill at a
+time with `--intonation`, `--dexterity`, `--bowing`, `--composure` (0..1).
 
 Useful A/B switches: `--expression 0` (deadpan, rules off), `--vibrato 0`,
 `--breath 2` (more steady bow noise), `--bright 1` (bright, powerful character),

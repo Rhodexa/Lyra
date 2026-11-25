@@ -27,6 +27,11 @@
 //!   seconds of a phrase and relaxes as the visible end approaches.
 //! * **High-loud**: higher notes are played a little louder.
 //! * **Short-soft**: very short notes are a little softer.
+//! * **The bow arm**: strokes alternate down and up (down-bows heavier, with
+//!   more bite); no two are alike and the bow bites a few ms late, more so
+//!   for a less skilled or busier arm. Short strokes dip less. A bow can't
+//!   bounce faster than about 12 notes a second: beyond that, tiny strokes
+//!   on the string.
 //! * **Bow changes** dip the loudness and puff some bow noise; **slurred**
 //!   notes keep the bow moving: a finger lands in ~8 ms, a string crossing
 //!   is instant, and only big expressive shifts slide.
@@ -162,6 +167,8 @@ pub struct Decision {
     /// How loaded the player was at this note, and how composed (0..1).
     pub workload: f32,
     pub composure: f32,
+    /// Down-bow (true) or up-bow.
+    pub down: bool,
 }
 
 /// Something the instrument must do at an exact time, besides the frames.
@@ -240,6 +247,14 @@ struct Plan {
     shift: f32,
     workload: f32,
     composure: f32,
+    /// Down-bow (true) or up-bow.
+    down: bool,
+    /// How late the bow bites after the written start, seconds.
+    late: f32,
+    /// The dip into the next bow change: how deep (the floor) and how long.
+    /// Short strokes are tiny, so they dip less.
+    stroke_floor: f32,
+    stroke_time: f32,
 }
 
 /// A streaming performer. Feed it notes (in start order, ideally at least
@@ -269,6 +284,12 @@ pub struct Performer {
     /// while instead of re-rolling every note.
     hand_bias: Wander,
     bias: f32,
+    /// The bow arm: which way the next stroke goes, and its slow drift.
+    bow_down: bool,
+    arm: Wander,
+    arm_now: f32,
+    /// When the last bow stroke began (slurred notes share one).
+    last_stroke: f64,
 }
 
 impl Performer {
@@ -293,6 +314,10 @@ impl Performer {
             last_start: 0.0,
             hand_bias: Wander::new(style.seed ^ 0xB1A5, 0.25),
             bias: 0.0,
+            bow_down: true,
+            arm: Wander::new(style.seed ^ 0xA2A2, 0.6),
+            arm_now: 0.0,
+            last_stroke: f64::MIN,
         }
     }
 
@@ -329,6 +354,7 @@ impl Performer {
                     shift: p.shift,
                     workload: p.workload,
                     composure: p.composure,
+                    down: p.down,
                 }
             })
             .collect()
@@ -365,6 +391,7 @@ impl Performer {
         let rate = (self.inst.vibrato_rate + 0.35 * self.rate_wander.next(dt as f32)) * note_rate;
         self.vib_phase = (self.vib_phase + TAU * rate as f64 * dt) % TAU;
         self.bias = self.hand_bias.next(dt as f32);
+        self.arm_now = self.arm.next(dt as f32);
 
         let mut frame = match self.owner {
             None => Frame {
@@ -568,6 +595,14 @@ impl Performer {
                 _ => false,
             };
         // Fast notes bowed separately (no slur on either side) bounce.
+        // A bow can only bounce so fast (about 12 strokes a second; quicker
+        // hands a bit more). Beyond that it stays on the string in tiny
+        // strokes. Strokes, not notes: a slurred pickup is one stroke.
+        let quickest = [next.map(|q| q.start - n.start), Some(n.start - self.last_stroke)]
+            .into_iter()
+            .flatten()
+            .fold(f64::MAX, f64::min) as f32;
+        let can_bounce = 1.0 / quickest.max(1e-3) <= 9.0 + 4.0 * self.style.skill.dexterity;
         let fast = next.is_some_and(|q| q.start - n.start < FAST + 0.02)
             || prev.is_some_and(|(pn, _)| n.start - pn.start < FAST + 0.02);
         let slur_out = next.is_some() && i + 1 < self.notes.len() && self.slur_rule(i, staccato);
@@ -575,7 +610,9 @@ impl Performer {
             && match n.articulation {
                 Articulation::Spiccato => true,
                 // Only short notes bounce: a long note after a fast run is bowed.
-                Articulation::Auto => n.dur < FAST + 0.02 && fast && !staccato && entry != Entry::Legato && !slur_out,
+                Articulation::Auto => {
+                    n.dur < FAST + 0.02 && fast && can_bounce && !staccato && entry != Entry::Legato && !slur_out
+                }
                 _ => false,
             };
 
@@ -651,6 +688,31 @@ impl Performer {
             level -= e * 0.04;
         }
         let level = level.clamp(0.05, 1.0);
+
+        // The bow arm: strokes alternate down and up (a down-bow is heavier,
+        // and bites a little more), no two quite alike, and the bow bites a
+        // few milliseconds late. A less skilled or busier arm varies more;
+        // the variation drifts slowly rather than jittering.
+        let new_stroke = entry != Entry::Legato && !pizz;
+        let down = if !new_stroke {
+            self.bow_down
+        } else if from_silence {
+            true
+        } else {
+            !self.bow_down
+        };
+        let berr = Skill::error(self.style.skill.bowing, workload, composure);
+        let (level, late) = if new_stroke {
+            let wobble = (0.03 + 0.12 * berr) * (0.6 * self.arm_now + 0.4 * hash_bipolar(seed ^ 0xA2E, i));
+            let dir = if down { 0.04 } else { -0.04 };
+            let late = e.min(1.0) * (0.002 + 0.014 * berr) * h01(0x1A7E);
+            ((level * (1.0 + e * (dir + wobble))).clamp(0.05, 1.0), late)
+        } else {
+            (level, 0.0)
+        };
+        let step_next = next.map_or(1.0, |q| (q.start - n.start) as f32);
+        let stroke_floor = BOW_CHANGE_FLOOR + 0.4 * (1.0 - smoothstep((step_next - 0.06) / 0.14));
+        let stroke_time = BOW_CHANGE_TIME.min(0.3 * step_next);
 
         // Intonation (cents). Where the finger first lands is corrected by
         // ear; a little stays. Both grow with load and nerves, and both carry
@@ -743,7 +805,7 @@ impl Performer {
             settle_tau,
             entry,
             attack,
-            accent,
+            accent: accent + if down && new_stroke { 0.1 * e.min(1.0) } else { 0.0 },
             staccato,
             spiccato,
             level,
@@ -763,6 +825,10 @@ impl Performer {
             shift: fingering.shift,
             workload,
             composure,
+            down,
+            late,
+            stroke_floor,
+            stroke_time,
         };
 
         // Events.
@@ -813,6 +879,10 @@ impl Performer {
         self.hand = fingering.hand;
         self.workload = workload;
         self.composure = composure;
+        self.bow_down = down;
+        if new_stroke {
+            self.last_stroke = n.start;
+        }
         self.last_start = n.start;
         self.plans.push(plan);
     }
@@ -840,22 +910,25 @@ impl Performer {
         let n = &self.notes[i];
         let p = &self.plans[i];
         let since = (t - n.start) as f32;
+        // The bow bites a touch late; the finger is already there.
+        let since_a = (since - p.late).max(0.0);
+        let floor_in = i.checked_sub(1).map_or(BOW_CHANGE_FLOOR, |j| self.plans[j].stroke_floor);
         let sound_end = self.sound_end(i, t);
         let exit = self.exit(i, t);
 
         // Bow envelope: how the attack rises…
         let rise = match p.entry {
             Entry::Legato => 1.0 - 0.06 * (-(since / 0.03).powi(2)).exp(),
-            Entry::BowChange => BOW_CHANGE_FLOOR + (1.0 - BOW_CHANGE_FLOOR) * smoothstep(since / p.attack),
-            Entry::Fresh => smoothstep(since / p.attack),
+            Entry::BowChange => floor_in + (1.0 - floor_in) * smoothstep(since_a / p.attack),
+            Entry::Fresh => smoothstep(since_a / p.attack),
         };
-        let bite = 1.0 + 0.35 * p.accent * (-since / 0.08).exp() * smoothstep(since / p.attack);
+        let bite = 1.0 + 0.35 * p.accent * (-since_a / 0.08).exp() * smoothstep(since_a / p.attack);
         // …and how the note leaves.
         let fall = match exit {
             Exit::Legato => 1.0,
             Exit::BowChange => {
                 let to_end = (sound_end - t) as f32;
-                1.0 - (1.0 - BOW_CHANGE_FLOOR) * smoothstep(1.0 - to_end / BOW_CHANGE_TIME)
+                1.0 - (1.0 - p.stroke_floor) * smoothstep(1.0 - to_end / p.stroke_time)
             }
             Exit::Decay(tau) => {
                 if t > sound_end {
@@ -874,7 +947,7 @@ impl Performer {
         let shape = 1.0 + p.swell * (std::f32::consts::PI * prog).sin() - fade;
         // A bounce: the bow drops, grips for a moment and lifts off; the
         // string keeps ringing until the next drop.
-        let bounce = 0.18 + 0.82 * smoothstep(since / 0.01) * (-(since - 0.01).max(0.0) / 0.065).exp();
+        let bounce = 0.18 + 0.82 * smoothstep(since_a / 0.01) * (-(since_a - 0.01).max(0.0) / 0.065).exp();
         // Once the finger lifts, the stopped note is choked (the open string
         // carries on as a separate ring).
         let lifted = self.lift_at(i, t).map_or(1.0, |lift| if t > lift { (-((t - lift) as f32) / 0.008).exp() } else { 1.0 });
@@ -911,13 +984,15 @@ impl Performer {
 
         // Bow contact: louder and accented means closer to the bridge, brighter.
         let tone = self.inst.string_tone[p.string as usize];
-        let attack_bite = if p.entry == Entry::Legato { 0.0 } else { (0.12 + 0.25 * p.accent) * (-since / 0.09).exp() };
+        let attack_bite = if p.entry == Entry::Legato { 0.0 } else { (0.12 + 0.25 * p.accent) * (-since_a / 0.09).exp() };
         // A free-ringing string (bow lifted or stopped) loses its highs first.
         let release_dark = if matches!(exit, Exit::Decay(_)) && t > sound_end { 0.35 * (1.0 - fall) } else { 0.0 };
         // A lifted bow leaves the string ringing free: darker by the moment.
         let lifted = if p.spiccato { 0.25 * (-since / 0.015).exp() - 0.22 * (1.0 - (-since / 0.08).exp()) } else { 0.0 };
         let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite + lifted - release_dark).clamp(0.0, 1.0);
 
+        // No scrape before the (slightly late) bow actually lands.
+        let bitten = if since < p.late { 0.0 } else { 1.0 };
         let spike = match p.entry {
             Entry::Legato if p.crossing => 0.15,
             Entry::Legato => 0.08, // the finger landing
@@ -929,7 +1004,7 @@ impl Performer {
             // The hair hits the string (a tick), then hardly any rosin: the bow is off.
             (0.3 * self.style.breath * bounce + 0.95 * (-since / 0.02).exp()).min(1.0)
         } else {
-            (0.3 * self.style.breath + spike * (-since / 0.035).exp() + if loudness < 0.25 { 0.08 } else { 0.0 }).min(1.0)
+            (0.3 * self.style.breath + spike * bitten * (-since_a / 0.035).exp() + if loudness < 0.25 { 0.08 } else { 0.0 }).min(1.0)
         };
 
         let string2 = p.double.map_or(0, |(_, s)| s);
@@ -1256,6 +1331,46 @@ mod tests {
         let virtuoso = miss(Skill::profile("virtuoso").unwrap(), 1.0);
         assert!(student > virtuoso * 2.0, "student {student} vs virtuoso {virtuoso} semitones");
         assert!(miss(Skill::profile("student").unwrap(), 0.0) < 1e-4, "deadpan plays exactly in tune");
+    }
+
+    #[test]
+    fn repeated_strokes_alternate_and_vary_but_deadpan_is_mechanical() {
+        // Twelve separate, gapped notes on one pitch (like Beethoven's opening).
+        let mut text = String::new();
+        for k in 0..12 {
+            text += &format!("{} 0.08 A3 0.6\n", k as f64 * 0.167);
+        }
+        let peaks = |style: &Style| {
+            let (c, d) = decide(&text, style);
+            let peaks: Vec<f32> = (0..12)
+                .map(|k| {
+                    let f = (k as f64 * 0.167 * FRAME_RATE) as usize;
+                    (f..f + 20).map(|j| c.frames[j].loudness).fold(0.0, f32::max)
+                })
+                .collect();
+            (peaks, d)
+        };
+        let (human, d) = peaks(&Style::default());
+        let downs: Vec<bool> = d.iter().map(|x| x.down).collect();
+        assert!(downs.windows(2).all(|w| w[0] != w[1]), "down, up, down, up…: {downs:?}");
+        let spread = human.iter().cloned().fold(f32::MIN, f32::max) - human.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(spread > 0.03, "strokes should differ: {human:?}");
+        let (machine, _) = peaks(&Style { expression: 0.0, vibrato: 0.0, ..Style::default() });
+        let flat = machine.iter().cloned().fold(f32::MIN, f32::max) - machine.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(flat < 0.01, "deadpan is a machine: {machine:?}");
+    }
+
+    #[test]
+    fn a_bow_cannot_bounce_beyond_about_twelve_a_second() {
+        let run = |step: f64| {
+            let mut text = String::new();
+            for k in 0..8 {
+                text += &format!("{} {} C4 0.6\n", k as f64 * step, step * 0.95);
+            }
+            decide(&text, &Style::default()).1.iter().filter(|d| d.played == Played::Bounced).count()
+        };
+        assert!(run(0.1) >= 6, "10 a second bounces");
+        assert_eq!(run(0.06), 0, "16 a second can't: tiny strokes on the string");
     }
 
     #[test]

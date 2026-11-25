@@ -240,7 +240,7 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
     let t_render = t0.elapsed();
     if let (true, Some(s)) = (args.explain, &score) {
         const STRINGS: [&str; 4] = ["IV", "III", "II", "I"];
-        println!("  start    length  note        how       string  hand  load calm");
+        println!("  start    length  note        how        string  hand  load calm   (↓ down-bow, ↑ up-bow)");
         let mut shifts = 0;
         for (n, d) in s.notes.iter().zip(&decisions) {
             let dbl = match (d.double, n.double) {
@@ -255,12 +255,12 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
                 String::new()
             };
             println!(
-                "  {:7.3}s {:>5.3}s  {:<4}{:<7} {:<9} {:<3} {:<4} {:>3.0}  {:>4.0} {:>4.0}{}",
+                "  {:7.3}s {:>5.3}s  {:<4}{:<7} {:<10} {:<3} {:<4} {:>3.0}  {:>4.0} {:>4.0}{}",
                 n.start,
                 n.dur,
                 octavia_core::score::pitch_name(n.pitch),
                 dbl,
-                format!("{:?}", d.played),
+                format!("{}{:?}", if d.down { "↓" } else { "↑" }, d.played),
                 STRINGS[d.string as usize],
                 if open { "open" } else { "" },
                 d.hand,
