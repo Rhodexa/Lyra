@@ -84,7 +84,11 @@ th{color:var(--page-dim);font-weight:600}
 .sect{display:flex;align-items:center;gap:10px;margin:16px 0 10px;font:700 10px/1 var(--label-font);letter-spacing:.18em;text-transform:uppercase;color:var(--text-primary);position:relative}
 .sect::after{content:"";flex:1;height:var(--ol);background:var(--text-primary)}
 .sect i{font-style:normal;color:var(--text-secondary);letter-spacing:.1em}
-.cols{display:grid;grid-template-columns:auto auto;gap:0 34px;justify-content:space-between;position:relative}
+.body{display:grid;grid-template-columns:auto auto;gap:6px 30px;align-items:start;position:relative}
+.cell{display:flex;flex-direction:column;position:relative}
+.sw[data-choice=patch] .btn{flex:1}
+.sw.vert{flex-direction:column}
+.sw.vert .btn{width:118px}
 .row{display:flex;gap:var(--gap);align-items:flex-end;position:relative}
 .cap{font:700 9px/1 var(--label-font);letter-spacing:.12em;text-transform:uppercase;color:var(--text-primary);text-align:center;white-space:nowrap}
 .cap.dim{color:var(--text-secondary);font-weight:600;letter-spacing:.08em}
@@ -158,34 +162,36 @@ th{color:var(--page-dim);font-weight:600}
     <div class="ctl"><div class="sw" data-choice="instrument"></div><div class="cap dim">instrument</div></div>
   </div>
 
-  <div class="bezel"><canvas id="lcd"></canvas></div>
-
-  <div class="under">
-    <div class="sw" data-choice="page"></div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <span class="cap dim" style="margin-right:2px">take</span>
-      <button class="btn sm solo" id="take-dn">−</button><button class="btn sm solo" id="take-up">+</button>
-    </div>
-  </div>
-
-  <div class="cols">
-    <div>
-      <div class="sect">player <i>· ability</i></div>
-      <div class="sw" data-choice="player" style="margin-bottom:14px"></div>
-      <div class="row" id="skills"></div>
-    </div>
-    <div>
-      <div class="sect">style <i>· decoration</i></div>
+  <div class="body">
+    <div class="bezel"><canvas id="lcd"></canvas></div>
+    <div class="cell">
+      <div class="sect" style="margin-top:0">style <i>· decoration</i></div>
       <div class="row" id="style" style="margin-bottom:14px"></div>
-      <div class="row" style="justify-content:center"><button class="btn solo" data-toggle="performer" style="min-width:160px;height:34px">performer</button></div>
+      <button class="btn solo" data-toggle="performer" style="height:34px">performer</button>
+      <div class="sect">screen</div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div class="sw" data-choice="page"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="cap dim">take</span>
+          <button class="btn sm solo" id="take-dn">−</button><button class="btn sm solo" id="take-up">+</button>
+        </div>
+      </div>
     </div>
-  </div>
-
-  <div class="sect">voice</div>
-  <div class="row" style="align-items:center;gap:28px">
-    <div class="row" id="voice"></div>
-    <div class="ctl"><div class="sw" data-choice="patch"></div><div class="cap dim">patch</div></div>
-    <div class="ctl"><button class="btn solo" data-toggle="doubles">double stops</button><div class="cap dim">two strings at once</div></div>
+    <div class="cell">
+      <div class="sect">player <i>· ability</i></div>
+      <div class="row" style="align-items:flex-start;gap:22px">
+        <div class="sw vert" data-choice="player"></div>
+        <div class="row" id="skills"></div>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="sect">voice</div>
+      <div class="row" style="align-items:center;gap:16px;margin-bottom:12px">
+        <div class="row" id="voice"></div>
+        <div class="ctl"><button class="btn solo" data-toggle="doubles" style="height:34px;line-height:1.25">double<br>stops</button><div class="cap dim">two strings</div></div>
+      </div>
+      <div class="ctl" style="justify-items:stretch"><div class="sw" data-choice="patch" style="display:flex"></div><div class="cap dim">patch</div></div>
+    </div>
   </div>
 
   <div class="foot"><span>octavia instruments</span><span>bowed by a player, not a robot</span></div>
@@ -265,6 +271,8 @@ const TUNE = [
   {k:'ghost',label:'unlit words',min:0,max:1,step:.05,def:.3,unit:''},
   {k:'shadow',label:'ink shadow',min:0,max:1,step:.05,def:.5,unit:''},
   {k:'shoff',label:'shadow offset',min:0,max:4,step:.5,def:2,unit:'px'},
+  {k:'lcdscale',label:'screen size',min:.5,max:1,step:.02,def:.68,unit:''},
+  {k:'mintext',label:'smallest text',min:8,max:14,step:.5,def:11.5,unit:'px'},
   {k:'lcdfont',label:'LCD text font',opts:['Roboto Condensed','IBM Plex Mono','Chakra Petch'],def:'Roboto Condensed'},
   {h:'Plate'},
   {k:'--plate-r',label:'plate corners',min:0,max:30,step:1,def:0,unit:'px'},
@@ -281,7 +289,7 @@ const TUNE = [
   {k:'--gap',label:'control gap',min:0,max:30,step:1,def:6,unit:'px'},
   {k:'--label-font',label:'label font',opts:["'IBM Plex Mono'","'Roboto Condensed'","'Chakra Petch'"],def:"'IBM Plex Mono'"},
 ];
-const TKEY = 'octavia-faceplate-tuner-3';
+const TKEY = 'octavia-faceplate-tuner-4';
 let tune = {};
 try { tune = JSON.parse(localStorage.getItem(TKEY) || '{}') || {}; } catch (e) { tune = {}; }
 const tv = k => (k in tune ? tune[k] : TUNE.find(t => t.k === k).def);
@@ -290,7 +298,7 @@ function applyTune() {
   $('#plate').classList.toggle('nopurf', tv('purfling') !== 'on');
   try { localStorage.setItem(TKEY, JSON.stringify(tune)); } catch (e) {}
   for (const f of Object.values(ui)) f();
-  readColors();
+  readColors(); sizeLcd();
 }
 function buildTuner() {
   const host = $('#tuner'); host.innerHTML = '';
@@ -437,10 +445,12 @@ function readColors() {
 const W = 640, H = 336;
 const cvs = $('#lcd'); let ctx = cvs.getContext('2d');
 let dim = false;
+// the screen is drawn in its own units (W×H) and shown at 'screen size'
 function sizeLcd() {
-  const dpr = window.devicePixelRatio || 1;
-  cvs.width = W * dpr; cvs.height = H * dpr; cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const dpr = window.devicePixelRatio || 1, k = tv('lcdscale');
+  cvs.width = Math.round(W * k * dpr); cvs.height = Math.round(H * k * dpr);
+  cvs.style.width = Math.round(W * k) + 'px'; cvs.style.height = Math.round(H * k) + 'px';
+  ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
 }
 const shade = s => (dim && s === 3 ? 2 : s);
 // ink(s, draw): draw(fill) is called with the shadow, then with the ink
@@ -455,14 +465,14 @@ const rect = (s, x, y, w, h) => ink(s, () => ctx.fillRect(x, y, w, h));
 const poly = (s, pts) => ink(s, () => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); });
 function text(s, str, x, y, size, opts = {}) {
   ink(s, () => {
-    ctx.font = `${opts.weight || 700} ${size}px "${tv('lcdfont')}"`;
+    ctx.font = `${opts.weight || 700} ${Math.max(size, tv('mintext'))}px "${tv('lcdfont')}"`;
     ctx.textAlign = opts.align || 'left'; ctx.textBaseline = 'alphabetic';
     if ('letterSpacing' in ctx) ctx.letterSpacing = (opts.track || 0) + 'px';
     ctx.fillText(str, x, y);
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   });
 }
-const textW = (str, size, track = 0) => { ctx.font = `700 ${size}px "${tv('lcdfont')}"`; return ctx.measureText(str).width + track * str.length; };
+const textW = (str, size, track = 0) => { ctx.font = `700 ${Math.max(size, tv('mintext'))}px "${tv('lcdfont')}"`; return ctx.measureText(str).width + track * str.length; };
 
 /* ═════════════════ LCD: 7-segment digits (the take) ═════════════════ */
 const S7 = {'0':'a b c d e f','1':'b c','2':'a b g e d','3':'a b c d g','4':'f g b c','5':'a f g c d',
