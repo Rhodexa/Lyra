@@ -1347,6 +1347,8 @@ pub struct DropRow {
     /// A toggle (a menu's view option): a box on the right, ticked when on.
     /// Picking it keeps the drawer open.
     pub check: Option<bool>,
+    /// Starts a new column (a big drawer's sections side by side).
+    pub new_column: bool,
 }
 
 impl DropRow {
@@ -1365,6 +1367,12 @@ impl DropRow {
     pub fn toggle(label: impl Into<String>, on: bool) -> Self {
         DropRow { label: label.into(), check: Some(on), ..Default::default() }
     }
+
+    /// This row starts a new column.
+    pub fn column(mut self) -> Self {
+        self.new_column = true;
+        self
+    }
 }
 
 /// A menu as an LCD drawer (the dropdown's, for every menu: "everything
@@ -1375,7 +1383,55 @@ pub fn menu_drawer(ui: &mut Ui, resp: &Response, id_salt: impl std::hash::Hash, 
     if resp.clicked() {
         ui.memory_mut(|mem| mem.toggle_popup(id));
     }
-    drawer(ui, id, resp.rect, width, rows, usize::MAX, true)
+    drawer(ui, id, resp.rect, None, width, rows, usize::MAX, true)
+}
+
+fn context_id(id_salt: impl std::hash::Hash) -> egui::Id {
+    egui::Id::new(("context-drawer", id_salt))
+}
+
+/// Open a context drawer at `at` (the mouse): a right-click, or F3.
+pub fn open_drawer_at(ctx: &egui::Context, id_salt: impl std::hash::Hash, at: Pos2) {
+    open_drawer_id(ctx, context_id(id_salt), at);
+}
+
+fn open_drawer_id(ctx: &egui::Context, id: egui::Id, at: Pos2) {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|d| d.insert_temp(id.with("at"), (at, pass)));
+    ctx.memory_mut(|m| m.open_popup(id));
+}
+
+/// A drawer opened by [`open_drawer_at`], where it was opened. `rows` is only
+/// built while it's open. Returns the row picked.
+pub fn drawer_at(ui: &mut Ui, id_salt: impl std::hash::Hash, width: f32, rows: impl FnOnce() -> Vec<DropRow>) -> Option<usize> {
+    drawer_at_id(ui, context_id(id_salt), width, rows)
+}
+
+fn drawer_at_id(ui: &mut Ui, id: egui::Id, width: f32, rows: impl FnOnce() -> Vec<DropRow>) -> Option<usize> {
+    if !ui.memory(|m| m.is_popup_open(id)) {
+        return None;
+    }
+    let (at, _) = ui.data(|d| d.get_temp::<(Pos2, u64)>(id.with("at"))).unwrap_or((Pos2::ZERO, 0));
+    let rows = rows();
+    drawer(ui, id, Rect::from_min_size(at, vec2(0.0, 0.0)), Some(at), width, &rows, usize::MAX, true)
+}
+
+/// A right-click menu as an LCD drawer, at the mouse (the rack's rows, mixer
+/// slots, the browser's folders). Returns the row picked.
+pub fn context_drawer(
+    ui: &mut Ui,
+    resp: &Response,
+    id_salt: impl std::hash::Hash,
+    width: f32,
+    rows: impl FnOnce() -> Vec<DropRow>,
+) -> Option<usize> {
+    let id = context_id(id_salt);
+    if resp.secondary_clicked() {
+        if let Some(at) = resp.interact_pointer_pos() {
+            open_drawer_id(ui.ctx(), id, at);
+        }
+    }
+    drawer_at_id(ui, id, width, rows)
 }
 
 /// Rows per column before a drawer wraps into the next column.
@@ -1406,7 +1462,9 @@ pub fn dropdown(
     let k = h / theme::SIZE_M;
     theme::outlined(p, r, (theme::CORNER * k).clamp(3.0, 5.0), body);
     let ink = if !enabled { theme::INK_FAINT } else if resp.hovered() || open { Color32::WHITE } else { theme::INK };
-    let row = rows.get(chosen.min(rows.len().saturating_sub(1)));
+    // Nothing chosen (`chosen` past the end, e.g. a sound that's no preset):
+    // a dim dash.
+    let row = rows.get(chosen).filter(|r| !r.heading);
     let mut x = r.left() + 9.0;
     if let Some(icon) = row.and_then(|r| r.icon) {
         let ir = Rect::from_center_size(pos2(x + h * 0.25, r.center().y), vec2(h * 0.6, h * 0.6));
@@ -1417,6 +1475,9 @@ pub fn dropdown(
     if let Some(row) = row {
         let g = drop_label(ui, &row.label, names, false, max_w, ink);
         ui.painter().galley(pos2(x, r.center().y - g.size().y * 0.5), g, ink);
+    } else {
+        let g = drop_label(ui, "—", true, false, max_w, theme::INK_FAINT);
+        ui.painter().galley(pos2(x, r.center().y - g.size().y * 0.5), g, theme::INK_FAINT);
     }
     let c = r.right_center() - vec2(12.0, 0.0);
     let (a, b) = if open { (1.5, -2.0) } else { (-1.5, 2.0) };
@@ -1427,40 +1488,77 @@ pub fn dropdown(
     if resp.clicked() && enabled {
         ui.memory_mut(|mem| mem.toggle_popup(id));
     }
-    drawer(ui, id, r, width, rows, chosen, names)
+    drawer(ui, id, r, None, width, rows, chosen, names)
 }
 
-/// A dropdown's drawer (the LCD's colours), open while `id`'s popup is open,
-/// under `anchor`. Returns the row picked.
-fn drawer(ui: &mut Ui, id: egui::Id, anchor: Rect, width: f32, rows: &[DropRow], chosen: usize, names: bool) -> Option<usize> {
+/// A drawer (the LCD's colours), open while `id`'s popup is open: under
+/// `anchor` (over it when there's no room below), or at `at` (a context
+/// drawer at the mouse). Always kept on screen. Columns: where a row says
+/// `new_column`, else past 12 rows it wraps into even columns. Returns the
+/// row picked.
+#[allow(clippy::too_many_arguments)]
+fn drawer(
+    ui: &mut Ui,
+    id: egui::Id,
+    anchor: Rect,
+    at: Option<Pos2>,
+    width: f32,
+    rows: &[DropRow],
+    chosen: usize,
+    names: bool,
+) -> Option<usize> {
     if !ui.memory(|mem| mem.is_popup_open(id)) {
         return None;
     }
     let h = theme::m().control_h;
     let r = anchor;
     let mut picked = None;
-    let cols = rows.len().div_ceil(DRAWER_ROWS).max(1);
-    let per_col = rows.len().div_ceil(cols).max(1);
-    let col_w = if cols == 1 { width.max(120.0) } else { (width * 0.8).max(130.0) };
-    // Under the anchor, or over it when there's no room below (a key at the
-    // bottom of a panel).
-    let full_h = per_col as f32 * h + 2.0 * (theme::OUTLINE_W + 2.0);
-    let screen = ui.ctx().screen_rect();
-    let below = r.left_bottom() + vec2(0.0, 3.0);
-    let drawer_pos = if below.y + full_h > screen.bottom() && r.top() - 3.0 - full_h >= screen.top() {
-        r.left_top() - vec2(0.0, 3.0 + full_h)
+    // Each row's (column, row in column).
+    let cells: Vec<(usize, usize)> = if rows.iter().skip(1).any(|r| r.new_column) {
+        let (mut c, mut k) = (0, 0);
+        rows.iter()
+            .enumerate()
+            .map(|(i, row)| {
+                if i > 0 && row.new_column {
+                    c += 1;
+                    k = 0;
+                }
+                k += 1;
+                (c, k - 1)
+            })
+            .collect()
     } else {
-        below
+        let cols = rows.len().div_ceil(DRAWER_ROWS).max(1);
+        let per_col = rows.len().div_ceil(cols).max(1);
+        (0..rows.len()).map(|i| (i / per_col, i % per_col)).collect()
     };
+    let cols = cells.iter().map(|c| c.0 + 1).max().unwrap_or(1);
+    let per_col = cells.iter().map(|c| c.1 + 1).max().unwrap_or(1);
+    let col_w = if cols == 1 { width.max(120.0) } else { (width * 0.8).max(130.0) };
+    let pad = theme::OUTLINE_W + 2.0;
+    let full = vec2(cols as f32 * col_w, per_col as f32 * h) + vec2(2.0 * pad, 2.0 * pad);
+    let screen = ui.ctx().screen_rect();
+    let mut drawer_pos = match at {
+        Some(p) => p,
+        None => {
+            let below = r.left_bottom() + vec2(0.0, 3.0);
+            if below.y + full.y > screen.bottom() && r.top() - 3.0 - full.y >= screen.top() {
+                r.left_top() - vec2(0.0, 3.0 + full.y)
+            } else {
+                below
+            }
+        }
+    };
+    drawer_pos.x = drawer_pos.x.min(screen.right() - full.x - 4.0).max(screen.left() + 4.0);
+    drawer_pos.y = drawer_pos.y.min(screen.bottom() - full.y - 4.0).max(screen.top() + 4.0);
     let area = egui::Area::new(id.with("drawer"))
         .order(egui::Order::Foreground)
         .fixed_pos(drawer_pos)
         .show(ui.ctx(), |ui| {
-            let pad = theme::OUTLINE_W + 2.0;
             let bg = ui.painter().add(Shape::Noop);
             let top = ui.cursor().min + vec2(pad, pad);
             for (i, row) in rows.iter().enumerate() {
-                let (c, k) = (i / per_col, i % per_col);
+                let (c, k) = cells[i];
                 let rr = Rect::from_min_size(top + vec2(c as f32 * col_w, k as f32 * h), vec2(col_w, h));
                 if row.heading {
                     let g = legend_galley(ui, &row.label, 11.0, false, theme::LCD_INK_DIM);
@@ -1532,8 +1630,11 @@ fn drawer(ui: &mut Ui, id: egui::Id, anchor: Rect, width: f32, rows: &[DropRow],
             }
             ui.painter().set(bg, Shape::Vec(shapes));
         });
-    // Close: on a pick, on Esc, or on a click outside the drawer and its well.
-    let outside = ui.input(|i| {
+    // Close: on a pick, on Esc, or on a click outside the drawer and its well
+    // (not the click that opened a context drawer).
+    let opened_now = at.is_some()
+        && ui.data(|d| d.get_temp::<(Pos2, u64)>(id.with("at"))).is_some_and(|(_, pass)| pass == ui.ctx().cumulative_pass_nr());
+    let outside = !opened_now && ui.input(|i| {
         i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|p| !area.response.rect.contains(p) && !r.contains(p))
     });
     let toggled = picked.is_some_and(|i| rows[i].check.is_some());
@@ -1591,7 +1692,7 @@ pub fn dropdown_compact(
     if resp.clicked() {
         ui.memory_mut(|mem| mem.toggle_popup(id));
     }
-    let picked = drawer(ui, id, r, drawer_w, rows, shown, false);
+    let picked = drawer(ui, id, r, None, drawer_w, rows, shown, false);
     (resp, picked.or(next))
 }
 

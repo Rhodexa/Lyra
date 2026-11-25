@@ -54,17 +54,12 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
         let melodic_or_drum = lyra_catalog::info(&instrument).is_some();
         if melodic_or_drum && instrument != "lyra.fluttersine" && instrument != "lyra.chrysalis" {
             ui.add_space(8.0);
-            ui.menu_button("Presets", |ui| {
-                let params = p.channels[ch].params.clone();
-                let (picked, close) = crate::user_presets::menu(ui, &instrument, &params, 220.0);
-                if let Some(e) = picked {
-                    h.checkpoint(p);
-                    p.channels[ch].params = e.params;
-                }
-                if close {
-                    ui.close_menu();
-                }
-            });
+            ui.label(RichText::new("preset").small().color(theme::TEXT_DIM));
+            let params = p.channels[ch].params.clone();
+            if let Some(crate::user_presets::Picked::Load(e)) = crate::user_presets::picker(ui, &instrument, &params, 160.0) {
+                h.checkpoint(p);
+                p.channels[ch].params = e.params;
+            }
         }
         if !lyra_catalog::info(&instrument).is_some_and(|i| i.melodic) {
             ui.add_space(8.0);
@@ -103,15 +98,15 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
         // per group instead of a wall of knobs.
         let tab_id = egui::Id::new(("editor-tab", instrument.as_str()));
         let mut tab = ui.ctx().data(|d| d.get_temp::<usize>(tab_id)).unwrap_or(0).min(groups.len() - 1);
-        ui.horizontal_wrapped(|ui| {
-            for (i, g) in groups.iter().enumerate() {
-                if ui.selectable_label(tab == i, g.name).clicked() {
-                    tab = i;
-                }
-            }
-        });
+        // Folder tabs over the group's panel (the tab row belongs to it).
+        let w = (groups.len() as f32 * 96.0).min(ui.available_width());
+        let (r, _) = ui.allocate_exact_size(vec2(w, theme::m().control_h + 4.0), Sense::hover());
+        let names: Vec<&str> = groups.iter().map(|g| g.name).collect();
+        if let Some(i) = widgets::tab_row(ui, r, &names, tab, tab_id.with("tabs")) {
+            tab = i;
+        }
         ui.ctx().data_mut(|d| d.insert_temp(tab_id, tab));
-        ui.add_space(4.0);
+        ui.add_space(-ui.spacing().item_spacing.y); // the tabs touch their panel
         let group = &groups[tab];
         egui::Frame::default().fill(theme::INSET).corner_radius(cr(4)).inner_margin(egui::Margin::same(6)).show(
             ui,

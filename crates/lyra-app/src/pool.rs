@@ -105,12 +105,10 @@ pub fn patterns(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState)
             st.place_automation = false;
             st.clip = None;
         }
-        resp.context_menu(|ui| {
-            if ui.button("Clone").clicked() {
-                clone = Some(i);
-                ui.close_menu();
-            }
-        });
+        // Right-click: an LCD drawer at the mouse.
+        if widgets::context_drawer(ui, &resp, ("pool-pattern", i), 160.0, || vec![widgets::DropRow::text("Clone")]).is_some() {
+            clone = Some(i);
+        }
     }
     if let Some(i) = clone {
         h.checkpoint(p);

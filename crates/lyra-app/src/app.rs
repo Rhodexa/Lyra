@@ -774,27 +774,24 @@ impl LyraApp {
     fn context_menu(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let Some(at) = self.context_menu else { return };
         let items = self.context_items();
-        let mut chosen = None;
-        let area =
-            egui::Area::new(Id::new("context-menu")).order(egui::Order::Foreground).fixed_pos(at).show(ctx, |ui| {
-                egui::Frame::menu(ui.style()).show(ui, |ui| {
-                    ui.set_min_width(180.0);
+        // The same LCD drawer as every menu, hosted in an empty area at the mouse.
+        let picked = egui::Area::new(Id::new("context-menu-host"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(at)
+            .show(ctx, |ui| {
+                widgets::drawer_at(ui, "f3", 200.0, || {
                     if items.is_empty() {
-                        ui.label(RichText::new("Nothing to do here").small().color(theme::TEXT_DIM));
+                        vec![widgets::DropRow::heading("Nothing to do here")]
+                    } else {
+                        items.iter().map(|(_, label)| widgets::DropRow::text(label.as_str())).collect()
                     }
-                    for (action, label) in &items {
-                        if ui.button(label).clicked() {
-                            chosen = Some(*action);
-                        }
-                    }
-                });
-            });
-        let away = ctx.input(|i| i.pointer.any_pressed() || i.key_pressed(egui::Key::Escape))
-            && !ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| area.response.rect.contains(p));
-        if let Some(a) = chosen {
-            actions.push(a);
-            self.context_menu = None;
-        } else if away {
+                })
+            })
+            .inner;
+        if let Some((a, _)) = picked.and_then(|i| items.get(i)) {
+            actions.push(*a);
+        }
+        if !ctx.memory(|m| m.any_popup_open()) {
             self.context_menu = None;
         }
     }
@@ -1185,7 +1182,12 @@ impl LyraApp {
                     self.import_midi(&path, Midi::Song { at: 0, track: row });
                 }
             }
-            Action::ContextMenu => self.context_menu = ctx.input(|i| i.pointer.hover_pos()),
+            Action::ContextMenu => {
+                self.context_menu = ctx.input(|i| i.pointer.hover_pos());
+                if let Some(at) = self.context_menu {
+                    widgets::open_drawer_at(ctx, "f3", at);
+                }
+            }
             Action::ClearLoop => {
                 let area = &mut self.areas[self.key_area];
                 (area.piano.looped, area.playlist.looped) = (None, None);

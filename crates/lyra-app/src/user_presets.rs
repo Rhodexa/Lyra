@@ -189,6 +189,87 @@ pub fn menu(ui: &mut Ui, plugin: &str, params: &[f32], width: f32) -> (Option<En
     (pick, close)
 }
 
+/// What [`picker`] asks for.
+pub enum Picked {
+    Load(Entry),
+}
+
+/// Lyra's own preset picker (the instrument window; Fluttersine and Chrysalis
+/// keep [`menu`] in their own look): a dropdown of the plugin's presets and
+/// yours, with a second column for "Save as…" and, when the sound is one of
+/// yours, deleting it. "Save as…" turns the dropdown into a name field in
+/// place: Enter saves, Esc gives up.
+pub fn picker(ui: &mut Ui, plugin: &str, params: &[f32], width: f32) -> Option<Picked> {
+    use crate::widgets::{self, DropRow};
+    let id = egui::Id::new(("preset-picker", plugin));
+    let saving: Option<String> = ui.ctx().data(|d| d.get_temp(id));
+    if let Some(mut name) = saving {
+        let resp = widgets::text_field(ui, &mut name, width, ("preset-name", plugin), "New preset name  ·  Enter saves");
+        let first = ui.ctx().data(|d| d.get_temp::<bool>(id.with("focused"))).is_none();
+        if first {
+            resp.request_focus();
+            ui.ctx().data_mut(|d| d.insert_temp(id.with("focused"), true));
+        }
+        let done = resp.lost_focus();
+        let enter = done && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        if enter && !name.trim().is_empty() {
+            match save(plugin, name.trim(), params) {
+                Ok(()) => ui.ctx().data_mut(|d| d.remove::<String>(id.with("error"))),
+                Err(e) => ui.ctx().data_mut(|d| d.insert_temp(id.with("error"), e)),
+            }
+        }
+        if done {
+            ui.ctx().data_mut(|d| {
+                d.remove::<String>(id);
+                d.remove::<bool>(id.with("focused"));
+            });
+        } else {
+            ui.ctx().data_mut(|d| d.insert_temp(id, name));
+        }
+        return None;
+    }
+    if let Some(err) = ui.ctx().data(|d| d.get_temp::<String>(id.with("error"))) {
+        ui.label(RichText::new(err).small().color(crate::theme::ROSE));
+    }
+    let all = entries(plugin);
+    let now = current(&all, params);
+    // Rows: the presets (yours under a heading), then the actions column.
+    let mut rows = Vec::new();
+    let mut what: Vec<Option<usize>> = Vec::new(); // preset index per row
+    let mut yours = false;
+    for (k, e) in all.iter().enumerate() {
+        if e.user && !yours {
+            yours = true;
+            rows.push(DropRow::heading("Yours"));
+            what.push(None);
+        }
+        rows.push(DropRow::text(e.name.as_str()));
+        what.push(Some(k));
+    }
+    let save_row = rows.len();
+    rows.push(DropRow::text("Save as…").column());
+    what.push(None);
+    let delete_row = now.filter(|&k| all[k].user).map(|k| {
+        rows.push(DropRow::text(format!("Delete \"{}\"", all[k].name)));
+        what.push(None);
+        (rows.len() - 1, k)
+    });
+    let chosen = now.and_then(|k| what.iter().position(|w| *w == Some(k))).unwrap_or(usize::MAX);
+    let hint = "Presets: the instrument's own and yours";
+    let picked = widgets::dropdown(ui, ("presets", plugin), width, &rows, chosen, true, hint)?;
+    if picked == save_row {
+        ui.ctx().data_mut(|d| d.insert_temp(id, String::new()));
+        return None;
+    }
+    if let Some((row, k)) = delete_row {
+        if picked == row {
+            delete(plugin, &all[k].name);
+            return None;
+        }
+    }
+    what[picked].map(|k| Picked::Load(all[k].clone()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

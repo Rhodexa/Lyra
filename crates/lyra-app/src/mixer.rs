@@ -380,31 +380,29 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
                 if resp.drag_started() {
                     st.fx_drag = Some(i);
                 }
-                resp.context_menu(|ui| {
-                    if ui.button("Open").clicked() {
-                        action = Some(SlotAction::Open(i));
-                        ui.close_menu();
+                // Right-click: the slot's menu, an LCD drawer at the mouse.
+                let count = p.mixer[t].effects.len();
+                let menu = || {
+                    let mut m = vec![(widgets::DropRow::text("Open"), Some(SlotAction::Open(i)))];
+                    if i > 0 {
+                        m.push((widgets::DropRow::text("Move up"), Some(SlotAction::Move(i, i - 1))));
                     }
-                    ui.menu_button("Replace with", |ui| {
-                        if let Some(id) = effect_menu(ui) {
-                            action = Some(SlotAction::Put(i, id));
-                            ui.close_menu();
-                        }
-                    });
-                    if i > 0 && ui.button("Move up").clicked() {
-                        action = Some(SlotAction::Move(i, i - 1));
-                        ui.close_menu();
+                    if i + 1 < count {
+                        m.push((widgets::DropRow::text("Move down"), Some(SlotAction::Move(i, i + 1))));
                     }
-                    if i + 1 < p.mixer[t].effects.len() && ui.button("Move down").clicked() {
-                        action = Some(SlotAction::Move(i, i + 1));
-                        ui.close_menu();
+                    m.push((widgets::DropRow::text("Remove"), Some(SlotAction::Remove(i))));
+                    m.push((widgets::DropRow::heading("Replace with").column(), None));
+                    for e in lyra_catalog::effects::all() {
+                        m.push((widgets::DropRow::text(e.name), Some(SlotAction::Put(i, e.id))));
                     }
-                    ui.separator();
-                    if ui.button("Remove").clicked() {
-                        action = Some(SlotAction::Remove(i));
-                        ui.close_menu();
-                    }
+                    m
+                };
+                let picked = widgets::context_drawer(ui, &resp, ("fx-slot", t, i), 180.0, || {
+                    menu().into_iter().map(|(row, _)| row).collect()
                 });
+                if let Some(a) = picked.and_then(|k| menu().into_iter().nth(k)).and_then(|(_, a)| a) {
+                    action = Some(a);
+                }
                 resp.hint("Click: open · drag: move · right-click: more");
             }
             None => {
@@ -419,17 +417,11 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
                         theme::TEXT_DIM,
                     );
                 }
-                let popup = ui.id().with(("fx-add", t, i));
-                if resp.clicked() {
-                    ui.memory_mut(|mem| mem.toggle_popup(popup));
+                // Click: the effect list, in a drawer under the slot.
+                let rows: Vec<_> = lyra_catalog::effects::all().iter().map(|e| widgets::DropRow::text(e.name)).collect();
+                if let Some(k) = widgets::menu_drawer(ui, &resp, ("fx-add", t, i), plate.width(), &rows) {
+                    action = Some(SlotAction::Put(i, lyra_catalog::effects::all()[k].id));
                 }
-                egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                    ui.set_min_width(plate.width());
-                    if let Some(id) = effect_menu(ui) {
-                        action = Some(SlotAction::Put(i, id));
-                        ui.memory_mut(|mem| mem.close_popup());
-                    }
-                });
             }
         }
 
@@ -516,6 +508,7 @@ fn effect_rack(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) 
     }
 }
 
+#[derive(Clone, Copy)]
 enum SlotAction {
     Open(usize),
     /// (slot, turn on, first in the gesture)
@@ -523,17 +516,6 @@ enum SlotAction {
     Put(usize, &'static str),
     Move(usize, usize),
     Remove(usize),
-}
-
-/// Every built-in effect, once. Returns the id picked.
-fn effect_menu(ui: &mut Ui) -> Option<&'static str> {
-    let mut picked = None;
-    for e in lyra_catalog::effects::all() {
-        if ui.button(e.name).clicked() {
-            picked = Some(e.id);
-        }
-    }
-    picked
 }
 
 /// One effect's controls, in a fixed grid (the effect window).

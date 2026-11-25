@@ -89,17 +89,22 @@ fn files(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState) {
             for root in &library {
                 let r = folder(ui, root, 0, p, h, st);
                 let yours = added.contains(&root.path);
-                r.context_menu(|ui| {
-                    if ui.button("Open in the file manager").clicked() {
+                // Right-click: the folder's menu, an LCD drawer at the mouse.
+                let picked = crate::widgets::context_drawer(ui, &r, ("browser-root", root.path.clone()), 240.0, || {
+                    let mut rows = vec![crate::widgets::DropRow::text("Open in the file manager")];
+                    if yours {
+                        rows.push(crate::widgets::DropRow::text("Take it out of the browser"));
+                    }
+                    rows
+                });
+                match picked {
+                    Some(0) => {
                         let _ = std::fs::create_dir_all(&root.path);
                         let _ = std::process::Command::new("xdg-open").arg(&root.path).spawn();
-                        ui.close_menu();
                     }
-                    if yours && ui.button("Take it out of the browser").clicked() {
-                        remove = Some(root.path.clone());
-                        ui.close_menu();
-                    }
-                });
+                    Some(1) => remove = Some(root.path.clone()),
+                    _ => {}
+                }
             }
             ui.add_space(6.0);
             if crate::widgets::wide_key(ui, "+ Add folder…", "Show another folder of sounds here (Lyra remembers it)")

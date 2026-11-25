@@ -102,41 +102,44 @@ pub fn tracked(r: &Response, h: &mut History, p: &Project) -> bool {
     r.changed()
 }
 
-/// Every instrument, once (presets live in each instrument's editor).
-/// Returns (name, instrument id, params) when one is picked.
-fn instrument_menu(ui: &mut Ui) -> Option<(&'static str, &'static str, Vec<f32>)> {
-    let mut picked = None;
-    for (title, melodic) in [("DRUMS", false), ("INSTRUMENTS", true)] {
-        ui.label(egui::RichText::new(title).small().color(theme::TEXT_DIM));
-        for inst in lyra_catalog::instruments().iter().filter(|i| i.melodic == melodic) {
-            if ui.button(inst.name).clicked() {
-                picked = Some((inst.name, inst.id, lyra_catalog::default_params(inst.id)));
-            }
-        }
-        if !melodic {
-            ui.separator();
-        }
-    }
-    picked
+/// What a rack row's right-click drawer does.
+#[derive(Clone, Copy)]
+enum RackAct {
+    PianoRoll,
+    Edit,
+    Clone,
+    Fill(u32),
+    Clear,
+    Delete,
+    Insert(&'static lyra_catalog::PluginInfo),
+    Replace(&'static lyra_catalog::PluginInfo),
 }
 
-/// The instrument list; a pick adds that instrument at `at` (a rack index),
-/// or at the end. Returns true when one was picked.
-fn add_channel_menu(ui: &mut Ui, p: &mut Project, h: &mut History, st: &mut UiState, at: Option<usize>) -> bool {
-    let Some((name, instrument, params)) = instrument_menu(ui) else { return false };
-    h.checkpoint(p);
-    p.add_channel(name, instrument, params);
-    let mut i = p.channels.len() - 1;
-    if let Some(at) = at.filter(|&a| a < i) {
-        let ch = p.channels.pop().expect("just added");
-        p.channels.insert(at, ch);
-        i = at;
+/// A rack row's right-click drawer: the channel's actions, then two columns
+/// of instruments (insert one after this row, or swap this row's).
+fn rack_menu() -> Vec<(widgets::DropRow, Option<RackAct>)> {
+    use widgets::DropRow;
+    let mut m = vec![
+        (DropRow::text("Piano roll"), Some(RackAct::PianoRoll)),
+        (DropRow::text("Edit instrument"), Some(RackAct::Edit)),
+        (DropRow::text("Clone channel"), Some(RackAct::Clone)),
+        (DropRow::text("Fill every 2 steps"), Some(RackAct::Fill(2))),
+        (DropRow::text("Fill every 4 steps"), Some(RackAct::Fill(4))),
+        (DropRow::text("Fill every 8 steps"), Some(RackAct::Fill(8))),
+        (DropRow::text("Clear notes"), Some(RackAct::Clear)),
+        (DropRow::text("Delete channel"), Some(RackAct::Delete)),
+    ];
+    type Make = fn(&'static lyra_catalog::PluginInfo) -> RackAct;
+    let makers: [(&str, Make); 2] = [("Insert here", RackAct::Insert), ("Replace with", RackAct::Replace)];
+    for (title, make) in makers {
+        m.push((DropRow::heading(title).column(), None));
+        for melodic in [false, true] {
+            for inst in lyra_catalog::instruments().iter().filter(|i| i.melodic == melodic) {
+                m.push((DropRow::text(inst.name), Some(make(inst))));
+            }
+        }
     }
-    st.selected = i;
-    if lyra_catalog::info(instrument).is_some_and(|x| x.melodic) {
-        st.show = Some(Editor::PianoRoll);
-    }
-    true
+    m
 }
 
 /// A wide "+ Instrument" key; its list opens under it.
@@ -379,70 +382,65 @@ fn row(
             st.show_editor = true;
             st.raise = Some(Focus::Editor);
         }
-        r.context_menu(|ui| {
-            if ui.button("Piano roll").clicked() {
-                st.selected = ci;
-                st.show = Some(Editor::PianoRoll);
-                ui.close_menu();
-            }
-            if ui.button("Edit instrument").clicked() {
-                st.selected = ci;
-                st.show_editor = true;
-                st.raise = Some(Focus::Editor);
-                ui.close_menu();
-            }
-            ui.menu_button("Insert instrument here", |ui| {
-                if add_channel_menu(ui, p, h, st, Some(ci + 1)) {
-                    ui.close_menu();
+        // Right-click: the channel's menu, an LCD drawer at the mouse.
+        let picked = widgets::context_drawer(ui, &r, ("rack-row", ci), 210.0, || {
+            rack_menu().into_iter().map(|(row, _)| row).collect()
+        });
+        if let Some(act) = picked.and_then(|i| rack_menu().into_iter().nth(i)).and_then(|(_, a)| a) {
+            match act {
+                RackAct::PianoRoll => {
+                    st.selected = ci;
+                    st.show = Some(Editor::PianoRoll);
                 }
-            });
-            ui.separator();
-            if ui.button("Clone channel").hint("Same instrument and settings, no notes").clicked() {
-                h.checkpoint(p);
-                let mut copy = p.channels[ci].clone();
-                copy.name = format!("{} 2", copy.name);
-                let id = p.add_channel(&copy.name, &copy.instrument, copy.params.clone());
-                let new = p.channels.pop().expect("just added");
-                copy.id = id;
-                copy.color = new.color;
-                p.channels.insert(ci + 1, copy);
-                st.selected = ci + 1;
-                ui.close_menu();
-            }
-            ui.menu_button("Replace instrument", |ui| {
-                if let Some((name, instrument, params)) = instrument_menu(ui) {
+                RackAct::Edit => {
+                    st.selected = ci;
+                    st.show_editor = true;
+                    st.raise = Some(Focus::Editor);
+                }
+                RackAct::Clone => {
+                    h.checkpoint(p);
+                    let mut copy = p.channels[ci].clone();
+                    copy.name = format!("{} 2", copy.name);
+                    let id = p.add_channel(&copy.name, &copy.instrument, copy.params.clone());
+                    let new = p.channels.pop().expect("just added");
+                    copy.id = id;
+                    copy.color = new.color;
+                    p.channels.insert(ci + 1, copy);
+                    st.selected = ci + 1;
+                }
+                RackAct::Fill(every) => {
+                    h.checkpoint(p);
+                    p.patterns[pat].fill_every(id, every);
+                }
+                RackAct::Clear => {
+                    h.checkpoint(p);
+                    p.patterns[pat].notes.remove(&id);
+                }
+                RackAct::Delete => *delete = Some(ci),
+                RackAct::Insert(inst) => {
+                    h.checkpoint(p);
+                    p.add_channel(inst.name, inst.id, lyra_catalog::default_params(inst.id));
+                    let ch = p.channels.pop().expect("just added");
+                    p.channels.insert(ci + 1, ch);
+                    st.selected = ci + 1;
+                    if inst.melodic {
+                        st.show = Some(Editor::PianoRoll);
+                    }
+                }
+                RackAct::Replace(inst) => {
                     h.checkpoint(p);
                     let ch = &mut p.channels[ci];
                     let named_after_instrument = lyra_catalog::info(&ch.instrument).map(|i| i.name)
                         == Some(ch.name.as_str())
                         || lyra_catalog::presets().any(|pr| pr.name == ch.name);
                     if named_after_instrument {
-                        ch.name = name.to_string(); // only rename channels still named after their instrument
+                        ch.name = inst.name.to_string(); // only rename channels still named after their instrument
                     }
-                    ch.instrument = instrument.to_string();
-                    ch.params = params;
-                    ui.close_menu();
-                }
-            });
-            ui.separator();
-            for every in [2, 4, 8] {
-                if ui.button(format!("Fill every {every} steps")).clicked() {
-                    h.checkpoint(p);
-                    p.patterns[pat].fill_every(id, every);
-                    ui.close_menu();
+                    ch.instrument = inst.id.to_string();
+                    ch.params = lyra_catalog::default_params(inst.id);
                 }
             }
-            if ui.button("Clear notes").clicked() {
-                h.checkpoint(p);
-                p.patterns[pat].notes.remove(&id);
-                ui.close_menu();
-            }
-            ui.separator();
-            if ui.button("Delete channel").clicked() {
-                *delete = Some(ci);
-                ui.close_menu();
-            }
-        });
+        }
 
         // Which mixer insert this instrument plays into (M = master).
         let mut insert = p.channels[ci].mixer;
