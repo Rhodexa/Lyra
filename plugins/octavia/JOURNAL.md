@@ -81,6 +81,9 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-24)* How do we make the player really shake the bow instead of spiccato on short notes? (And: dying for a UI.)
   - Claude: that's bowed tremolo, which didn't exist. Added like pizzicato (asked for, not inferred): `~` in scores, `--tremolo` patch (every note of 1/4 s or more; shorter notes stay normal), later per-note data in Lyra. 13–16 strokes a second, slightly uneven, each reversal a small dip and scrape, down-strokes heavier; faster and rougher under load; works on double stops. Demo: `scores/tremolo.txt` → `renders/tremolo.wav`; `renders/ab/flower-tremolo-patch.wav`. Pink in plots.
 
+- [ ] *(Rhodexa, 2026-11-25)* The HTML UI shows a bug in Flowering Night: the cool weird sounds correlate with a finger left on a string after the hand has moved out of reach. A real player can't do that.
+  - Claude: right. A string left ringing at a *stopped* pitch only ended when the bow came back or it died out, even if the hand had shifted away from the finger holding it. Now the performer tracks which fingers are holding ringing strings; when the hand moves out of reach (or a crossing shifts at once), the finger lifts: the string rings open (faintly, sometimes not at all) with a tiny tap. Flowering Night: 64 of 238 stopped rings were ghost fingers; they now become open-string ghosts.
+
 ## Wishes
 
 - [ ]

@@ -319,6 +319,10 @@ pub struct Performer {
     arm_now: f32,
     /// When the last bow stroke began (slurred notes share one).
     last_stroke: f64,
+    /// Fingers still holding a ringing, stopped string after the bow left
+    /// it: per string, the note's offset above the open string and until
+    /// when it can still be ringing.
+    held: [Option<(f32, f64)>; 4],
 }
 
 impl Performer {
@@ -349,6 +353,7 @@ impl Performer {
             arm: Wander::new(style.seed ^ 0xA2A2, 0.6),
             arm_now: 0.0,
             last_stroke: f64::MIN,
+            held: [None; 4],
         }
     }
 
@@ -954,22 +959,62 @@ impl Performer {
             events.push(Event::Tap(Tap { time: (n.start - lead).max(t), strength }));
         }
 
-        // Crossing away from a string that was sounding: it rings on.
+        // Crossing away from a string that was sounding: it rings on. If a
+        // finger was holding that note, it can only keep holding it while
+        // the hand stays in reach; a finger that has to go lifts, and the
+        // string rings open (faintly, or not at all).
+        let reach = |off: f32, hand: f32| off >= hand - 0.01 && off <= hand + inst.hand_span + 0.01;
+        let at = (n.start - glide as f64).max(t);
+        let lift = |s: u8, salt: u64, events: &mut Vec<Event>| {
+            if h01(salt) > 0.3 {
+                events.push(Event::Ring(Ring {
+                    time: at,
+                    pitch: inst.open_strings[s as usize] + string_detune(seed, s),
+                    level: 0.2 * level * (0.4 + 0.6 * h01(salt ^ 0x5)),
+                    string: s,
+                    open: true,
+                    bright: 0.15 + 0.25 * h01(salt ^ 0x9),
+                }));
+            }
+            events.push(Event::Tap(Tap { time: at, strength: 0.04 + 0.1 * h01(salt ^ 0xD) }));
+        };
+        let mut held = self.held;
+        held[string as usize] = None; // the bow is on it now
         if let (true, false, Some((pn, pp))) = (crossing, pizz, prev) {
             if entry != Entry::Fresh {
-                let open_prev = (pn.pitch - inst.open_strings[pp.string as usize]).abs() < 0.01;
-                // How it rings depends on how the bow left it: never the same.
-                events.push(Event::Ring(Ring {
-                    time: (n.start - glide as f64).max(t),
-                    pitch: pp.pitch,
-                    level: pp.level * (0.6 + 0.4 * h01(0x217A)),
-                    string: pp.string,
-                    open: open_prev,
-                    bright: 0.4 + 0.6 * h01(0xB21C),
-                }));
+                let s = pp.string as usize;
+                let off = pn.pitch - inst.open_strings[s];
+                let open_prev = off.abs() < 0.01;
+                if open_prev || reach(off, fingering.hand) {
+                    // How it rings depends on how the bow left it: never the same.
+                    events.push(Event::Ring(Ring {
+                        time: at,
+                        pitch: pp.pitch,
+                        level: pp.level * (0.6 + 0.4 * h01(0x217A)),
+                        string: pp.string,
+                        open: open_prev,
+                        bright: 0.4 + 0.6 * h01(0xB21C),
+                    }));
+                    held[s] = (!open_prev).then_some((off, at + 0.8));
+                } else {
+                    lift(pp.string, 0x11F8, events);
+                    held[s] = None;
+                }
+            }
+        }
+        // Earlier fingers the hand has now moved away from let go.
+        for s in 0..4 {
+            if let Some((off, until)) = held[s] {
+                if at > until {
+                    held[s] = None;
+                } else if !reach(off, fingering.hand) {
+                    lift(s as u8, 0x11F9 ^ s as u64, events);
+                    held[s] = None;
+                }
             }
         }
 
+        self.held = held;
         self.prev_string = Some(string);
         self.hand = fingering.hand;
         self.workload = workload;
@@ -1541,6 +1586,19 @@ mod tests {
         assert_eq!(how[0], Played::Tremolo);
         assert_ne!(how[1], Played::Tremolo, "short notes are played normally");
         assert_eq!(how[3], Played::Tremolo);
+    }
+
+    #[test]
+    fn a_finger_left_ringing_lets_go_when_the_hand_moves_away() {
+        // E3 (D string, finger at +2) crossing to A3's string, then the hand
+        // shifts high up the A string: the D string can't still sound E3.
+        let c = perform(&Score::parse("tempo 120\nE3:q B3 A4:h").unwrap(), &cello(), &Style::default());
+        let stopped: Vec<&Ring> = c.rings.iter().filter(|r| r.string == 2 && !r.open).collect();
+        assert_eq!(stopped.len(), 1, "E3 rings on after the crossing: {:?}", c.rings);
+        let later: Vec<&Ring> = c.rings.iter().filter(|r| r.string == 2 && r.time > stopped[0].time).collect();
+        let lift_tap = c.taps.iter().any(|k| k.time > stopped[0].time + 0.1 && k.strength < 0.15);
+        assert!(lift_tap, "the finger lifts when the hand shifts away: rings {:?} taps {:?}", later, c.taps);
+        assert!(later.iter().all(|r| r.open), "and the string rings open, if at all");
     }
 
     #[test]
