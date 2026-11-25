@@ -15,7 +15,7 @@
 //! * [`render_score`] performs and plays a whole score through the engine.
 
 use crate::body::{Body, BodyResponse};
-use crate::curves::{Curves, Frame, FRAME_RATE};
+use crate::curves::{Curves, Frame, Ring, FRAME_RATE};
 use crate::dsp::OnePole;
 use crate::instrument::Instrument;
 use crate::performer::{Decision, Event, Performer, Style};
@@ -24,6 +24,7 @@ use crate::ring::Rings;
 use crate::rand::Rng;
 use crate::score::{Note, Score};
 use crate::sympathetic::Sympathetic;
+use crate::telemetry::Snapshot;
 use crate::voice::BowVoice;
 
 /// First sample of frame `f`.
@@ -204,6 +205,8 @@ pub struct Engine {
     scratch: Vec<Event>,
     hop_events: Vec<(usize, Event)>,
     record: Option<Curves>,
+    /// The last ring event per string (for the snapshot).
+    rings: [Option<Ring>; 4],
 }
 
 impl Engine {
@@ -222,6 +225,7 @@ impl Engine {
             scratch: Vec::with_capacity(16),
             hop_events: Vec::with_capacity(16),
             record: record.then(Curves::default),
+            rings: [None; 4],
         };
         // The first frame is pulled on the first `process`, so notes added
         // before then are seen from frame 0.
@@ -234,6 +238,50 @@ impl Engine {
 
     pub fn set_bright(&mut self, bright: f32) {
         self.sound.set_bright(bright);
+    }
+
+    /// Live hosts: what's expected next, ids and start times in this
+    /// engine's clock (see [`Performer::forecast`]).
+    pub fn forecast(&mut self, notes: impl IntoIterator<Item = (u32, Note)>, doubles: bool) {
+        self.perf.forecast(notes, doubles);
+    }
+
+    /// Live hosts: a note-on now (see [`Performer::note_on`]).
+    pub fn note_on(&mut self, id: u32, pitch: f32, velocity: f32) {
+        self.perf.note_on(id, pitch, velocity);
+    }
+
+    /// Live hosts: a note-off now (see [`Performer::note_off`]).
+    pub fn note_off(&mut self, id: u32, pitch: f32) {
+        self.perf.note_off(id, pitch);
+    }
+
+    /// Live hosts: stop everything (transport stop, panic).
+    pub fn all_off(&mut self) {
+        self.perf.all_off();
+    }
+
+    /// Live hosts: once per block (see [`Performer::settle`]).
+    pub fn settle(&mut self) {
+        self.perf.settle();
+    }
+
+    /// The performer's knobs, while playing.
+    pub fn set_style(&mut self, style: &Style, doubles: bool) {
+        self.perf.set_style(style);
+        self.perf.set_doubles(doubles);
+    }
+
+    /// What the player is doing now, for a faceplate (see [`Snapshot`]).
+    pub fn snapshot(&self) -> Snapshot {
+        let mut s = Snapshot { time: self.time(), frame: self.a, ..Snapshot::default() };
+        self.perf.fill_snapshot(s.time, &self.a, &self.rings, &mut s);
+        s
+    }
+
+    /// The performer, to read what it's doing (telemetry).
+    pub fn performer(&self) -> &Performer {
+        &self.perf
     }
 
     /// Seconds, at the next sample `process` will write.
@@ -270,6 +318,9 @@ impl Engine {
             rec.frames.push(f);
         }
         for e in self.scratch.drain(..) {
+            if let Event::Ring(r) = e {
+                self.rings[r.string as usize & 3] = Some(r);
+            }
             if let Some(rec) = &mut self.record {
                 match e {
                     Event::Pluck(p) => rec.plucks.push(p),
@@ -364,7 +415,7 @@ impl Knocks {
 mod tests {
     use super::*;
     use crate::instrument::cello;
-    use crate::performer::{perform, LOOKAHEAD};
+    use crate::performer::{perform, LOOKAHEAD, NO_ID};
 
     fn rms(x: &[f32]) -> f32 {
         (x.iter().map(|v| v * v).sum::<f32>() / x.len().max(1) as f32).sqrt()
@@ -422,6 +473,103 @@ mod tests {
             e.process(block);
         }
         assert_eq!(live, offline);
+    }
+
+    /// Plays `s` the way a host with look-ahead does: every block a fresh
+    /// forecast of the next second, then the note-ons and offs on time.
+    /// `gone`: (note, when) notes deleted at that time, never played.
+    fn host(s: &Score, style: &Style, len: usize, gone: &[(usize, f64)]) -> Vec<f32> {
+        let mut e = Engine::new(&cello(), style, 48_000.0, 0.0, false);
+        let mut out = vec![0.0f32; len];
+        let (mut on, mut off) = (vec![false; s.notes.len()], vec![false; s.notes.len()]);
+        let deleted = |i: usize, t: f64| gone.iter().any(|&(g, at)| g == i && t >= at);
+        for block in out.chunks_mut(256) {
+            let t = e.time();
+            let ahead = s
+                .notes
+                .iter()
+                .enumerate()
+                .filter(|&(i, n)| n.start >= t && n.start <= t + LOOKAHEAD + 0.1 && !deleted(i, t));
+            e.forecast(ahead.map(|(i, n)| (i as u32, n.clone())), true);
+            for (i, n) in s.notes.iter().enumerate() {
+                if !on[i] && n.start <= t && !deleted(i, t) {
+                    on[i] = true;
+                    e.note_on(i as u32, n.pitch, 0.5);
+                }
+                if on[i] && !off[i] && n.end() <= t {
+                    off[i] = true;
+                    e.note_off(i as u32, n.pitch);
+                }
+            }
+            e.settle();
+            e.process(block);
+        }
+        out
+    }
+
+    #[test]
+    fn a_forecast_kept_plays_exactly_like_offline() {
+        let s = Score::parse("tempo 100\n(C3:e D3 E3 F3) G3:q D3+A3:q B3:h").unwrap();
+        let style = Style::default();
+        let offline = render_score(&s, &cello(), &style, 48_000.0, 0.0).audio;
+        assert_eq!(host(&s, &style, offline.len(), &[]), offline);
+    }
+
+    #[test]
+    fn a_note_deleted_before_it_starts_is_not_played_or_barely() {
+        // Three half-second notes, a rest, a last note at 2.5 s.
+        let s = Score::parse("tempo 120\nC3:q E3 G3 r:h C4:h").unwrap();
+        let last = s.notes[3].start;
+        let at = |t: f64| (t * 48_000.0) as usize;
+        let window = |o: &[f32]| rms(&o[at(last + 0.3)..at(last + 0.9)]);
+        let played = window(&host(&s, &Style::default(), 48_000 * 5, &[]));
+        // Deleted half a second ahead: never played at all.
+        let early = host(&s, &Style::default(), 48_000 * 5, &[(3, last - 0.5)]);
+        let without = Score::parse(
+            "tempo 120
+C3:q E3 G3",
+        )
+        .unwrap();
+        let reference = window(&host(&without, &Style::default(), 48_000 * 5, &[]));
+        assert_eq!(window(&early), reference, "as if it was never written");
+        assert!(rms(&early[at(0.1)..at(0.4)]) > 0.01, "the others play");
+        // Deleted once the hand had committed: cut, a ghost of it at most.
+        let late = host(&s, &Style::default(), 48_000 * 5, &[(3, last - 0.05)]);
+        assert!(window(&late) < 0.1 * played, "cut: {} vs {played}", window(&late));
+    }
+
+    #[test]
+    fn a_note_nobody_forecast_is_sight_read_and_stops_at_its_note_off() {
+        let mut e = Engine::new(&cello(), &Style::default(), 48_000.0, 0.0, false);
+        let mut out = vec![0.0f32; 48_000 * 3];
+        for (k, block) in out.chunks_mut(256).enumerate() {
+            let t = e.time();
+            e.forecast([], true); // the song isn't playing: nothing expected
+            if k == 40 {
+                e.note_on(NO_ID, 50.0, 0.8); // a key pressed, no id, no length
+            }
+            if (1.2..1.21).contains(&t) {
+                e.note_off(NO_ID, 50.0);
+            }
+            e.settle();
+            e.process(block);
+        }
+        let at = |t: f64| (t * 48_000.0) as usize;
+        assert!(rms(&out[..at(0.2)]) < 1e-4, "silent before the key");
+        assert!(rms(&out[at(0.5)..at(1.1)]) > 0.01, "plays at once, held");
+        assert!(rms(&out[at(2.2)..]) < 1e-3, "and stops after the key is let go: {}", rms(&out[at(2.2)..]));
+    }
+
+    #[test]
+    fn two_keys_together_live_become_a_double_stop() {
+        let mut e = Engine::new(&cello(), &Style::default(), 48_000.0, 0.0, false);
+        let mut out = vec![0.0f32; 4096];
+        e.note_on(NO_ID, 50.0, 0.8);
+        e.note_on(NO_ID, 57.0, 0.8);
+        e.process(&mut out);
+        let d = e.performer().decisions();
+        assert_eq!(d.len(), 1, "one note…");
+        assert!(d[0].double, "…played as a double stop");
     }
 }
 

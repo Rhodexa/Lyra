@@ -1,0 +1,12 @@
+[package]
+name = "octavia-lyra"
+description = "Octavia as a Lyra instrument: parameters, presets, notes in, audio and telemetry out."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+octavia-core.workspace = true
+# Lyra's plugin interface, from the Lyra repo next door. Lyra lists this
+# crate in its own Cargo.toml by path; nothing here moves.
+lyra-plugin = { path = "../../../../Lyra/crates/lyra-plugin" }

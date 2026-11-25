@@ -101,14 +101,18 @@ Claude reads this before choosing what to work on.
 - [ ] Attacks are only curves (a noise puff plus a brightness bite). There's no real bow-scratch transient or finger thump on shifts yet. This is the next big realism step.
 - [ ] One line only: no double stops, no ties (two slurred notes of the same pitch don't re-articulate, but there's no `~` tie mark), no spiccato or sul ponticello yet.
 - [ ] The violin body is a rough guess; the cello got more care.
-- [ ] Streaming works (2026-11-23); the Lyra adapter is next and needs Lyra to hand over upcoming notes.
 - [ ] Inferred accents only fire when a note is 0.12 louder than its neighbourhood average, so a run of accents in a row dilutes itself (only the first one in `articulations.roll` gets accented).
-- [ ] No "open notes" yet (length unknown until note-off), so live keyboard playing isn't supported.
 - [ ] About 20× real time per cello, untuned. Fine for now.
 - [ ] *(found by the faceplate, 2026-11-25)* A string crossing that comes with a shift still rings the old string at its **stopped** pitch, though the hand has moved away. `showcase` at 0.70 s: D3 on the G string (finger at 7), then the hand shifts to 2 (covers 2–6) for E3, and the G string rings on at D3. The finger should lift (ring open, or damped). Changes the sound, so it needs a listening A/B.
+
+- [ ] *(2026-11-25, for the faceplate)* NEXT can only show *how* a note is played once the performer commits to it, 0.12 s before it starts (`PLAN_LEAD`); earlier, a coming note has its pitch and time but `decision: None`. The mock knew every decision in advance from the renders. Either NEXT shows undecided notes plainly (pitch only), or the performer learns to pre-decide (a bigger change: decisions would then have to stay revisable).
+- [ ] *(2026-11-25)* There is no "Player" parameter: the four profiles are presets that set the skill faders, and the LCD can name the profile by matching the faders (or show CUSTOM). The faceplate's profile buttons load presets. If a saved, automatable Player is wanted after all, it goes at the end of the table.
+- [ ] *(2026-11-25)* Switching Cello ↔ Violin mid-song cuts what's sounding (two engines, one plays). Fine for an instrument switch; say if it should crossfade.
+- [ ] *(2026-11-25)* Two notes pressed live within ~10 ms become a double stop; slower "rolled" chords become two notes in a row (a cello can't hold a third anyway). From the piano roll, chords always land together.
 
 ---
 
 ## Done
+- 2026-11-25: **In Lyra.** `crates/octavia-lyra`: the parameter table, the four profiles as presets, notes in, audio out, telemetry. Lyra hands over the next second of notes (`lyra.note-lookahead`) as a *forecast*; note-ons and offs stay the truth: a deleted note is dropped (or cut if the hand had committed), a key played live is sight-read and held until its note-off ("open notes"), chords become double stops. Played through Lyra's API the result is sample-identical to `render_score`. Telemetry (`octavia_core::telemetry::Snapshot`) comes from the engine's own state and matches `--explain` note for note.
 - 2026-11-23: Performer sees one second ahead, streaming engine, inference from bare piano rolls (`.roll`), pizzicato as a patch. The inferred Bach prelude bows exactly like the hand-marked one.
 - 2026-11-23: First version: rules performer, recipe voice, plucks, sympathetic strings, body, renderer with plots and measurements.

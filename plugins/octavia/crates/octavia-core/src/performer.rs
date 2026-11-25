@@ -77,6 +77,7 @@ use crate::dsp::smoothstep;
 use crate::instrument::Instrument;
 use crate::rand::{hash_bipolar, Wander};
 use crate::score::{Articulation, Note, Score};
+use crate::telemetry::{NoteInfo, Snapshot, StringSound, StringState, Tuner, RECENT, UPCOMING};
 use std::f64::consts::TAU;
 
 /// How far ahead the performer looks, in seconds.
@@ -195,6 +196,29 @@ pub enum Event {
     Ring(Ring),
 }
 
+/// "No id" from a live host: match the note by its key.
+pub const NO_ID: u32 = u32::MAX;
+/// A live note with no known end yet lasts this long until its note-off.
+const OPEN: f64 = 3600.0;
+/// A committed forecast note whose note-on is this late was deleted.
+const MISSED: f64 = 0.02;
+
+/// Who a note is to a live host.
+#[derive(Clone, Copy, Debug)]
+struct Tag {
+    /// The host's ids for the note and, in a double stop, its lower note.
+    id: u32,
+    id2: u32,
+    /// The lower key of a live double stop (to match its note-off).
+    key2: f32,
+    /// Its note-on came (offline notes count as heard).
+    heard: bool,
+}
+
+impl Tag {
+    const HEARD: Tag = Tag { id: NO_ID, id2: NO_ID, key2: -1.0, heard: true };
+}
+
 /// Notes closer than this count as connected.
 const TOUCH: f64 = 0.03;
 /// A gap longer than this ends a phrase.
@@ -289,6 +313,8 @@ pub struct Performer {
     inst: Instrument,
     style: Style,
     notes: Vec<Note>,
+    /// Per note: who it is to a live host (see "Live hosts" below).
+    tags: Vec<Tag>,
     plans: Vec<Plan>,
     frame: u64,
     owner: Option<usize>,
@@ -323,7 +349,16 @@ pub struct Performer {
     /// it: per string, the note's offset above the open string and until
     /// when it can still be ringing.
     held: [Option<(f32, f64)>; 4],
+    /// Two-note chords become double stops (live hosts; see `set_doubles`).
+    style_doubles: bool,
+    /// The tuner: (time, cents) of recent frames of the current note.
+    tuner_buf: [(f64, f32); TUNER_FRAMES],
+    tuner_len: usize,
+    tuner_owner: Option<usize>,
 }
+
+/// The tuner's memory: a little over 0.15 s of frames.
+const TUNER_FRAMES: usize = 40;
 
 impl Performer {
     pub fn new(inst: &Instrument, style: &Style) -> Self {
@@ -331,6 +366,7 @@ impl Performer {
             inst: inst.clone(),
             style: style.clone(),
             notes: Vec::with_capacity(1024),
+            tags: Vec::with_capacity(1024),
             plans: Vec::with_capacity(1024),
             frame: 0,
             owner: None,
@@ -354,48 +390,349 @@ impl Performer {
             arm_now: 0.0,
             last_stroke: f64::MIN,
             held: [None; 4],
+            style_doubles: true,
+            tuner_buf: [(0.0, 0.0); TUNER_FRAMES],
+            tuner_len: 0,
+            tuner_owner: None,
         }
     }
 
     /// Adds a note. Notes already planned can't be moved, so a note arriving
     /// out of order is placed after them.
     pub fn add_note(&mut self, n: Note) {
+        self.insert(n, Tag::HEARD);
+    }
+
+    fn insert(&mut self, n: Note, tag: Tag) {
         let pos = self.notes.partition_point(|m| m.start <= n.start).max(self.plans.len());
         self.notes.insert(pos, n);
+        self.tags.insert(pos, tag);
+    }
+
+    // ── live hosts: a forecast, then the notes themselves ───────────────
+    //
+    // A host like Lyra says what's coming (a forecast, refreshed every
+    // block) and then plays the notes (note-on, note-off). The forecast lets
+    // the performer phrase; the notes are the truth:
+    // * a forecast note whose note-on comes is played as planned;
+    // * a note-on nobody forecast (played live, or added at the last
+    //   moment) is sight-read: played at once, held until its note-off;
+    // * a note-off ends its note then, even if it was meant to be longer;
+    // * a forecast note that never comes is dropped, or, if the hands had
+    //   already committed to it (`PLAN_LEAD`), cut as soon as it's missed.
+    // Nothing here allocates while fewer than 1024 notes are in play.
+
+    /// The host's forecast: every note it expects to start in the next
+    /// [`LOOKAHEAD`], in start order, with its id; start times in the
+    /// performer's clock. Replaces everything not yet planned. Notes starting
+    /// together (10 ms) become a double stop when `doubles`, else the highest
+    /// alone.
+    pub fn forecast(&mut self, notes: impl IntoIterator<Item = (u32, Note)>, doubles: bool) {
+        // Drop the old forecast, but keep notes actually played and not yet
+        // planned (a key pressed a moment ago).
+        let planned = self.plans.len();
+        let mut keep = planned;
+        for r in planned..self.notes.len() {
+            if self.tags[r].heard {
+                self.notes.swap(keep, r);
+                self.tags.swap(keep, r);
+                keep += 1;
+            }
+        }
+        self.notes.truncate(keep);
+        self.tags.truncate(keep);
+        for (id, n) in notes {
+            if self.find(id).is_some() {
+                continue; // planned or played: it can't move any more
+            }
+            // A chord: the highest note leads, the next one down is its
+            // double stop (like `Score::merge_chords`).
+            let chord = (planned..self.notes.len())
+                .rev()
+                .find(|&j| !self.tags[j].heard && (self.notes[j].start - n.start).abs() < 0.01);
+            if let Some(j) = chord {
+                self.tags[j].id2 = id;
+                let m = &mut self.notes[j];
+                let (hi, lo) = if n.pitch > m.pitch { (n.pitch, m.pitch) } else { (m.pitch, n.pitch) };
+                m.pitch = hi;
+                m.double = (doubles && hi - lo > 0.01).then_some(lo.max(m.double.unwrap_or(f32::MIN)));
+                m.dur = m.dur.max(n.dur);
+            } else {
+                self.insert(n, Tag { id, heard: false, ..Tag::HEARD });
+            }
+        }
+    }
+
+    /// A note-on, now. Forecast: it's confirmed. Otherwise it's played from
+    /// now on, until its note-off. `id` may be [`NO_ID`] (match by key).
+    pub fn note_on(&mut self, id: u32, pitch: f32, velocity: f32) {
+        if let Some(i) = self.find(id) {
+            self.tags[i].heard = true;
+            return;
+        }
+        let dynamic = crate::score::velocity_to_dynamic(velocity);
+        let now = self.time();
+        // A second key a moment after an unplanned one: a double stop.
+        if let Some(i) = self.notes.len().checked_sub(1).filter(|&i| i >= self.plans.len()) {
+            let n = &mut self.notes[i];
+            if (n.start - now).abs() < 0.01 && n.double.is_none() && (n.pitch - pitch).abs() > 0.01 {
+                let (hi, lo) = if pitch > n.pitch { (pitch, n.pitch) } else { (n.pitch, pitch) };
+                n.pitch = hi;
+                n.double = self.style_doubles.then_some(lo);
+                self.tags[i].id2 = id;
+                self.tags[i].key2 = pitch;
+                return;
+            }
+        }
+        let n = Note {
+            start: now,
+            dur: OPEN,
+            pitch,
+            dynamic,
+            dynamic_end: dynamic,
+            articulation: crate::score::Articulation::Auto,
+            slur: None,
+            double: None,
+        };
+        self.insert(n, Tag { id, ..Tag::HEARD });
+    }
+
+    /// A note-off, now: its note ends here if it was meant to last longer.
+    pub fn note_off(&mut self, id: u32, pitch: f32) {
+        let now = self.time();
+        let i = self.find(id).or_else(|| {
+            // No id: the latest note on this key still sounding.
+            (0..self.notes.len()).rev().find(|&i| {
+                let (n, t) = (&self.notes[i], &self.tags[i]);
+                t.id == NO_ID && ((n.pitch - pitch).abs() < 0.01 || (t.key2 - pitch).abs() < 0.01) && n.end() > now
+            })
+        });
+        if let Some(i) = i {
+            let n = &mut self.notes[i];
+            if n.start <= now && n.end() > now + 0.005 {
+                n.dur = now - n.start;
+            }
+        }
+    }
+
+    /// Stop: every note ends now and nothing more is expected.
+    pub fn all_off(&mut self) {
+        let now = self.time();
+        let planned = self.plans.len();
+        self.notes.truncate(planned);
+        self.tags.truncate(planned);
+        for n in &mut self.notes {
+            if n.end() > now {
+                n.dur = (now - n.start).max(0.0);
+            }
+        }
+    }
+
+    /// Once per block in a live host: cut committed notes whose note-on
+    /// never came, and forget everything once all has died away (so the
+    /// lists don't grow through a long session).
+    pub fn settle(&mut self) {
+        let now = self.time();
+        let from = self.plans.len().saturating_sub(16);
+        for i in from..self.plans.len() {
+            let n = &mut self.notes[i];
+            if !self.tags[i].heard && n.start < now - MISSED && n.end() > now {
+                n.dur = now - n.start;
+            }
+        }
+        if self.plans.len() == self.notes.len() && !self.notes.is_empty() && now > self.end() {
+            self.notes.clear();
+            self.tags.clear();
+            self.plans.clear();
+            self.owner = None;
+            self.lifted = None;
+            self.held = [None; 4];
+        }
+    }
+
+    /// Whether two-note chords become double stops (live hosts).
+    pub fn set_doubles(&mut self, on: bool) {
+        self.style_doubles = on;
+    }
+
+    /// The knobs, changed while playing (the instrument stays).
+    pub fn set_style(&mut self, style: &Style) {
+        self.style = style.clone();
+    }
+
+    /// Notes not yet started or still sounding, among the last ones.
+    fn find(&self, id: u32) -> Option<usize> {
+        if id == NO_ID {
+            return None;
+        }
+        // Only recent notes can still matter: search back from the end.
+        (0..self.tags.len()).rev().take(256).find(|&i| self.tags[i].id == id || self.tags[i].id2 == id)
     }
 
     /// How each note planned so far is being played, in note order.
     pub fn decisions(&self) -> Vec<Decision> {
-        self.plans
-            .iter()
-            .map(|p| {
-                let how = if p.pizz {
-                    Played::Plucked
-                } else if p.tremolo {
-                    Played::Tremolo
-                } else if p.spiccato {
-                    Played::Bounced
-                } else if p.staccato {
-                    Played::Staccato
-                } else {
-                    match p.entry {
-                        Entry::Fresh => Played::Fresh,
-                        Entry::BowChange => Played::NewBow,
-                        Entry::Legato => Played::Slurred,
+        (0..self.plans.len()).map(|i| self.decision(i)).collect()
+    }
+
+    /// How planned note `i` is being played.
+    fn decision(&self, i: usize) -> Decision {
+        let p = &self.plans[i];
+        let how = if p.pizz {
+            Played::Plucked
+        } else if p.tremolo {
+            Played::Tremolo
+        } else if p.spiccato {
+            Played::Bounced
+        } else if p.staccato {
+            Played::Staccato
+        } else {
+            match p.entry {
+                Entry::Fresh => Played::Fresh,
+                Entry::BowChange => Played::NewBow,
+                Entry::Legato => Played::Slurred,
+            }
+        };
+        Decision {
+            played: how,
+            double: p.double.is_some(),
+            string: p.string,
+            hand: p.hand,
+            shift: p.shift,
+            workload: p.workload,
+            composure: p.composure,
+            down: p.down,
+        }
+    }
+
+    // ── what a faceplate sees ───────────────────────────────────────────
+
+    /// Fills everything but the time and frame of a [`Snapshot`], at time
+    /// `t` with the sound at `frame`, given the last ring per string.
+    pub(crate) fn fill_snapshot(&self, t: f64, frame: &Frame, rings: &[Option<Ring>; 4], out: &mut Snapshot) {
+        let open = self.inst.open_strings;
+        let sounding = frame.loudness > 0.02;
+        let mut st = [StringState::default(); 4];
+        // Strings ringing on their own (crossed away from, or let go)…
+        for (s, r) in rings.iter().enumerate() {
+            let Some(r) = r.filter(|r| r.time <= t) else {
+                continue;
+            };
+            let tau = if r.open { 1.5 } else { (0.12 + 0.5 * r.bright as f64) / 2.0 };
+            let level = r.level * (-(t - r.time) / tau).exp() as f32;
+            if level > 0.02 {
+                st[s].sound = StringSound::Ringing(level.min(1.0));
+                if !r.open && t < r.time + 0.12 + 0.5 * r.bright as f64 {
+                    st[s].finger = Some(r.pitch);
+                }
+            }
+        }
+        // …fingers still holding them…
+        for (s, h) in self.held.iter().enumerate() {
+            if let Some((off, until)) = *h {
+                if t < until && t >= self.last_start {
+                    st[s].finger = Some(open[s] + off);
+                }
+            }
+        }
+        // …and the note being played, on top.
+        if let Some(i) = self.owner {
+            let (n, p) = (&self.notes[i], &self.plans[i]);
+            let s = p.string as usize;
+            let playing = t < self.sound_end(i, t);
+            let fingered = playing || self.lift_at(i, t).is_some_and(|l| t < l);
+            if p.pizz {
+                if t < n.start + 0.25 {
+                    st[s].sound = StringSound::Plucked;
+                }
+            } else if sounding && playing {
+                st[s].sound = StringSound::Bowed;
+                if let Some((_, s2)) = p.double {
+                    st[s2 as usize].sound = StringSound::Bowed;
+                }
+            } else if fingered && sounding {
+                st[s].sound = StringSound::Ringing(frame.loudness.min(1.0));
+            }
+            if fingered {
+                // Where the finger really is: the sound's pitch while it's on
+                // this string, else where the note is written.
+                let real = |pitch: f32, string: u8, written: f32| {
+                    if !p.pizz && pitch > 0.0 && string == p.string {
+                        pitch
+                    } else {
+                        written
                     }
                 };
-                Decision {
-                    played: how,
-                    double: p.double.is_some(),
-                    string: p.string,
-                    hand: p.hand,
-                    shift: p.shift,
-                    workload: p.workload,
-                    composure: p.composure,
-                    down: p.down,
+                let fp = real(frame.pitch, frame.string, n.pitch);
+                st[s].finger = (fp - open[s] >= 0.5).then_some(fp);
+                if let Some((lo, s2)) = p.double {
+                    let fp2 = if frame.pitch2 > 0.0 { frame.pitch2 } else { lo };
+                    st[s2 as usize].finger = (fp2 - open[s2 as usize] >= 0.5).then_some(fp2);
                 }
-            })
-            .collect()
+            }
+            if p.entry == Entry::Legato
+                && p.shift > 0.0
+                && i > 0
+                && self.plans[i - 1].string == p.string
+                && t - n.start < 0.5
+            {
+                st[s].sliding_from = Some(self.notes[i - 1].pitch);
+            }
+        }
+        out.strings = st;
+        out.hand = self.hand;
+        out.workload = self.workload;
+        out.composure = self.composure;
+        out.tuner = if sounding && self.owner.is_some_and(|i| !self.plans[i].pizz) { self.tuner(t) } else { None };
+        let info = |i: usize| {
+            let n = &self.notes[i];
+            let decision = (i < self.plans.len()).then(|| self.decision(i));
+            NoteInfo {
+                start: n.start,
+                len: n.dur.min(OPEN / 2.0),
+                pitch: n.pitch,
+                pitch2: n.double,
+                decision,
+                open: decision.is_some_and(|d| (n.pitch - open[d.string as usize]).abs() < 0.01),
+            }
+        };
+        let now = self.owner.map_or(0, |o| o + 1);
+        let from = now.saturating_sub(RECENT);
+        out.recent = [None; RECENT];
+        for (k, i) in (from..now).enumerate() {
+            out.recent[k] = Some(info(i));
+        }
+        out.upcoming = [None; UPCOMING];
+        for (k, i) in (now..self.notes.len()).take(UPCOMING).enumerate() {
+            out.upcoming[k] = Some(info(i));
+        }
+    }
+
+    /// The last 0.15 s of the note against its written pitch (frames past
+    /// the onset glide, sounding, within a semitone).
+    fn track_tuner(&mut self, frame: &Frame, t: f64) {
+        if self.owner != self.tuner_owner {
+            self.tuner_owner = self.owner;
+            self.tuner_len = 0;
+        }
+        let Some(i) = self.owner else { return };
+        let c = (frame.pitch - self.notes[i].pitch) * 100.0;
+        if frame.loudness < 0.02 || t < self.notes[i].start + 0.08 || c.abs() > 100.0 {
+            return;
+        }
+        self.tuner_buf[self.tuner_len % TUNER_FRAMES] = (t, c);
+        self.tuner_len += 1;
+    }
+
+    fn tuner(&self, t: f64) -> Option<Tuner> {
+        let seen = &self.tuner_buf[..self.tuner_len.min(TUNER_FRAMES)];
+        let (mut sum, mut k, mut lo, mut hi) = (0.0, 0, f32::MAX, f32::MIN);
+        for &(_, c) in seen.iter().filter(|(at, _)| *at >= t - 0.15) {
+            sum += c;
+            k += 1;
+            lo = lo.min(c);
+            hi = hi.max(c);
+        }
+        (k > 0).then(|| Tuner { cents: sum / k as f32, lo, hi })
     }
 
     /// Seconds since the start, of the next frame.
@@ -468,6 +805,7 @@ impl Performer {
         };
         self.smooth_loud = frame.loudness + self.loud_keep * (self.smooth_loud - frame.loudness);
         frame.loudness = self.smooth_loud;
+        self.track_tuner(&frame, t);
         self.frame += 1;
         frame
     }

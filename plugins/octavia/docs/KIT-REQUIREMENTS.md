@@ -18,6 +18,11 @@ synth-specific pieces; the kit should be the small shared part only.
 
 ## A. The sound side (`lyra-plugin`)
 
+*Done 2026-11-25: note ids on note events (`NoteId`, `NO_ID` like CLAP's
+-1), the `lyra.note-lookahead` extension (`Plugin::note_lookahead`,
+`Plugin::upcoming`, `UpcomingNote`), `Plugin::latency`. Per-note data is
+still to come. C is done too (`octavia_core::telemetry`).*
+
 | need | today | why Octavia needs it | CLAP equivalent |
 |---|---|---|---|
 | parameter table, continuous + choice, groups | ✅ `ParamInfo`, `groups()` | character, breath, skills, patch… | `clap.params` |

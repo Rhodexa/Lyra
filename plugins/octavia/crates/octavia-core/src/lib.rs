@@ -26,13 +26,15 @@ pub mod render;
 pub mod ring;
 pub mod score;
 pub mod sympathetic;
+pub mod telemetry;
 pub mod voice;
 
 pub use curves::{Curves, Frame, Pluck, Ring, Tap, FRAME_RATE};
 pub use instrument::Instrument;
-pub use performer::{perform, Decision, Event, Performer, Played, Skill, Style, LOOKAHEAD};
+pub use performer::{perform, Decision, Event, Performer, Played, Skill, Style, LOOKAHEAD, NO_ID};
 pub use render::{render, render_score, Engine, Rendered, Sound};
 pub use score::{Articulation, Note, Score};
+pub use telemetry::Snapshot;
 
 /// MIDI note number (fractional allowed) to Hz. A4 = 69 = 440 Hz.
 #[inline]

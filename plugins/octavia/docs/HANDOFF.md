@@ -4,6 +4,22 @@ Written 2026-11-25, at the end of the faceplate design session. Three
 pieces of work, each for its own session, each owning its own files. Read
 this, then the files it points to.
 
+**Status (2026-11-25, evening): sessions 1 and 2 are done; 3 is next.**
+Octavia plays from Lyra's piano roll with the generic editor
+(`crates/octavia-lyra`). For the porter:
+
+* Telemetry: `octavia_core::telemetry::Snapshot` (plain data). The editor
+  gets it with `plugin.telemetry()` → downcast to `octavia_lyra::Telemetry`
+  → `.read()`; `.instrument()` says cello or violin, and
+  `octavia_core::instrument::{cello, violin}()` give open strings, hand
+  span. Fingers solid = `StringSound::Bowed | Plucked`, hollow = `Ringing`.
+* NEXT: coming notes have `decision: None` until 0.12 s before they start
+  (see the journal's "Noticed").
+* No Player parameter: profile buttons load the presets (journal).
+* Lyra side: note ids, `Plugin::note_lookahead`/`upcoming`
+  (`lyra.note-lookahead`) and `Plugin::latency` live in `lyra-plugin`.
+  Lyra doesn't compensate latency; it gives look-ahead instead.
+
 ## Where things stand
 
 * **The engine** (stages 1–4) is done and tested: performer, voice,
