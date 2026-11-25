@@ -127,7 +127,7 @@ th{color:var(--page-dim);font-weight:600}
     <li>The vibe: blocky and flat, square corners, hard shadows, few decorations; slightly off, never polished.</li>
     <li>LCD colours: <code>--lcd-0…3</code> (the lavender set).</li>
     <li>The LCD cheats: plain text with LCD shadows (the colours and shadows sell it, not segment shapes); segments only for the take. Unlit things are off or barely there, never half-lit.</li>
-    <li>Graphs are smooth vector lines; meters are BIOS-style outlined boxes with blocks.</li>
+    <li>Meters are BIOS-style outlined boxes with blocks taller than wide; no curves.</li>
     <li>Knobs round, with an arc. Logo: later, probably a raster.</li>
   </ul>
 </div>
@@ -202,12 +202,11 @@ th{color:var(--page-dim);font-weight:600}
 <table>
 <tr><th>where</th><th>what</th><th>from</th></tr>
 <tr><td>top</td><td>the message (the player, or the control you're touching and its value; PERF OFF) · take, the one segment display left</td><td>parameters</td></tr>
-<tr><td>printed words</td><td>lit when true: instrument, patch, double stops, page, grit, performer off, playing</td><td>parameters, frames</td></tr>
+<tr><td>printed words</td><td>lit when true: instrument, patch, double stops, grit (the bow scratching), page, playing</td><td>parameters, frames</td></tr>
 <tr><td>the note</td><td>the note being played and how</td><td>latest decision</td></tr>
 <tr><td>the strings</td><td>looking down at the fingerboard: the bowed string dark, strings left ringing grey, the finger on the neck at its position (none when open), the bow across</td><td>decision, hand, ring events</td></tr>
 <tr><td>next</td><td>what the performer has already planned (the look-ahead), each with its bow mark: ⊓ down, V up. Below, the bow's way now: ⊓◀ or ▶V</td><td>upcoming notes, decision</td></tr>
-<tr><td>loudness</td><td>the bow's loudness, the last two seconds</td><td>frames</td></tr>
-<tr><td>pitch · workload · calm</td><td>BIOS-style boxes: the tuner (one block, ±50 cents vs. the written note) and the player's state</td><td>frames, decisions</td></tr>
+<tr><td>meters</td><td>BIOS-style boxes: loudness (GRIT lights when the bow scratches), brightness, pitch (a tuner: the dark block is where the note sits, the light span is the vibrato, ±50 cents), workload, calm</td><td>frames, decisions</td></tr>
 <tr><td>LOG page</td><td>the decisions as text, like <code>--explain</code></td><td>decision ring buffer</td></tr>
 </table>
 </div>
@@ -229,6 +228,7 @@ th{color:var(--page-dim);font-weight:600}
 <script src="tapes/prelude.js"></script>
 <script src="tapes/lament.js"></script>
 <script src="tapes/violin-air.js"></script>
+<script src="tapes/local/index.js"></script>  <!-- optional: MIDI tapes, git-ignored -->
 <script>
 'use strict';
 const $ = s => document.querySelector(s);
@@ -506,10 +506,9 @@ function frameAt(t, key) { const f = tape.frames[key]; return f[Math.max(0, Math
 function string2Of(n) { if (!n.note2) return -1; const i = Math.round((n.t + n.len * .5) * tape.fps); return tape.frames.string2[Math.min(i, tape.frames.string2.length - 1)]; }
 function ringLevel(t, s) { // how much a string left by the bow still rings
   let lv = 0;
-  for (const r of tape.rings) { if (r.string !== s || r.t > t) continue;
+  for (const r of tape.rings) { if (r.t > t) break; if (r.string !== s || r.t < t - 2) continue;
     const dur = r.open ? 1.8 : .12 + .5 * r.bright;
-    const next = tape.notes.find(n => n.t > r.t + .01 && (n.string === s || string2Of(n) === s));
-    if (next && next.t <= t) continue;
+    if (r.stop <= t) continue;
     lv = Math.max(lv, r.level * (1 - (t - r.t) / dur)); }
   return lv;
 }
@@ -580,43 +579,42 @@ function nextPanel(t, cur) {
   bowMark(upb, 'up', x + 118, by - 7, 14);
 }
 
-function graphPanel(t) {
-  const x = L.colX + 12, y = L.mid + 8, w = W - L.pad - x, h = 50;
-  printed(2, 'LOUDNESS', x, y, 9);
-  const grit = frameAt(t, 'grit') > .12 && frameAt(t, 'loudness') > .02;
-  printed(grit ? 3 : 0, 'GRIT', x + w, y, 9, 'right');
-  const span = 2.0, base = y + 8 + h, N = 120;
-  rect(1, x, base + 3, w, 2);
-  ink(3, () => {
-    ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.beginPath(); let started = false;
-    for (let i = 0; i <= N; i++) {
-      const tt = t - span + i * span / N; if (tt < 0) continue;
-      const v = Math.min(1, frameAt(tt, 'loudness') * 1.5), xx = x + i * w / N, yy = base - 2 - v * (h - 4);
-      started ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); started = true;
-    }
-    ctx.stroke();
-  });
-}
-
+// the right side: BIOS-style meters, an outlined box with blocks taller than wide
 function meters(t, cur) {
-  const x = L.colX + 12, w = W - L.pad - x, bx = x + 70, bw = w - 70;
-  // pitch: a box, the centre marked, one block where the pitch is (±50 cents)
-  const yP = L.div + 14;
-  printed(2, 'PITCH', x, yP + 10, 9);
-  rect(2, bx + bw / 2 - 1, yP - 4, 2, 4); rect(2, bx + bw / 2 - 1, yP + 14, 2, 4);
-  const loud = frameAt(t, 'loudness');
-  let cents = null;
-  if (cur && loud > .02 && cur.how !== 'Plucked' && t < cur.t + cur.len + .05)
-    cents = Math.max(-50, Math.min(50, (frameAt(t, 'pitch') - midi(cur.note)) * 100));
-  const n = 21, at = cents === null ? -1 : Math.round((cents + 50) / 100 * (n - 1));
-  boxMeter(bx, yP, bw, 14, n, i => i === at);
-  if (cents !== null) text(3, (cents >= 0 ? '+' : '−') + Math.abs(Math.round(cents)) + '¢', x + 36, yP + 10, 11);
-  // workload and composure
+  const x = L.colX + 12, w = W - L.pad - x, bx = x + 84, bw = w - 84, bh = 16, n = 32;
+  const loud = frameAt(t, 'loudness'), sounding = loud > .02;
+  const row = (label, y, v) => { printed(2, label, x, y + 12, 9); const k = Math.round(v * n); boxMeter(bx, y, bw, bh, n, i => i < k); };
+  let y = L.mid + 6;
+  row('LOUDNESS', y, Math.min(1, loud * 1.5));
+  y += 32; row('BRIGHTNESS', y, sounding ? Math.min(1, frameAt(t, 'brightness')) : 0);
+  // pitch: like a tuner. The dark block is where the note sits (smoothed, the onset
+  // glide ignored), the lighter span is how far the vibrato swings. ±50 cents.
+  y += 32;
+  printed(2, 'PITCH', x, y + 12, 9);
+  const np = 41, at = c => Math.max(0, Math.min(np - 1, Math.round((c + 50) / 100 * (np - 1))));
+  let lo = null, hi = null, sum = 0, cnt = 0;
+  if (cur && cur.how !== 'Plucked' && sounding) {
+    const target = midi(cur.note), from = Math.max(cur.t + .08, t - .15);
+    for (let tt = from; tt <= t + 1e-6; tt += 1 / tape.fps) {
+      if (frameAt(tt, 'loudness') < .02) continue;
+      const c = (frameAt(tt, 'pitch') - target) * 100;
+      if (Math.abs(c) > 100) continue;   // still gliding in from the last note
+      lo = lo === null ? c : Math.min(lo, c); hi = hi === null ? c : Math.max(hi, c); sum += c; cnt++;
+    }
+  }
+  rect(2, bx + bw / 2 - 1, y - 5, 2, 4); rect(2, bx + bw / 2 - 1, y + bh + 1, 2, 4);   // the centre, printed
+  if (cnt) {
+    const mean = sum / cnt, a = at(lo), b = at(hi), m = at(mean);
+    boxMeter(bx, y, bw, bh, np, i => i === m);
+    const ix = bx + 4, iw = (bw - 8) / np;
+    for (let i = a; i <= b; i++) if (i !== m) rect(2, Math.round(ix + i * iw), y + 4, Math.ceil(iw) - 2, bh - 8);
+    const r = Math.round(mean); text(3, (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r) + '¢', x + 40, y + 12, 11);
+  } else boxMeter(bx, y, bw, bh, np, () => false);
+  // the player
   const off = !state.performer;
-  const bar = (label, y, v) => { printed(2, label, x, y + 10, 9); const k = Math.round(v * 16); boxMeter(bx, y, bw, 14, 16, i => i < k); };
-  bar('WORKLOAD', yP + 32, off || !cur ? 0 : Math.min(1, cur.load / 50));
-  bar('CALM', yP + 56, off ? 0 : cur ? cur.calm / 100 : 1);
-  if (off) text(3, 'PERFORMER OFF', x + w, yP + 96, 12, {align: 'right', track: 1});
+  y += 32; row('WORKLOAD', y, off || !cur ? 0 : Math.min(1, cur.load / 50));
+  y += 32; row('CALM', y, off ? 0 : cur ? cur.calm / 100 : 1);
+  if (off) text(3, 'PERFORMER OFF', x + w, H - 6, 11, {align: 'right', track: 1});
 }
 
 function perfPage(t, playing) {
@@ -624,7 +622,6 @@ function perfPage(t, playing) {
   nowPanel(cur);
   stringsPanel(t, cur, playing);
   nextPanel(t, cur);
-  graphPanel(t);
   meters(t, cur);
   rect(2, L.colX, L.mid, 2, H - L.mid - 10);         // printed rules
   rect(2, L.pad, L.div, L.colX - L.pad - 12, 2);
@@ -662,7 +659,7 @@ function drawLcd(t, playing) {
   let x = L.pad;
   const items = [['CELLO', state.instrument === 'cello'], ['VIOLIN', state.instrument === 'violin'], null,
     ['ARCO', state.patch === 'arco'], ['PIZZ', state.patch === 'pizz'], ['TREM', state.patch === 'trem'], null,
-    ['DOUBLE', state.doubles], null, ['PERF', state.page === 'perf'], ['LOG', state.page === 'log'], null, ['▶ PLAY', playing]];
+    ['DOUBLE', state.doubles], null, ['GRIT', frameAt(t, 'grit') > .12 && frameAt(t, 'loudness') > .02], null, ['PERF', state.page === 'perf'], ['LOG', state.page === 'log'], null, ['▶ PLAY', playing]];
   for (const it of items) { if (!it) { x += 14; continue; }
     printed(it[1] ? 3 : 0, it[0], x, L.ann, 10); x += textW(it[0], 10, 1.2) + 10; }
   rect(2, L.pad, L.rule, W - 2 * L.pad, 2);
@@ -674,11 +671,23 @@ const audio = $('#audio');
 let playing = false, pausedAt = 0;
 const TAPE_NAMES = Object.keys(window.TAPES || {});
 for (const n of TAPE_NAMES) $('#tape').add(new Option(n, n));
-function loadTape(name) {
-  tape = TAPES[name]; audio.src = `tapes/${name}.ogg`; pausedAt = 0; hand = 0;
+const LOCAL = (window.LOCAL_TAPES || []).filter(n => !TAPE_NAMES.includes(n));
+for (const n of LOCAL) $('#tape').add(new Option(n + ' (midi)', n));
+function loadTape(name, at = 0) {
+  if (!TAPES[name]) { // a local tape: load it the first time it's picked
+    const sc = document.createElement('script'); sc.src = `tapes/local/${name}.js`;
+    sc.onload = () => loadTape(name, at); document.head.append(sc); return;
+  }
+  tape = TAPES[name]; hand = 0;
+  audio.src = LOCAL.includes(name) ? `tapes/local/${name}.ogg` : `tapes/${name}.ogg`;
+  if (!tape.prepared) { // when each ringing string is stopped by the next note on it
+    tape.rings.sort((a, b) => a.t - b.t);
+    for (const r of tape.rings) { const nx = tape.notes.find(n => n.t > r.t + .01 && (n.string === r.string || string2Of(n) === r.string)); r.stop = nx ? nx.t : 1e9; }
+    tape.prepared = true;
+  }
   $('#scrub').max = tape.frames.pitch.length / tape.fps;
   if (state.instrument !== tape.instrument) { state.instrument = tape.instrument; ui.instrument(); }
-  stop(); say(name.slice(0, 8));
+  stop(); pausedAt = at; say(name.slice(0, 8));
 }
 const now = () => playing ? audio.currentTime : pausedAt;
 function play() { if (!tape) return; audio.currentTime = pausedAt; audio.play().catch(() => {}); playing = true; $('#play').textContent = '❚❚ Pause'; }
@@ -700,9 +709,8 @@ function tick() {
 buildTuner(); sizeLcd(); applyTune();
 // ?tape=showcase&t=9.2&page=log&live : open on a moment (live = drawn as if playing)
 const Q = new URLSearchParams(location.search);
-const first = TAPE_NAMES.includes(Q.get('tape')) ? Q.get('tape') : TAPE_NAMES[0];
-if (first) { $('#tape').value = first; loadTape(first); msg.until = 0; }
-if (Q.has('t')) pausedAt = +Q.get('t');
+const first = TAPE_NAMES.includes(Q.get('tape')) || LOCAL.includes(Q.get('tape')) ? Q.get('tape') : TAPE_NAMES[0];
+if (first) { $('#tape').value = first; loadTape(first, +(Q.get('t') || 0)); msg.until = 0; }
 if (Q.has('page')) state.page = Q.get('page'), ui.page();
 const LIVE = Q.has('live');
 requestAnimationFrame(tick);

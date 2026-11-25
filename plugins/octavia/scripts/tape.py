@@ -7,9 +7,12 @@ telemetry would carry, as a script the page can load from file://:
     docs/design/tapes/NAME.js    window.TAPES.NAME = {notes, frames, ...}
     docs/design/tapes/NAME.ogg   the sound, so the mock plays in sync
 
-usage: scripts/tape.py scores/prelude.txt [more scores...] [-- octavia options]
+usage: scripts/tape.py [--local] scores/prelude.txt [more...] [-- octavia options]
 
-Only our own scores: MIDI files may be copyrighted and are never committed.
+--local writes to docs/design/tapes/local/ (git-ignored) and lists what's
+there in local/index.js, which the page loads when it exists. Use it for
+MIDI files: they may be copyrighted and are never committed
+(scripts/tape-midis.sh does them all).
 """
 import json, re, subprocess, sys, tempfile
 from pathlib import Path
@@ -28,15 +31,23 @@ ROMAN = {"IV": 0, "III": 1, "II": 2, "I": 3}  # 0 = lowest string, as in the cur
 
 
 def main():
+    global OUT
     args = sys.argv[1:]
     extra = []
     if "--" in args:
         i = args.index("--")
         args, extra = args[:i], args[i + 1:]
+    local = "--local" in args
+    if local:
+        args.remove("--local")
+        OUT = OUT / "local"
     subprocess.run(["cargo", "build", "--release", "-q"], cwd=ROOT, check=True)
     OUT.mkdir(parents=True, exist_ok=True)
     for score in args:
         tape(Path(score), extra)
+    if local:
+        names = sorted(p.stem for p in OUT.glob("*.js") if p.stem != "index")
+        (OUT / "index.js").write_text("window.LOCAL_TAPES = " + json.dumps(names) + ";\n")
 
 
 def tape(score, extra):

@@ -7,3 +7,5 @@ Cargo.lock.bak
 /ext_sample
 # MIDI files to play with: may be copyrighted, never committed.
 /midi
+# Faceplate tapes made from MIDI files (may be copyrighted)
+/docs/design/tapes/local
