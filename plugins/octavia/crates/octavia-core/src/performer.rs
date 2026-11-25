@@ -132,12 +132,12 @@ impl Skill {
 
     /// How large a player's mistakes in one skill are right now: a little
     /// from the skill itself, more under load, more still when rattled.
-    /// Grows much faster than the skill drops: a good player barely moves,
-    /// a student's misses are plain to hear (15–30 cents, loose strokes).
+    /// Grows faster than the skill drops, and much faster under load: a
+    /// student is fine when calm and slow, and falls apart when it's fast.
     fn error(skill: f32, workload: f32, composure: f32) -> f32 {
         let stress = workload * (1.5 - composure);
-        let base = (1.0 - skill) + 0.8 * stress * (1.1 - skill);
-        base + 4.0 * base * base
+        let base = (1.0 - skill) + 1.2 * stress * (1.1 - skill);
+        base + 1.5 * base * base
     }
 }
 
@@ -722,7 +722,10 @@ impl Performer {
         // the hand's slow bias, so a rattled player stays off for a while. A
         // hurried shift tends to overshoot. Open strings are as tuned.
         let err = Skill::error(sk.intonation, workload, composure);
-        let mut cents = e * err * (10.0 * self.bias + 6.0 * hash_bipolar(seed, i));
+        // What's left once the ear has done its work: everyone hears well,
+        // so it stays small (a little more for a weaker player).
+        let ear = 1.0 - sk.intonation;
+        let mut cents = e * ear * (5.0 * self.bias + 3.0 * hash_bipolar(seed, i));
         if let Some(q) = next {
             if (q.pitch - n.pitch - 1.0).abs() < 0.01 && n.dur > 0.15 {
                 cents += 7.0 * e; // leading tone leans up
@@ -744,7 +747,10 @@ impl Performer {
             }
             land / 100.0
         };
-        let settle_tau = 0.04 + 0.25 * err;
+        // How fast the miss is pulled in: quick for a good player, slower for
+        // a student, slower still when rattled. Long notes always get there;
+        // fast ones end before the fix.
+        let settle_tau = 0.03 + 0.12 * ear + 0.05 * workload * (1.5 - composure);
 
         // Vibrato is a choice: some notes stay straight (more when busy,
         // short, or on two strings), and each note's depth, onset and speed
@@ -1334,6 +1340,15 @@ mod tests {
         let virtuoso = miss(Skill::profile("virtuoso").unwrap(), 1.0);
         assert!(student > virtuoso * 2.0, "student {student} vs virtuoso {virtuoso} semitones");
         assert!(miss(Skill::profile("student").unwrap(), 0.0) < 1e-4, "deadpan plays exactly in tune");
+        // But a student has good ears: given time, a long note ends in tune.
+        let style = Style { skill: Skill::profile("student").unwrap(), vibrato: 0.0, ..Style::default() };
+        let (c, _) = decide(text, &style);
+        let settled: f32 = notes
+            .iter()
+            .map(|n| (c.frames[((n.start + 0.6) * FRAME_RATE) as usize].pitch - n.pitch).abs())
+            .sum::<f32>()
+            / notes.len() as f32;
+        assert!(settled < 0.06, "a student's long notes settle in tune: {settled} semitones off");
     }
 
     #[test]
