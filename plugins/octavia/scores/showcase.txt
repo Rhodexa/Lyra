@@ -1,0 +1,13 @@
+# For the faceplate mock: every decision the LCD has to draw, in ~25 s.
+# Fresh start, new bows, slurs, staccato, bounced, a shift up the neck,
+# a double stop, tremolo, plucks, and an open string left ringing.
+tempo 84
+mf
+D3:q E3 F3 G3                          # separate bows
+(A3:e G3 F3 E3) (F3:e G3 A3 Bb3)       # slurs, string crossings
+'C4:e 'A3 'F3 'D3 r:h                  # staccato, then a rest
+*D3:s *E3 *F3 *G3 *A3 *G3 *F3 *E3      # bounced
+f D4:q (E4:e F4) G4:h                  # up the neck
+mp D3+A3:h ~F3:h                       # a double stop, then tremolo
+pizz G2:q D3 A3 D4 arco
+p < C3:w f

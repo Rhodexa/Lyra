@@ -3,7 +3,9 @@
 What the faceplate must show and control, derived from what the engine
 actually has (2026-11-25). A brief for designing it (Rhodexa) and for
 building it (a UI session). It isn't the design: layout, proportions and
-drawing are the designer's. Earlier notes and the cheap mock-ups:
+drawing are the designer's. **Being designed in `docs/design/faceplate.html`**
+(HTML first, the egui port last; its LCD plays real renders made by
+`scripts/tape.py`). Earlier notes and the cheap mock-ups:
 `docs/UI.md`, `docs/design/`. Palette: `docs/design/colors.css`.
 
 ## Identity
