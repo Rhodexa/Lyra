@@ -204,7 +204,7 @@ th{color:var(--page-dim);font-weight:600}
 <tr><td>top</td><td>the message (the player, or the control you're touching and its value; PERF OFF) · take, the one segment display left</td><td>parameters</td></tr>
 <tr><td>printed words</td><td>lit when true: instrument, patch, double stops, grit (the bow scratching), page, playing</td><td>parameters, frames</td></tr>
 <tr><td>the note</td><td>the note being played and how</td><td>latest decision</td></tr>
-<tr><td>the strings</td><td>looking down at the fingerboard: the bowed string dark, strings left ringing grey, the finger on the neck at its position (none when open), the bow across</td><td>decision, hand, ring events</td></tr>
+<tr><td>the neck</td><td>along the bottom, seen from the side: nut on the left, highest string on top. The bowed string dark, strings left ringing grey, each finger where it really stops the string (two octaves of room), the hand's reach as a bracket sliding above, the bow across by the bridge</td><td>decision, hand, ring events</td></tr>
 <tr><td>next</td><td>what the performer has already planned (the look-ahead), each with its bow mark: ⊓ down, V up. Below, the bow's way now: ⊓◀ or ▶V</td><td>upcoming notes, decision</td></tr>
 <tr><td>meters</td><td>BIOS-style boxes: loudness (GRIT lights when the bow scratches), brightness, pitch (a tuner: the dark block is where the note sits, the light span is the vibrato, ±50 cents), workload, calm</td><td>frames, decisions</td></tr>
 <tr><td>LOG page</td><td>the decisions as text, like <code>--explain</code></td><td>decision ring buffer</td></tr>
@@ -217,7 +217,7 @@ th{color:var(--page-dim);font-weight:600}
 <tr><th>question</th><th>this draft does</th><th>alternatives</th></tr>
 <tr><td>Her on the plate?</td><td>The bow tie as the logo mark, purfling in her violin's woods</td><td>her face beside the wordmark, or peeking over the LCD's bezel</td></tr>
 <tr><td>Knobs or faders?</td><td>Faders for the four skills (they read as a profile), knobs for style and voice</td><td>all knobs (more compact)</td></tr>
-<tr><td>The strings picture</td><td>Seen from above, nut at the top, positions 1–7 down the neck</td><td>sideways (like a tab), or no picture, just "STRING D"</td></tr>
+<tr><td>The neck</td><td>Along the bottom, from the side, fingers at their real places</td><td>no picture, just "STRING D"</td></tr>
 </table>
 <p>The tapes were rendered with the default settings, so moving the controls changes the plate and the LCD's labels but not the performance playing. In Lyra the performance will follow them.</p>
 </div>
@@ -434,7 +434,7 @@ function readColors() {
   const g = css('--lcd-background'), l = css('--lcd-inactive'), m = css('--lcd-secondary'), d = css('--lcd-foreground');
   C = {glass: g, ink: [mix(g, l, tv('ghost')), l, m, d], shadow: mix(g, m, tv('shadow') * .55)};
 }
-const W = 640, H = 244;
+const W = 640, H = 314;
 const cvs = $('#lcd'); let ctx = cvs.getContext('2d');
 let dim = false;
 function sizeLcd() {
@@ -514,7 +514,7 @@ function ringLevel(t, s) { // how much a string left by the bow still rings
 }
 
 // layout of the glass (px)
-const L = {pad: 14, msg: 30, ann: 52, rule: 60, mid: 68, colX: 318, div: 108};
+const L = {pad: 14, msg: 30, ann: 52, rule: 60, mid: 68, colX: 318, div: 108, neck: 232};
 function printed(s, str, x, y, size = 10, align) { text(s, str, x, y, size, {track: 1.2, align}); }
 
 function nowPanel(cur) {
@@ -524,59 +524,75 @@ function nowPanel(cur) {
   text(3, HOW[cur.how] || cur.how, x + 128, y - 4, 18, {track: .5});
 }
 
-function stringsPanel(t, cur, playing) {
-  const labels = STRINGS[tape.instrument] || STRINGS.cello;
-  const x0 = L.pad + 10, top = L.div + 24, bot = top + 80, sx = s => x0 + 22 + s * 30;   // string IV on the left, as you look down at it
+// the neck, seen from the side, the whole width of the glass: nut on the left,
+// the highest string on top, each finger where it really stops the string
+// (semitones above the open string), the hand's reach as a bracket above,
+// the bow across the strings by the bridge
+const OPEN = {cello: [36, 43, 50, 57], violin: [55, 62, 69, 76]};
+const SEMIS = 26;
+function neckPanel(t, cur, playing) {
+  const inst = tape.instrument in OPEN ? tape.instrument : 'cello';
+  const labels = STRINGS[inst], open = OPEN[inst];
+  const nut = L.pad + 22, end = W - L.pad - 70, bridge = W - L.pad - 40;
+  const sy = s => L.neck + 16 + (3 - s) * 14;
+  const sx = semi => nut + 6 + Math.min(SEMIS, semi) * (end - nut - 6) / SEMIS;
   const loud = frameAt(t, 'loudness'), str = frameAt(t, 'string'), p2 = frameAt(t, 'pitch2'), str2 = frameAt(t, 'string2');
   const plucking = cur && cur.how === 'Plucked' && t < cur.t + .25;
   const bowed = new Set();
   if (loud > .02 && !(cur && cur.how === 'Plucked')) { bowed.add(str); if (p2 > 0) bowed.add(str2); }
-  // the nut and the position marks, printed
-  rect(2, x0 + 8, top - 6, 4 * 30 - 2, 5);
-  for (let p = 1; p <= 7; p++) rect(1, x0 + 4, top + p * 9, 5, 2);
-  printed(2, '1', x0, top + 13, 9, 'right'); printed(2, '7', x0, top + 67, 9, 'right');
-  // strings: bowed dark and thick, ringing grey, idle faint
+  // printed: the nut, the bridge, a mark per semitone, the octaves doubled
+  rect(2, nut - 4, sy(3) - 6, 5, sy(0) - sy(3) + 12);
+  rect(1, bridge - 1, sy(3) - 6, 2, sy(0) - sy(3) + 12);
+  for (let k = 1; k <= SEMIS; k++) { const big = k % 12 === 0; rect(big ? 2 : 1, sx(k) - 1, sy(0) + 8, 2, big ? 6 : 3); }
+  printed(2, '8va', sx(12), sy(0) + 24, 8, 'center'); printed(2, '15ma', sx(24), sy(0) + 24, 8, 'center');
+  // the strings: bowed dark and thick, ringing grey, idle faint
   for (let s = 0; s < 4; s++) {
     const ring = ringLevel(t, s);
     const st = bowed.has(s) || (plucking && cur.string === s) ? 3 : ring > .04 ? 2 : 1;
     const wdt = (s < 2 ? 3 : 2) + (st === 3 ? 1 : 0);
-    rect(st, sx(s) - wdt / 2, top, wdt, bot - top);
-    text(st === 1 ? 2 : 3, labels[s], sx(s), bot + 17, 13, {align: 'center'});
+    rect(st, nut, sy(s) - wdt / 2, bridge + 14 - nut, wdt);
+    text(st === 1 ? 2 : 3, labels[s], L.pad, sy(s) + 5, 13);
   }
-  // the hand: a finger on the neck, sliding when it shifts (none on an open string)
+  // the hand's reach (about four semitones from where it sits), sliding on shifts
   const target = cur ? cur.hand : 0, dt = Math.min(.1, Math.abs(t - lastT));
   hand += (target - hand) * (dt > 0 && playing ? 1 - Math.exp(-dt * 14) : 1);
-  const hy = top + 4 + hand * 5.2;
+  const hx0 = sx(hand), hx1 = sx(hand + 4), hy = sy(3) - 12;
+  rect(2, hx0, hy, hx1 - hx0, 2); rect(2, hx0, hy, 2, 5); rect(2, hx1 - 2, hy, 2, 5);
+  // the fingers: where each sounding note is stopped (none on an open string)
   if (cur && t < cur.t + cur.len + .3) {
-    for (const s of [cur.string, string2Of(cur)]) {
-      if (s < 0) continue;
-      if (s === cur.string && cur.open) { text(2, 'OPEN', sx(s), top - 10, 9, {align: 'center', track: .5}); continue; }
-      rect(3, sx(s) - 7, hy - 6, 14, 12);
+    const fingers = [[cur.string, cur.note], [string2Of(cur), cur.note2]];
+    for (const [s, n] of fingers) {
+      if (s < 0 || !n) continue;
+      const semi = midi(n) - open[s];
+      if (semi <= 0) { rect(3, nut + 2, sy(s) - 5, 3, 10); continue; }   // open: a tick at the nut
+      rect(3, sx(semi) - 6, sy(s) - 5, 12, 10);
     }
   }
-  // the bow across the strings, or a pluck mark
-  if (bowed.size) { rect(3, x0, bot - 18, 4 * 30 + 4, 5); rect(3, x0 - 4, bot - 20, 4, 9); }
-  else if (plucking) { const xs = sx(cur.string); poly(3, [[xs - 8, bot - 12], [xs, bot - 22], [xs + 8, bot - 12]]); }
+  // the bow across the strings, or a pluck
+  if (bowed.size) rect(3, bridge + 6, sy(3) - 9, 5, sy(0) - sy(3) + 18);
+  else if (plucking) { const y = sy(cur.string); poly(3, [[bridge + 4, y - 7], [bridge + 14, y], [bridge + 4, y + 7]]); }
 }
 
 function nextPanel(t, cur) {
-  const x = 172, y = L.div + 20;
+  const labels = STRINGS[tape.instrument] || STRINGS.cello;
+  const x = L.pad, y = L.div + 20;
   printed(2, 'NEXT', x, y, 9);
   const up = tape.notes.filter(n => n.t > t + 1e-3).slice(0, 4);
   up.forEach((n, i) => {
-    const yy = y + 19 + i * 18, s = i === 0 ? 3 : 2;
+    const yy = y + 19 + i * 19, s = i === 0 ? 3 : 2;
     text(s, noteName(n), x, yy, 15);
-    bowMark(n.how === 'Plucked' ? 0 : s, n.dir, x + 56, yy - 10, 10);
-    text(s, SHORT[n.how] || n.how, x + 72, yy, 12, {track: .5});
+    bowMark(n.how === 'Plucked' ? 0 : s, n.dir, x + 66, yy - 10, 10);
+    text(s, SHORT[n.how] || n.how, x + 82, yy, 12, {track: .5});
+    text(s, labels[n.string], x + 150, yy, 12);
   });
   if (!up.length) text(1, 'END', x, y + 19, 14);
-  // the bow's way, big: ⊓ ◀ for a down-bow (the frog pulls away), ▶ V for an up-bow
-  const by = y + 92, bowing = cur && cur.how !== 'Plucked' && frameAt(t, 'loudness') > .02;
+  // the bow's way now, big: ⊓◀ for a down-bow (the frog pulls away), ▶V for an up-bow
+  const ax = 196, by = y + 44, bowing = cur && cur.how !== 'Plucked' && frameAt(t, 'loudness') > .02;
   const dn = bowing && cur.dir === 'down' ? 3 : 0, upb = bowing && cur.dir === 'up' ? 3 : 0;
-  bowMark(dn, 'down', x, by - 7, 14);
-  poly(dn, [[x + 20, by], [x + 32, by - 8], [x + 32, by - 3], [x + 52, by - 3], [x + 52, by + 3], [x + 32, by + 3], [x + 32, by + 8]]);
-  poly(upb, [[x + 112, by], [x + 100, by - 8], [x + 100, by - 3], [x + 80, by - 3], [x + 80, by + 3], [x + 100, by + 3], [x + 100, by + 8]]);
-  bowMark(upb, 'up', x + 118, by - 7, 14);
+  bowMark(dn, 'down', ax, by - 7, 14);
+  poly(dn, [[ax + 18, by], [ax + 30, by - 8], [ax + 30, by - 3], [ax + 46, by - 3], [ax + 46, by + 3], [ax + 30, by + 3], [ax + 30, by + 8]]);
+  poly(upb, [[ax + 92, by], [ax + 80, by - 8], [ax + 80, by - 3], [ax + 64, by - 3], [ax + 64, by + 3], [ax + 80, by + 3], [ax + 80, by + 8]]);
+  bowMark(upb, 'up', ax + 96, by - 7, 14);
 }
 
 // the right side: BIOS-style meters, an outlined box with blocks taller than wide
@@ -614,17 +630,18 @@ function meters(t, cur) {
   const off = !state.performer;
   y += 32; row('WORKLOAD', y, off || !cur ? 0 : Math.min(1, cur.load / 50));
   y += 32; row('CALM', y, off ? 0 : cur ? cur.calm / 100 : 1);
-  if (off) text(3, 'PERFORMER OFF', x + w, H - 6, 11, {align: 'right', track: 1});
+  if (off) text(3, 'PERFORMER OFF', x + w, L.neck - 8, 11, {align: 'right', track: 1});
 }
 
 function perfPage(t, playing) {
   const cur = noteAt(t);
   nowPanel(cur);
-  stringsPanel(t, cur, playing);
   nextPanel(t, cur);
   meters(t, cur);
-  rect(2, L.colX, L.mid, 2, H - L.mid - 10);         // printed rules
+  neckPanel(t, cur, playing);
+  rect(2, L.colX, L.mid, 2, L.neck - L.mid - 8);     // printed rules
   rect(2, L.pad, L.div, L.colX - L.pad - 12, 2);
+  rect(2, L.pad, L.neck, W - 2 * L.pad, 2);
 }
 
 function logPage(t) {
@@ -632,7 +649,7 @@ function logPage(t) {
   const x = L.pad, y = L.mid + 12;
   for (const [h, dx] of cols) printed(2, h, x + dx, y, 9);
   rect(2, L.pad, y + 5, W - 2 * L.pad, 2);
-  const rows = 7, done = tape.notes.filter(n => n.t <= t + 1e-6).slice(-rows);
+  const rows = 10, done = tape.notes.filter(n => n.t <= t + 1e-6).slice(-rows);
   done.forEach((n, i) => {
     const s = i === done.length - 1 ? 3 : 2, yy = y + 24 + (rows - done.length + i) * 19;
     const cells = [n.t.toFixed(2), noteName(n), '', HOW[n.how] || n.how,
