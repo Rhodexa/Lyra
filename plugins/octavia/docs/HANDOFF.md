@@ -4,7 +4,9 @@ Written 2026-11-25, at the end of the faceplate design session. Three
 pieces of work, each for its own session, each owning its own files. Read
 this, then the files it points to.
 
-**Status (2026-11-25, evening): sessions 1 and 2 are done; 3 is next.**
+**Status (2026-11-25, evening): sessions 1 and 2 are done; 3 has a first
+version (`crates/octavia-editor`, notes in `docs/FACEPLATE-PORT.md`),
+waiting for Rhodexa's look.**
 Octavia plays from Lyra's piano roll with the generic editor
 (`crates/octavia-lyra`). For the porter:
 
