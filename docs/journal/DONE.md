@@ -4,6 +4,7 @@ Everything finished from JOURNAL.md, with the commit that did it, newest
 first. Moved out of the journal (2026-11-25) so it stays short.
 
 **UI port (2026-11-25)**
+- [x] Stretching viewport bar beyond used space enters a stretching loop that grows way too fast. *→ the bar's scale is frozen while you drag; it settles on release. The vertical bar had the same loop (5665a2e).*
 - [x] Menus as LCD drawers, and the key root/scale pickers. *→ FILE, VIEW and + Instrument open the dropdowns' drawer; root and scale are header dropdowns (6e18428).*
 - [x] Octave buttons and FILE should react across the toolbar's full height. *→ the octave keys do; FILE is as tall as the toolbar's keys (707a4ef).*
 - [x] The gap under editor headers; the audio-clip editor's tabs had no top edge. *→ the areas' 8 px padding is gone, editors run edge to edge, EDITOR / RECORDER are tabs again (6119d98).*

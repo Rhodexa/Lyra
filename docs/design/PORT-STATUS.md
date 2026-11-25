@@ -32,12 +32,12 @@ widget (Rhodexa reviews as it goes).
    - **3v** Floating windows: Lyra's frame and title row. The slider (SL1) and
      the F12 panel on it, scrolling. COMPONENTS.md lists the new widget set.
 
-## Still open
+5. Closing the port (2026-11-25): the viewport bars' runaway stretch is
+   fixed (5665a2e). The last egui menus are LCD drawers (a36ded1): every
+   right-click menu, F3, the empty mixer slot, the instrument window's presets.
 
-- The egui leftovers listed at the end of [COMPONENTS.md](COMPONENTS.md):
-  right-click menus, the F3 menu, the Presets menu (needs a drawer that
-  holds a text field).
-- `SURFACE_SEL`, `SIZE_S`, `SIZE_L` are still unused (`#[allow(dead_code)]`).
+**The port is done.** `SURFACE_SEL`, `SIZE_S`, `SIZE_L` are still unused
+(`#[allow(dead_code)]`); they wait for pass two.
 
 ## Pass two (after the port)
 

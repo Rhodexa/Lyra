@@ -29,7 +29,9 @@ their own look, frozen in `plugin_look.rs`. **Never change them from here.**
 | **Mode switch** | `choice` | one choice among a few, a lit plate that slides; two options: any click switches (SONG / PAT, EDITOR / RECORDER) |
 | **Folder tabs** | `tab_row`, `panel_header` | a tab row belongs to the panel under it; the seam above is its top edge |
 | **Dropdown** | `dropdown`, `dropdown_compact` (mixer inserts) | a well with the value; opens the LCD drawer |
-| **Menu** | `menu_drawer` + `DropRow::action`, `heading`, `toggle` | any key opens the same LCD drawer: actions with a shortcut, dim headings, toggles that keep it open (FILE, VIEW, + Instrument). Opens upward when there's no room below |
+| **Menu** | `menu_drawer` + `DropRow::action`, `heading`, `toggle`, `.column()` | any key opens the same LCD drawer: actions with a shortcut, dim headings, toggles that keep it open, columns (FILE, VIEW, + Instrument, an empty mixer slot). Opens upward when there's no room below; always on screen |
+| **Context drawer** | `context_drawer`, `open_drawer_at` + `drawer_at` | the same drawer at the mouse: right-click menus (rack rows, effect slots, browser folders, Patterns) and F3. Submenus are columns with headings |
+| **Preset picker** | `user_presets::picker` | a dropdown of presets (yours under a heading) with Save as… / Delete in a second column; Save as turns it into a name field. Fluttersine and Chrysalis keep `user_presets::menu` |
 | **Checkbox** | `checkbox` | a sunken well, backlit with a tick; the row is the target |
 | **Slider** | `slider` | SL1: a recessed track lit up to a fader cap, a quiet readout; Shift = fine, wheel, double-click resets (F12) |
 | **Text field** | `text_field`, `text_field_at`, `name_field` | `name_field`: one undo step per edit |
@@ -55,12 +57,7 @@ their own look, frozen in `plugin_look.rs`. **Never change them from here.**
 | **Drop ghost** | `playlist.rs` | a dragged sample shows as a ghost clip at the snapped spot |
 | **Layout** | `flex::row`, `col`, `even_row`, `Px`, `Grow` | one row = one height, one column = one width |
 
-## Still egui's (next)
+## Still egui's
 
-- Right-click menus: the plugin rack's rows, mixer effect slots and the effect
-  list, the browser, the Patterns pool. They should become `menu_drawer`s,
-  or move to the context bar (right-click deletes in the editors).
-- The F3 context menu (`app::context_menu`), drawn in an egui menu frame.
-- The instrument window's **Presets** menu (`user_presets::menu`): a list plus
-  a "Save as" field, so it needs a drawer that can hold a text field.
-- The F12 panel's control library still shows the silicone keys (Fluttersine's).
+Nothing in Lyra's own UI (2026-11-25). The F12 panel's control library still
+shows the silicone keys (Fluttersine's).
