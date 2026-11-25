@@ -33,4 +33,16 @@
 
     --border:           var(--coat-outline);
     --lcd-bezel:        var(--mane);
+
+    /* LCD — GAME BOY INSPIRED */
+
+    --lcd-0:            #BEC5B2;
+    --lcd-1:            #9CA58F;
+    --lcd-2:            #707B65;
+    --lcd-3:            #283126;
+
+    --lcd-background:   var(--lcd-0);
+    --lcd-inactive:     var(--lcd-1);
+    --lcd-secondary:    var(--lcd-2);
+    --lcd-foreground:   var(--lcd-3);
 }
