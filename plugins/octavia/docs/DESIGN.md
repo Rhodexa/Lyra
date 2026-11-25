@@ -81,14 +81,28 @@ automatically during playback. Notes whose length is unknown until note-off
 
 1. ✅ Rules performer + recipe voice + body + renderer with plots and
    measurements.
-2. Listen, tune rules and tone with Rhodexa's ears. Attack/transition layer
-   (bow scratch, finger-noise on shifts), spiccato, ties, double stops.
-3. ✅ Streaming engine with bounded look-ahead; inference from bare piano
-   rolls. Next: the Lyra adapter, which needs upcoming notes from Lyra.
-4. Timbre model trained on clean-licensed solo recordings (CC0/CC-BY, or a
-   commissioned session). Small: curves in, overtone levels out. CPU inference
-   written by hand.
-5. Maybe a learned performer, if the rules plateau.
+2. ✅ Tuned by ear against real recordings (`octavia analyze`): spectrum,
+   bow noise, finger taps, strings left ringing, finger lifts, spiccato,
+   double stops, tremolo, fingering with a left hand, inference from bare
+   piano rolls and MIDI.
+3. ✅ Streaming engine with bounded look-ahead (identical offline and live,
+   tested bit for bit).
+4. ✅ The human layer (started 2026-11-24): `Skill` (intonation, dexterity,
+   bowing, composure), workload and composure per note, landing errors and
+   correction, slowly drifting errors, per-string tuning, selective vibrato,
+   the bow arm (down/up strokes, stroke variation, late bite), grit and
+   failed starts, physical speed limits. Still open: imperfect slides with
+   finger noise, accidental open-string brushes, bow position as a decision,
+   bow planning (hooked bowing), rubato.
+5. **Lyra**: plugin kit (Lyra session, `KIT-REQUIREMENTS.md`), adapter,
+   upcoming-notes extension, telemetry, faceplate (`FACEPLATE.md`).
+6. Timbre model trained on clean-licensed solo recordings (Iowa MIS first).
+   Small: curves in, overtone levels out. CPU inference written by hand.
+7. Maybe a learned performer, if the rules plateau.
+
+Where to start reading the engine: `crates/octavia-core/src/lib.rs` (the
+pipeline), `performer.rs` (all the rules, each documented at the top),
+`render.rs` (`Engine`, `Sound`), then `JOURNAL.md` for why each rule exists.
 
 ## Data and licensing
 

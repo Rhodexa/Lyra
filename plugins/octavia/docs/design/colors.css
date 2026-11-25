@@ -1,0 +1,36 @@
+:root {
+    /* OCTAVIA — CHARACTER PALETTE */
+
+    --coat:             #BDB4AE;
+    --coat-outline:     #988F89;
+
+    --mane:             #423C3C;
+    --mane-outline:     #231A20;
+
+    --bow-tie:          #E07ED4;
+    --bow-tie-outline:  #BD58B6;
+
+    --collar:           #DEDDE8;
+
+    --violin-body:      #BC7547;
+    --violin-wood:      #7C4A2D;
+
+
+    /* SEMANTIC UI COLORS */
+
+    --chassis:          var(--coat);
+    --chassis-inset:    var(--coat-outline);
+
+    --control:          var(--mane);
+    --control-track:    var(--mane-outline);
+
+    --text-primary:     var(--mane-outline);
+    --text-secondary:   var(--mane);
+    --text-inverse:     var(--collar);
+
+    --accent:           var(--bow-tie);
+    --accent-dark:      var(--bow-tie-outline);
+
+    --border:           var(--coat-outline);
+    --lcd-bezel:        var(--mane);
+}

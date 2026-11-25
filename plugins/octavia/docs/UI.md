@@ -1,5 +1,8 @@
 # Octavia's face (notes for when we build it)
 
+> Superseded by `FACEPLATE.md` (the brief from the real engine) and
+> `KIT-REQUIREMENTS.md`. Kept for the history of the idea.
+
 Colour and mood: `design/vibe-2026-11-23.png`. Mauve-grey body, pink for
 "on", a cream LCD, dark keys. It's the *vibe*, not the layout. Built from
 Lyra's existing views, as a page inside the instrument window (no new
