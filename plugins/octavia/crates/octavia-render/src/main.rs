@@ -27,6 +27,7 @@ usage: octavia <score.txt | curves.csv>... [options]
   --composure X      skill 0..1: staying calm under load
   --seed N           a different take of the same performance
   --pizz             the pizzicato patch: pluck every note
+  --tremolo          the tremolo patch: shake the bow on every note of 1/4 s or more
   --track N          MIDI: which track (default: the busiest; see midi-info)
   --channel N        MIDI: only this channel (1-16)
   --bottom           MIDI: in chords, keep the lowest note (default: highest)
@@ -102,6 +103,7 @@ fn parse_args() -> Result<Args, String> {
             "--sr" => a.sr = val("--sr")?.parse().map_err(|_| "bad --sr")?,
             "--dry" => a.dry = true,
             "--pizz" => a.style.pizzicato = true,
+            "--tremolo" => a.style.tremolo = true,
             "--bottom" => a.bottom = true,
             "--no-doubles" => a.doubles = false,
             "--explain" => a.explain = true,

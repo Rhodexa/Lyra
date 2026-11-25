@@ -32,6 +32,10 @@
 //!   for a less skilled or busier arm. Short strokes dip less. A bow can't
 //!   bounce faster than about 12 notes a second: beyond that, tiny strokes
 //!   on the string.
+//! * **Tremolo** (asked for, like pizzicato: a `~` mark or the tremolo
+//!   patch): the bow shakes on one long note, 13–16 strokes a second and a
+//!   little uneven, each reversal a small dip and scrape; faster and rougher
+//!   under load.
 //! * **Grit**: until the bow catches the string it slips irregularly, so
 //!   every stroke starts with a little scratch: more for hard starts,
 //!   strokes with little time to prepare, a weaker or busier arm. Now and
@@ -89,6 +93,9 @@ pub struct Style {
     pub breath: f32,
     /// Pluck every note (the pizzicato patch).
     pub pizzicato: bool,
+    /// Shake the bow on every note of a quarter second or more (the tremolo
+    /// patch); shorter notes are played normally.
+    pub tremolo: bool,
     /// How good the player is (separate from style and from who decides).
     pub skill: Skill,
     pub seed: u64,
@@ -96,7 +103,7 @@ pub struct Style {
 
 impl Default for Style {
     fn default() -> Self {
-        Self { expression: 1.0, vibrato: 1.0, breath: 1.0, pizzicato: false, skill: Skill::default(), seed: 1 }
+        Self { expression: 1.0, vibrato: 1.0, breath: 1.0, pizzicato: false, tremolo: false, skill: Skill::default(), seed: 1 }
     }
 }
 
@@ -157,6 +164,8 @@ pub enum Played {
     Staccato,
     /// Bounced bow (spiccato).
     Bounced,
+    /// Bowed tremolo.
+    Tremolo,
     Plucked,
 }
 
@@ -235,6 +244,11 @@ struct Plan {
     staccato: bool,
     /// Bounced bow: a drop, a tick of hair, then the string rings free.
     spiccato: bool,
+    /// Bowed tremolo: its speed (strokes a second, before the arm's drift)
+    /// and how deep each reversal dips.
+    tremolo: bool,
+    trem_rate: f32,
+    trem_depth: f32,
     level: f32,
     ramp: f32,
     swell: f32,
@@ -279,6 +293,9 @@ pub struct Performer {
     frame: u64,
     owner: Option<usize>,
     vib_phase: f64,
+    /// Tremolo strokes so far (one per whole number), and the arm's drift.
+    trem_cycles: f64,
+    trem_wander: Wander,
     rate_wander: Wander,
     smooth_loud: f32,
     loud_keep: f32,
@@ -314,6 +331,8 @@ impl Performer {
             frame: 0,
             owner: None,
             vib_phase: 0.0,
+            trem_cycles: 0.0,
+            trem_wander: Wander::new(style.seed ^ 0x7E30, 3.0),
             rate_wander: Wander::new(style.seed ^ 0x5EED, 0.8),
             smooth_loud: 0.0,
             // Loudness can't jump: the bow has mass. ~8 ms smoothing.
@@ -347,6 +366,8 @@ impl Performer {
             .map(|p| {
                 let how = if p.pizz {
                     Played::Plucked
+                } else if p.tremolo {
+                    Played::Tremolo
                 } else if p.spiccato {
                     Played::Bounced
                 } else if p.staccato {
@@ -404,6 +425,8 @@ impl Performer {
         self.vib_phase = (self.vib_phase + TAU * rate as f64 * dt) % TAU;
         self.bias = self.hand_bias.next(dt as f32);
         self.arm_now = self.arm.next(dt as f32);
+        let trem = self.owner.and_then(|i| self.plans[i].tremolo.then_some(self.plans[i].trem_rate)).unwrap_or(14.0);
+        self.trem_cycles += (trem * (1.0 + 0.08 * self.trem_wander.next(dt as f32))) as f64 * dt;
 
         let mut frame = match self.owner {
             None => Frame {
@@ -624,7 +647,14 @@ impl Performer {
         let fast = next.is_some_and(|q| q.start - n.start < FAST + 0.02)
             || prev.is_some_and(|(pn, _)| n.start - pn.start < FAST + 0.02);
         let slur_out = next.is_some() && i + 1 < self.notes.len() && self.slur_rule(i, staccato);
+        let tremolo = !pizz
+            && (n.articulation == Articulation::Tremolo
+                || (self.style.tremolo
+                    && n.dur >= 0.25
+                    && !matches!(n.articulation, Articulation::Staccato | Articulation::Spiccato)));
+        let staccato = staccato && !tremolo;
         let spiccato = !pizz
+            && !tremolo
             && match n.articulation {
                 Articulation::Spiccato => true,
                 // Only short notes bounce: a long note after a fast run is bowed.
@@ -863,6 +893,11 @@ impl Performer {
             accent: accent + if down && new_stroke { 0.1 * e.min(1.0) } else { 0.0 },
             staccato,
             spiccato,
+            tremolo,
+            // Fast and a little uneven; faster and rougher under load, a
+            // clumsier arm a bit slower with deeper reversals.
+            trem_rate: (13.0 + 3.0 * h01(0x7E31)) * (1.0 + 0.15 * workload) * (0.85 + 0.15 * self.style.skill.dexterity),
+            trem_depth: 0.3 + 0.2 * berr.min(1.0),
             level,
             ramp: n.dynamic_end - n.dynamic,
             swell: if n.dur > 0.9 && !pizz && !hairpin { 0.07 * e } else { 0.0 },
@@ -1011,6 +1046,16 @@ impl Performer {
         // Once the finger lifts, the stopped note is choked (the open string
         // carries on as a separate ring).
         let lifted = self.lift_at(i, t).map_or(1.0, |lift| if t > lift { (-((t - lift) as f32) / 0.008).exp() } else { 1.0 });
+        // Tremolo: the bow reverses once per stroke; each reversal dips and
+        // scrapes a little, down-strokes a touch heavier than up-strokes.
+        let (shake, reversal) = if p.tremolo {
+            let frac = self.trem_cycles.fract() as f32;
+            let rev = (-(frac.min(1.0 - frac) / 0.12).powi(2)).exp() * smoothstep(since / 0.05);
+            let down = (self.trem_cycles as i64) % 2 == 0;
+            ((1.0 - p.trem_depth * rev) * if down { 1.03 } else { 0.97 }, rev)
+        } else {
+            (1.0, 0.0)
+        };
         // A failed start stalls for a moment before it catches.
         let stall = 1.0 - p.stall * (-((since_a - 0.03) / 0.02).powi(2)).exp();
         let loudness = lifted
@@ -1019,6 +1064,8 @@ impl Performer {
                 0.0
             } else if p.spiccato {
                 (p.level * (1.0 + 0.25 * p.accent)).max(0.0) * bounce * fall
+            } else if p.tremolo {
+                ((p.level + p.ramp * prog) * shape).max(0.0) * rise * bite * fall * shake
             } else {
                 ((p.level + p.ramp * prog) * shape).max(0.0) * rise * bite * fall
             };
@@ -1027,7 +1074,7 @@ impl Performer {
         let settle = p.settle * (-since / p.settle_tau).exp();
         let mut pitch = p.pitch + settle;
         let mut pitch2 = p.double.map_or(0.0, |(d, _)| d + settle);
-        let mut vib = p.vib_depth * smoothstep((since - p.vib_delay) / 0.3);
+        let mut vib = p.vib_depth * smoothstep((since - p.vib_delay) / 0.3) * if p.tremolo { 0.4 } else { 1.0 };
         if let (Some(qn), Some(q)) = (self.next_visible(i, t), self.plans.get(i + 1)) {
             let to_next = (qn.start - t) as f32;
             if q.glide > 0.0 && to_next < q.glide {
@@ -1052,7 +1099,7 @@ impl Performer {
         let release_dark = if matches!(exit, Exit::Decay(_)) && t > sound_end { 0.35 * (1.0 - fall) } else { 0.0 };
         // A lifted bow leaves the string ringing free: darker by the moment.
         let lifted = if p.spiccato { 0.25 * (-since / 0.015).exp() - 0.22 * (1.0 - (-since / 0.08).exp()) } else { 0.0 };
-        let grit = if since < p.late { 0.0 } else { p.grit * (-since_a / p.grit_time).exp() };
+        let grit = if since < p.late { 0.0 } else { p.grit * (-since_a / p.grit_time).exp() } + 0.15 * reversal;
         let brightness =
             (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite + lifted - release_dark + 0.1 * grit).clamp(0.0, 1.0);
 
@@ -1073,6 +1120,8 @@ impl Performer {
         };
 
         let string2 = p.double.map_or(0, |(_, s)| s);
+        let noise = (noise + 0.25 * reversal).min(1.0);
+        let brightness = (brightness + if p.tremolo { 0.08 } else { 0.0 }).min(1.0);
         Frame { pitch, loudness, brightness, noise, string: p.string, pitch2, string2, grit }
     }
 }
@@ -1476,6 +1525,22 @@ mod tests {
         };
         assert!(fails(&student) > fails(&virtuoso), "{} vs {}", fails(&student), fails(&virtuoso));
         assert_eq!(grit_at(&Style { expression: 0.0, ..Style::default() }, 0.02), 0.0, "deadpan is clean");
+    }
+
+    #[test]
+    fn tremolo_shakes_the_bow_and_the_patch_spares_short_notes() {
+        let inst = cello();
+        let c = perform(&Score::parse("tempo 60\n~D3:w").unwrap(), &inst, &Style::default());
+        // Count dips (bow reversals) over two seconds in the middle.
+        let l: Vec<f32> = (250..750).map(|f| c.frames[f].loudness).collect();
+        let dips = (1..l.len() - 1).filter(|&k| l[k] < l[k - 1] && l[k] <= l[k + 1] && l[k] < 0.97 * l[k - 1].max(l[k + 1]) + 0.0).count();
+        assert!((24..=36).contains(&dips), "12–18 strokes a second, got {dips} in 2 s");
+        let patch = Style { tremolo: true, ..Style::default() };
+        let (_, d) = decide("0 1 C3 0.6\n1 0.12 D3 0.6\n1.12 0.12 E3 0.6\n1.24 1 F3 0.6", &patch);
+        let how: Vec<Played> = d.iter().map(|x| x.played).collect();
+        assert_eq!(how[0], Played::Tremolo);
+        assert_ne!(how[1], Played::Tremolo, "short notes are played normally");
+        assert_eq!(how[3], Played::Tremolo);
     }
 
     #[test]

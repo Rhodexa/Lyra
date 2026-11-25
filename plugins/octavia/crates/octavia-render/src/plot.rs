@@ -69,6 +69,7 @@ fn played_colour(p: Option<Played>) -> [u8; 3] {
         Some(Played::Slurred) => [110, 70, 160],  // purple: same bow (slur)
         Some(Played::Staccato) => [170, 60, 60],  // red: staccato
         Some(Played::Bounced) => [200, 130, 40],  // orange: spiccato
+        Some(Played::Tremolo) => [217, 140, 180], // pink: tremolo
         Some(Played::Plucked) => [60, 150, 80],   // green: pizzicato
         None => [70, 70, 80],
     }

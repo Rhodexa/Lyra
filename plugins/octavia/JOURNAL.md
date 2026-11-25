@@ -78,6 +78,9 @@ Claude reads this before choosing what to work on.
   - Claude: those are strings left ringing on crossings; the phrase repeats, so the rings were identical. Each ring now varies in strength, brightness and ring time with how the bow left the string; the quick plucked start is kept (I briefly softened it, then put it back). Finger lifts vary too: sometimes no ghost at all, the lift tap varies. New ring column `bright`.
 - [ ] ~ Grit amount: noticeable at the moment; tune slowly by ear (`--bowing` moves it).
 
+- [ ] *(Rhodexa, 2026-11-24)* How do we make the player really shake the bow instead of spiccato on short notes? (And: dying for a UI.)
+  - Claude: that's bowed tremolo, which didn't exist. Added like pizzicato (asked for, not inferred): `~` in scores, `--tremolo` patch (every note of 1/4 s or more; shorter notes stay normal), later per-note data in Lyra. 13–16 strokes a second, slightly uneven, each reversal a small dip and scrape, down-strokes heavier; faster and rougher under load; works on double stops. Demo: `scores/tremolo.txt` → `renders/tremolo.wav`; `renders/ab/flower-tremolo-patch.wav`. Pink in plots.
+
 ## Wishes
 
 - [ ]

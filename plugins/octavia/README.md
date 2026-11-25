@@ -22,7 +22,7 @@ Everything lands in `renders/`:
 
 The written notes are coloured by how Octavia chose to play them:
 **blue** from silence · **teal** new bow stroke · **purple** slurred ·
-**red** staccato · **orange** bounced (spiccato) · **green** plucked.
+**red** staccato · **orange** bounced (spiccato) · **pink** tremolo · **green** plucked.
 `--explain` prints the same thing as text, note by note, with the bow
 direction (↓ down, ↑ up), string, hand position, workload and composure.
 
@@ -87,6 +87,7 @@ mp
 p < C3:w f              # hairpins run to the next dynamic, even inside one note
 pizz G2:q r D3 arco
 *C4:s *C4 *C4           # * spiccato (bounced); fast separate notes bounce anyway
+~D3:w                   # ~ tremolo: the bow shakes (or --tremolo for every long note)
 D3+A3:h                 # + a double stop (two strings at once)
 ```
 
