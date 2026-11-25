@@ -80,13 +80,9 @@ pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Opti
     });
     ui.add_space(6.0);
 
-    // Hand-made editors (they have their own preset browser).
-    if instrument == "lyra.fluttersine" {
-        crate::fm_editor::show(ui, p, h, ch);
-        return;
-    }
-    if instrument == "lyra.chrysalis" {
-        crate::chrysalis_editor::show(ui, p, h, ch, live);
+    // Hand-made editors, each in its plugin's crate (they have their own preset browser).
+    if let Some(e) = crate::plugin_host::editor_for(&instrument) {
+        (e.show)(ui, &mut crate::plugin_host::ChannelHost { project: p, history: h, channel: ch, live });
         return;
     }
 

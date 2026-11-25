@@ -1,0 +1,12 @@
+[package]
+name = "lyra-kit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "What a plugin editor needs from Lyra, and nothing else: the host's parameters with undo, telemetry, presets, layout, knob behaviour, live-reloaded assets. No colours, no drawings."
+
+[dependencies]
+lyra-plugin.workspace = true
+egui.workspace = true
+# Decodes artwork PNGs (already in the tree through eframe).
+png = "0.18"

@@ -3,7 +3,7 @@
 For whoever continues the port (a later session, or another agent). The spec is
 [catalog-next.html](catalog-next.html) (its "Settled" index). The old look is in
 [widget-catalog.html](widget-catalog.html). Rules: Fluttersine and Chrysalis are
-frozen in `plugin_look.rs` and must not change; one commit per step, each with
+frozen in their own crates (`crates/plugins/shared-look`, `…/editor`) and must not change; one commit per step, each with
 before/after screenshots from the same saved state; no confirmation needed per
 widget (Rhodexa reviews as it goes).
 

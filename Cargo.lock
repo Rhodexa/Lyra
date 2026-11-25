@@ -1421,9 +1421,12 @@ dependencies = [
  "libc",
  "lyra-catalog",
  "lyra-chrysalis",
+ "lyra-chrysalis-editor",
  "lyra-dsp",
  "lyra-engine",
  "lyra-fluttersine",
+ "lyra-fluttersine-editor",
+ "lyra-kit",
  "lyra-model",
  "lyra-plugin",
  "lyra-sampler",
@@ -1455,6 +1458,20 @@ version = "0.1.0"
 dependencies = [
  "lyra-dsp",
  "lyra-plugin",
+]
+
+[[package]]
+name = "lyra-chrysalis-editor"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "hound",
+ "lyra-chrysalis",
+ "lyra-dsp",
+ "lyra-kit",
+ "lyra-plugin",
+ "lyra-shared-look",
+ "rfd",
 ]
 
 [[package]]
@@ -1498,6 +1515,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "lyra-fluttersine-editor"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "lyra-fluttersine",
+ "lyra-kit",
+ "lyra-plugin",
+ "lyra-shared-look",
+]
+
+[[package]]
+name = "lyra-kit"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "lyra-plugin",
+ "png",
+]
+
+[[package]]
 name = "lyra-model"
 version = "0.1.0"
 dependencies = [
@@ -1514,6 +1551,15 @@ name = "lyra-sampler"
 version = "0.1.0"
 dependencies = [
  "lyra-dsp",
+ "lyra-plugin",
+]
+
+[[package]]
+name = "lyra-shared-look"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "lyra-kit",
  "lyra-plugin",
 ]
 

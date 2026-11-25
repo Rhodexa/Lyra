@@ -1,0 +1,17 @@
+[package]
+name = "lyra-chrysalis-editor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Chrysalis's editor: oscillators, mod matrix and the table studio, in its own look."
+
+[dependencies]
+lyra-kit.workspace = true
+lyra-shared-look.workspace = true
+lyra-plugin.workspace = true
+lyra-chrysalis.workspace = true
+# Pure DSP helpers (the table studio's FFT).
+lyra-dsp.workspace = true
+egui.workspace = true
+rfd.workspace = true
+hound.workspace = true

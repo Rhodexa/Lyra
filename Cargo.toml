@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/lyra-*", "crates/plugins/*"]
+members = ["crates/lyra-*", "crates/plugins/*", "crates/plugins/*/editor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,8 @@ license = "MIT OR Apache-2.0"
 lyra-plugin = { path = "crates/lyra-plugin" }
 lyra-dsp    = { path = "crates/lyra-dsp" }
 lyra-catalog = { path = "crates/lyra-catalog" }
+# The plugin kit: what an editor needs from Lyra (crates/lyra-kit).
+lyra-kit = { path = "crates/lyra-kit" }
 # One crate per built-in plugin family (see crates/plugins).
 lyra-fluttersine = { path = "crates/plugins/fluttersine" }
 lyra-chrysalis   = { path = "crates/plugins/chrysalis" }
@@ -18,6 +20,10 @@ lyra-drums       = { path = "crates/plugins/drums" }
 lyra-synth       = { path = "crates/plugins/synth" }
 lyra-sampler     = { path = "crates/plugins/sampler" }
 lyra-effects     = { path = "crates/plugins/effects" }
+# Editors live beside their plugin; the two synths share a frozen look.
+lyra-shared-look        = { path = "crates/plugins/shared-look" }
+lyra-fluttersine-editor = { path = "crates/plugins/fluttersine/editor" }
+lyra-chrysalis-editor   = { path = "crates/plugins/chrysalis/editor" }
 lyra-engine = { path = "crates/lyra-engine" }
 lyra-model  = { path = "crates/lyra-model" }
 

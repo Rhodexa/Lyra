@@ -324,18 +324,7 @@ pub struct SampleDrag(pub String);
 
 /// Our own double-click test (egui's doesn't fire on rows that can also be
 /// dragged): true on a second click on the same `item` within 0.35 s.
-pub fn double_click<T: Clone + PartialEq + Send + Sync + 'static>(ui: &Ui, key: &str, item: T) -> bool {
-    let now = ui.input(|i| i.time);
-    let key = egui::Id::new(key);
-    let last: Option<(T, f64)> = ui.data(|d| d.get_temp(key));
-    if last.is_some_and(|(n, t)| n == item && now - t < 0.35) {
-        ui.data_mut(|d| d.remove::<(T, f64)>(key));
-        true
-    } else {
-        ui.data_mut(|d| d.insert_temp(key, (item, now)));
-        false
-    }
-}
+pub use lyra_kit::double_click;
 
 /// A new sampler instrument playing `sample`, named after it.
 pub fn add_sampler(p: &mut Project, h: &mut History, st: &mut UiState, sample: &str) {

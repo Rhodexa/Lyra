@@ -26,13 +26,12 @@
 //! Like every view, this only edits `channel.params`; the bridge does the rest.
 //! The waveform pictures are display-only copies of `lyra_fluttersine`'s shapes.
 
-use crate::flex::{self, Grow, Px};
-use crate::rack::tracked;
-use crate::plugin_look::{self as look, cr, stroke, Icon, Light};
+use lyra_kit::flex::{self, Grow, Px};
+use lyra_kit::{tracked, wheel_step, Host};
+use lyra_shared_look::{self as look, cr, stroke, Icon, Light};
 use egui::{pos2, vec2, Align, Align2, Color32, Id, Layout, Rect, Response, RichText, Sense, Shape, Ui};
 use egui::{UiBuilder, Vec2};
 use lyra_fluttersine::{apply_algorithm, macro_factor, matching_algorithm, p, Algorithm, ALGORITHMS, FM_PARAMS};
-use lyra_model::{History, Project};
 use p::{op, OPS};
 use std::f32::consts::TAU;
 
@@ -105,15 +104,15 @@ impl Page {
 
 /// The channel being edited, plus undo.
 struct Ed<'a> {
-    p: &'a mut Project,
-    h: &'a mut History,
+    host: &'a mut dyn Host,
+    /// Tells this editor's egui ids apart from another Fluttersine's.
     ch: usize,
 }
 
 impl Ed<'_> {
     /// Where automation has it while the song plays, else its own value.
     fn v(&self, id: usize) -> f32 {
-        crate::automation::shown_param(self.ch, id).unwrap_or(self.p.channels[self.ch].params[id])
+        self.host.param(id)
     }
     fn on(&self, id: usize) -> bool {
         self.v(id) >= 0.5
@@ -124,24 +123,24 @@ impl Ed<'_> {
     /// Set without a checkpoint (the middle of a drag).
     fn put(&mut self, id: usize, x: f32) {
         let info = &FM_PARAMS[id];
-        self.p.channels[self.ch].params[id] = x.clamp(info.min, info.max);
+        self.host.set_param(id, x.clamp(info.min, info.max));
     }
     /// A one-shot change (a click): checkpoint, then set.
     fn set(&mut self, id: usize, x: f32) {
         if self.v(id) != x {
-            self.h.checkpoint(self.p);
+            self.host.begin_edit();
             self.put(id, x);
         }
     }
     /// A change from a knob-like widget: one checkpoint per drag.
     fn track(&mut self, r: &Response, id: usize, x: f32) {
-        if tracked(r, self.h, self.p) {
+        if tracked(r, self.host) {
             self.put(id, x);
         }
     }
 }
 
-/// Every size, derived from the synths' frozen sizes (plugin_look::m()). The
+/// Every size, derived from the synths' frozen sizes (`look::m()`). The
 /// plates have fixed sizes: switching pages never resizes the window.
 struct Sizes {
     cell_w: f32,
@@ -200,16 +199,30 @@ fn sizes() -> Sizes {
     }
 }
 
-/// The editor, in the synths' frozen style (see plugin_look.rs).
-pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
+/// Fluttersine's editor, for Lyra's list of editors.
+pub const EDITOR: lyra_kit::Editor =
+    lyra_kit::Editor { plugin: "lyra.fluttersine", show, fonts: look::add_font_families };
+
+/// The Fluttersine wordmark, the user's artwork (`assets/logo.png`). Export over the file while
+/// Lyra runs from the source tree and the editor shows it within a second.
+const LOGO: lyra_kit::assets::Artwork = lyra_kit::assets::Artwork {
+    name: "fluttersine-logo",
+    built_in: include_bytes!("../assets/logo.png"),
+    file: concat!(env!("CARGO_MANIFEST_DIR"), "/assets/logo.png"),
+    max_h: 220,
+};
+
+/// The editor, in the synths' frozen style (see `lyra_shared_look`).
+pub fn show(ui: &mut Ui, host: &mut dyn Host) {
     ui.scope(|ui| {
         look::freeze(ui);
-        show_inner(ui, p, h, ch);
+        show_inner(ui, host);
     });
 }
 
-fn show_inner(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize) {
-    let mut ed = Ed { p, h, ch };
+fn show_inner(ui: &mut Ui, host: &mut dyn Host) {
+    let ch = host.instance();
+    let mut ed = Ed { host, ch };
     let s = sizes();
     let seam = look::SEAM;
     let page_id = Id::new(("fm-page", ch));
@@ -323,7 +336,7 @@ fn header(ui: &mut Ui, ed: &mut Ed, r: Rect) {
 
 /// The Fluttersine wordmark, part of the header (no frame of its own).
 fn logo(ui: &mut Ui, r: Rect) {
-    let (tex, [w, h]) = look::fluttersine_logo(ui.ctx());
+    let (tex, [w, h]) = LOGO.texture(ui.ctx());
     let scale = (r.width() / w as f32).min(r.height() / h as f32);
     let img = Rect::from_center_size(r.center(), vec2(w as f32, h as f32) * scale);
     ui.painter().image(tex, img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
@@ -380,10 +393,9 @@ fn long_name(id: usize) -> String {
 /// `◀ [ preset ▾ ] ▶` filling `r`, a dropdown like the pattern picker. Click
 /// for the list, scroll over it to step.
 fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    const PLUGIN: &str = "lyra.fluttersine";
-    let all = crate::user_presets::entries(PLUGIN);
+    let all = ed.host.presets();
     let n = all.len();
-    let current = crate::user_presets::current(&all, &ed.p.channels[ed.ch].params);
+    let current = lyra_kit::presets::current(&all, ed.host.params());
     // The last preset loaded here, so ◀ ▶ still make sense after you tweak it.
     let last_id = Id::new(("fm-last-preset", ed.ch));
     let last: Option<String> = ui.ctx().data(|d| d.get_temp(last_id));
@@ -394,7 +406,7 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         (None, Some(k)) => (all[k].name.clone(), true),
         (None, None) => ("Custom".to_string(), false),
     };
-    let mut pick: Option<crate::user_presets::Entry> = None;
+    let mut pick: Option<lyra_kit::PresetEntry> = None;
     let [prev, field, next] = flex::row(r, [Px(r.height()), Grow(1.0), Px(r.height())], 4.0);
     if icon_key(ui, prev, "fm-prev-preset", Icon::Prev).on_hover_text("Previous preset").clicked() && n > 0 {
         pick = Some(all[(at + n - 1) % n].clone());
@@ -435,10 +447,9 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         ui.memory_mut(|m| m.toggle_popup(popup));
     }
     let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list (and to save yours)");
-    let params = ed.p.channels[ed.ch].params.clone();
     egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
         look::freeze(ui);
-        let (picked, close) = crate::user_presets::menu(ui, PLUGIN, &params, field.width().max(220.0));
+        let (picked, close) = lyra_kit::presets::menu(ui, ed.host, field.width().max(220.0), look::MENU_INK);
         if picked.is_some() {
             pick = picked;
         }
@@ -447,20 +458,10 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         }
     });
     if let Some(e) = pick {
-        ed.h.checkpoint(ed.p);
-        ed.p.channels[ed.ch].params = e.params;
+        ed.host.begin_edit();
+        ed.host.set_params(e.params);
         ui.ctx().data_mut(|d| d.insert_temp(last_id, e.name));
     }
-}
-
-/// -1 / +1 when the wheel turns over `rect` this frame (wheel down = next).
-pub(crate) fn wheel_step(ui: &Ui, rect: Rect) -> Option<i32> {
-    if !ui.rect_contains_pointer(rect) {
-        return None;
-    }
-    let d = ui.input(|i| i.raw_scroll_delta);
-    let dy = if d.y != 0.0 { d.y } else { d.x };
-    (dy != 0.0).then_some(if dy > 0.0 { -1 } else { 1 })
 }
 
 // ───────────────────────────────────────────────────────────── routing
@@ -755,7 +756,7 @@ fn filter_graph(ui: &mut Ui, ed: &mut Ed, size: Vec2) {
             Sense::click_and_drag(),
         );
         if r.drag_started() || r.double_clicked() {
-            ed.h.checkpoint(ed.p);
+            ed.host.begin_edit();
         }
         if r.double_clicked() {
             ed.put(cut_id, FM_PARAMS[cut_id].default);
@@ -873,14 +874,14 @@ fn lfo_page(ui: &mut Ui, ed: &mut Ed) {
     // One second of the LFO, so the rate is visible (a synced one at the song's tempo).
     let beats = lyra_fluttersine::SYNC_BEATS[ed.choice(sync_id).min(lyra_fluttersine::SYNC_BEATS.len() - 1)];
     let synced = beats > 0.0;
-    let rate = if synced { ed.p.bpm as f32 / 60.0 / beats } else { ed.v(rate_id) };
+    let rate = if synced { ed.host.tempo() as f32 / 60.0 / beats } else { ed.v(rate_id) };
     let (rect, _) = ui.allocate_exact_size(vec2(s.left_w, s.display_h - 12.0), Sense::hover());
     let painter = ui.painter_at(rect);
     look::lcd_panel(&painter, rect);
     let inner = rect.shrink2(vec2(10.0, 14.0));
     painter.line_segment([inner.left_center(), inner.right_center()], stroke(1.0, lcd_grid()));
     draw_curve(&painter, inner, &|t| lfo_at(shape, t), rate, look::LCD_INK, 1.8, Some(inner.center().y));
-    let caption = if synced { format!("1 second at {:.0} BPM", ed.p.bpm) } else { "1 second".into() };
+    let caption = if synced { format!("1 second at {:.0} BPM", ed.host.tempo()) } else { "1 second".into() };
     painter.text(
         rect.right_bottom() - vec2(9.0, 3.0),
         Align2::RIGHT_BOTTOM,
@@ -1088,7 +1089,7 @@ fn matrix(ui: &mut Ui, ed: &mut Ed, r: Rect, page: &mut Page, used: &[bool; OPS]
 /// diagram and name. A key lights while the matrix has its shape; pressing one
 /// reshapes the matrix and keeps the amounts you set.
 fn algorithms(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    let current = matching_algorithm(&ed.p.channels[ed.ch].params);
+    let current = matching_algorithm(ed.host.params());
     let mut pick = None;
     let font = look::font(look::m().text_small);
     let rows = flex::even_col(r, 3, 6.0);
@@ -1109,8 +1110,8 @@ fn algorithms(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         }
     }
     if let Some(k) = pick {
-        let changes = apply_algorithm(&ed.p.channels[ed.ch].params, &ALGORITHMS[k]);
-        ed.h.checkpoint(ed.p);
+        let changes = apply_algorithm(ed.host.params(), &ALGORITHMS[k]);
+        ed.host.begin_edit();
         for (id, x) in changes {
             ed.put(id, x);
         }
@@ -1492,7 +1493,7 @@ fn envelope(ui: &mut Ui, ed: &mut Ed, ids: [usize; 4], size: Vec2, salt: impl st
         for (k, at) in dots {
             let r = ui.interact(Rect::from_center_size(at, vec2(20.0, 20.0)), base.with(k), Sense::click_and_drag());
             if r.drag_started() || r.double_clicked() {
-                ed.h.checkpoint(ed.p);
+                ed.host.begin_edit();
             }
             let resets: &[usize] = match k {
                 0 => &[a_id],

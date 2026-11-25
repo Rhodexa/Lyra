@@ -5,8 +5,8 @@
 //! by id, like in a project; a preset from an older Lyra gets the
 //! parameters added since at their defaults.
 //!
-//! [`menu`] draws the list every preset picker shows: the factory presets,
-//! then yours (each with an × to delete it), then "Save as…".
+//! [`picker`] is Lyra's own preset dropdown; plugin editors with their own
+//! look use the kit's list (`lyra_kit::presets::menu`) through their `Host`.
 
 use egui::{RichText, Ui};
 use serde::{Deserialize, Serialize};
@@ -16,13 +16,8 @@ use std::sync::Mutex;
 
 const EXT: &str = "lyrapreset";
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Entry {
-    pub name: String,
-    pub params: Vec<f32>,
-    /// Yours (a file), not one of the plugin's own.
-    pub user: bool,
-}
+/// One preset: the kit's type, so plugin editors and Lyra share it.
+pub use lyra_kit::PresetEntry as Entry;
 
 #[derive(Serialize, Deserialize)]
 struct File {
@@ -91,12 +86,7 @@ pub fn entries(plugin: &str) -> Vec<Entry> {
 }
 
 /// The preset these parameters are exactly, if any.
-pub fn current(entries: &[Entry], params: &[f32]) -> Option<usize> {
-    entries.iter().position(|e| {
-        e.params.len() == params.len()
-            && e.params.iter().zip(params).all(|(a, b)| (a - b).abs() <= 1e-5 * a.abs().max(1.0))
-    })
-}
+pub use lyra_kit::presets::current;
 
 /// Save `params` as your preset `name` (replacing one of the same name).
 pub fn save(plugin: &str, name: &str, params: &[f32]) -> Result<(), String> {
@@ -130,72 +120,13 @@ pub fn delete(plugin: &str, name: &str) {
     forget(plugin);
 }
 
-/// The preset list for a popup: the plugin's own, yours (× deletes), and a
-/// "Save as" field for the current sound. Returns the preset picked, and
-/// whether the popup should close.
-pub fn menu(ui: &mut Ui, plugin: &str, params: &[f32], width: f32) -> (Option<Entry>, bool) {
-    let all = entries(plugin);
-    let now = current(&all, params);
-    let mut pick = None;
-    let mut close = false;
-    ui.set_min_width(width);
-    egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-        let mut shown_yours = false;
-        for (k, e) in all.iter().enumerate() {
-            if e.user && !shown_yours {
-                shown_yours = true;
-                ui.separator();
-                ui.label(RichText::new("YOURS").small().color(crate::theme::TEXT_DIM));
-            }
-            ui.horizontal(|ui| {
-                if ui.selectable_label(now == Some(k), &e.name).clicked() {
-                    pick = Some(e.clone());
-                    close = true;
-                }
-                if e.user {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let x = ui.small_button("×").on_hover_text("Delete this preset (its file goes too)");
-                        if x.clicked() {
-                            delete(plugin, &e.name);
-                        }
-                    });
-                }
-            });
-        }
-    });
-    ui.separator();
-    // Save as: the name is kept while the popup is open.
-    let id = egui::Id::new(("preset-save-name", plugin));
-    let mut name: String = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
-    let err_id = id.with("error");
-    ui.horizontal(|ui| {
-        let edit =
-            ui.add(egui::TextEdit::singleline(&mut name).hint_text("New preset name").desired_width(width - 70.0));
-        let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        if ui.button("Save").clicked() || enter {
-            match save(plugin, &name, params) {
-                Ok(()) => {
-                    name.clear();
-                    ui.ctx().data_mut(|d| d.remove::<String>(err_id));
-                }
-                Err(e) => ui.ctx().data_mut(|d| d.insert_temp(err_id, e)),
-            }
-        }
-    });
-    if let Some(err) = ui.ctx().data(|d| d.get_temp::<String>(err_id)) {
-        ui.label(RichText::new(err).small().color(crate::theme::ROSE));
-    }
-    ui.ctx().data_mut(|d| d.insert_temp(id, name));
-    (pick, close)
-}
-
 /// What [`picker`] asks for.
 pub enum Picked {
     Load(Entry),
 }
 
 /// Lyra's own preset picker (the instrument window; Fluttersine and Chrysalis
-/// keep [`menu`] in their own look): a dropdown of the plugin's presets and
+/// use the kit's list in their own look): a dropdown of the plugin's presets and
 /// yours, with a second column for "Save as…" and, when the sound is one of
 /// yours, deleting it. "Save as…" turns the dropdown into a name field in
 /// place: Enter saves, Esc gives up.

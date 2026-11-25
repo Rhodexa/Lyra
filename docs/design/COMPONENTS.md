@@ -5,7 +5,7 @@ settled in [catalog-next.html](catalog-next.html); this file says where its
 code lives and where it's used. Use these. Don't hand-draw a new one.
 
 Plugins (Fluttersine, Chrysalis) are not in this list on purpose: they keep
-their own look, frozen in `plugin_look.rs`. **Never change them from here.**
+their own look, frozen in `crates/plugins/shared-look` and their editor crates. **Never change them from here.**
 
 ## Foundations (`theme.rs`)
 

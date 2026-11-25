@@ -20,6 +20,10 @@ what exists is in [COMPONENTS.md](COMPONENTS.md).
 > behaviour, icons, their logos, today's sizes, today's egui style, and their
 > own font families), and they use only that, plus layout, undo and data
 > helpers that draw nothing. Verified: before/after screenshots identical.
+> **Since the kit (2026-11-25):** the editors are their own crates
+> (`crates/plugins/{fluttersine,chrysalis}/editor`), the frozen look is
+> `crates/plugins/shared-look` (its egui style is now code, not a copy of
+> Lyra's taken at startup), and Lyra reaches them only through `lyra-kit`.
 > Only their hover hints still follow Lyra's style.
 
 ## What to call them

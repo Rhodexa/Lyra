@@ -28,13 +28,12 @@
 //! for an imported table). The pictures call `lyra_chrysalis` itself, so
 //! they show exactly what plays.
 
-#[path = "chrysalis_table.rs"]
 mod studio;
 
-use crate::flex::{self, Grow, Px};
-use crate::fm_editor::wheel_step;
-use crate::rack::tracked;
-use crate::plugin_look::{self as look, cr, stroke};
+use lyra_kit::flex::{self, Grow, Px};
+use lyra_kit::wheel_step;
+use lyra_kit::{tracked, Host};
+use lyra_shared_look::{self as look, cr, stroke};
 use egui::text::LayoutJob;
 use egui::{
     pos2, vec2, Align, Align2, Color32, Id, Layout, Pos2, Rect, Response, Sense, Shape, Ui, UiBuilder, Vec2,
@@ -44,7 +43,6 @@ use lyra_chrysalis::params::{ft, warp};
 use lyra_chrysalis::table::{self, Table, IMPORTED};
 use lyra_chrysalis::telemetry::{Snapshot, Telemetry};
 use lyra_chrysalis::{p, PARAMS};
-use lyra_model::{History, Project};
 use std::f32::consts::PI;
 use std::sync::Arc;
 
@@ -94,8 +92,8 @@ fn alpha(c: Color32, a: f32) -> Color32 {
 
 /// The channel being edited, plus undo.
 struct Ed<'a> {
-    p: &'a mut Project,
-    h: &'a mut History,
+    host: &'a mut dyn Host,
+    /// Tells this editor's egui ids apart from another Chrysalis's.
     ch: usize,
     /// What the sound is doing right now (None before the engine has the plugin).
     live: Option<Snapshot>,
@@ -107,7 +105,7 @@ impl Ed<'_> {
     /// A parameter as it is right now: where automation has it while the
     /// song plays, else its own value.
     fn v(&self, id: usize) -> f32 {
-        crate::automation::shown_param(self.ch, id).unwrap_or(self.p.channels[self.ch].params[id])
+        self.host.param(id)
     }
     fn on(&self, id: usize) -> bool {
         self.v(id) >= 0.5
@@ -118,18 +116,18 @@ impl Ed<'_> {
     /// Set without a checkpoint (the middle of a drag).
     fn put(&mut self, id: usize, x: f32) {
         let info = &PARAMS[id];
-        self.p.channels[self.ch].params[id] = x.clamp(info.min, info.max);
+        self.host.set_param(id, x.clamp(info.min, info.max));
     }
     /// A one-shot change (a click): checkpoint, then set.
     fn set(&mut self, id: usize, x: f32) {
         if self.v(id) != x {
-            self.h.checkpoint(self.p);
+            self.host.begin_edit();
             self.put(id, x);
         }
     }
     /// A change from a knob-like widget: one checkpoint per drag.
     fn track(&mut self, r: &Response, id: usize, x: f32) {
-        if tracked(r, self.h, self.p) {
+        if tracked(r, self.host) {
             self.put(id, x);
         }
     }
@@ -157,27 +155,41 @@ const KEY_H: f32 = 24.0;
 /// The one line of text under a knob.
 const LABEL_H: f32 = 15.0;
 
-/// The editor, in the synths' frozen style (see plugin_look.rs).
-pub fn show(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Option<crate::bridge::Live>) {
+/// Chrysalis's editor, for Lyra's list of editors.
+pub const EDITOR: lyra_kit::Editor =
+    lyra_kit::Editor { plugin: "lyra.chrysalis", show, fonts: look::add_font_families };
+
+/// The Chrysalis emblem, the user's artwork (`assets/emblem.png`). Export over the file while
+/// Lyra runs from the source tree and the editor shows it within a second.
+const EMBLEM: lyra_kit::assets::Artwork = lyra_kit::assets::Artwork {
+    name: "chrysalis-emblem",
+    built_in: include_bytes!("../assets/emblem.png"),
+    file: concat!(env!("CARGO_MANIFEST_DIR"), "/assets/emblem.png"),
+    max_h: 220,
+};
+
+/// The editor, in the synths' frozen style (see `lyra_shared_look`).
+pub fn show(ui: &mut Ui, host: &mut dyn Host) {
     ui.scope(|ui| {
         look::freeze(ui);
-        show_inner(ui, p, h, ch, live);
+        show_inner(ui, host);
     });
 }
 
-fn show_inner(ui: &mut Ui, p: &mut Project, h: &mut History, ch: usize, live: Option<crate::bridge::Live>) {
-    let live = live.and_then(|l| l.downcast::<Telemetry>().ok()).map(|t| t.snapshot());
+fn show_inner(ui: &mut Ui, host: &mut dyn Host) {
+    let ch = host.instance();
+    let live = host.telemetry().and_then(|l| l.downcast::<Telemetry>().ok()).map(|t| t.snapshot());
     // The backlight follows the output: up at once, down gently.
     let glow_id = Id::new(("chrys-glow", ch));
     let before: f32 = ui.ctx().data(|d| d.get_temp(glow_id)).unwrap_or(0.0);
     let glow = live.map_or(0.0, |l| l.level.min(1.0)).max(before * 0.88);
     ui.ctx().data_mut(|d| d.insert_temp(glow_id, glow));
     // Animate only while something moves: notes sounding, a free LFO, a fading glow.
-    let free_lfo = (0..4).any(|l| p.channels[ch].params[p::lfo(l, p::L_MODE)] < 0.5);
+    let free_lfo = (0..4).any(|l| host.params()[p::lfo(l, p::L_MODE)] < 0.5);
     if live.is_some_and(|l| l.voices > 0) || glow > 0.01 || (live.is_some() && free_lfo) {
         ui.ctx().request_repaint();
     }
-    let mut ed = Ed { p, h, ch, live, glow };
+    let mut ed = Ed { host, ch, live, glow };
     let total = vec2(W, HEADER_H + OSC_H + FX_H + MOD_H + 3.0 * GAP);
     let (all, _) = ui.allocate_exact_size(total, Sense::hover());
     backdrop(ui, all);
@@ -352,7 +364,7 @@ fn knob_in(ui: &mut Ui, ed: &mut Ed, r: Rect, id: usize, label: &str, color: Col
     place(ui, kr.union(lr), ("chrys-knob", id), enabled, |ui| {
         let mut v = ed.v(id);
         let live = if enabled { modulated(ed, id) } else { None };
-        let resp = crate::plugin_look::knob_painted(ui, &mut v, info, d, |p, rect, v, hot| {
+        let resp = look::knob_painted(ui, &mut v, info, d, |p, rect, v, hot| {
             paint_knob_live(p, rect, info, v, color, hot, live)
         });
         if enabled {
@@ -480,7 +492,7 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
             p.line_segment([pos2(x(t0), y(t0)), pos2(x(t1), y(t1))], stroke(1.2, alpha(TURQ, 0.5 * a)));
         }
     }
-    let (tex, [w, h]) = look::chrysalis_emblem(ui.ctx());
+    let (tex, [w, h]) = EMBLEM.texture(ui.ctx());
     // A badge: a little taller than the bar, so it breaks out of it.
     let eh = r.height() + 18.0;
     let img = Rect::from_center_size(c, vec2(eh * w as f32 / h as f32, eh));
@@ -545,10 +557,9 @@ fn header_bar(ui: &mut Ui, ed: &mut Ed, r: Rect) {
 
 /// `‹ name ›` in `r`: click the name for the list, scroll over it to step.
 fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
-    const PLUGIN: &str = "lyra.chrysalis";
-    let all = crate::user_presets::entries(PLUGIN);
+    let all = ed.host.presets();
     let n = all.len();
-    let current = crate::user_presets::current(&all, &ed.p.channels[ed.ch].params);
+    let current = lyra_kit::presets::current(&all, ed.host.params());
     let last_id = Id::new(("chrys-last-preset", ed.ch));
     let last: Option<String> = ui.ctx().data(|d| d.get_temp(last_id));
     let last_k = last.as_ref().and_then(|name| all.iter().position(|e| &e.name == name));
@@ -559,7 +570,7 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         (None, None) => ("Custom".to_string(), false),
     };
     let [prev, field, next] = flex::row(r, [Px(r.height()), Grow(1.0), Px(r.height())], 4.0);
-    let mut pick: Option<crate::user_presets::Entry> = None;
+    let mut pick: Option<lyra_kit::PresetEntry> = None;
     for (rect, left) in [(prev, true), (next, false)] {
         let resp = ui.interact(rect, Id::new(("chrys-preset-step", left)), Sense::click());
         let p = ui.painter();
@@ -595,10 +606,9 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         ui.memory_mut(|m| m.toggle_popup(popup));
     }
     let resp = resp.on_hover_text("Preset: scroll to flip through, click for the list (and to save yours)");
-    let params = ed.p.channels[ed.ch].params.clone();
     egui::popup_below_widget(ui, popup, &resp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
         look::freeze(ui);
-        let (picked, close) = crate::user_presets::menu(ui, PLUGIN, &params, field.width());
+        let (picked, close) = lyra_kit::presets::menu(ui, ed.host, field.width(), look::MENU_INK);
         if picked.is_some() {
             pick = picked;
         }
@@ -607,8 +617,8 @@ fn preset_row(ui: &mut Ui, ed: &mut Ed, r: Rect) {
         }
     });
     if let Some(e) = pick {
-        ed.h.checkpoint(ed.p);
-        ed.p.channels[ed.ch].params = e.params;
+        ed.host.begin_edit();
+        ed.host.set_params(e.params);
         ui.ctx().data_mut(|d| d.insert_temp(last_id, e.name));
     }
 }
@@ -631,7 +641,7 @@ fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
     place(ui, table, ("chrys-osc-table", o), true, |ui| {
         well(ui, ed, at(p::TABLE), table.size(), color, "Wavetable: scroll to flip through")
     });
-    let has = ed.p.channels[ed.ch].sample.is_some();
+    let has = ed.host.sample().is_some();
     let hint = "Import a WAV as a wavetable (cut into frames of 2048 samples). Both oscillators can play it.";
     let clicked = place(ui, load, ("chrys-osc-load", o), true, |ui| {
         key(ui, "load", load.size(), is_import && has, color, hint).clicked()
@@ -643,13 +653,13 @@ fn osc_panel(ui: &mut Ui, ed: &mut Ed, o: usize, r: Rect) {
     }
     if clicked {
         if let Some(path) = rfd::FileDialog::new().add_filter("Audio", &["wav", "flac"]).pick_file() {
-            ed.h.checkpoint(ed.p);
-            ed.p.channels[ed.ch].sample = Some(crate::samples::name_for(&path));
+            ed.host.begin_edit();
+            ed.host.set_sample(Some(ed.host.sample_name_for(&path)));
             ed.put(at(p::TABLE), IMPORTED as f32);
         }
     }
     if is_import {
-        let text = ed.p.channels[ed.ch].sample.as_deref().map_or("no WAV loaded".into(), crate::samples::display_name);
+        let text = ed.host.sample().map_or("no WAV loaded".into(), |s| ed.host.sample_label(s));
         ui.painter_at(name).text(name.left_center(), Align2::LEFT_CENTER, text, look::font(11.0), TEXT_DIM);
     }
     caps(ui.painter(), warp_cap.right_center(), "warp", TEXT_FAINT, Align2::RIGHT_CENTER);
@@ -898,7 +908,7 @@ fn lfo_view(ui: &mut Ui, ed: &mut Ed, l: usize, inner: Rect) {
                 resp.on_hover_text(*name).clicked()
             });
             if picked {
-                ed.h.checkpoint(ed.p);
+                ed.host.begin_edit();
                 write_points(ed, l, &shape);
             }
         }
@@ -1053,7 +1063,7 @@ fn slot_row(ui: &mut Ui, ed: &mut Ed, k: usize, r: Rect) {
     p.line_segment([c + vec2(-4.0, -4.0), c + vec2(4.0, 4.0)], xs);
     p.line_segment([c + vec2(-4.0, 4.0), c + vec2(4.0, -4.0)], xs);
     if xresp.on_hover_text("Remove this route").clicked() {
-        ed.h.checkpoint(ed.p);
+        ed.host.begin_edit();
         for q in [p::S_SRC, p::S_DEST, p::S_AMT, p::S_VIA, p::S_BIPOLAR] {
             ed.put(at(q), PARAMS[at(q)].default);
         }
@@ -1067,7 +1077,7 @@ fn amount_bar(ui: &mut Ui, ed: &mut Ed, id: usize, r: Rect, color: Color32) {
     let info = &PARAMS[id];
     let reset = dbl(ui, &resp, ("amount", id));
     if resp.drag_started() || reset {
-        ed.h.checkpoint(ed.p);
+        ed.host.begin_edit();
     }
     if reset {
         ed.put(id, 0.0);
@@ -1077,7 +1087,7 @@ fn amount_bar(ui: &mut Ui, ed: &mut Ed, id: usize, r: Rect, color: Color32) {
         ed.put(id, ed.v(id) + (d.x - d.y) / r.width() * (info.max - info.min) * fine);
     }
     if let Some(step) = wheel_step(ui, r) {
-        ed.h.checkpoint(ed.p);
+        ed.host.begin_edit();
         ed.put(id, ed.v(id) - step as f32 * 0.01);
     }
     let hot = resp.hovered() || resp.dragged();
@@ -1306,7 +1316,7 @@ fn handle(p: &egui::Painter, at: Pos2, color: Color32, solid: bool, hot: bool) {
 /// A double-click on `r`, timed by Lyra itself (egui only knows on the frame
 /// the button comes back up, so quick clicks slip through).
 fn dbl(ui: &Ui, r: &Response, what: impl std::hash::Hash) -> bool {
-    r.clicked() && crate::browser::double_click(ui, "chrys-double-click", Id::new(what))
+    r.clicked() && lyra_kit::double_click(ui, "chrys-double-click", Id::new(what))
 }
 
 /// A drag on a picture moves `id` like a knob (up = more); wheel nudges,
@@ -1315,7 +1325,7 @@ fn drag_param(ui: &Ui, ed: &mut Ed, r: &Response, id: usize, span: f32) {
     let info = &PARAMS[id];
     let reset = dbl(ui, r, ("param", id));
     if r.drag_started() || reset {
-        ed.h.checkpoint(ed.p);
+        ed.host.begin_edit();
     }
     if reset {
         ed.put(id, info.default);
@@ -1325,7 +1335,7 @@ fn drag_param(ui: &Ui, ed: &mut Ed, r: &Response, id: usize, span: f32) {
         ed.put(id, info.from_normalized(n));
     }
     if let Some(step) = wheel_step(ui, r.rect) {
-        ed.h.checkpoint(ed.p);
+        ed.host.begin_edit();
         let n = info.to_normalized(ed.v(id)) - step as f32 * 0.02;
         ed.put(id, info.from_normalized(n));
     }
@@ -1389,12 +1399,12 @@ fn table_of(ui: &Ui, ed: &Ed, o: usize) -> Tab {
 }
 
 fn imported_table(ui: &Ui, ed: &Ed) -> Option<Arc<Table>> {
-    let name = ed.p.channels[ed.ch].sample.clone()?;
+    let name = ed.host.sample()?.to_string();
     let id = Id::new(("chrys-import", name.as_str()));
     if let Some(t) = ui.ctx().data(|d| d.get_temp::<Option<Arc<Table>>>(id)) {
         return t;
     }
-    let t = crate::samples::decode(&crate::samples::path_for(&name))
+    let t = ed.host.load_sample(&name)
         .ok()
         .and_then(|s| Table::from_sample(&s))
         .map(Arc::new);
@@ -1598,7 +1608,7 @@ fn filter_graph(ui: &mut Ui, ed: &mut Ed, rect: Rect) {
         let r = ui.interact(Rect::from_center_size(at, vec2(22.0, 22.0)), id, Sense::click_and_drag());
         let reset = dbl(ui, &r, ("fdot", f));
         if r.drag_started() || reset {
-            ed.h.checkpoint(ed.p);
+            ed.host.begin_edit();
         }
         if reset {
             ed.put(cut_id, PARAMS[cut_id].default);
@@ -1723,7 +1733,7 @@ fn envelope(ui: &mut Ui, ed: &mut Ed, e: usize, rect: Rect) {
         let r = ui.interact(Rect::from_center_size(at, vec2(20.0, 20.0)), base.with(k), Sense::click_and_drag());
         let reset = dbl(ui, &r, ("envdot", e, k));
         if r.drag_started() || reset {
-            ed.h.checkpoint(ed.p);
+            ed.host.begin_edit();
         }
         let resets: &[usize] = match k {
             0 => &[a_id],
@@ -1762,7 +1772,7 @@ fn envelope(ui: &mut Ui, ed: &mut Ed, e: usize, rect: Rect) {
         let r = ui.interact(Rect::from_center_size(mid, vec2(18.0, 18.0)), base.with(10 + k), Sense::click_and_drag());
         let reset = dbl(ui, &r, ("envring", e, k));
         if r.drag_started() || reset {
-            ed.h.checkpoint(ed.p);
+            ed.host.begin_edit();
         }
         if reset {
             ed.put(cid, PARAMS[cid].default);
@@ -1874,7 +1884,7 @@ fn lfo_editor(ui: &mut Ui, ed: &mut Ed, l: usize, rect: Rect) {
         let at = pos2(sx(pts[k].x), sy(pts[k].y));
         let r = ui.interact(Rect::from_center_size(at, vec2(18.0, 18.0)), base.with(k), Sense::click_and_drag());
         if r.drag_started() {
-            ed.h.checkpoint(ed.p);
+            ed.host.begin_edit();
         }
         if (dbl(ui, &r, ("lfopt", l, k)) || r.secondary_clicked()) && k > 0 {
             remove = Some(k);
@@ -1908,7 +1918,7 @@ fn lfo_editor(ui: &mut Ui, ed: &mut Ed, l: usize, rect: Rect) {
         let r = ui.interact(Rect::from_center_size(mid, vec2(16.0, 16.0)), base.with(100 + k), Sense::click_and_drag());
         let reset = dbl(ui, &r, ("lfobend", l, k));
         if r.drag_started() || reset {
-            ed.h.checkpoint(ed.p);
+            ed.host.begin_edit();
         }
         if reset {
             pts[k].bend = 0.0;
@@ -1928,13 +1938,13 @@ fn lfo_editor(ui: &mut Ui, ed: &mut Ed, l: usize, rect: Rect) {
         if let Some(pos) = bg.interact_pointer_pos() {
             let (x, y) = (snap(fx(pos.x), 32.0).max(1e-4), snap(fy(pos.y), 16.0));
             let at = pts.iter().position(|q| q.x > x).unwrap_or(n);
-            ed.h.checkpoint(ed.p);
+            ed.host.begin_edit();
             pts.insert(at.max(1), Point { x, y, bend: 0.0 });
             changed = true;
         }
     }
     if let Some(k) = remove {
-        ed.h.checkpoint(ed.p);
+        ed.host.begin_edit();
         pts.remove(k);
         changed = true;
     }

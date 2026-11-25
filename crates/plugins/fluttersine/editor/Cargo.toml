@@ -1,0 +1,13 @@
+[package]
+name = "lyra-fluttersine-editor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Fluttersine's editor: the six-operator rack, in its own look."
+
+[dependencies]
+lyra-kit.workspace = true
+lyra-shared-look.workspace = true
+lyra-plugin.workspace = true
+lyra-fluttersine.workspace = true
+egui.workspace = true

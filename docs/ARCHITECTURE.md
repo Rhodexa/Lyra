@@ -238,24 +238,27 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   editor (`editor.rs`) is generated from `params()` and `groups()` alone, so any
   future plugin gets an editor for free.
 * Hand-made editors take over below the editor's header for one instrument id.
-  Fluttersine (id `lyra.fluttersine`) has one: `fm_editor.rs` (a header with the hover
+  Each lives in its plugin's folder and talks to Lyra only through the plugin
+  kit (see "Plugin kit" below). Fluttersine (id `lyra.fluttersine`) has one:
+  `crates/plugins/fluttersine/editor` (a header with the hover
   readout, preset, logo and Tone/Time/Volume/Glide; operator / filter / LFO / MOD
   tabs on the left; MATRIX / ALGORITHMS tabs on the right; draggable envelopes
   and filter curve; flat keys; laid out with `flex`). It still only
-  edits `params`. Chrysalis (`lyra.chrysalis`) has `chrysalis_editor.rs`,
+  edits `params`. Chrysalis (`lyra.chrysalis`) has `crates/plugins/chrysalis/editor`
+  (the table studio is its `studio.rs`),
   with **its own look** (the user's call: the sound is aggressive, the editor
   shouldn't whisper): teal-black panels, dark screens with glowing curves,
-  neon knobs (`widgets::knob_painted`: Lyra's knob feel, its own drawing),
+  neon knobs (`lyra_kit::knob_painted`: Lyra's knob feel, its own drawing),
   green/cyan for the sound and violet for modulation, the emblem as a badge
   in the header. Everything is on one page except modulation (ENV / LFO /
   MATRIX tabs). It draws with the plugin's own functions (`Table::sample`,
   `warp_preview`, `drive_shape`, `curve::bend`), so the pictures are what
-  plays. Its palette lives in that file, not in `theme.rs`: it is
+  plays. Its palette lives in its crate, not in `theme.rs`: it is
   Chrysalis's, not Lyra's.
 * **Live state for editors:** `Plugin::telemetry()` (default none) returns an
   object the audio thread updates with atomics only, at the end of each
   block; the bridge keeps it per channel when it makes the plugin
-  (`Bridge::live`) and the app passes it to the editor, which downcasts it.
+  (`Bridge::live`) and the editor gets it from `Host::telemetry()` and downcasts it.
   Chrysalis shares its newest voice's playing positions, LFO phases,
   envelope stages, matrix sums and output level (`telemetry.rs`); its editor
   animates from that and repaints only while something moves.
@@ -265,9 +268,37 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
   defaults on load). Every preset picker (Chrysalis, Fluttersine, the
   generic editor's Presets menu) lists the factory presets, then yours with
   an × to delete, then "Save as".
-* Plugin artwork (Fluttersine's wordmark, Chrysalis's emblem) lives in
-  `lyra-app/assets/` and is live-reloaded from there while Lyra runs from the
-  source tree (`theme::live_logo`).
+* Plugin artwork (Fluttersine's wordmark, Chrysalis's emblem) lives in each
+  editor's `assets/` folder and is live-reloaded from there while Lyra runs
+  from the source tree (`lyra_kit::assets::Artwork`).
+
+## Plugin kit
+
+`crates/lyra-kit`: what a plugin's editor needs from Lyra, and nothing else,
+so an editor can live in its plugin's own crate (even outside this repo, by
+path). It holds **no colours, drawings, logos or layout of any plugin, and
+nothing from Lyra's theme**: a plugin owns its look, and Lyra's redesigns
+can't reach it.
+
+* **`Host`** (trait): the channel as its editor sees it. Parameters as shown
+  (automation) and as stored; changes in gestures like CLAP's: `begin_edit()`
+  once per drag or click (one undo step), then `set_param` as often as needed
+  (`lyra_kit::tracked` does this for knob-like widgets). Also the telemetry
+  object, the channel's name, the tempo, presets (list / save / delete), the
+  channel's sample slot, and Lyra's data folder. Lyra's implementation is
+  `ChannelHost` in `lyra-app/src/plugin_host.rs`.
+* **`Editor`**: `{ plugin, show, fonts }`. Registering one is one line in
+  `plugin_host::EDITORS`; `fonts` adds the plugin's own font families at
+  startup, before Lyra's.
+* Behaviour, never painting: `knob_turn` / `knob_painted` (drag, Shift fine,
+  wheel, double-click reset), `wheel_step`, `double_click`, `flex` (below), the
+  preset list for a popup (`presets::menu`, ink passed in), and `assets::Artwork`
+  (a PNG built in and live-reloaded from the plugin's folder).
+
+Fluttersine and Chrysalis also share `crates/plugins/shared-look`: their look
+as it was on 2026-11-25 (colours, lights, LED, LCD, knob painter, icons,
+sizes, and the egui style written out as code). It belongs to them, not to
+the kit. A new plugin (Octavia) brings its own look and needs only the kit.
 
 ## Chrysalis (wavetable synth)
 
@@ -295,7 +326,7 @@ the key first.
 
 ## UI layout
 
-* **The flexbox: `lyra-app/src/flex.rs`.** Layout by arithmetic. Take a
+* **The flexbox: `lyra-kit/src/flex.rs`** (in the kit, so plugin editors share it; `crate::flex` in Lyra). Layout by arithmetic. Take a
   rectangle and split it into a row or a column of parts. Each part is fixed
   (`Px(28.0)`) or a share of what's left (`Grow(1.0)`), with a gap between parts:
 

@@ -12,6 +12,9 @@ path = "src/main.rs"
 [dependencies]
 lyra-plugin.workspace = true
 lyra-catalog.workspace = true
+lyra-kit.workspace = true
+lyra-fluttersine-editor.workspace = true
+lyra-chrysalis-editor.workspace = true
 lyra-fluttersine.workspace = true
 lyra-chrysalis.workspace = true
 lyra-dsp.workspace = true
@@ -27,7 +30,6 @@ hound.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 claxon.workspace = true
-# Already in the tree through eframe; decodes the Fluttersine logo (live-reloaded while you edit it).
 png = "0.18"
 midly = { version = "0.5", default-features = false, features = ["std"] }
 rtrb.workspace = true

@@ -6,7 +6,7 @@
 //! Roboto Condensed for labels and Roboto for reading text. The "Foundations"
 //! section below holds its tokens; older constants are being replaced widget by
 //! widget during the port. Fluttersine and Chrysalis don't use this module
-//! (they have their own frozen look in plugin_look.rs).
+//! (they have their own frozen look in crates/plugins/shared-look).
 
 use egui::{Color32, Context, FontFamily, FontId, Painter, Rect, Stroke, TextStyle};
 
@@ -235,13 +235,13 @@ pub fn read_bold(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name(READ_BOLD.into()))
 }
 
-/// Lyra's fonts, with the synths' families (copies of egui's own defaults)
-/// kept as they were. Call once at startup.
+/// Lyra's fonts, with every plugin editor's own families added first
+/// (plugin_host::EDITORS), so Lyra's can't replace them. Call once at startup.
 pub fn install_fonts(ctx: &Context) {
     use egui::{FontData, FontDefinitions};
     use std::sync::Arc;
     let mut defs = FontDefinitions::default();
-    crate::plugin_look::add_font_families(&mut defs);
+    crate::plugin_host::add_editor_fonts(&mut defs);
     let fonts: [(&str, &'static [u8]); 4] = [
         ("Roboto-Regular", include_bytes!("../assets/fonts/Roboto-Regular.ttf")),
         ("Roboto-SemiBold", include_bytes!("../assets/fonts/Roboto-SemiBold.ttf")),

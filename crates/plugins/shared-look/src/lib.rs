@@ -1,31 +1,31 @@
-//! The synths' own look, frozen on 2026-11-25.
+//! The look Fluttersine and Chrysalis share, frozen on 2026-11-25.
 //!
-//! Fluttersine and Chrysalis are independent projects with their own visual
-//! language. Lyra's UI is being redesigned (docs/design/catalog-next.html), and
-//! nothing in that redesign may change them. So everything visual they used to
-//! borrow from `theme` and `widgets` is copied here, exactly as it was, and they
-//! use only this module (plus layout, undo and data helpers that draw nothing):
+//! Both synths are independent projects with their own visual language, and
+//! Lyra's redesigns must never reach them. So everything visual they used to
+//! borrow from Lyra is here, as code, exactly as it was:
 //!
 //! * colours, the eight lights, the colour helpers;
 //! * the LED, the LCD panel, the well, the key ink;
-//! * the knob painter and its drag behaviour;
+//! * the knob painter (how a knob *turns* is the kit's, `lyra_kit::knob`);
 //! * the two icons they use;
-//! * their logos (moved here: they were only ever theirs);
-//! * today's sizes, as constants (F12 no longer reaches them);
-//! * today's egui style, captured at startup ([`capture_style`]), and their own
-//!   font families, copies of today's defaults ([`install_fonts`]), so a new
-//!   font for Lyra leaves them alone. [`freeze`] puts the style on a `Ui`.
+//! * the sizes of the day, as constants;
+//! * the egui style of the day ([`style`], put on a `Ui` by [`freeze`]) and
+//!   their own font families, copies of egui's defaults ([`add_font_families`]),
+//!   so a new font for Lyra leaves them alone.
 //!
 //! One thing still follows Lyra: hover hints (egui tooltips take the global
 //! style). The popup *frames* follow the editor's style, and their contents
 //! call [`freeze`] themselves.
 //!
-//! Change things here only to change the synths, on purpose.
+//! Each synth's own logo lives in its editor crate. Change things here only to
+//! change the synths, on purpose.
 
-use egui::{vec2, Color32, ColorImage, Context, FontFamily, FontId, Painter, Pos2, Rect, Response, Sense, Shape, Stroke, TextureHandle, Ui};
+use egui::{vec2, Color32, FontFamily, FontId, Painter, Pos2, Rect, Shape, Stroke, Ui};
 use lyra_plugin::ParamInfo;
 use std::f32::consts::PI;
 use std::sync::{Arc, OnceLock};
+
+pub use lyra_kit::knob_painted;
 
 // ── Colours (theme.rs, 2026-11-25) ──
 pub const BG: Color32 = Color32::from_rgb(0x16, 0x16, 0x16);
@@ -260,67 +260,6 @@ fn arc(center: Pos2, radius: f32, from: f32, to: f32) -> Vec<Pos2> {
         .collect()
 }
 
-/// A knob that turns exactly like Lyra's knobs (as of the freeze) but is drawn by `paint(painter,
-/// rect, value, hot)`, with no tooltip: for instruments with their own look
-/// (Chrysalis), which show the value themselves.
-pub fn knob_painted(
-    ui: &mut Ui,
-    value: &mut f32,
-    info: &ParamInfo,
-    diameter: f32,
-    paint: impl FnOnce(&egui::Painter, Rect, f32, bool),
-) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(diameter, diameter), Sense::click_and_drag());
-    let (resp, hot) = knob_turn(ui, resp, value, info);
-    paint(ui.painter(), rect, *value, hot);
-    // No tooltip: an editor with its own look shows the value its own way.
-    resp
-}
-
-/// What every knob does with the mouse; returns the response and whether it is "hot".
-fn knob_turn(ui: &mut Ui, mut resp: Response, value: &mut f32, info: &ParamInfo) -> (Response, bool) {
-    let n0 = info.to_normalized(*value);
-    let mut n = n0;
-    let before = *value;
-
-    // During a drag the knob keeps its own raw, continuous position and only
-    // the value it outputs is quantised (choice knobs snap to steps). Rounding
-    // the position itself every frame threw away any movement smaller than
-    // half a step per frame, so stepped knobs barely moved.
-    let raw_id = resp.id.with("raw");
-    if resp.dragged() {
-        let fine = ui.input(|i| i.modifiers.shift);
-        let raw: f32 = if resp.drag_started() { n0 } else { ui.data(|d| d.get_temp(raw_id)).unwrap_or(n0) };
-        n = (raw - resp.drag_delta().y * if fine { 0.0015 } else { 0.006 }).clamp(0.0, 1.0);
-        ui.data_mut(|d| d.insert_temp(raw_id, n));
-    }
-    if resp.hovered() {
-        let wheel = ui.input(|i| i.raw_scroll_delta.y);
-        if wheel != 0.0 {
-            n = if info.is_choice() {
-                // One notch = one step.
-                info.to_normalized((value.round() + wheel.signum()).clamp(info.min, info.max))
-            } else {
-                n + wheel.signum() * 0.02
-            };
-        }
-    }
-    // Only convert back when the knob actually moved: the round trip through the
-    // knob position isn't exact on exponential params (250 Hz came back as 250.00002),
-    // which counted as an edit (and an undo step) just from being drawn.
-    if n != n0 {
-        *value = info.from_normalized(n);
-    }
-    if resp.double_clicked() {
-        *value = info.default;
-    }
-    if *value != before {
-        resp.mark_changed();
-    }
-    let hot = resp.hovered() || resp.dragged();
-    (resp, hot)
-}
-
 /// The knob families from the control library, by size.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum KnobStyle {
@@ -480,128 +419,12 @@ pub fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, ink: Color32, _bg: Col
     p.add(Shape::line(pts, line));
 }
 
-// ── Logos (moved from theme.rs) ──
-//
-// Plugin artwork by the user: `assets/fluttersine_logo.png` (the wordmark)
-// and `assets/chrysalis_emblem.png`. Both are built into the app, and while
-// Lyra runs from the source tree it also watches the files: export over one
-// (from Krita, say) and the editor shows it within a second, no restart.
-// Transparent margins are trimmed, so draw freely.
-
-const FLUTTERSINE_LOGO_PNG: &[u8] = include_bytes!("../assets/fluttersine_logo.png");
-const FLUTTERSINE_LOGO_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fluttersine_logo.png");
-const CHRYSALIS_EMBLEM_PNG: &[u8] = include_bytes!("../assets/chrysalis_emblem.png");
-const CHRYSALIS_EMBLEM_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/chrysalis_emblem.png");
-/// Artwork is scaled down to at most this tall (about twice what the editors show).
-const LOGO_MAX_H: usize = 220;
-
-#[derive(Clone)]
-struct LogoCache {
-    handle: TextureHandle,
-    size: [usize; 2],
-    modified: Option<std::time::SystemTime>,
-    checked: std::time::Instant,
-}
-
-/// The Fluttersine logo texture and its pixel size (for the aspect ratio).
-pub fn fluttersine_logo(ctx: &Context) -> (egui::TextureId, [usize; 2]) {
-    live_logo(ctx, "fluttersine-logo", FLUTTERSINE_LOGO_PNG, FLUTTERSINE_LOGO_FILE)
-}
-
-/// The Chrysalis emblem texture and its pixel size.
-pub fn chrysalis_emblem(ctx: &Context) -> (egui::TextureId, [usize; 2]) {
-    live_logo(ctx, "chrysalis-emblem", CHRYSALIS_EMBLEM_PNG, CHRYSALIS_EMBLEM_FILE)
-}
-
-/// A piece of artwork: `file` if it is there (re-read when it changes), else `built_in`.
-fn live_logo(ctx: &Context, name: &str, built_in: &[u8], file: &str) -> (egui::TextureId, [usize; 2]) {
-    let id = egui::Id::new(name);
-    // Copy the cache out first: egui's context lock is not re-entrant.
-    let cached = ctx.data(|d| d.get_temp::<LogoCache>(id));
-    let now = std::time::Instant::now();
-    if let Some(c) = &cached {
-        if now.duration_since(c.checked) < std::time::Duration::from_secs(1) {
-            return (c.handle.id(), c.size);
-        }
-    }
-    ctx.request_repaint_after(std::time::Duration::from_secs(1));
-    let modified = std::fs::metadata(file).and_then(|m| m.modified()).ok();
-    if let Some(c) = cached.clone().filter(|c| c.modified == modified) {
-        ctx.data_mut(|d| d.insert_temp(id, LogoCache { checked: now, ..c.clone() }));
-        return (c.handle.id(), c.size);
-    }
-    // New or changed: decode the file if it's there (and readable), else the built-in copy.
-    let from_file = modified.and_then(|_| std::fs::read(file).ok()).and_then(|b| decode_logo(&b));
-    let image =
-        from_file.or_else(|| decode_logo(built_in)).unwrap_or_else(|| ColorImage::new([1, 1], Color32::TRANSPARENT));
-    let size = image.size;
-    let handle = match cached {
-        Some(mut c) => {
-            c.handle.set(image, egui::TextureOptions::LINEAR);
-            c.handle
-        }
-        None => ctx.load_texture(name, image, egui::TextureOptions::LINEAR),
-    };
-    ctx.data_mut(|d| d.insert_temp(id, LogoCache { handle: handle.clone(), size, modified, checked: now }));
-    (handle.id(), size)
-}
-
-/// PNG → RGBA, trimmed to its visible pixels and scaled down to `LOGO_MAX_H`.
-fn decode_logo(bytes: &[u8]) -> Option<ColorImage> {
-    let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
-    decoder.set_transformations(png::Transformations::normalize_to_color8());
-    let mut reader = decoder.read_info().ok()?;
-    let mut buf = vec![0; reader.output_buffer_size()?];
-    let info = reader.next_frame(&mut buf).ok()?;
-    let (w, h) = (info.width as usize, info.height as usize);
-    let px: Vec<[u8; 4]> = match info.color_type {
-        png::ColorType::Rgba => buf.as_chunks::<4>().0.to_vec(),
-        png::ColorType::Rgb => buf.as_chunks::<3>().0.iter().map(|&[r, g, b]| [r, g, b, 255]).collect(),
-        png::ColorType::GrayscaleAlpha => buf.as_chunks::<2>().0.iter().map(|&[g, a]| [g, g, g, a]).collect(),
-        png::ColorType::Grayscale => buf.iter().map(|&g| [g, g, g, 255]).collect(),
-        png::ColorType::Indexed => return None,
-    };
-    let px = &px[..w * h];
-    // Trim transparent margins.
-    let visible = |x: usize, y: usize| px[y * w + x][3] > 8;
-    let rows: Vec<usize> = (0..h).filter(|&y| (0..w).any(|x| visible(x, y))).collect();
-    let cols: Vec<usize> = (0..w).filter(|&x| (0..h).any(|y| visible(x, y))).collect();
-    let (&y0, &y1, &x0, &x1) = (rows.first()?, rows.last()?, cols.first()?, cols.last()?);
-    let (cw, ch) = (x1 - x0 + 1, y1 - y0 + 1);
-    // Area-average down to LOGO_MAX_H (premultiplied, so edges don't go dark).
-    let (tw, th) = if ch > LOGO_MAX_H { ((cw * LOGO_MAX_H / ch).max(1), LOGO_MAX_H) } else { (cw, ch) };
-    let mut out = Vec::with_capacity(tw * th * 4);
-    for ty in 0..th {
-        let (sy0, sy1) = (y0 + ty * ch / th, y0 + ((ty + 1) * ch / th).max(ty * ch / th + 1));
-        for tx in 0..tw {
-            let (sx0, sx1) = (x0 + tx * cw / tw, x0 + ((tx + 1) * cw / tw).max(tx * cw / tw + 1));
-            let mut acc = [0u32; 4];
-            for y in sy0..sy1 {
-                for x in sx0..sx1 {
-                    let [r, g, b, a] = px[y * w + x];
-                    let a32 = a as u32;
-                    acc[0] += r as u32 * a32;
-                    acc[1] += g as u32 * a32;
-                    acc[2] += b as u32 * a32;
-                    acc[3] += a32;
-                }
-            }
-            let n = ((sx1 - sx0) * (sy1 - sy0)) as u32;
-            let a = acc[3].max(1);
-            out.extend_from_slice(&[(acc[0] / a) as u8, (acc[1] / a) as u8, (acc[2] / a) as u8, (acc[3] / n) as u8]);
-        }
-    }
-    Some(ColorImage::from_rgba_unmultiplied([tw, th], &out))
-}
-
-
-// ── Style and fonts ──
+// ── Style and fonts (theme::apply and Metrics::DEFAULT, 2026-11-25) ──
 const FONT: &str = "plugin";
 const FONT_MONO: &str = "plugin-mono";
-static STYLE: OnceLock<Arc<egui::Style>> = OnceLock::new();
 
-/// The synths' font families: copies of egui's own defaults, added to `defs`
-/// before Lyra puts its fonts in (theme::install_fonts).
+/// The synths' font families: copies of egui's own defaults. Lyra adds them
+/// before its own fonts (it collects every editor's `fonts`).
 pub fn add_font_families(defs: &mut egui::FontDefinitions) {
     let prop = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
     let mono = defs.families.get(&FontFamily::Monospace).cloned().unwrap_or_default();
@@ -609,24 +432,97 @@ pub fn add_font_families(defs: &mut egui::FontDefinitions) {
     defs.families.insert(FontFamily::Name(FONT_MONO.into()), mono);
 }
 
-/// Keep today's style (call right after `theme::apply` at startup), with the
-/// text styles moved onto the synths' own font families.
-pub fn capture_style(ctx: &Context) {
-    let mut style = (*ctx.style()).clone();
-    for font in style.text_styles.values_mut() {
-        font.family = if font.family == FontFamily::Monospace { FontFamily::Name(FONT_MONO.into()) } else { FontFamily::Name(FONT.into()) };
+/// The synths' egui style: what Lyra's style was on the day of the freeze,
+/// with the text on the synths' own font families.
+pub fn style() -> Arc<egui::Style> {
+    static STYLE: OnceLock<Arc<egui::Style>> = OnceLock::new();
+    STYLE.get_or_init(|| Arc::new(build_style())).clone()
+}
+
+// Written as the field-by-field copy of theme::apply it is, so the two compare line by line.
+#[allow(clippy::field_reassign_with_default)]
+fn build_style() -> egui::Style {
+    use egui::TextStyle;
+    let (text, text_small, control_h) = (14.0, 11.0, 28.0);
+    let prop = |size| FontId::new(size, FontFamily::Name(FONT.into()));
+    let mut style = egui::Style::default();
+    style.text_styles = [
+        (TextStyle::Small, prop(text_small)),
+        (TextStyle::Body, prop(text)),
+        (TextStyle::Button, prop(text)),
+        (TextStyle::Heading, prop(text + 3.0)),
+        (TextStyle::Monospace, FontId::new(text - 0.5, FontFamily::Name(FONT_MONO.into()))),
+    ]
+    .into();
+    style.spacing.item_spacing = vec2(5.0, 4.0);
+    style.spacing.button_padding = vec2(8.0, 3.0);
+    style.spacing.interact_size = vec2(control_h, control_h);
+    style.spacing.combo_height = 320.0;
+    style.interaction.resize_grab_radius_side = 9.0;
+    style.spacing.scroll = egui::style::ScrollStyle {
+        bar_width: 16.0,
+        handle_min_length: 28.0,
+        bar_inner_margin: 2.0,
+        bar_outer_margin: 2.0,
+        dormant_background_opacity: 1.0,
+        active_background_opacity: 1.0,
+        interact_background_opacity: 1.0,
+        dormant_handle_opacity: 1.0,
+        active_handle_opacity: 1.0,
+        interact_handle_opacity: 1.0,
+        ..egui::style::ScrollStyle::solid()
+    };
+
+    const LINE: Color32 = hex(0x111111);
+    const PLATE: Color32 = hex(0x454545);
+    const INK_ON_LIGHT: Color32 = hex(0x2c2c2c);
+    const OUTLINE_W: f32 = 2.0;
+    let outline_of = |c| mix(c, Color32::BLACK, 0.5);
+    let v = &mut style.visuals;
+    *v = egui::Visuals::dark();
+    v.override_text_color = Some(TEXT);
+    v.panel_fill = PANEL;
+    v.window_fill = PANEL;
+    v.extreme_bg_color = INSET;
+    v.faint_bg_color = PANEL_HI;
+    v.window_stroke = stroke(1.0, LINE);
+    v.window_shadow = egui::epaint::Shadow::NONE;
+    v.popup_shadow = egui::epaint::Shadow::NONE;
+    v.selection.bg_fill = L_MINT.low;
+    v.selection.stroke = stroke(1.0, INK_ON_LIGHT);
+    v.widgets.noninteractive.bg_fill = PANEL;
+    v.widgets.noninteractive.bg_stroke = stroke(1.0, LINE);
+    let corner = cr(4);
+    let hover = mix(PLATE, Color32::WHITE, 0.09);
+    let press = mix(PLATE, Color32::BLACK, 0.18);
+    for (w, fill) in [
+        (&mut v.widgets.inactive, PLATE),
+        (&mut v.widgets.hovered, hover),
+        (&mut v.widgets.active, press),
+        (&mut v.widgets.open, hover),
+    ] {
+        w.bg_fill = fill;
+        w.weak_bg_fill = fill;
+        w.bg_stroke = stroke(OUTLINE_W, outline_of(fill));
+        w.corner_radius = corner;
+        w.expansion = 0.0;
     }
-    let _ = STYLE.set(Arc::new(style));
+    v.widgets.hovered.fg_stroke = stroke(OUTLINE_W, BG);
+    v.widgets.active.fg_stroke = stroke(OUTLINE_W, BG);
+    v.widgets.noninteractive.corner_radius = corner;
+    v.slider_trailing_fill = true;
+    style
 }
 
 /// Put the synths' frozen style on `ui` (and everything inside it).
 pub fn freeze(ui: &mut Ui) {
-    if let Some(s) = STYLE.get() {
-        ui.set_style(s.clone());
-    }
+    ui.set_style(style());
 }
 
 /// The synths' proportional font at `size`.
 pub fn font(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name(FONT.into()))
 }
+
+/// The colours the kit's preset list prints its notes in.
+pub const MENU_INK: lyra_kit::presets::MenuInk = lyra_kit::presets::MenuInk { dim: TEXT_DIM, error: hex(0xffc5df) };

@@ -47,7 +47,7 @@ fn doc_id(ch: usize) -> Id {
 pub(super) fn open(ui: &Ui, ed: &Ed, o: usize) {
     let t = table_of(ui, ed, o);
     let frames: Vec<Vec<f32>> = (0..t.frames()).map(|f| t.frame(0, f)[..FRAME].to_vec()).collect();
-    let name = format!("{} table", ed.p.channels[ed.ch].name);
+    let name = format!("{} table", ed.host.channel_name());
     let doc = Doc {
         osc: o,
         frames,
@@ -525,7 +525,7 @@ fn file_name(name: &str) -> String {
 /// Write the table as a WAV, make it this channel's sample, and play it on
 /// the oscillator (the engine reads the file again).
 fn save(ui: &Ui, ed: &mut Ed, doc: &mut Doc) {
-    let dir = crate::files::data_dir().join("tables");
+    let dir = ed.host.data_dir().join("tables");
     let path = dir.join(file_name(&doc.name));
     let write = || -> Result<(), String> {
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -547,15 +547,14 @@ fn save(ui: &Ui, ed: &mut Ed, doc: &mut Doc) {
         doc.note = Some(format!("Couldn't save: {e}"));
         return;
     }
-    let sample = crate::samples::name_for(&path);
+    let sample = ed.host.sample_name_for(&path);
     let table_id = p::osc(doc.osc, p::TABLE);
-    let ch = &ed.p.channels[ed.ch];
-    if ch.sample.as_deref() != Some(sample.as_str()) || ch.params[table_id] != IMPORTED as f32 {
-        ed.h.checkpoint(ed.p);
-        ed.p.channels[ed.ch].sample = Some(sample.clone());
+    if ed.host.sample() != Some(sample.as_str()) || ed.host.params()[table_id] != IMPORTED as f32 {
+        ed.host.begin_edit();
+        ed.host.set_sample(Some(sample.clone()));
         ed.put(table_id, IMPORTED as f32);
     }
-    crate::samples::reload(&sample);
+    ed.host.sample_changed(&sample);
     // The editor's own picture of the import, refreshed now.
     let table = Table::from_frames(&doc.frames, false);
     ui.ctx().data_mut(|d| d.insert_temp(Id::new(("chrys-import", sample.as_str())), Some(Arc::new(table))));

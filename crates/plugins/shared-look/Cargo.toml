@@ -1,0 +1,11 @@
+[package]
+name = "lyra-shared-look"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The look Fluttersine and Chrysalis share (frozen 2026-11-25): colours, lights, LED, LCD, knob painter, egui style, font families."
+
+[dependencies]
+lyra-kit.workspace = true
+lyra-plugin.workspace = true
+egui.workspace = true
