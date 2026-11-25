@@ -204,7 +204,7 @@ th{color:var(--page-dim);font-weight:600}
 <tr><td>top</td><td>the message (the player, or the control you're touching and its value; PERF OFF) · take, the one segment display left</td><td>parameters</td></tr>
 <tr><td>printed words</td><td>lit when true: instrument, patch, double stops, grit (the bow scratching), page, playing</td><td>parameters, frames</td></tr>
 <tr><td>the note</td><td>the note being played and how</td><td>latest decision</td></tr>
-<tr><td>the neck</td><td>along the bottom, seen from the side: nut on the left, highest string on top. The bowed string dark, strings left ringing grey. Each finger where it really stops the string (two octaves of room): solid while its string is played, hollow while it's only held (a note ringing into a rest until the engine lifts the finger, a string crossed away from still ringing). The hand's reach as a bracket sliding above, the bow across by the bridge</td><td>decision, hand, ring events</td></tr>
+<tr><td>the neck</td><td>along the bottom, seen from the side: nut on the left, highest string on top. The bowed string dark, strings left ringing grey. Each finger where it really is, from the engine's pitch frame by frame (intonation, vibrato, slides; two octaves of room), with a fading trail when it has just slid: solid while its string is played, hollow while it's only held (a note ringing into a rest until the engine lifts the finger, a string crossed away from still ringing). The hand's reach as a bracket sliding above, the bow across by the bridge</td><td>decision, hand, ring events</td></tr>
 <tr><td>next</td><td>what the performer has already planned (the look-ahead), each with its bow mark (⊓ down, V up) and string. Beside it, the bow's way now: ⊓↓ or V↑</td><td>upcoming notes, decision</td></tr>
 <tr><td>meters</td><td>BIOS-style boxes: loudness (GRIT lights when the bow scratches), brightness, pitch (a tuner: the dark block is where the note sits, the light span is the vibrato, ±50 cents), workload, calm</td><td>frames, decisions</td></tr>
 <tr><td>LOG page</td><td>the decisions as text, like <code>--explain</code></td><td>decision ring buffer</td></tr>
@@ -434,7 +434,7 @@ function readColors() {
   const g = css('--lcd-background'), l = css('--lcd-inactive'), m = css('--lcd-secondary'), d = css('--lcd-foreground');
   C = {glass: g, ink: [mix(g, l, tv('ghost')), l, m, d], shadow: mix(g, m, tv('shadow') * .55)};
 }
-const W = 640, H = 314;
+const W = 640, H = 336;
 const cvs = $('#lcd'); let ctx = cvs.getContext('2d');
 let dim = false;
 function sizeLcd() {
@@ -535,7 +535,7 @@ function neckPanel(t, cur, playing) {
   const inst = tape.instrument in OPEN ? tape.instrument : 'cello';
   const labels = STRINGS[inst], open = OPEN[inst];
   const nut = L.pad + 22, end = W - L.pad - 70, bridge = W - L.pad - 40;
-  const sy = s => L.neck + 16 + (3 - s) * 14;
+  const sy = s => L.neck + 26 + (3 - s) * 16;
   const sx = semi => nut + 6 + Math.min(SEMIS, semi) * (end - nut - 6) / SEMIS;
   const loud = frameAt(t, 'loudness'), str = frameAt(t, 'string'), p2 = frameAt(t, 'pitch2'), str2 = frameAt(t, 'string2');
   const plucking = cur && cur.how === 'Plucked' && t < cur.t + .25;
@@ -557,7 +557,7 @@ function neckPanel(t, cur, playing) {
   // the hand's reach (hand_span semitones from where it sits), sliding on shifts
   const target = cur ? cur.hand : 0, dt = Math.min(.1, Math.abs(t - lastT));
   hand += (target - hand) * (dt > 0 && playing ? 1 - Math.exp(-dt * 14) : 1);
-  const hx0 = sx(hand), hx1 = sx(hand + SPAN[inst]), hy = sy(3) - 12;
+  const hx0 = sx(hand), hx1 = sx(hand + SPAN[inst]), hy = sy(3) - 14;
   rect(2, hx0, hy, hx1 - hx0, 2); rect(2, hx0, hy, 2, 5); rect(2, hx1 - 2, hy, 2, 5);
   // the fingers, as the engine has them: solid on a string being played, hollow
   // on one only held: a note ringing into a rest until the engine lifts the
@@ -565,20 +565,32 @@ function neckPanel(t, cur, playing) {
   const fingers = [];
   if (cur) {
     const playingNow = t < cur.t + cur.len;
+    // where the finger really is: the engine's pitch, frame by frame (intonation,
+    // vibrato, slides), not the written note
+    const fp = (s, n, key, skey) => cur.how !== 'Plucked' && frameAt(t, skey) === s && frameAt(t, key) > 0 ? frameAt(t, key) : midi(n);
     if (playingNow || t < cur.lift)
-      for (const [s, n] of [[cur.string, cur.note], [string2Of(cur), cur.note2]])
-        if (s >= 0 && n) fingers.push([s, midi(n) - open[s], playingNow]);
+      for (const [s, n, key, skey] of [[cur.string, cur.note, 'pitch', 'string'], [string2Of(cur), cur.note2, 'pitch2', 'string2']])
+        if (s >= 0 && n) fingers.push([s, fp(s, n, key, skey) - open[s], playingNow]);
+    // a slide: the engine slides only on a legato note that shifts the hand on the
+    // same string (the hand travels, or a big expressive shift). The trail follows
+    // the real pitch path from the last note and fades over half a second.
+    const i = tape.notes.indexOf(cur), prev = tape.notes[i - 1], age = (t - cur.t) / .5;
+    if (prev && cur.how === 'Slurred' && cur.shift > 0 && prev.string === cur.string && age < 1) {
+      const s = cur.string, xa = sx(midi(prev.note) - open[s]), xb = sx(frameAt(t, 'pitch') - open[s]);
+      const x0 = Math.min(xa, xb), x1 = Math.max(xa, xb), every = age < .4 ? 1 : age < .7 ? 2 : 4;
+      for (let x = x0, k = 0; x <= x1; x += 4, k++) if (k % every === 0) rect(2, x - 1.5, sy(s) - 3, 3, 6);
+    }
   }
   for (const r of tape.rings) {
     if (r.t > t) break;
     if (r.open || r.t < t - 2 || t >= r.stop || t >= r.t + .12 + .5 * r.bright) continue;
-    if (!fingers.some(f => f[0] === r.string)) fingers.push([r.string, Math.round(r.pitch - open[r.string]), false]);
+    if (!fingers.some(f => f[0] === r.string)) fingers.push([r.string, r.pitch - open[r.string], false]);
   }
   for (const [s, semi, solid] of fingers) {
-    if (semi <= 0) { rect(3, nut + 2, sy(s) - 5, 3, 10); continue; }   // open: a tick at the nut
-    const fx = sx(semi) - 6, fy = sy(s) - 5;
-    if (solid) rect(3, fx, fy, 12, 10);
-    else { rect(3, fx, fy, 12, 2); rect(3, fx, fy + 8, 12, 2); rect(3, fx, fy, 2, 10); rect(3, fx + 10, fy, 2, 10); }
+    if (semi < .5) { rect(3, nut + 2, sy(s) - 6, 3, 12); continue; }   // open: a tick at the nut
+    const fx = sx(semi) - 6, fy = sy(s) - 6;
+    if (solid) rect(3, fx, fy, 12, 12);
+    else { rect(3, fx, fy, 12, 2); rect(3, fx, fy + 10, 12, 2); rect(3, fx, fy, 2, 12); rect(3, fx + 10, fy, 2, 12); }
   }
   // the bow across the strings, or a pluck
   if (bowed.size) rect(3, bridge + 6, sy(3) - 9, 5, sy(0) - sy(3) + 18);
