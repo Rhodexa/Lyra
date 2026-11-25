@@ -30,7 +30,7 @@ pub mod voice;
 
 pub use curves::{Curves, Frame, Pluck, Ring, Tap, FRAME_RATE};
 pub use instrument::Instrument;
-pub use performer::{perform, Decision, Event, Performer, Played, Style, LOOKAHEAD};
+pub use performer::{perform, Decision, Event, Performer, Played, Skill, Style, LOOKAHEAD};
 pub use render::{render, render_score, Engine, Rendered, Sound};
 pub use score::{Articulation, Note, Score};
 

@@ -32,8 +32,17 @@
 //!   is instant, and only big expressive shifts slide.
 //! * **Vibrato** starts a moment after the note, grows in, follows loudness,
 //!   and is absent on short notes and open strings.
-//! * **Intonation**: a few cents of human error that settles after the
-//!   attack; leading tones lean up toward the note they resolve to.
+//! * **Workload and composure**: how hard the music is right now (speed,
+//!   hurried shifts, string skips, leaps, two strings, bounces), eased by
+//!   dexterity; composure drains under load and recovers in rests. Mistakes
+//!   come from these meeting the player's [`Skill`], never from plain dice.
+//! * **Intonation**: the finger lands slightly off (hurried shifts tend to
+//!   overshoot) and is pulled in by ear, quicker for a better player; a
+//!   little stays. Errors drift slowly rather than re-rolling each note.
+//!   Each string is tuned a touch off; leading tones lean up.
+//! * **Vibrato** is a choice: some notes stay straight (more when busy or
+//!   short), each note's depth, onset and speed vary; nerves make it
+//!   quicker and narrower. Double stops vibrate less, the lower string less.
 //! * **Finger taps**: a finger landing knocks the fingerboard, hardest when
 //!   it hammers down mid-slur; lifting off makes a smaller one. After a rest
 //!   the finger is placed silently. A bounced bow knocks as it lands.
@@ -71,12 +80,56 @@ pub struct Style {
     pub breath: f32,
     /// Pluck every note (the pizzicato patch).
     pub pizzicato: bool,
+    /// How good the player is (separate from style and from who decides).
+    pub skill: Skill,
     pub seed: u64,
 }
 
 impl Default for Style {
     fn default() -> Self {
-        Self { expression: 1.0, vibrato: 1.0, breath: 1.0, pizzicato: false, seed: 1 }
+        Self { expression: 1.0, vibrato: 1.0, breath: 1.0, pizzicato: false, skill: Skill::default(), seed: 1 }
+    }
+}
+
+/// The player's abilities, each 0..1. Mistakes come from these meeting the
+/// music's workload, never from plain dice: a skilled player under little
+/// load is nearly clean; anyone gets ragged when it gets frantic.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Skill {
+    /// Landing fingers in tune, and how fast a miss is corrected.
+    pub intonation: f32,
+    /// How hard fast notes, shifts and string skips feel.
+    pub dexterity: f32,
+    /// Bow control: clean starts, steady contact.
+    pub bowing: f32,
+    /// Keeping calm under load, and recovering in rests.
+    pub composure: f32,
+}
+
+impl Default for Skill {
+    /// A good professional on a normal day.
+    fn default() -> Self {
+        Self { intonation: 0.9, dexterity: 0.85, bowing: 0.88, composure: 0.8 }
+    }
+}
+
+impl Skill {
+    pub fn profile(name: &str) -> Option<Skill> {
+        let s = |intonation, dexterity, bowing, composure| Skill { intonation, dexterity, bowing, composure };
+        Some(match name {
+            "concert" => Skill::default(),
+            "student" => s(0.6, 0.5, 0.65, 0.45),
+            "virtuoso" => s(0.98, 0.98, 0.96, 0.92),
+            "session" => s(0.85, 0.9, 0.92, 0.95),
+            _ => return None,
+        })
+    }
+
+    /// How large a player's mistakes in one skill are right now: a little
+    /// from the skill itself, more under load, more still when rattled.
+    fn error(skill: f32, workload: f32, composure: f32) -> f32 {
+        let stress = workload * (1.5 - composure);
+        (1.0 - skill) + 0.8 * stress * (1.1 - skill)
     }
 }
 
@@ -106,6 +159,9 @@ pub struct Decision {
     /// Hand position (lowest semitone offset it covers) and how far it moved.
     pub hand: f32,
     pub shift: f32,
+    /// How loaded the player was at this note, and how composed (0..1).
+    pub workload: f32,
+    pub composure: f32,
 }
 
 /// Something the instrument must do at an exact time, besides the frames.
@@ -155,7 +211,10 @@ enum Exit {
 #[derive(Clone, Debug)]
 struct Plan {
     pitch: f32,
+    /// Where the finger first lands, relative to `pitch` (semitones), and
+    /// how fast the ear pulls it in.
     settle: f32,
+    settle_tau: f32,
     entry: Entry,
     attack: f32,
     accent: f32,
@@ -168,6 +227,8 @@ struct Plan {
     fade: f32,
     vib_depth: f32,
     vib_delay: f32,
+    /// This note's vibrato speed relative to the player's usual.
+    vib_rate: f32,
     glide: f32,
     string: u8,
     crossing: bool,
@@ -177,6 +238,8 @@ struct Plan {
     double: Option<(f32, u8)>,
     hand: f32,
     shift: f32,
+    workload: f32,
+    composure: f32,
 }
 
 /// A streaming performer. Feed it notes (in start order, ideally at least
@@ -197,6 +260,15 @@ pub struct Performer {
     lifted: Option<usize>,
     /// Where the left hand sits (see [`choose_fingering`]).
     hand: f32,
+    /// How loaded the player is (smoothed over notes) and how composed.
+    workload: f32,
+    composure: f32,
+    /// When the last note was planned (for the two above).
+    last_start: f64,
+    /// A slow drift in where the fingers land: errors that persist for a
+    /// while instead of re-rolling every note.
+    hand_bias: Wander,
+    bias: f32,
 }
 
 impl Performer {
@@ -216,6 +288,11 @@ impl Performer {
             prev_string: None,
             hand: 1.0,
             lifted: None,
+            workload: 0.0,
+            composure: 1.0,
+            last_start: 0.0,
+            hand_bias: Wander::new(style.seed ^ 0xB1A5, 0.25),
+            bias: 0.0,
         }
     }
 
@@ -244,7 +321,15 @@ impl Performer {
                         Entry::Legato => Played::Slurred,
                     }
                 };
-                Decision { played: how, double: p.double.is_some(), string: p.string, hand: p.hand, shift: p.shift }
+                Decision {
+                    played: how,
+                    double: p.double.is_some(),
+                    string: p.string,
+                    hand: p.hand,
+                    shift: p.shift,
+                    workload: p.workload,
+                    composure: p.composure,
+                }
             })
             .collect()
     }
@@ -276,8 +361,10 @@ impl Performer {
                 break;
             }
         }
-        let rate = self.inst.vibrato_rate + 0.35 * self.rate_wander.next(dt as f32);
+        let note_rate = self.owner.map_or(1.0, |i| self.plans[i].vib_rate);
+        let rate = (self.inst.vibrato_rate + 0.35 * self.rate_wander.next(dt as f32)) * note_rate;
         self.vib_phase = (self.vib_phase + TAU * rate as f64 * dt) % TAU;
+        self.bias = self.hand_bias.next(dt as f32);
 
         let mut frame = match self.owner {
             None => Frame {
@@ -295,7 +382,7 @@ impl Performer {
                         let residual = p.level * LIFT_AT;
                         events.push(Event::Ring(Ring {
                             time: t,
-                            pitch: self.inst.open_strings[p.string as usize],
+                            pitch: self.inst.open_strings[p.string as usize] + string_detune(self.style.seed, p.string),
                             level: residual * 0.7,
                             string: p.string,
                             open: true,
@@ -530,6 +617,28 @@ impl Performer {
         let crossing = self.prev_string.is_some_and(|s| s != string);
         let open = (n.pitch - inst.open_strings[string as usize]).abs() < 0.01;
 
+        // How loaded is the player? Effort from this note (speed, a hurried
+        // shift, skipped strings, a big leap, two strings, a bounce), eased
+        // by dexterity and smoothed over notes; composure drains under load
+        // and comes back in rests.
+        let sk = self.style.skill;
+        let seed = self.style.seed;
+        let h01 = |salt: u64| 0.5 + 0.5 * hash_bipolar(seed ^ salt, i);
+        let ioi = prev.map_or(1.0, |(pn, _)| (n.start - pn.start) as f32).max(0.01);
+        let speed = smoothstep((1.0 / ioi - 3.0) / 9.0); // 3 … 12 notes a second
+        let hurried_shift = (fingering.shift / 7.0).min(1.0) * (1.0 - smoothstep(ioi / 0.5));
+        let skip = self.prev_string.map_or(0.0, |s| ((s as f32 - string as f32).abs() - 1.0).max(0.0) * 0.25);
+        let leap = prev.map_or(0.0, |(pn, _)| (((n.pitch - pn.pitch).abs() - 7.0) / 12.0).clamp(0.0, 1.0) * 0.3);
+        let extra = if double.is_some() { 0.2 } else { 0.0 } + if spiccato { 0.1 } else { 0.0 };
+        let effort =
+            ((0.55 * speed + 0.6 * hurried_shift + skip + leap + extra) * (1.3 - 0.6 * sk.dexterity)).clamp(0.0, 1.0);
+        let dt = (n.start - self.last_start).max(0.0) as f32;
+        let wtau = if effort > self.workload { 0.5 } else { 1.5 };
+        let workload = self.workload + (effort - self.workload) * (1.0 - (-dt / wtau).exp());
+        let calm = 1.0 - workload * (1.2 - sk.composure);
+        let ctau = if calm < self.composure { 2.0 } else { 4.0 - 2.0 * sk.composure };
+        let composure = (self.composure + (calm - self.composure) * (1.0 - (-dt / ctau).exp())).clamp(0.0, 1.0);
+
         // Phrase shape: grow into the phrase, relax toward its visible end.
         let phrase_start = match prev {
             Some((pn, pp)) if n.start - pn.end() <= PHRASE_GAP => pp.phrase_start,
@@ -543,22 +652,54 @@ impl Performer {
         }
         let level = level.clamp(0.05, 1.0);
 
-        // Intonation, in semitones.
-        let mut cents = 3.0 * e * hash_bipolar(self.style.seed, i);
+        // Intonation (cents). Where the finger first lands is corrected by
+        // ear; a little stays. Both grow with load and nerves, and both carry
+        // the hand's slow bias, so a rattled player stays off for a while. A
+        // hurried shift tends to overshoot. Open strings are as tuned.
+        let err = Skill::error(sk.intonation, workload, composure);
+        let mut cents = e * err * (10.0 * self.bias + 6.0 * hash_bipolar(seed, i));
         if let Some(q) = next {
             if (q.pitch - n.pitch - 1.0).abs() < 0.01 && n.dur > 0.15 {
                 cents += 7.0 * e; // leading tone leans up
             }
         }
         if open {
-            cents = 0.0;
+            cents = 100.0 * string_detune(seed, string);
         }
-        let settle =
-            if entry == Entry::Legato || open || pizz { 0.0 } else { e * 0.05 * hash_bipolar(self.style.seed ^ 0xA77AC, i) };
+        let settle = if open || pizz {
+            0.0
+        } else {
+            let mut land = e * err * (12.0 * self.bias + 16.0 * hash_bipolar(seed ^ 0xA77AC, i));
+            if let (true, Some((pn, _))) = (fingering.shift > 0.0, prev) {
+                let dir = (n.pitch - pn.pitch).signum();
+                land += dir * e * err * (8.0 + 4.0 * fingering.shift) * (0.5 + 0.5 * h01(0x0E5));
+            }
+            if entry == Entry::Legato {
+                land *= 0.6;
+            }
+            land / 100.0
+        };
+        let settle_tau = 0.04 + 0.25 * err;
 
-        let vib_depth = if pizz || open || spiccato || n.dur < 0.22 { 0.0 } else { (0.13 + 0.14 * level) * self.style.vibrato };
+        // Vibrato is a choice: some notes stay straight (more when busy,
+        // short, or on two strings), and each note's depth, onset and speed
+        // differ a little. Nerves make it quicker and narrower.
+        let straight_chance =
+            0.12 + 0.5 * workload + if n.dur < 0.4 { 0.25 } else { 0.0 } + if double.is_some() { 0.2 } else { 0.0 };
+        let straight = h01(0x5741) < straight_chance;
+        let vib_depth = if pizz || open || spiccato || n.dur < 0.22 || straight {
+            0.0
+        } else {
+            (0.13 + 0.14 * level)
+                * self.style.vibrato
+                * (0.75 + 0.5 * h01(0x7D))
+                * (1.0 - 0.3 * workload)
+                * if double.is_some() { 0.6 } else { 1.0 }
+        };
         let prev_vibrated = prev.is_some_and(|(_, pp)| pp.vib_depth > 0.0);
-        let vib_delay = if entry == Entry::Legato && prev_vibrated { 0.05 } else { 0.14 };
+        let vib_delay =
+            if entry == Entry::Legato && prev_vibrated { 0.04 } else { 0.08 + 0.17 * h01(0xDE1A) + 0.08 * composure };
+        let vib_rate = (0.94 + 0.12 * h01(0x7A7E)) * (1.0 + 0.1 * workload * (1.5 - composure));
 
         let glide = match (entry, prev) {
             (Entry::Legato, Some((pn, _))) => {
@@ -599,6 +740,7 @@ impl Performer {
         let plan = Plan {
             pitch: n.pitch + cents / 100.0,
             settle,
+            settle_tau,
             entry,
             attack,
             accent,
@@ -610,6 +752,7 @@ impl Performer {
             fade: if pizz || n.dynamic_end > n.dynamic { 0.0 } else { 0.25 * e },
             vib_depth,
             vib_delay,
+            vib_rate,
             glide,
             string,
             crossing,
@@ -618,6 +761,8 @@ impl Performer {
             double,
             hand: fingering.hand,
             shift: fingering.shift,
+            workload,
+            composure,
         };
 
         // Events.
@@ -645,6 +790,8 @@ impl Performer {
             .filter(|_| !from_silence)
         {
             let lead = if entry == Entry::Legato { glide as f64 } else { 0.015 };
+            // Busier hands hit harder; no two taps alike.
+            let strength = (strength * (0.6 + 0.8 * workload) * (0.8 + 0.4 * h01(0x7A9))).min(1.0);
             events.push(Event::Tap(Tap { time: (n.start - lead).max(t), strength }));
         }
 
@@ -664,6 +811,9 @@ impl Performer {
 
         self.prev_string = Some(string);
         self.hand = fingering.hand;
+        self.workload = workload;
+        self.composure = composure;
+        self.last_start = n.start;
         self.plans.push(plan);
     }
 
@@ -738,7 +888,7 @@ impl Performer {
             };
 
         // Left hand: settling intonation, vibrato, moving into the next note.
-        let settle = p.settle * (-since / 0.05).exp();
+        let settle = p.settle * (-since / p.settle_tau).exp();
         let mut pitch = p.pitch + settle;
         let mut pitch2 = p.double.map_or(0.0, |(d, _)| d + settle);
         let mut vib = p.vib_depth * smoothstep((since - p.vib_delay) / 0.3);
@@ -755,7 +905,8 @@ impl Performer {
         }
         pitch += vib * (self.vib_phase as f32).sin();
         if pitch2 > 0.0 {
-            pitch2 += vib * (self.vib_phase as f32).sin(); // one hand, one vibrato
+            // One hand, one motion; the lower string moves a little less.
+            pitch2 += 0.8 * vib * (self.vib_phase as f32).sin();
         }
 
         // Bow contact: louder and accented means closer to the bridge, brighter.
@@ -784,6 +935,12 @@ impl Performer {
         let string2 = p.double.map_or(0, |(_, s)| s);
         Frame { pitch, loudness, brightness, noise, string: p.string, pitch2, string2 }
     }
+}
+
+/// Each string is tuned a touch off (a couple of cents, fixed per seed):
+/// open strings ring exactly there, while stopped notes are fixed by ear.
+fn string_detune(seed: u64, string: u8) -> f32 {
+    0.025 * hash_bipolar(seed ^ 0x5791, string as usize)
 }
 
 fn touching(a: &Note, b: &Note) -> bool {
@@ -1038,9 +1195,67 @@ mod tests {
         let c = perform(&Score::parse("tempo 60\nE3:q r:h D3:e r:h").unwrap(), &inst, &Style::default());
         let rings: Vec<_> = c.rings.iter().filter(|r| r.open && r.time > 1.0 && r.time < 2.0).collect();
         assert_eq!(rings.len(), 1, "one lift after E3: {:?}", c.rings);
-        assert_eq!(rings[0].pitch, 50.0, "the open D rings");
+        assert!((rings[0].pitch - 50.0).abs() < 0.04, "the open D rings (a touch off-tune): {}", rings[0].pitch);
         assert!(frame_at(&c, rings[0].time + 0.06).loudness < 0.01, "the stopped note is choked");
         assert!(!c.rings.iter().any(|r| r.time > 3.0), "no lift for an open string: {:?}", c.rings);
+    }
+
+    fn decide(text: &str, style: &Style) -> (Curves, Vec<Decision>) {
+        let inst = cello();
+        let score = roll(text);
+        let mut p = Performer::new(&inst, style);
+        for n in score.notes.iter().cloned() {
+            p.add_note(n);
+        }
+        let mut c = Curves::default();
+        let mut ev = Vec::new();
+        for _ in 0..(p.end() * FRAME_RATE) as usize {
+            c.frames.push(p.next_frame(&mut ev));
+        }
+        (c, p.decisions())
+    }
+
+    #[test]
+    fn workload_rises_when_frantic_and_composure_recovers_in_rests() {
+        // Calm quarters, a frantic zig-zag across strings, a long rest, calm again.
+        let mut text = String::new();
+        for k in 0..4 {
+            text += &format!("{} 1 {} 0.6\n", k, ["C3", "D3", "E3", "F3"][k]);
+        }
+        for k in 0..24 {
+            text += &format!("{} 0.09 {} 0.6\n", 4.0 + k as f64 * 0.09, ["D2", "A2", "D2", "E3"][k % 4]);
+        }
+        text += "12 1 C3 0.6\n13 1 D3 0.6\n";
+        let (_, d) = decide(&text, &Style::default());
+        let calm = d[3];
+        let frantic = d[4 + 23];
+        let after = d[d.len() - 1];
+        assert!(frantic.workload > calm.workload + 0.3, "{} vs {}", frantic.workload, calm.workload);
+        assert!(frantic.composure < calm.composure - 0.05, "{} vs {}", frantic.composure, calm.composure);
+        assert!(after.composure > frantic.composure + 0.05, "recovers in the rest: {} vs {}", after.composure, frantic.composure);
+    }
+
+    #[test]
+    fn a_student_plays_less_in_tune_than_a_virtuoso_and_deadpan_is_exact() {
+        // Long notes with shifts; measure how far each sits from the written
+        // pitch once vibrato's averaged out (no vibrato here).
+        let text = "0 0.8 C3 0.6\n0.8 0.8 A3 0.6\n1.6 0.8 F3 0.6\n2.4 0.8 D4 0.6\n3.2 0.8 G3 0.6\n4 0.8 E4 0.6\n4.8 0.8 B3 0.6\n5.6 0.8 C4 0.6";
+        let notes = roll(text).notes;
+        let miss = |skill: Skill, expression: f32| {
+            let style = Style { skill, vibrato: 0.0, expression, ..Style::default() };
+            let (c, _) = decide(text, &style);
+            let mut total = 0.0;
+            for n in &notes {
+                // Just after landing: the initial miss, before the ear corrects it.
+                let f = c.frames[((n.start + 0.02) * FRAME_RATE) as usize];
+                total += (f.pitch - n.pitch).abs();
+            }
+            total / notes.len() as f32
+        };
+        let student = miss(Skill::profile("student").unwrap(), 1.0);
+        let virtuoso = miss(Skill::profile("virtuoso").unwrap(), 1.0);
+        assert!(student > virtuoso * 2.0, "student {student} vs virtuoso {virtuoso} semitones");
+        assert!(miss(Skill::profile("student").unwrap(), 0.0) < 1e-4, "deadpan plays exactly in tune");
     }
 
     #[test]

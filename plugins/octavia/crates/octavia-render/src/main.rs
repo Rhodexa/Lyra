@@ -5,7 +5,7 @@ mod midi;
 mod plot;
 mod reverb;
 
-use octavia_core::{render, render_score, Curves, Instrument, Score, Style};
+use octavia_core::{render, render_score, Curves, Instrument, Score, Skill, Style};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -20,6 +20,11 @@ usage: octavia <score.txt | curves.csv>... [options]
   --vibrato X        vibrato depth scale (default 1)
   --bright X         character: 0 = natural cello (default), 1 = bright and powerful
   --breath X         steady bow noise under the tone (default 1; try 0.5 .. 3)
+  --player NAME      concert (default), student, virtuoso or session
+  --intonation X     skill 0..1: landing in tune, correcting misses
+  --dexterity X      skill 0..1: how hard fast notes and shifts feel
+  --bowing X         skill 0..1: clean starts, steady contact
+  --composure X      skill 0..1: staying calm under load
   --seed N           a different take of the same performance
   --pizz             the pizzicato patch: pluck every note
   --track N          MIDI: which track (default: the busiest; see midi-info)
@@ -85,6 +90,14 @@ fn parse_args() -> Result<Args, String> {
             "--vibrato" => a.style.vibrato = val("--vibrato")?.parse().map_err(|_| "bad --vibrato")?,
             "--bright" => a.bright = val("--bright")?.parse().map_err(|_| "bad --bright")?,
             "--breath" => a.style.breath = val("--breath")?.parse().map_err(|_| "bad --breath")?,
+            "--player" => {
+                let name = val("--player")?;
+                a.style.skill = Skill::profile(&name).ok_or(format!("no player {name:?} (concert, student, virtuoso, session)"))?;
+            }
+            "--intonation" => a.style.skill.intonation = val("--intonation")?.parse().map_err(|_| "bad --intonation")?,
+            "--dexterity" => a.style.skill.dexterity = val("--dexterity")?.parse().map_err(|_| "bad --dexterity")?,
+            "--bowing" => a.style.skill.bowing = val("--bowing")?.parse().map_err(|_| "bad --bowing")?,
+            "--composure" => a.style.skill.composure = val("--composure")?.parse().map_err(|_| "bad --composure")?,
             "--seed" => a.style.seed = val("--seed")?.parse().map_err(|_| "bad --seed")?,
             "--sr" => a.sr = val("--sr")?.parse().map_err(|_| "bad --sr")?,
             "--dry" => a.dry = true,
@@ -227,7 +240,7 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
     let t_render = t0.elapsed();
     if let (true, Some(s)) = (args.explain, &score) {
         const STRINGS: [&str; 4] = ["IV", "III", "II", "I"];
-        println!("  start    length  note        how       string  hand");
+        println!("  start    length  note        how       string  hand  load calm");
         let mut shifts = 0;
         for (n, d) in s.notes.iter().zip(&decisions) {
             let dbl = match (d.double, n.double) {
@@ -242,7 +255,7 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
                 String::new()
             };
             println!(
-                "  {:7.3}s {:>5.3}s  {:<4}{:<7} {:<9} {:<3} {:<4} {:>3.0}{}",
+                "  {:7.3}s {:>5.3}s  {:<4}{:<7} {:<9} {:<3} {:<4} {:>3.0}  {:>4.0} {:>4.0}{}",
                 n.start,
                 n.dur,
                 octavia_core::score::pitch_name(n.pitch),
@@ -251,6 +264,8 @@ fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
                 STRINGS[d.string as usize],
                 if open { "open" } else { "" },
                 d.hand,
+                d.workload * 100.0,
+                d.composure * 100.0,
                 moved
             );
         }

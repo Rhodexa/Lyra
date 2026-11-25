@@ -65,6 +65,9 @@ Claude reads this before choosing what to work on.
   - Reference check: Rainbow Tylenol has one new bow change at 1:17.8 (a borderline overlap). Accepted as the new baseline; tell me if you hear it.
 - [ ] ~ Lyra can't open MIDI files yet: that would make A/B testing of tracks much easier (for Lyra's journal).
 
+- [ ] *(Rhodexa, 2026-11-24)* After a day of listening (Lindsey Stirling's Roundtable etc.): way too perfect. Ideas: a performer **workload**, **composure**, **skill** sliders; grit and failed bow starts; tap variation; accidental open-string plucks when frantic; bow position as a decision; selective, varied vibrato (also on double stops); overshoot/undershoot and correction; imperfect slides with finger noise; strings not perfectly tuned. Context from outside: `docs/design/checklist-gpt.txt`, `docs/design/faceplate-gpt.html`.
+  - Claude, step 1 done: `Skill` (intonation, dexterity, bowing, composure; `--player concert|student|virtuoso|session` or one flag each), workload per note (speed, hurried shifts, string skips, leaps, double stops, bounces; eased by dexterity), composure (drains under load, recovers in rests). They now drive intonation (landing off, overshoot after hurried shifts, corrected by ear at a speed set by skill; errors drift slowly via a "hand bias" instead of re-rolling), per-string tuning (open strings a couple of cents off), vibrato (straight notes sometimes, varied depth/onset/speed, nerves make it quicker and narrower; double stops narrower, lower string less) and tap loudness (busier = harder, never identical). `--explain` shows load and calm per note. Next: physical speed limits, then bow-start grit, slides, accidental brushes, bow position.
+
 ## Wishes
 
 - [ ]
