@@ -74,6 +74,10 @@ Claude reads this before choosing what to work on.
 - [ ] *(Rhodexa, 2026-11-24)* The student plays plain bad now ("I could play as bad"). A student doesn't hear worse: they land worse when it's fast, correct slower, and on fast notes there's no time to fix it; long important notes still end in tune. (Skipping notes stays the composer's call.) Next: bow-start grit. Also: files everywhere.
   - Claude: landing error grows with load (curve gentler); correction speed is the skill; what stays off once settled is tiny for everyone (tested: a student's long notes settle within ~5 cents). **Grit**: until the bow catches the string, the period wanders and the tone crunches with extra noise, for 30–100 ms: more for hard starts (accents, staccato), little preparation time, a weaker or busier arm; now and then a start fails (crunch plus a stall before it catches); slurred crossings catch the new string with a small scrape. It's a new curve column, `grit`. **Files**: `midi/` holds only .mid; renders go to `renders/midi/` (`scripts/render-midis.sh` renders them all, extra options pass through, e.g. `--player student`). A/B: `renders/ab/beethoven-cello-{after,grit,student}.wav`, `beethoven-violin-grit.wav`.
 
+- [ ] *(Rhodexa, 2026-11-24)* Flowering Night (flower.mid): the plucks at the start when strings are released are always the same. (Loves them, just not identical.) Grit is quite noticeable; we'll tune it slowly.
+  - Claude: those are strings left ringing on crossings; the phrase repeats, so the rings were identical. Each ring now varies in strength, brightness and ring time with how the bow left the string; the quick plucked start is kept (I briefly softened it, then put it back). Finger lifts vary too: sometimes no ghost at all, the lift tap varies. New ring column `bright`.
+- [ ] ~ Grit amount: noticeable at the moment; tune slowly by ear (`--bowing` moves it).
+
 ## Wishes
 
 - [ ]

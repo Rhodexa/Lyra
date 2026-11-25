@@ -418,15 +418,21 @@ impl Performer {
                     if t >= lift && self.lifted != Some(i) {
                         self.lifted = Some(i);
                         let p = &self.plans[i];
-                        let residual = p.level * LIFT_AT;
-                        events.push(Event::Ring(Ring {
-                            time: t,
-                            pitch: self.inst.open_strings[p.string as usize] + string_detune(self.style.seed, p.string),
-                            level: residual * 0.7,
-                            string: p.string,
-                            open: true,
-                        }));
-                        events.push(Event::Tap(Tap { time: t, strength: 0.12 }));
+                        // Never twice the same: sometimes the finger rolls off
+                        // cleanly and nothing rings; otherwise a ghost of
+                        // varying strength and colour, and a small tap.
+                        let h = |salt: u64| 0.5 + 0.5 * hash_bipolar(self.style.seed ^ salt, i);
+                        if h(0x11F7) > 0.3 {
+                            events.push(Event::Ring(Ring {
+                                time: t,
+                                pitch: self.inst.open_strings[p.string as usize] + string_detune(self.style.seed, p.string),
+                                level: p.level * LIFT_AT * (0.25 + 0.5 * h(0x6057)),
+                                string: p.string,
+                                open: true,
+                                bright: 0.15 + 0.25 * h(0xB216),
+                            }));
+                        }
+                        events.push(Event::Tap(Tap { time: t, strength: 0.05 + 0.12 * h(0x7A9F) }));
                     }
                 }
                 f
@@ -917,12 +923,14 @@ impl Performer {
         if let (true, false, Some((pn, pp))) = (crossing, pizz, prev) {
             if entry != Entry::Fresh {
                 let open_prev = (pn.pitch - inst.open_strings[pp.string as usize]).abs() < 0.01;
+                // How it rings depends on how the bow left it: never the same.
                 events.push(Event::Ring(Ring {
                     time: (n.start - glide as f64).max(t),
                     pitch: pp.pitch,
-                    level: pp.level,
+                    level: pp.level * (0.6 + 0.4 * h01(0x217A)),
                     string: pp.string,
                     open: open_prev,
+                    bright: 0.4 + 0.6 * h01(0xB21C),
                 }));
             }
         }

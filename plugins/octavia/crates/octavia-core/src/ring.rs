@@ -20,11 +20,15 @@ struct Voice {
     amps: [f32; PARTIALS],
     decay: [f32; PARTIALS],
     count: usize,
+    /// Fades the ring in: the string was already vibrating, so it carries
+    /// on rather than starting with a pluck.
+    env: f32,
+    env_step: f32,
 }
 
 impl Default for Voice {
     fn default() -> Self {
-        Self { active: false, phase: 0.0, step: 0.0, amps: [0.0; PARTIALS], decay: [1.0; PARTIALS], count: 0 }
+        Self { active: false, phase: 0.0, step: 0.0, amps: [0.0; PARTIALS], decay: [1.0; PARTIALS], count: 0, env: 1.0, env_step: 0.0 }
     }
 }
 
@@ -47,12 +51,18 @@ impl Rings {
         v.step = TAU * f0 as f64 / self.sr as f64;
         v.count = ((self.sr * 0.45 / f0) as usize).clamp(1, PARTIALS);
         // An open string rings for a second or two; a stopped one is damped
-        // by the fingertip.
-        let t60 = if r.open { 1.6 } else { 0.5 };
+        // by the fingertip (more firmly when darker). It keeps its quick,
+        // slightly plucked start (Rhodexa loves it); only a 1 ms ramp to
+        // avoid a click. Brightness and ring time vary from ring to ring.
+        let b = r.bright.clamp(0.0, 1.0);
+        let t60 = if r.open { 1.6 } else { 0.35 + 0.3 * b };
+        let tilt = 1.4 + 0.5 * (1.0 - b);
+        v.env = 0.0;
+        v.env_step = 1.0 / (0.001 * self.sr);
         let mut energy = 0.0;
         for k in 0..v.count {
             let n = (k + 1) as f32;
-            let a = n.powf(-1.4);
+            let a = n.powf(-tilt);
             energy += a * a;
             v.amps[k] = a;
             let t = t60 / (1.0 + 0.2 * (n - 1.0));
@@ -79,8 +89,10 @@ impl Rings {
             v.phase = (v.phase + v.step) % TAU;
             let (s1, c1) = v.phase.sin_cos();
             let (mut s, mut c) = (s1, c1);
+            v.env = (v.env + v.env_step).min(1.0);
+            let env = v.env as f64;
             for k in 0..v.count {
-                y += v.amps[k] as f64 * s;
+                y += env * v.amps[k] as f64 * s;
                 let ns = s * c1 + c * s1;
                 c = c * c1 - s * s1;
                 s = ns;

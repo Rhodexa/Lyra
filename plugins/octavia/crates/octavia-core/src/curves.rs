@@ -9,7 +9,7 @@
 //! ...
 //! pluck,1.250,50.000,0.600,0.550,2
 //! tap,2.000,0.700
-//! ring,2.500,43.000,0.600,1,1
+//! ring,2.500,43.000,0.600,1,1,0.40
 //! ```
 
 pub const FRAME_RATE: f64 = 250.0;
@@ -63,6 +63,9 @@ pub struct Ring {
     pub string: u8,
     /// Open strings ring long; stopped ones are damped by the finger.
     pub open: bool,
+    /// 0..1: how much of the high end is left (a free string darkens fast),
+    /// which also sets how long a stopped string rings.
+    pub bright: f32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -93,7 +96,7 @@ impl Curves {
             s += &format!("tap,{:.4},{:.3}\n", k.time, k.strength);
         }
         for r in &self.rings {
-            s += &format!("ring,{:.4},{:.3},{:.4},{},{}\n", r.time, r.pitch, r.level, r.string, r.open as u8);
+            s += &format!("ring,{:.4},{:.3},{:.4},{},{},{:.3}\n", r.time, r.pitch, r.level, r.string, r.open as u8, r.bright);
         }
         s
     }
@@ -115,6 +118,7 @@ impl Curves {
                     level: num(3)? as f32,
                     string: num(4)? as u8,
                     open: num(5)? != 0.0,
+                    bright: num(6).unwrap_or(0.4) as f32,
                 });
             } else if cols[0] == "tap" {
                 c.taps.push(Tap { time: num(1)?, strength: num(2)? as f32 });
@@ -159,7 +163,7 @@ mod tests {
             ],
             plucks: vec![Pluck { time: 0.5, pitch: 50.0, velocity: 0.6, brightness: 0.5, string: 2 }],
             taps: vec![Tap { time: 0.25, strength: 0.7 }],
-            rings: vec![Ring { time: 0.75, pitch: 43.0, level: 0.6, string: 1, open: true }],
+            rings: vec![Ring { time: 0.75, pitch: 43.0, level: 0.6, string: 1, open: true, bright: 0.35 }],
         };
         let back = Curves::from_csv(&c.to_csv()).unwrap();
         assert_eq!(back.frames.len(), 2);
