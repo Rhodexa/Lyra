@@ -126,7 +126,8 @@ th{color:var(--page-dim);font-weight:600}
   <ul style="margin:0;padding-left:20px">
     <li>The vibe: blocky and flat, square corners, hard shadows, few decorations; slightly off, never polished.</li>
     <li>LCD colours: <code>--lcd-0…3</code> (the lavender set).</li>
-    <li>The LCD cheats: segment digits for the message, note and take; printed pictures and plain text where information is dense; shadows on all ink.</li>
+    <li>The LCD cheats: plain text with LCD shadows (the colours and shadows sell it, not segment shapes); segments only for the take. Unlit things are off or barely there, never half-lit.</li>
+    <li>Graphs are smooth vector lines; meters are BIOS-style outlined boxes with blocks.</li>
     <li>Knobs round, with an arc. Logo: later, probably a raster.</li>
   </ul>
 </div>
@@ -200,17 +201,15 @@ th{color:var(--page-dim);font-weight:600}
 <div class="card">
 <table>
 <tr><th>where</th><th>what</th><th>from</th></tr>
-<tr><td>top</td><td>the message (the player, or the control you're touching and its value; PERF OFF) · take</td><td>parameters</td></tr>
+<tr><td>top</td><td>the message (the player, or the control you're touching and its value; PERF OFF) · take, the one segment display left</td><td>parameters</td></tr>
 <tr><td>printed words</td><td>lit when true: instrument, patch, double stops, page, grit, performer off, playing</td><td>parameters, frames</td></tr>
-<tr><td>now</td><td>the note in segments (a real ♯), how it's played, which way the bow goes</td><td>latest decision</td></tr>
+<tr><td>the note</td><td>the note being played and how</td><td>latest decision</td></tr>
 <tr><td>the strings</td><td>looking down at the fingerboard: the bowed string dark, strings left ringing grey, the finger on the neck at its position (none when open), the bow across</td><td>decision, hand, ring events</td></tr>
-<tr><td>next</td><td>what the performer has already planned: the look-ahead</td><td>upcoming notes</td></tr>
-<tr><td>loudness</td><td>the bow's loudness, stepped, the last two seconds</td><td>frames</td></tr>
-<tr><td>pitch · workload · calm</td><td>the tuner (±50 cents vs. the written note) and the player's state</td><td>frames, decisions</td></tr>
+<tr><td>next</td><td>what the performer has already planned (the look-ahead), each with its bow mark: ⊓ down, V up. Below, the bow's way now: ⊓◀ or ▶V</td><td>upcoming notes, decision</td></tr>
+<tr><td>loudness</td><td>the bow's loudness, the last two seconds</td><td>frames</td></tr>
+<tr><td>pitch · workload · calm</td><td>BIOS-style boxes: the tuner (one block, ±50 cents vs. the written note) and the player's state</td><td>frames, decisions</td></tr>
 <tr><td>LOG page</td><td>the decisions as text, like <code>--explain</code></td><td>decision ring buffer</td></tr>
 </table>
-<h3>The segment font (14 segments, with its own ♯)</h3>
-<canvas id="glyphs"></canvas>
 </div>
 
 <h2>Open questions</h2>
@@ -263,10 +262,9 @@ const ui = {}; // redraw callbacks
 /* ═════════════════ TUNER ═════════════════ */
 const TUNE = [
   {h:'LCD'},
-  {k:'ghost',label:'ghost segments',min:0,max:1,step:.05,def:0,unit:''},
+  {k:'ghost',label:'unlit words',min:0,max:1,step:.05,def:.3,unit:''},
   {k:'shadow',label:'ink shadow',min:0,max:1,step:.05,def:.5,unit:''},
   {k:'shoff',label:'shadow offset',min:0,max:4,step:.5,def:2,unit:'px'},
-  {k:'slant',label:'segment slant',min:0,max:.2,step:.01,def:0,unit:''},
   {k:'lcdfont',label:'LCD text font',opts:['Roboto Condensed','IBM Plex Mono','Chakra Petch'],def:'Roboto Condensed'},
   {h:'Plate'},
   {k:'--plate-r',label:'plate corners',min:0,max:30,step:1,def:0,unit:'px'},
@@ -283,7 +281,7 @@ const TUNE = [
   {k:'--gap',label:'control gap',min:0,max:30,step:1,def:6,unit:'px'},
   {k:'--label-font',label:'label font',opts:["'IBM Plex Mono'","'Roboto Condensed'","'Chakra Petch'"],def:"'IBM Plex Mono'"},
 ];
-const TKEY = 'octavia-faceplate-tuner-2';
+const TKEY = 'octavia-faceplate-tuner-3';
 let tune = {};
 try { tune = JSON.parse(localStorage.getItem(TKEY) || '{}') || {}; } catch (e) { tune = {}; }
 const tv = k => (k in tune ? tune[k] : TUNE.find(t => t.k === k).def);
@@ -293,7 +291,6 @@ function applyTune() {
   try { localStorage.setItem(TKEY, JSON.stringify(tune)); } catch (e) {}
   for (const f of Object.values(ui)) f();
   readColors();
-  if (typeof drawGlyphs === 'function') drawGlyphs();
 }
 function buildTuner() {
   const host = $('#tuner'); host.innerHTML = '';
@@ -437,7 +434,7 @@ function readColors() {
   const g = css('--lcd-background'), l = css('--lcd-inactive'), m = css('--lcd-secondary'), d = css('--lcd-foreground');
   C = {glass: g, ink: [mix(g, l, tv('ghost')), l, m, d], shadow: mix(g, m, tv('shadow') * .55)};
 }
-const W = 640, H = 300;
+const W = 640, H = 244;
 const cvs = $('#lcd'); let ctx = cvs.getContext('2d');
 let dim = false;
 function sizeLcd() {
@@ -467,54 +464,31 @@ function text(s, str, x, y, size, opts = {}) {
 }
 const textW = (str, size, track = 0) => { ctx.font = `700 ${size}px "${tv('lcdfont')}"`; return ctx.measureText(str).width + track * str.length; };
 
-/* ═════════════════ LCD: segments ═════════════════ */
-// 14 segments: a b c d e f, g1 g2 (middle), tl tm tr (upper diagonals + middle), bl bm br, plus dp
-const S14 = {
-'0':'a b c d e f tr bl','1':'b c','2':'a b g1 g2 e d','3':'a b c d g2','4':'f g1 g2 b c','5':'a f g1 g2 c d',
-'6':'a f e d c g1 g2','7':'a b c','8':'a b c d e f g1 g2','9':'a b c d f g1 g2',
-A:'a b c e f g1 g2',B:'a b c d g2 tm bm',C:'a d e f',D:'a b c d tm bm',E:'a d e f g1',F:'a e f g1',G:'a c d e f g2',
-H:'b c e f g1 g2',I:'a d tm bm',J:'b c d e',K:'e f g1 tr br',L:'d e f',M:'b c e f tl tr',N:'b c e f tl br',
-O:'a b c d e f',P:'a b e f g1 g2',Q:'a b c d e f br',R:'a b e f g1 g2 br',S:'a f g1 g2 c d',T:'a tm bm',
-U:'b c d e f',V:'e f bl tr',W:'b c e f bl br',X:'tl tr bl br',Y:'tl tr bm',Z:'a d tr bl',
-'-':'g1 g2','+':'g1 g2 tm bm','/':'tr bl',' ':''};
-const SEGS14 = 'a b c d e f g1 g2 tl tm tr bl bm br'.split(' ');
-const SEGS7 = 'a b c d e f g1 g2'.split(' ');
-function segPolys(w, h, t) {
-  const g = t * .28, xl = t / 2, xr = w - t / 2, yt = t / 2, yb = h - t / 2, xm = w / 2, ym = h / 2;
-  const Hs = (x0, x1, y) => { x0 += g; x1 -= g; return [[x0, y], [x0 + t / 2, y - t / 2], [x1 - t / 2, y - t / 2], [x1, y], [x1 - t / 2, y + t / 2], [x0 + t / 2, y + t / 2]]; };
-  const Vs = (x, y0, y1) => { y0 += g; y1 -= g; return [[x, y0], [x + t / 2, y0 + t / 2], [x + t / 2, y1 - t / 2], [x, y1], [x - t / 2, y1 - t / 2], [x - t / 2, y0 + t / 2]]; };
-  const D = (x0, y0, x1, y1) => { const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L, w2 = t * .36;
-    return [[x0 - uy * w2, y0 + ux * w2], [x1 - uy * w2, y1 + ux * w2], [x1 + uy * w2, y1 - ux * w2], [x0 + uy * w2, y0 - ux * w2]]; };
-  const k = t * .95, n = t * .8;
-  return { a: Hs(xl, xr, yt), d: Hs(xl, xr, yb), g1: Hs(xl, xm, ym), g2: Hs(xm, xr, ym),
-    f: Vs(xl, yt, ym), e: Vs(xl, ym, yb), b: Vs(xr, yt, ym), c: Vs(xr, ym, yb), tm: Vs(xm, yt, ym), bm: Vs(xm, ym, yb),
-    tl: D(xl + k, yt + k, xm - n, ym - n), tr: D(xr - k, yt + k, xm + n, ym - n),
-    bl: D(xl + k, yb - k, xm - n, ym + n), br: D(xr - k, yb - k, xm + n, ym + n) };
+/* ═════════════════ LCD: 7-segment digits (the take) ═════════════════ */
+const S7 = {'0':'a b c d e f','1':'b c','2':'a b g e d','3':'a b c d g','4':'f g b c','5':'a f g c d',
+  '6':'a f e d c g','7':'a b c','8':'a b c d e f g','9':'a b c d f g',' ':''};
+function digits(str, x, y, w, h) {
+  const t = Math.max(2, w * .22), g = t * .28, xl = t / 2, xr = w - t / 2, yt = t / 2, yb = h - t / 2, ym = h / 2;
+  const Hs = (x0, x1, yy) => { x0 += g; x1 -= g; return [[x0, yy], [x0 + t / 2, yy - t / 2], [x1 - t / 2, yy - t / 2], [x1, yy], [x1 - t / 2, yy + t / 2], [x0 + t / 2, yy + t / 2]]; };
+  const Vs = (xx, y0, y1) => { y0 += g; y1 -= g; return [[xx, y0], [xx + t / 2, y0 + t / 2], [xx + t / 2, y1 - t / 2], [xx, y1], [xx - t / 2, y1 - t / 2], [xx - t / 2, y0 + t / 2]]; };
+  const P = {a: Hs(xl, xr, yt), d: Hs(xl, xr, yb), g: Hs(xl, xr, ym), f: Vs(xl, yt, ym), e: Vs(xl, ym, yb), b: Vs(xr, yt, ym), c: Vs(xr, ym, yb)};
+  [...str].forEach((ch, i) => { const ox = x + i * w * 1.35, on = new Set((S7[ch] ?? '').split(' '));
+    for (const s in P) if (on.has(s)) poly(3, P[s].map(([px, py]) => [ox + px, y + py])); });   // unlit segments: off
 }
-// the sharp: its own printed segment, a real ♯ (two slanted uprights, two thick bars)
-function sharpPolys(w, h) {
-  const t = Math.max(2, w * .16), x0 = w * .3, x1 = w * .7, sl = w * .08, y0 = h * .12, y1 = h * .88;
-  const up = x => [[x - t / 2 + sl, y0], [x + t / 2 + sl, y0], [x + t / 2 - sl, y1], [x - t / 2 - sl, y1]];
-  const bar = y => [[w * .08, y + t * .5], [w * .92, y - t * .5], [w * .92, y + t * .9], [w * .08, y + t * 1.9]];
-  return [up(x0), up(x1), bar(h * .3), bar(h * .56)];
+
+/* ═════════════════ LCD: printed marks ═════════════════ */
+// the string player's own bow marks: ⊓ down-bow, V up-bow (drawn, so every font has them)
+function bowMark(s, dir, x, y, size) {
+  const t = Math.max(1.5, size * .16);
+  if (dir === 'down') { rect(s, x, y, size, t * 1.6); rect(s, x, y, t, size); rect(s, x + size - t, y, t, size); }
+  else { poly(s, [[x, y], [x + t * 1.3, y], [x + size / 2, y + size - t * 1.6], [x + size / 2, y + size]]);
+         poly(s, [[x + size, y], [x + size - t * 1.3, y], [x + size / 2, y + size - t * 1.6], [x + size / 2, y + size]]); }
 }
-// a row of cells; '.' lights the previous cell's dp, '#' is the sharp
-function segText(str, x, y, w, h, cells, set, lit = 3) {
-  const t = Math.max(2, w * .22), polys = segPolys(w, h, t), slant = tv('slant');
-  const chars = [];
-  for (const ch of str.toUpperCase()) { if (ch === '.' && chars.length) chars[chars.length - 1][1] = true; else chars.push([ch, false]); }
-  while (chars.length < cells) chars.push([' ', false]);
-  const sk = (pts, ox) => pts.map(([px, py]) => [ox + px + (h - py) * slant, y + py]);
-  const pitch = w + w * .32;
-  chars.slice(0, cells).forEach(([ch, dp], i) => {
-    const ox = x + i * pitch;
-    if (ch === '#') { for (const p of sharpPolys(w, h)) poly(lit, sk(p, ox)); return; }
-    const on = new Set((S14[ch] ?? '').split(' '));
-    for (const s of set) poly(on.has(s) ? lit : 0, sk(polys[s], ox));
-    const r = t * .5;
-    rect(dp ? lit : 0, ox + w + w * .06, y + h - r * 2, r * 2, r * 2);
-  });
-  return x + cells * pitch;
+// BIOS-style meter: an outlined box, blocks inside; unlit blocks are simply off
+function boxMeter(x, y, w, h, n, lit) {
+  rect(2, x, y, w, 2); rect(2, x, y + h - 2, w, 2); rect(2, x, y, 2, h); rect(2, x + w - 2, y, 2, h);
+  const ix = x + 4, iw = w - 8, bw = iw / n;
+  for (let i = 0; i < n; i++) if (lit(i)) rect(3, Math.round(ix + i * bw), y + 4, Math.ceil(bw) - 2, h - 8);
 }
 
 /* ═════════════════ LCD: what it shows ═════════════════ */
@@ -524,6 +498,7 @@ const SHORT = {Fresh:'START', NewBow:'NEW', Slurred:'SLUR', Staccato:'STAC', Bou
 const ROMAN = ['IV', 'III', 'II', 'I'];
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const midi = n => { const m = n.match(/^([A-G]#?)(-?\d)$/); return NAMES.indexOf(m[1]) + 12 * (+m[2] + 1); };
+const noteName = n => n.note + (n.note2 ? '+' + n.note2 : '');
 
 let tape = null, hand = 0, lastT = 0;
 function noteAt(t) { let cur = null; for (const n of tape.notes) { if (n.t <= t + 1e-6) cur = n; else break; } return cur; }
@@ -540,50 +515,39 @@ function ringLevel(t, s) { // how much a string left by the bow still rings
 }
 
 // layout of the glass (px)
-const L = {pad: 14, top: 12, ann: 74, mid: 96, colX: 318};
-
+const L = {pad: 14, msg: 30, ann: 52, rule: 60, mid: 68, colX: 318, div: 108};
 function printed(s, str, x, y, size = 10, align) { text(s, str, x, y, size, {track: 1.2, align}); }
 
-function nowPanel(t, cur, playing) {
-  const x = L.pad, y = L.mid + 8;
-  printed(2, 'NOW', x, y + 4, 9);
-  const name = cur ? cur.note + (cur.note2 ? '+' + cur.note2 : '') : '';
-  segText(name, x, y + 10, 16, 28, 6, SEGS14);
-  if (cur) {
-    text(3, HOW[cur.how] || cur.how, x + 140, y + 22, 17);
-    const bowing = cur.how !== 'Plucked';
-    text(bowing ? 3 : 1, cur.dir === 'down' ? 'DOWN BOW' : 'UP BOW', x + 140, y + 38, 12, {track: .8});
-  }
-  // big bow arrows, printed: the lit one is the bow's way
-  const ax = 268, ay = y + 6;
-  const down = cur && cur.dir === 'down' && cur.how !== 'Plucked', upb = cur && cur.dir === 'up' && cur.how !== 'Plucked';
-  poly(upb ? 3 : 1, [[ax, ay + 12], [ax + 9, ay], [ax + 18, ay + 12], [ax + 12, ay + 12], [ax + 12, ay + 18], [ax + 6, ay + 18], [ax + 6, ay + 12]]);
-  poly(down ? 3 : 1, [[ax + 6, ay + 22], [ax + 12, ay + 22], [ax + 12, ay + 28], [ax + 18, ay + 28], [ax + 9, ay + 40], [ax, ay + 28], [ax + 6, ay + 28]]);
+function nowPanel(cur) {
+  if (!cur) return;
+  const x = L.pad, y = L.mid + 30;
+  text(3, noteName(cur), x, y, 30);
+  text(3, HOW[cur.how] || cur.how, x + 128, y - 4, 18, {track: .5});
 }
 
 function stringsPanel(t, cur, playing) {
   const labels = STRINGS[tape.instrument] || STRINGS.cello;
-  const x0 = L.pad + 8, top = 168, bot = 266, sx = s => x0 + 22 + s * 30;   // string IV on the left, as you look down at it
+  const x0 = L.pad + 10, top = L.div + 24, bot = top + 80, sx = s => x0 + 22 + s * 30;   // string IV on the left, as you look down at it
   const loud = frameAt(t, 'loudness'), str = frameAt(t, 'string'), p2 = frameAt(t, 'pitch2'), str2 = frameAt(t, 'string2');
   const plucking = cur && cur.how === 'Plucked' && t < cur.t + .25;
   const bowed = new Set();
   if (loud > .02 && !(cur && cur.how === 'Plucked')) { bowed.add(str); if (p2 > 0) bowed.add(str2); }
   // the nut and the position marks, printed
   rect(2, x0 + 8, top - 6, 4 * 30 - 2, 5);
-  for (let p = 1; p <= 7; p++) { const y = top + p * 11; rect(1, x0 + 4, y, 5, 2); }
-  printed(2, '1', x0 - 4, top + 15, 9, 'right'); printed(2, '7', x0 - 4, top + 81, 9, 'right');
+  for (let p = 1; p <= 7; p++) rect(1, x0 + 4, top + p * 9, 5, 2);
+  printed(2, '1', x0, top + 13, 9, 'right'); printed(2, '7', x0, top + 67, 9, 'right');
   // strings: bowed dark and thick, ringing grey, idle faint
   for (let s = 0; s < 4; s++) {
     const ring = ringLevel(t, s);
     const st = bowed.has(s) || (plucking && cur.string === s) ? 3 : ring > .04 ? 2 : 1;
     const wdt = (s < 2 ? 3 : 2) + (st === 3 ? 1 : 0);
     rect(st, sx(s) - wdt / 2, top, wdt, bot - top);
-    text(st === 1 ? 2 : 3, labels[s], sx(s), bot + 20, 13, {align: 'center'});
+    text(st === 1 ? 2 : 3, labels[s], sx(s), bot + 17, 13, {align: 'center'});
   }
   // the hand: a finger on the neck, sliding when it shifts (none on an open string)
   const target = cur ? cur.hand : 0, dt = Math.min(.1, Math.abs(t - lastT));
   hand += (target - hand) * (dt > 0 && playing ? 1 - Math.exp(-dt * 14) : 1);
-  const hy = top + 4 + hand * 6.5;
+  const hy = top + 4 + hand * 5.2;
   if (cur && t < cur.t + cur.len + .3) {
     for (const s of [cur.string, string2Of(cur)]) {
       if (s < 0) continue;
@@ -592,97 +556,92 @@ function stringsPanel(t, cur, playing) {
     }
   }
   // the bow across the strings, or a pluck mark
-  if (bowed.size) {
-    rect(3, x0, bot - 20, 4 * 30 + 4, 5);
-    rect(3, x0 - 4, bot - 22, 4, 9);   // the frog
-  } else if (plucking) {
-    const xs = sx(cur.string); poly(3, [[xs - 8, bot - 14], [xs, bot - 24], [xs + 8, bot - 14]]);
-  }
+  if (bowed.size) { rect(3, x0, bot - 18, 4 * 30 + 4, 5); rect(3, x0 - 4, bot - 20, 4, 9); }
+  else if (plucking) { const xs = sx(cur.string); poly(3, [[xs - 8, bot - 12], [xs, bot - 22], [xs + 8, bot - 12]]); }
 }
 
-function nextPanel(t) {
-  const x = 170, y = 172;
+function nextPanel(t, cur) {
+  const x = 172, y = L.div + 20;
   printed(2, 'NEXT', x, y, 9);
   const up = tape.notes.filter(n => n.t > t + 1e-3).slice(0, 4);
   up.forEach((n, i) => {
-    const yy = y + 20 + i * 20;
-    text(i === 0 ? 3 : 2, n.note + (n.note2 ? '+' + n.note2 : ''), x, yy, 15);
-    text(i === 0 ? 3 : 2, (n.dir === 'down' ? '↓ ' : '↑ ') + (SHORT[n.how] || n.how), x + 56, yy, 12, {track: .5});
+    const yy = y + 19 + i * 18, s = i === 0 ? 3 : 2;
+    text(s, noteName(n), x, yy, 15);
+    bowMark(n.how === 'Plucked' ? 0 : s, n.dir, x + 56, yy - 10, 10);
+    text(s, SHORT[n.how] || n.how, x + 72, yy, 12, {track: .5});
   });
-  if (!up.length) text(1, 'END', x, y + 20, 14);
+  if (!up.length) text(1, 'END', x, y + 19, 14);
+  // the bow's way, big: ⊓ ◀ for a down-bow (the frog pulls away), ▶ V for an up-bow
+  const by = y + 92, bowing = cur && cur.how !== 'Plucked' && frameAt(t, 'loudness') > .02;
+  const dn = bowing && cur.dir === 'down' ? 3 : 0, upb = bowing && cur.dir === 'up' ? 3 : 0;
+  bowMark(dn, 'down', x, by - 7, 14);
+  poly(dn, [[x + 20, by], [x + 32, by - 8], [x + 32, by - 3], [x + 52, by - 3], [x + 52, by + 3], [x + 32, by + 3], [x + 32, by + 8]]);
+  poly(upb, [[x + 112, by], [x + 100, by - 8], [x + 100, by - 3], [x + 80, by - 3], [x + 80, by + 3], [x + 100, by + 3], [x + 100, by + 8]]);
+  bowMark(upb, 'up', x + 118, by - 7, 14);
 }
 
 function graphPanel(t) {
-  const x = L.colX + 10, y = L.mid + 4, w = W - L.pad - x, h = 62;
-  printed(2, 'LOUDNESS', x, y + 6, 9);
+  const x = L.colX + 12, y = L.mid + 8, w = W - L.pad - x, h = 50;
+  printed(2, 'LOUDNESS', x, y, 9);
   const grit = frameAt(t, 'grit') > .12 && frameAt(t, 'loudness') > .02;
-  printed(grit ? 3 : 0, 'GRIT', x + w, y + 6, 9, 'right');
-  const N = 48, step = w / N, span = 2.0, base = y + 12 + h;
-  rect(1, x, base + 2, w, 2);
-  let py = null;
-  for (let i = 0; i < N; i++) {
-    const tt = t - span + (i + 1) * span / N; if (tt < 0) continue;
-    const v = Math.min(1, frameAt(tt, 'loudness') * 1.5);
-    const yy = Math.round(base - 3 - v * (h - 4));
-    const xx = Math.round(x + i * step);
-    rect(3, xx, yy, Math.ceil(step) + 1, 3);
-    if (py !== null && py !== yy) rect(3, xx, Math.min(py, yy), 3, Math.abs(py - yy) + 3);
-    py = yy;
-  }
+  printed(grit ? 3 : 0, 'GRIT', x + w, y, 9, 'right');
+  const span = 2.0, base = y + 8 + h, N = 120;
+  rect(1, x, base + 3, w, 2);
+  ink(3, () => {
+    ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.beginPath(); let started = false;
+    for (let i = 0; i <= N; i++) {
+      const tt = t - span + i * span / N; if (tt < 0) continue;
+      const v = Math.min(1, frameAt(tt, 'loudness') * 1.5), xx = x + i * w / N, yy = base - 2 - v * (h - 4);
+      started ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); started = true;
+    }
+    ctx.stroke();
+  });
 }
 
 function meters(t, cur) {
-  const x = L.colX + 10, w = W - L.pad - x;
-  // pitch: 11 segments, ±50 cents, the centre wider
-  const yP = 196;
-  printed(2, 'PITCH', x, yP, 9);
+  const x = L.colX + 12, w = W - L.pad - x, bx = x + 70, bw = w - 70;
+  // pitch: a box, the centre marked, one block where the pitch is (±50 cents)
+  const yP = L.div + 14;
+  printed(2, 'PITCH', x, yP + 10, 9);
+  rect(2, bx + bw / 2 - 1, yP - 4, 2, 4); rect(2, bx + bw / 2 - 1, yP + 14, 2, 4);
   const loud = frameAt(t, 'loudness');
-  let lit = -1, cents = null;
-  if (cur && loud > .02 && cur.how !== 'Plucked' && t < cur.t + cur.len + .05) {
+  let cents = null;
+  if (cur && loud > .02 && cur.how !== 'Plucked' && t < cur.t + cur.len + .05)
     cents = Math.max(-50, Math.min(50, (frameAt(t, 'pitch') - midi(cur.note)) * 100));
-    lit = Math.round(cents / 10) + 5;
-  }
-  const sx0 = x + 64, sw = (w - 64) / 11;
-  for (let i = 0; i < 11; i++) {
-    const cx = sx0 + i * sw, hh = i === 5 ? 16 : 10 + Math.abs(i - 5) * .6;
-    rect(i === lit ? 3 : 1, cx + 1, yP + 2 - hh, sw - 4, hh);
-  }
-  printed(2, '♭', sx0 - 10, yP + 1, 11); printed(2, '♯', sx0 + 11 * sw + 1, yP + 1, 11);
-  if (cents !== null) text(3, (cents >= 0 ? '+' : '−') + Math.abs(Math.round(cents)) + '¢', x, yP + 16, 12);
-  // workload and composure, 12 segments
+  const n = 21, at = cents === null ? -1 : Math.round((cents + 50) / 100 * (n - 1));
+  boxMeter(bx, yP, bw, 14, n, i => i === at);
+  if (cents !== null) text(3, (cents >= 0 ? '+' : '−') + Math.abs(Math.round(cents)) + '¢', x + 36, yP + 10, 11);
+  // workload and composure
   const off = !state.performer;
-  const bar = (label, y, v) => {
-    printed(2, label, x, y, 9);
-    const n = Math.round(v * 12), bx = x + 64, bw = (w - 64) / 12;
-    for (let i = 0; i < 12; i++) rect(i < n ? 3 : 1, bx + i * bw, y - 10, bw - 3, 11);
-  };
-  bar('WORKLOAD', 238, off || !cur ? 0 : Math.min(1, cur.load / 50));
-  bar('CALM', 262, off ? 0 : cur ? cur.calm / 100 : 1);
-  if (off) text(3, 'PERFORMER OFF', x + w, 286, 12, {align: 'right', track: 1});
+  const bar = (label, y, v) => { printed(2, label, x, y + 10, 9); const k = Math.round(v * 16); boxMeter(bx, y, bw, 14, 16, i => i < k); };
+  bar('WORKLOAD', yP + 32, off || !cur ? 0 : Math.min(1, cur.load / 50));
+  bar('CALM', yP + 56, off ? 0 : cur ? cur.calm / 100 : 1);
+  if (off) text(3, 'PERFORMER OFF', x + w, yP + 96, 12, {align: 'right', track: 1});
 }
 
 function perfPage(t, playing) {
   const cur = noteAt(t);
-  nowPanel(t, cur, playing);
+  nowPanel(cur);
   stringsPanel(t, cur, playing);
-  nextPanel(t);
+  nextPanel(t, cur);
   graphPanel(t);
   meters(t, cur);
   rect(2, L.colX, L.mid, 2, H - L.mid - 10);         // printed rules
-  rect(2, L.pad, 156, L.colX - L.pad - 10, 2);
+  rect(2, L.pad, L.div, L.colX - L.pad - 12, 2);
 }
 
 function logPage(t) {
-  const cols = [['TIME', 0], ['NOTE', 52], ['BOW', 112], ['HOW', 148], ['STRING', 262], ['HAND', 322], ['LOAD', 372], ['CALM', 422], ['SHIFT', 474]];
-  const x = L.pad, y = L.mid + 14;
+  const cols = [['TIME', 0], ['NOTE', 50], ['BOW', 110], ['HOW', 142], ['STRING', 256], ['HAND', 318], ['LOAD', 368], ['CALM', 418], ['SHIFT', 470]];
+  const x = L.pad, y = L.mid + 12;
   for (const [h, dx] of cols) printed(2, h, x + dx, y, 9);
   rect(2, L.pad, y + 5, W - 2 * L.pad, 2);
-  const done = tape.notes.filter(n => n.t <= t + 1e-6).slice(-8);
+  const rows = 7, done = tape.notes.filter(n => n.t <= t + 1e-6).slice(-rows);
   done.forEach((n, i) => {
-    const s = i === done.length - 1 ? 3 : 2, yy = y + 26 + (8 - done.length + i) * 21;
-    const cells = [n.t.toFixed(2), n.note + (n.note2 ? '+' + n.note2 : ''), n.dir === 'down' ? '↓' : '↑', HOW[n.how] || n.how,
+    const s = i === done.length - 1 ? 3 : 2, yy = y + 24 + (rows - done.length + i) * 19;
+    const cells = [n.t.toFixed(2), noteName(n), '', HOW[n.how] || n.how,
                    ROMAN[n.string] + (n.open ? ' open' : ''), String(n.hand), String(n.load), String(n.calm), n.shift ? '+' + n.shift : ''];
     cells.forEach((c, j) => text(s, c, x + cols[j][1], yy, 14, {weight: j === 1 || j === 3 ? 700 : 600}));
+    if (n.how !== 'Plucked') bowMark(s, n.dir, x + cols[2][1] + 4, yy - 10, 10);
   });
   if (!done.length) text(1, 'NO NOTES YET', x, y + 60, 14);
 }
@@ -694,19 +653,19 @@ function drawLcd(t, playing) {
   dim = !playing;
   ctx.fillStyle = C.glass; ctx.fillRect(0, 0, W, H);
   const idle = !state.performer ? 'PERF OFF' : (state.player || 'custom');
-  segText(performance.now() < msg.until ? msg.text : idle, L.pad, L.top, 26, 44, 8, SEGS14);
-  // take
-  const tx = W - L.pad - 2 * 22 * 1.32;
-  segText(String(state.take).padStart(2, '0'), tx, L.top, 22, 44, 2, SEGS7);
-  printed(2, 'TAKE', tx - 8, L.top + 44, 9, 'right');
-  // printed annunciators
+  text(3, (performance.now() < msg.until ? msg.text : idle).toUpperCase(), L.pad, L.msg, 22, {track: 2});
+  // take: the one place the segments stay
+  const tx = W - L.pad - 2 * 14 * 1.35 + 4;
+  digits(String(state.take).padStart(2, '0'), tx, L.msg - 22, 14, 24);
+  printed(2, 'TAKE', tx - 8, L.msg, 9, 'right');
+  // printed annunciators: lit when true, barely there when not
   let x = L.pad;
   const items = [['CELLO', state.instrument === 'cello'], ['VIOLIN', state.instrument === 'violin'], null,
     ['ARCO', state.patch === 'arco'], ['PIZZ', state.patch === 'pizz'], ['TREM', state.patch === 'trem'], null,
     ['DOUBLE', state.doubles], null, ['PERF', state.page === 'perf'], ['LOG', state.page === 'log'], null, ['▶ PLAY', playing]];
   for (const it of items) { if (!it) { x += 14; continue; }
-    printed(it[1] ? 3 : 1, it[0], x, L.ann, 11); x += textW(it[0], 11, 1.2) + 10; }
-  rect(2, L.pad, L.ann + 8, W - 2 * L.pad, 2);
+    printed(it[1] ? 3 : 0, it[0], x, L.ann, 10); x += textW(it[0], 10, 1.2) + 10; }
+  rect(2, L.pad, L.rule, W - 2 * L.pad, 2);
   if (state.page === 'perf') perfPage(t, playing); else logPage(t);
 }
 
@@ -737,17 +696,6 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
-/* ═════════════════ the glyph sheet ═════════════════ */
-function drawGlyphs() {
-  const gc = $('#glyphs'), dpr = window.devicePixelRatio || 1, GW = 760, GH = 120;
-  gc.width = GW * dpr; gc.height = GH * dpr; gc.style.width = GW + 'px'; gc.style.height = GH + 'px';
-  const keep = ctx, keepDim = dim; ctx = gc.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); dim = false;
-  ctx.fillStyle = C.glass; ctx.fillRect(0, 0, GW, GH);
-  const chars = Object.keys(S14).join('') + '#', perRow = 30;
-  for (let i = 0, y = 12; i < chars.length; i += perRow, y += 52) segText(chars.slice(i, i + perRow), 12, y, 16, 30, perRow, SEGS14);
-  ctx = keep; dim = keepDim;
-}
-
 /* ═════════════════ go ═════════════════ */
 buildTuner(); sizeLcd(); applyTune();
 // ?tape=showcase&t=9.2&page=log&live : open on a moment (live = drawn as if playing)
@@ -757,7 +705,6 @@ if (first) { $('#tape').value = first; loadTape(first); msg.until = 0; }
 if (Q.has('t')) pausedAt = +Q.get('t');
 if (Q.has('page')) state.page = Q.get('page'), ui.page();
 const LIVE = Q.has('live');
-document.fonts && document.fonts.ready.then(drawGlyphs);
 requestAnimationFrame(tick);
 </script>
 </body>
