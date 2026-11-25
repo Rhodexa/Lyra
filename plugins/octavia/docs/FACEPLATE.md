@@ -26,12 +26,11 @@ shadow sell "LCD", not segment shapes (segment letters were tried and were
 beautiful and hard to read). Segments survive only for the take number.
 Unlit things are off or barely there (0.15), never half-lit.
 
-## The plate (about 780×600 at scale 1)
+## The plate (about 780×540 at scale 1)
 
 ```text
  ┌──────────────────────────────────────────────────────────┐
- │ [logo]                                  [CELLO|VIOLIN]   │
- │ string performer · model 01               instrument     │
+ │ [logo, a sticker]                       [CELLO|VIOLIN]   │
  │ ┌─bezel──────────────────────┐  STYLE · decoration ───── │
  │ │ LCD, 640×336 units          │  (expr) (vib) (breath)    │
  │ │ shown at 0.68               │  [      PERFORMER      ]  │
@@ -42,7 +41,7 @@ Unlit things are off or barely there (0.15), never half-lit.
  │ [STUDENT ]  ┃   ┃   ┃   ┃         natural bright [STOPS]  │
  │ [VIRTUOSO]  ┃   ┃   ┃   ┃        [ARCO | PIZZ | TREM]     │
  │ [SESSION ]  intonation dexterity bowing composure        │
- │ octavia instruments            bowed by a player, not a robot │
+ │ rhodune! lab                                             │
  └──────────────────────────────────────────────────────────┘
 ```
 
@@ -59,6 +58,7 @@ Unlit things are off or barely there (0.15), never half-lit.
 | gaps | 6 px between controls | |
 | labels | IBM Plex Mono 700, 9–10 px, caps, tracked | |
 | section heads | caps label + a 2 px rule to the right | |
+| branding | the logo only (68 px tall, a sticker); no tagline, no model name, no caption under the instrument switch; footer `rhodune! lab` | Rhodexa, 2026-11-25 |
 | LCD | drawn in 640×336 units, shown at **0.68**; text never under 11.5 units; font **Roboto Condensed** 700 (Lyra already bundles it) | |
 | LCD ink | 3 = `--lcd-3`, 2 = `--lcd-2`, 1 = `--lcd-1`, unlit = mix(`--lcd-0`, `--lcd-1`, **0.15**) | |
 | LCD shadow | every piece of ink drawn twice: first at +2 units in mix(`--lcd-0`, `--lcd-2`, 0.275), then itself | |
