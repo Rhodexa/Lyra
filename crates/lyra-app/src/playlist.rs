@@ -468,10 +468,21 @@ impl Playlist {
             pos2(right, overview_r.bottom() + 2.0 + m.ruler_h),
         );
         let grid = Rect::from_min_max(pos2(ruler.left(), ruler.bottom()), pos2(right, rect.bottom()));
-        let vbar = VBar { rect: Rect::from_min_max(pos2(right + 2.0, grid.top()), pos2(rect.right(), grid.bottom())) };
+        let vbar_lock = match self.drag {
+            Drag::VBar(d) => Some(d.span()),
+            _ => None,
+        };
+        let vbar = VBar {
+            rect: Rect::from_min_max(pos2(right + 2.0, grid.top()), pos2(rect.right(), grid.bottom())),
+            lock: vbar_lock,
+        };
         let headers = Rect::from_min_max(pos2(rect.left(), grid.top()), pos2(grid.left(), grid.bottom()));
         let song_len = p.song_length() as f32;
-        let overview = Overview { rect: overview_r, area: grid, content: song_len };
+        let overview_lock = match self.drag {
+            Drag::Overview(d) => Some(d.span()),
+            _ => None,
+        };
+        let overview = Overview { rect: overview_r, area: grid, lock: overview_lock, content: song_len };
 
         let input = timeline::Input::read(ui, rect);
         let Input {

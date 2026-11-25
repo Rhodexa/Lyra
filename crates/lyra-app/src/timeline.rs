@@ -35,13 +35,24 @@ impl TimeView {
     }
 }
 
-/// An overview-bar drag in progress.
+/// An overview-bar drag in progress. `span` is the bar's scale when it
+/// started, frozen for the whole drag: the scale depends on the view, so a
+/// live one fed the drag back into itself (stretching past the content grew
+/// the view ~20 % a frame, with the mouse standing still).
 #[derive(Clone, Copy, Debug)]
 pub enum OverviewDrag {
     /// Grabbed the thumb's middle, `grab` ticks right of its left end.
-    Pan { grab: f32 },
+    Pan { grab: f32, span: f32 },
     /// Grabbed one end; the other end stays where it was.
-    Edge { left: bool, fixed: f32 },
+    Edge { left: bool, fixed: f32, span: f32 },
+}
+
+impl OverviewDrag {
+    pub fn span(&self) -> f32 {
+        match *self {
+            OverviewDrag::Pan { span, .. } | OverviewDrag::Edge { span, .. } => span,
+        }
+    }
 }
 
 /// The overview bar for content `content` ticks long.
@@ -50,6 +61,8 @@ pub struct Overview {
     /// The area the view scrolls (same width as `rect`).
     pub area: Rect,
     pub content: f32,
+    /// The scale frozen by a drag in progress (see [`OverviewDrag`]).
+    pub lock: Option<f32>,
 }
 
 impl Overview {
@@ -57,6 +70,9 @@ impl Overview {
     /// bit more than is visible so the thumb never fills the bar (a full-width
     /// thumb doesn't look grabbable).
     pub fn span(&self, v: &TimeView) -> f32 {
+        if let Some(span) = self.lock {
+            return span;
+        }
         (self.content + 2.0 * TICKS_PER_BAR as f32).max(v.scroll + v.visible(self.area) * 1.2)
     }
 
@@ -75,25 +91,26 @@ impl Overview {
     pub fn press(&self, v: &mut TimeView, pos: Pos2) -> OverviewDrag {
         let thumb = self.thumb(v);
         let visible = v.visible(self.area);
+        let span = self.span(v);
         // The zoom handles: 14 px inside each end of the window (and a little past it).
         if pos.x > thumb.left() - 3.0 && pos.x < thumb.left() + HANDLE {
-            OverviewDrag::Edge { left: true, fixed: v.scroll + visible }
+            OverviewDrag::Edge { left: true, fixed: v.scroll + visible, span }
         } else if pos.x < thumb.right() + 3.0 && pos.x > thumb.right() - HANDLE {
-            OverviewDrag::Edge { left: false, fixed: v.scroll }
+            OverviewDrag::Edge { left: false, fixed: v.scroll, span }
         } else if thumb.x_range().contains(pos.x) {
-            OverviewDrag::Pan { grab: self.at(v, pos.x) - v.scroll }
+            OverviewDrag::Pan { grab: self.at(v, pos.x) - v.scroll, span }
         } else {
             // Clicked the track: centre the view there and keep panning.
             v.scroll = (self.at(v, pos.x) - visible * 0.5).max(0.0);
-            OverviewDrag::Pan { grab: visible * 0.5 }
+            OverviewDrag::Pan { grab: visible * 0.5, span }
         }
     }
 
     pub fn drag(&self, v: &mut TimeView, drag: OverviewDrag, pos: Pos2, min_ticks: f32, max_ppt: f32) {
-        let at = self.at(v, pos.x);
+        let at = ((pos.x - self.rect.left()) / self.rect.width() * drag.span()).max(0.0);
         match drag {
-            OverviewDrag::Pan { grab } => v.scroll = (at - grab).max(0.0),
-            OverviewDrag::Edge { left, fixed } => {
+            OverviewDrag::Pan { grab, .. } => v.scroll = (at - grab).max(0.0),
+            OverviewDrag::Edge { left, fixed, .. } => {
                 let (a, b) = if left { (at.min(fixed - min_ticks), fixed) } else { (fixed, at.max(fixed + min_ticks)) };
                 v.ppt = (self.area.width() / (b - a)).clamp(0.005, max_ppt);
                 v.scroll = a.max(0.0);
@@ -171,13 +188,21 @@ pub struct RowView {
     pub total: f32,
 }
 
-/// A vertical-bar drag in progress.
+/// A vertical-bar drag in progress; `span` frozen like [`OverviewDrag`]'s.
 #[derive(Clone, Copy, Debug)]
 pub enum VDrag {
     /// Grabbed the thumb's middle, `grab` rows below its top.
-    Pan { grab: f32 },
+    Pan { grab: f32, span: f32 },
     /// Grabbed one end; the other end stays where it was.
-    Edge { top: bool, fixed: f32 },
+    Edge { top: bool, fixed: f32, span: f32 },
+}
+
+impl VDrag {
+    pub fn span(&self) -> f32 {
+        match *self {
+            VDrag::Pan { span, .. } | VDrag::Edge { span, .. } => span,
+        }
+    }
 }
 
 /// The overview bar's vertical twin, beside a row editor: drag the thumb to
@@ -185,6 +210,8 @@ pub enum VDrag {
 /// over it to zoom (keeping the middle row still). Thinner than the overview.
 pub struct VBar {
     pub rect: Rect,
+    /// The scale frozen by a drag in progress.
+    pub lock: Option<f32>,
 }
 
 impl VBar {
@@ -195,6 +222,9 @@ impl VBar {
     }
 
     fn span(&self, v: &RowView) -> f32 {
+        if let Some(span) = self.lock {
+            return span;
+        }
         v.total.max(v.start + v.visible).max(1.0)
     }
 
@@ -214,25 +244,26 @@ impl VBar {
 
     pub fn press(&self, v: &mut RowView, pos: Pos2) -> VDrag {
         let thumb = self.thumb(v);
+        let span = self.span(v);
         if pos.y > thumb.top() - 3.0 && pos.y < thumb.top() + HANDLE {
-            VDrag::Edge { top: true, fixed: v.start + v.visible }
+            VDrag::Edge { top: true, fixed: v.start + v.visible, span }
         } else if pos.y < thumb.bottom() + 3.0 && pos.y > thumb.bottom() - HANDLE {
-            VDrag::Edge { top: false, fixed: v.start }
+            VDrag::Edge { top: false, fixed: v.start, span }
         } else if thumb.y_range().contains(pos.y) {
-            VDrag::Pan { grab: self.at(v, pos.y) - v.start }
+            VDrag::Pan { grab: self.at(v, pos.y) - v.start, span }
         } else {
             v.start = (self.at(v, pos.y) - v.visible * 0.5).clamp(0.0, (v.total - v.visible).max(0.0));
-            VDrag::Pan { grab: v.visible * 0.5 }
+            VDrag::Pan { grab: v.visible * 0.5, span }
         }
     }
 
     /// Follow a drag. Edge drags change `visible` (the caller turns that into
     /// a row height), between `min_rows` and `max_rows`.
     pub fn drag(&self, v: &mut RowView, drag: VDrag, pos: Pos2, min_rows: f32, max_rows: f32) {
-        let at = self.at(v, pos.y);
+        let at = ((pos.y - self.rect.top()) / self.rect.height() * drag.span()).max(0.0);
         match drag {
-            VDrag::Pan { grab } => v.start = (at - grab).clamp(0.0, (v.total - v.visible).max(0.0)),
-            VDrag::Edge { top, fixed } => {
+            VDrag::Pan { grab, .. } => v.start = (at - grab).clamp(0.0, (v.total - v.visible).max(0.0)),
+            VDrag::Edge { top, fixed, .. } => {
                 let (a, b) = if top { (at.min(fixed - min_rows), fixed) } else { (fixed, at.max(fixed + min_rows)) };
                 v.visible = (b - a).clamp(min_rows, max_rows);
                 v.start = if top { (fixed - v.visible).max(0.0) } else { a.max(0.0) };

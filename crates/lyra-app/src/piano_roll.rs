@@ -396,7 +396,14 @@ impl PianoRoll {
         let grid = Rect::from_min_max(pos2(overview_r.left(), ruler.bottom()), pos2(right, rect.bottom() - VEL_H));
         let keys_r = Rect::from_min_max(pos2(rect.left(), grid.top()), pos2(grid.left(), grid.bottom()));
         let vel = Rect::from_min_max(pos2(grid.left(), grid.bottom() + 3.0), pos2(right, rect.bottom()));
-        let vbar = VBar { rect: Rect::from_min_max(pos2(right + 2.0, grid.top()), pos2(rect.right(), grid.bottom())) };
+        let vbar_lock = match self.drag {
+            Drag::VBar(d) => Some(d.span()),
+            _ => None,
+        };
+        let vbar = VBar {
+            rect: Rect::from_min_max(pos2(right + 2.0, grid.top()), pos2(rect.right(), grid.bottom())),
+            lock: vbar_lock,
+        };
 
         let input = timeline::Input::read(ui, rect);
         let Input {
@@ -411,7 +418,11 @@ impl PianoRoll {
         } = input;
         let double_r = ui.input(|i| i.pointer.button_double_clicked(egui::PointerButton::Secondary));
         let pattern_ticks = (p.patterns[pat].play_length() * TICKS_PER_STEP) as f32;
-        let overview = Overview { rect: overview_r, area: grid, content: pattern_ticks };
+        let overview_lock = match self.drag {
+            Drag::Overview(d) => Some(d.span()),
+            _ => None,
+        };
+        let overview = Overview { rect: overview_r, area: grid, lock: overview_lock, content: pattern_ticks };
         let over_bars = pos.is_some_and(|p| overview_r.contains(p) || vbar.rect.contains(p));
 
         // ── Wheel ──
