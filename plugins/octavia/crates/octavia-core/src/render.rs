@@ -100,6 +100,7 @@ impl Sound {
             brightness: f.brightness,
             noise: f.noise * 0.6,
             string: f.string2,
+            grit: f.grit,
             ..Frame::default()
         }
     }

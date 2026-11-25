@@ -32,6 +32,10 @@
 //!   for a less skilled or busier arm. Short strokes dip less. A bow can't
 //!   bounce faster than about 12 notes a second: beyond that, tiny strokes
 //!   on the string.
+//! * **Grit**: until the bow catches the string it slips irregularly, so
+//!   every stroke starts with a little scratch: more for hard starts,
+//!   strokes with little time to prepare, a weaker or busier arm. Now and
+//!   then a start fails (a crunch and a stall before it catches).
 //! * **Bow changes** dip the loudness and puff some bow noise; **slurred**
 //!   notes keep the bow moving: a finger lands in ~8 ms, a string crossing
 //!   is instant, and only big expressive shifts slide.
@@ -258,6 +262,11 @@ struct Plan {
     /// Short strokes are tiny, so they dip less.
     stroke_floor: f32,
     stroke_time: f32,
+    /// How scratchy the start is, and for how long; how deep a failed start
+    /// stalls the loudness (0 = it caught cleanly).
+    grit: f32,
+    grit_time: f32,
+    stall: f32,
 }
 
 /// A streaming performer. Feed it notes (in start order, ideally at least
@@ -713,6 +722,37 @@ impl Performer {
         } else {
             (level, 0.0)
         };
+        // Grit: until the bow catches the string it slips irregularly. Hard
+        // starts (accents, staccato) scrape more; so does a stroke with
+        // little time to prepare, a less skilled arm, or a busy one. Now and
+        // then a start fails: a crunch and a stall before it catches. A
+        // slurred crossing catches the new string with a little scrape.
+        let prep = if from_silence { 1.0 } else { smoothstep((n.start - self.last_stroke) as f32 / 0.4) };
+        let (grit, grit_time, stall) = if new_stroke {
+            let kind = if spiccato {
+                0.15
+            } else if accent >= 1.0 {
+                0.35
+            } else if staccato {
+                0.25
+            } else if entry == Entry::BowChange {
+                0.12
+            } else {
+                0.18
+            };
+            let mut g = kind * (1.3 - 0.6 * prep) + 0.5 * berr * h01(0x6217);
+            let failed = h01(0xFA11) < 0.01 + 0.25 * berr * (1.0 - 0.5 * prep);
+            if failed {
+                g = g.max(0.6);
+            }
+            let g = (e.min(1.0) * g).min(1.0);
+            let failed = failed && e > 0.0;
+            (g, 0.025 + 0.05 * g + if failed { 0.05 } else { 0.0 }, if failed { 0.45 } else { 0.0 })
+        } else if crossing && !pizz {
+            (0.08 * e.min(1.0), 0.02, 0.0)
+        } else {
+            (0.0, 0.02, 0.0)
+        };
         let step_next = next.map_or(1.0, |q| (q.start - n.start) as f32);
         let stroke_floor = BOW_CHANGE_FLOOR + 0.4 * (1.0 - smoothstep((step_next - 0.06) / 0.14));
         let stroke_time = BOW_CHANGE_TIME.min(0.3 * step_next);
@@ -838,6 +878,9 @@ impl Performer {
             late,
             stroke_floor,
             stroke_time,
+            grit,
+            grit_time,
+            stall,
         };
 
         // Events.
@@ -960,7 +1003,10 @@ impl Performer {
         // Once the finger lifts, the stopped note is choked (the open string
         // carries on as a separate ring).
         let lifted = self.lift_at(i, t).map_or(1.0, |lift| if t > lift { (-((t - lift) as f32) / 0.008).exp() } else { 1.0 });
+        // A failed start stalls for a moment before it catches.
+        let stall = 1.0 - p.stall * (-((since_a - 0.03) / 0.02).powi(2)).exp();
         let loudness = lifted
+            * stall
             * if p.pizz {
                 0.0
             } else if p.spiccato {
@@ -998,7 +1044,9 @@ impl Performer {
         let release_dark = if matches!(exit, Exit::Decay(_)) && t > sound_end { 0.35 * (1.0 - fall) } else { 0.0 };
         // A lifted bow leaves the string ringing free: darker by the moment.
         let lifted = if p.spiccato { 0.25 * (-since / 0.015).exp() - 0.22 * (1.0 - (-since / 0.08).exp()) } else { 0.0 };
-        let brightness = (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite + lifted - release_dark).clamp(0.0, 1.0);
+        let grit = if since < p.late { 0.0 } else { p.grit * (-since_a / p.grit_time).exp() };
+        let brightness =
+            (0.5 + 0.45 * (loudness - 0.5) + tone + attack_bite + lifted - release_dark + 0.1 * grit).clamp(0.0, 1.0);
 
         // No scrape before the (slightly late) bow actually lands.
         let bitten = if since < p.late { 0.0 } else { 1.0 };
@@ -1017,7 +1065,7 @@ impl Performer {
         };
 
         let string2 = p.double.map_or(0, |(_, s)| s);
-        Frame { pitch, loudness, brightness, noise, string: p.string, pitch2, string2 }
+        Frame { pitch, loudness, brightness, noise, string: p.string, pitch2, string2, grit }
     }
 }
 
@@ -1389,6 +1437,37 @@ mod tests {
         };
         assert!(run(0.1) >= 6, "10 a second bounces");
         assert_eq!(run(0.06), 0, "16 a second can't: tiny strokes on the string");
+    }
+
+    #[test]
+    fn strokes_start_with_grit_that_fades_and_students_scrape_more() {
+        let mut text = String::new();
+        for k in 0..40 {
+            text += &format!("{} 0.2 {} 0.6\n", k as f64 * 0.25, ["C3", "D3", "E3", "G3"][k % 4]);
+        }
+        let grit_at = |style: &Style, after: f64| {
+            let (c, _) = decide(&text, style);
+            (0..40).map(|k| c.frames[((k as f64 * 0.25 + after) * FRAME_RATE) as usize].grit).sum::<f32>() / 40.0
+        };
+        let pro = Style::default();
+        assert!(grit_at(&pro, 0.02) > 0.05, "a little scratch at the start");
+        assert!(grit_at(&pro, 0.15) < 0.01, "gone once the bow has caught");
+        let student = Style { skill: Skill::profile("student").unwrap(), ..Style::default() };
+        let virtuoso = Style { skill: Skill::profile("virtuoso").unwrap(), ..Style::default() };
+        assert!(grit_at(&student, 0.02) > grit_at(&virtuoso, 0.02) * 1.5);
+        let fails = |style: &Style| {
+            let mut p = Performer::new(&cello(), style);
+            for n in roll(&text).notes {
+                p.add_note(n);
+            }
+            let mut ev = Vec::new();
+            for _ in 0..(p.end() * FRAME_RATE) as usize {
+                p.next_frame(&mut ev);
+            }
+            p.plans.iter().filter(|x| x.stall > 0.0).count()
+        };
+        assert!(fails(&student) > fails(&virtuoso), "{} vs {}", fails(&student), fails(&virtuoso));
+        assert_eq!(grit_at(&Style { expression: 0.0, ..Style::default() }, 0.02), 0.0, "deadpan is clean");
     }
 
     #[test]

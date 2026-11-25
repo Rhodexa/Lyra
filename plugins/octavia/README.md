@@ -64,6 +64,12 @@ next note down as a **double stop** when it's held and playable
 is shifted by octaves into the instrument's range. The extracted line is
 written as `NAME.roll`, so you can see and edit what Octavia plays.
 
+## Rendering all the MIDIs
+
+`scripts/render-midis.sh` renders every file in `midi/` (only `.mid` lives
+there) into `renders/midi/`, with each piece's known settings. Extra options
+apply to all of them: `scripts/render-midis.sh --player student`.
+
 ## Reference pieces
 
 `scripts/refs.sh` re-renders the pieces that already sound right (with their

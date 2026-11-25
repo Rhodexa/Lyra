@@ -15,6 +15,8 @@
 //!   The bow hair is a wide ribbon and its position drifts, so the dips are
 //!   averaged over a spread of `β` and wander;
 //! * a soft high cut from string damping;
+//! * grit at stroke starts: until the bow catches, the period wanders wildly
+//!   and the tone crunches (with extra bow noise);
 //! * random shimmer per overtone, more in the highs, and period jitter, so
 //!   no two cycles are identical.
 //!
@@ -48,6 +50,9 @@ pub struct BowVoice {
     rng: Rng,
     jitter: Wander,
     wobble: Wander,
+    /// Grit: the bow slipping irregularly before it catches.
+    slip: Wander,
+    crunch: Wander,
     grain: Wander,
     scratch: Wander,
     bow_drift: Wander,
@@ -75,6 +80,8 @@ impl BowVoice {
             rng: Rng::new(seed ^ 0xB0B0),
             jitter: Wander::new(seed ^ 0x717, 70.0),
             wobble: Wander::new(seed ^ 0x3C3, 9.0),
+            slip: Wander::new(seed ^ 0x511B, 420.0),
+            crunch: Wander::new(seed ^ 0xC2C4, 170.0),
             grain: Wander::new(seed ^ 0x6A1, 180.0),
             scratch: Wander::new(seed ^ 0x5C7, 14.0),
             bow_drift: Wander::new(seed ^ 0xD71F7, 1.3),
@@ -155,7 +162,8 @@ impl BowVoice {
         let fc = lerp(1000.0 + 2500.0 * nb, 2000.0 + 6000.0 * nb, self.bright);
         self.noise_lp.set_lowpass(self.sr, fc, 0.7);
         // Level matched to clean cello recordings: ~−22 dB floor between overtones.
-        let noise_target = lerp(0.3, 0.15, self.bright) * b.loudness.max(0.0).powf(1.2) * b.noise;
+        let noise_target =
+            lerp(0.3, 0.15, self.bright) * b.loudness.max(0.0).powf(1.2) * (b.noise + 0.8 * b.grit.clamp(0.0, 1.0));
         let noise_step = (noise_target - self.noise_amp) * inv;
 
         let sr = self.sr as f64;
@@ -163,8 +171,12 @@ impl BowVoice {
         for i in 0..len {
             let u = i as f32 * inv;
             let pitch = a.pitch + (b.pitch - a.pitch) * u;
-            // Stick-slip is never perfectly periodic: fast jitter plus a slower wobble.
-            let jitter = 1.0 + 0.0025 * self.jitter.next(dt) + 0.0015 * self.wobble.next(dt);
+            let grit = a.grit + (b.grit - a.grit) * u;
+            // Stick-slip is never perfectly periodic: fast jitter plus a slower
+            // wobble. Before the bow has caught the string (grit), the slips
+            // come irregularly: the period wanders wildly and the tone crunches.
+            let jitter = 1.0 + 0.0025 * self.jitter.next(dt) + 0.0015 * self.wobble.next(dt) + 0.04 * grit * self.slip.next(dt);
+            let crunch = 1.0 + 0.7 * grit * self.crunch.next(dt);
             let f = midi_to_hz(pitch) as f64 * jitter as f64;
             self.phase += TAU * f / sr;
             if self.phase >= TAU {
@@ -182,7 +194,7 @@ impl BowVoice {
                 self.re[k] += self.d_re[k];
                 self.im[k] += self.d_im[k];
             }
-            tone[i] = acc as f32;
+            tone[i] = acc as f32 * crunch;
 
             let w = self.rng.bipolar();
             let shaped = self.noise_lp.process(self.noise_hp.highpass(w));
