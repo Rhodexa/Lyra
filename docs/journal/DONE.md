@@ -3,6 +3,9 @@
 Everything finished from JOURNAL.md, with the commit that did it, newest
 first. Moved out of the journal (2026-11-25) so it stays short.
 
+**Plugin kit (2026-11-25)**
+- [x] *(Octavia's handoff, docs/KIT-REQUIREMENTS.md part B)* A minimal plugin kit; synth-specific code out of `plugin_look.rs`; editors able to live in their own crates. *→ `lyra-kit` (Host, Editor, behaviour only); Fluttersine and Chrysalis editors in `crates/plugins/*/editor` with their logos; their shared frozen look in `crates/plugins/shared-look`, its style now code (d5cc71b).*
+
 **UI port (2026-11-25)**
 - [x] Stretching viewport bar beyond used space enters a stretching loop that grows way too fast. *→ the bar's scale is frozen while you drag; it settles on release. The vertical bar had the same loop (5665a2e).*
 - [x] Menus as LCD drawers, and the key root/scale pickers. *→ FILE, VIEW and + Instrument open the dropdowns' drawer; root and scale are header dropdowns (6e18428).*
