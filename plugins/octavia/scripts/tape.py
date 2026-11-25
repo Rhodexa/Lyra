@@ -68,10 +68,14 @@ def tape(score, extra):
                 "shift": int(m["shift"]) if m["shift"] else 0,
             })
         rows = (Path(tmp) / f"{name}.curves.csv").read_text().splitlines()
-        # events: the bow leaving a string that rings on, plucks (also in the notes)
+        # events: the bow leaving a string that rings on (a finger lifting leaves the open
+        # string ringing), plucks (also in the notes)
         rings = [{"t": float(c[1]), "pitch": float(c[2]), "level": float(c[3]),
                   "string": int(c[4]), "open": c[5] == "1", "bright": float(c[6])}
                  for c in (r.split(",") for r in rows) if c[0] == "ring"]
+        # finger taps: a finger landing or lifting knocks the fingerboard
+        taps = [{"t": float(c[1]), "strength": float(c[2])}
+                for c in (r.split(",") for r in rows) if c[0] == "tap"]
         rows = [r for r in rows if r[0].isdigit() or r.startswith(("pitch", "-"))]
         cols = rows[0].split(",")
         frames = {c: [] for c in cols}
@@ -80,7 +84,7 @@ def tape(score, extra):
                 frames[c].append(round(float(v), 3))
         instrument = "violin" if "violin" in extra else "cello"
         data = {"name": name, "fps": 250 / STEP, "instrument": instrument,
-                "options": " ".join(extra), "notes": notes, "rings": rings, "frames": frames}
+                "options": " ".join(extra), "notes": notes, "rings": rings, "taps": taps, "frames": frames}
         (OUT / f"{name}.js").write_text(
             f"// made by scripts/tape.py from {score.as_posix()} {' '.join(extra)}\n"
             f"(window.TAPES = window.TAPES || {{}})[{json.dumps(name)}] = "

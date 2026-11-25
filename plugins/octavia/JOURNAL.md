@@ -102,6 +102,7 @@ Claude reads this before choosing what to work on.
 - [ ] Inferred accents only fire when a note is 0.12 louder than its neighbourhood average, so a run of accents in a row dilutes itself (only the first one in `articulations.roll` gets accented).
 - [ ] No "open notes" yet (length unknown until note-off), so live keyboard playing isn't supported.
 - [ ] About 20× real time per cello, untuned. Fine for now.
+- [ ] *(found by the faceplate, 2026-11-25)* A string crossing that comes with a shift still rings the old string at its **stopped** pitch, though the hand has moved away. `showcase` at 0.70 s: D3 on the G string (finger at 7), then the hand shifts to 2 (covers 2–6) for E3, and the G string rings on at D3. The finger should lift (ring open, or damped). Changes the sound, so it needs a listening A/B.
 
 ---
 

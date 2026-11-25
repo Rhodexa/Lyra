@@ -204,8 +204,8 @@ th{color:var(--page-dim);font-weight:600}
 <tr><td>top</td><td>the message (the player, or the control you're touching and its value; PERF OFF) · take, the one segment display left</td><td>parameters</td></tr>
 <tr><td>printed words</td><td>lit when true: instrument, patch, double stops, grit (the bow scratching), page, playing</td><td>parameters, frames</td></tr>
 <tr><td>the note</td><td>the note being played and how</td><td>latest decision</td></tr>
-<tr><td>the neck</td><td>along the bottom, seen from the side: nut on the left, highest string on top. The bowed string dark, strings left ringing grey, each finger where it really stops the string (two octaves of room), the hand's reach as a bracket sliding above, the bow across by the bridge</td><td>decision, hand, ring events</td></tr>
-<tr><td>next</td><td>what the performer has already planned (the look-ahead), each with its bow mark: ⊓ down, V up. Below, the bow's way now: ⊓◀ or ▶V</td><td>upcoming notes, decision</td></tr>
+<tr><td>the neck</td><td>along the bottom, seen from the side: nut on the left, highest string on top. The bowed string dark, strings left ringing grey. Each finger where it really stops the string (two octaves of room): solid while its string is played, hollow while it's only held (a note ringing into a rest until the engine lifts the finger, a string crossed away from still ringing). The hand's reach as a bracket sliding above, the bow across by the bridge</td><td>decision, hand, ring events</td></tr>
+<tr><td>next</td><td>what the performer has already planned (the look-ahead), each with its bow mark (⊓ down, V up) and string. Beside it, the bow's way now: ⊓↓ or V↑</td><td>upcoming notes, decision</td></tr>
 <tr><td>meters</td><td>BIOS-style boxes: loudness (GRIT lights when the bow scratches), brightness, pitch (a tuner: the dark block is where the note sits, the light span is the vibrato, ±50 cents), workload, calm</td><td>frames, decisions</td></tr>
 <tr><td>LOG page</td><td>the decisions as text, like <code>--explain</code></td><td>decision ring buffer</td></tr>
 </table>
@@ -529,6 +529,7 @@ function nowPanel(cur) {
 // (semitones above the open string), the hand's reach as a bracket above,
 // the bow across the strings by the bridge
 const OPEN = {cello: [36, 43, 50, 57], violin: [55, 62, 69, 76]};
+const SPAN = {cello: 4, violin: 6};   // instrument.rs hand_span: how far the fingers reach
 const SEMIS = 26;
 function neckPanel(t, cur, playing) {
   const inst = tape.instrument in OPEN ? tape.instrument : 'cello';
@@ -553,20 +554,31 @@ function neckPanel(t, cur, playing) {
     rect(st, nut, sy(s) - wdt / 2, bridge + 14 - nut, wdt);
     text(st === 1 ? 2 : 3, labels[s], L.pad, sy(s) + 5, 13);
   }
-  // the hand's reach (about four semitones from where it sits), sliding on shifts
+  // the hand's reach (hand_span semitones from where it sits), sliding on shifts
   const target = cur ? cur.hand : 0, dt = Math.min(.1, Math.abs(t - lastT));
   hand += (target - hand) * (dt > 0 && playing ? 1 - Math.exp(-dt * 14) : 1);
-  const hx0 = sx(hand), hx1 = sx(hand + 4), hy = sy(3) - 12;
+  const hx0 = sx(hand), hx1 = sx(hand + SPAN[inst]), hy = sy(3) - 12;
   rect(2, hx0, hy, hx1 - hx0, 2); rect(2, hx0, hy, 2, 5); rect(2, hx1 - 2, hy, 2, 5);
-  // the fingers: where each sounding note is stopped (none on an open string)
-  if (cur && t < cur.t + cur.len + .3) {
-    const fingers = [[cur.string, cur.note], [string2Of(cur), cur.note2]];
-    for (const [s, n] of fingers) {
-      if (s < 0 || !n) continue;
-      const semi = midi(n) - open[s];
-      if (semi <= 0) { rect(3, nut + 2, sy(s) - 5, 3, 10); continue; }   // open: a tick at the nut
-      rect(3, sx(semi) - 6, sy(s) - 5, 12, 10);
-    }
+  // the fingers, as the engine has them: solid on a string being played, hollow
+  // on one only held: a note ringing into a rest until the engine lifts the
+  // finger, or a string crossed away from that still rings at its stopped pitch
+  const fingers = [];
+  if (cur) {
+    const playingNow = t < cur.t + cur.len;
+    if (playingNow || t < cur.lift)
+      for (const [s, n] of [[cur.string, cur.note], [string2Of(cur), cur.note2]])
+        if (s >= 0 && n) fingers.push([s, midi(n) - open[s], playingNow]);
+  }
+  for (const r of tape.rings) {
+    if (r.t > t) break;
+    if (r.open || r.t < t - 2 || t >= r.stop || t >= r.t + .12 + .5 * r.bright) continue;
+    if (!fingers.some(f => f[0] === r.string)) fingers.push([r.string, Math.round(r.pitch - open[r.string]), false]);
+  }
+  for (const [s, semi, solid] of fingers) {
+    if (semi <= 0) { rect(3, nut + 2, sy(s) - 5, 3, 10); continue; }   // open: a tick at the nut
+    const fx = sx(semi) - 6, fy = sy(s) - 5;
+    if (solid) rect(3, fx, fy, 12, 10);
+    else { rect(3, fx, fy, 12, 2); rect(3, fx, fy + 8, 12, 2); rect(3, fx, fy, 2, 10); rect(3, fx + 10, fy, 2, 10); }
   }
   // the bow across the strings, or a pluck
   if (bowed.size) rect(3, bridge + 6, sy(3) - 9, 5, sy(0) - sy(3) + 18);
@@ -586,13 +598,13 @@ function nextPanel(t, cur) {
     text(s, labels[n.string], x + 150, yy, 12);
   });
   if (!up.length) text(1, 'END', x, y + 19, 14);
-  // the bow's way now, big: ⊓◀ for a down-bow (the frog pulls away), ▶V for an up-bow
-  const ax = 196, by = y + 44, bowing = cur && cur.how !== 'Plucked' && frameAt(t, 'loudness') > .02;
+  // the bow's way now, big, along the bow as the neck draws it: ⊓↓ down-bow, V↑ up-bow
+  const ax = 204, by = y + 44, bowing = cur && cur.how !== 'Plucked' && frameAt(t, 'loudness') > .02;
   const dn = bowing && cur.dir === 'down' ? 3 : 0, upb = bowing && cur.dir === 'up' ? 3 : 0;
   bowMark(dn, 'down', ax, by - 7, 14);
-  poly(dn, [[ax + 18, by], [ax + 30, by - 8], [ax + 30, by - 3], [ax + 46, by - 3], [ax + 46, by + 3], [ax + 30, by + 3], [ax + 30, by + 8]]);
-  poly(upb, [[ax + 92, by], [ax + 80, by - 8], [ax + 80, by - 3], [ax + 64, by - 3], [ax + 64, by + 3], [ax + 80, by + 3], [ax + 80, by + 8]]);
-  bowMark(upb, 'up', ax + 96, by - 7, 14);
+  poly(dn, [[ax + 22, by - 16], [ax + 28, by - 16], [ax + 28, by + 4], [ax + 34, by + 4], [ax + 25, by + 16], [ax + 16, by + 4], [ax + 22, by + 4]]);
+  poly(upb, [[ax + 62, by + 16], [ax + 68, by + 16], [ax + 68, by - 4], [ax + 74, by - 4], [ax + 65, by - 16], [ax + 56, by - 4], [ax + 62, by - 4]]);
+  bowMark(upb, 'up', ax + 80, by - 7, 14);
 }
 
 // the right side: BIOS-style meters, an outlined box with blocks taller than wide
@@ -700,6 +712,15 @@ function loadTape(name, at = 0) {
   if (!tape.prepared) { // when each ringing string is stopped by the next note on it
     tape.rings.sort((a, b) => a.t - b.t);
     for (const r of tape.rings) { const nx = tape.notes.find(n => n.t > r.t + .01 && (n.string === r.string || string2Of(n) === r.string)); r.stop = nx ? nx.t : 1e9; }
+    // when the finger leaves a note that rings into a rest: the engine's lift
+    // (the open string takes over, or just a tap), or the next note
+    tape.notes.forEach((n, i) => {
+      const end = n.t + n.len, next = tape.notes[i + 1] ? tape.notes[i + 1].t : 1e9;
+      const ring = tape.rings.find(r => r.open && r.string === n.string && r.t > end - .01 && r.t < next);
+      const tap = (tape.taps || []).find(p => p.t > end && p.t < next - .1);
+      n.lift = Math.min(next, ring ? ring.t : 1e9, tap ? tap.t : 1e9);
+      if (n.open || n.how === 'Plucked') n.lift = Math.min(n.lift, end);
+    });
     tape.prepared = true;
   }
   $('#scrub').max = tape.frames.pitch.length / tape.fps;
