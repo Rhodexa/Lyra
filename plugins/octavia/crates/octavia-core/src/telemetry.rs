@@ -71,6 +71,16 @@ pub enum StringSound {
     Ringing(f32),
 }
 
+/// The left hand's plan for a coming note.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Intent {
+    /// String (0 = lowest).
+    pub string: u8,
+    /// Hand position (lowest semitone it covers) and how far it moves there.
+    pub hand: f32,
+    pub shift: f32,
+}
+
 /// One note as the performer sees it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NoteInfo {
@@ -79,8 +89,13 @@ pub struct NoteInfo {
     pub pitch: f32,
     /// A double stop's lower note.
     pub pitch2: Option<f32>,
-    /// How it is played; `None` while not decided yet.
+    /// How it is played; `None` while not decided yet (the performer
+    /// commits just before a note starts).
     pub decision: Option<Decision>,
+    /// Before that: where the left hand means to play it, from the plan
+    /// over everything in sight. It can change as more music comes into
+    /// view; the decision is what was actually done.
+    pub intent: Option<Intent>,
     /// Played on an open string.
     pub open: bool,
 }
@@ -129,6 +144,28 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn coming_notes_show_the_hands_plan_and_it_is_kept() {
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../scores/showcase.txt")).unwrap();
+        let s = Score::parse(&text).unwrap();
+        let explain = render_score(&s, &cello(), &Style::default(), 48_000.0, 0.0).decisions;
+        let snaps = snapshots(&s);
+        let (mut shown, mut kept) = (0, 0);
+        for (i, n) in s.notes.iter().enumerate().filter(|(_, n)| n.double.is_none()) {
+            // Half a second before it starts, NEXT knows where it'll be played…
+            let Some(b) = snaps.iter().rev().find(|x| x.time < n.start - 0.5) else { continue };
+            let Some(u) = b.upcoming.iter().flatten().find(|u| u.start == n.start) else { continue };
+            let intent = u.intent.expect("a coming note has the hand's plan");
+            shown += 1;
+            // …and usually that's what happens (more music can change it).
+            if intent.string == explain[i].string {
+                kept += 1;
+            }
+        }
+        assert!(shown >= 10, "{shown}");
+        assert!(kept * 10 >= shown * 8, "the plan mostly holds: {kept} of {shown}");
     }
 
     #[test]

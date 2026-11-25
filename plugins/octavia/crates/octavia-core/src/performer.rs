@@ -77,7 +77,7 @@ use crate::dsp::smoothstep;
 use crate::instrument::Instrument;
 use crate::rand::{hash_bipolar, Wander};
 use crate::score::{Articulation, Note, Score};
-use crate::telemetry::{NoteInfo, Snapshot, StringSound, StringState, Tuner, RECENT, UPCOMING};
+use crate::telemetry::{Intent, NoteInfo, Snapshot, StringSound, StringState, Tuner, RECENT, UPCOMING};
 use std::f64::consts::TAU;
 
 /// How far ahead the performer looks, in seconds.
@@ -218,6 +218,11 @@ struct Tag {
 impl Tag {
     const HEARD: Tag = Tag { id: NO_ID, id2: NO_ID, key2: -1.0, heard: true };
 }
+
+/// How many notes the left hand plans ahead, and how many hand states
+/// it weighs per note.
+const PLAN_NOTES: usize = 12;
+const PLAN_STATES: usize = 48;
 
 /// Notes closer than this count as connected.
 const TOUCH: f64 = 0.03;
@@ -604,6 +609,87 @@ impl Performer {
         }
     }
 
+    // ── the left hand plans ahead ───────────────────────────────────────
+
+    /// The cheapest way to finger the visible passage from note `i` on (up
+    /// to [`PLAN_NOTES`] notes, stopping before a double stop), from where
+    /// the hand is now: each note's [`reach_cost`], a hurried shift dearer.
+    /// Fills `path` and returns note `i`'s fingering (the greedy choice if
+    /// nothing can be planned). Pure and allocation-free: the performer
+    /// calls it to commit a note, a faceplate to show the intention.
+    fn finger_plan(&self, i: usize, t: f64, path: &mut [Fingering; PLAN_NOTES]) -> Fingering {
+        let inst = &self.inst;
+        let n = self.notes[i].clone();
+        let greedy = || choose_fingering(n.pitch, self.prev_string, self.hand, n.dur > 0.5 && !self.is_pizz(&n), inst);
+        let len = self.plan_len(i, t);
+        if len == 0 {
+            path[0] = greedy();
+            return path[0];
+        }
+        #[derive(Clone, Copy, Default)]
+        struct Node {
+            cost: f32,
+            f: Fingering,
+            back: u8,
+        }
+        let mut layers = [[Node::default(); PLAN_STATES]; PLAN_NOTES];
+        let mut counts = [0usize; PLAN_NOTES];
+        let start = Node { cost: 0.0, f: Fingering { string: self.prev_string.unwrap_or(u8::MAX), hand: self.hand, shift: 0.0 }, back: 0 };
+        let mut len = len;
+        for k in 0..len {
+            let note = &self.notes[i + k];
+            let avoid_open = note.dur > 0.5 && !self.is_pizz(note);
+            let ioi = (i + k).checked_sub(1).map_or(1.0, |j| note.start - self.notes[j].start) as f32;
+            let hurry = 1.0 - smoothstep(ioi / 0.5);
+            let sources = if k == 0 { 1 } else { counts[k - 1] };
+            for src in 0..sources {
+                let from = if k == 0 { start } else { layers[k - 1][src] };
+                let prev = (from.f.string != u8::MAX).then_some(from.f.string);
+                for s in 0..inst.open_strings.len() {
+                    let Some((c, f)) = reach_cost(note.pitch, prev, from.f.hand, avoid_open, hurry, s, inst) else { continue };
+                    let node = Node { cost: from.cost + c, f, back: src as u8 };
+                    // Same string and hand = same state: keep the cheaper.
+                    let layer = &mut layers[k][..counts[k]];
+                    if let Some(same) = layer.iter_mut().find(|m| m.f.string == f.string && (m.f.hand - f.hand).abs() < 0.01) {
+                        if node.cost < same.cost {
+                            *same = node;
+                        }
+                    } else if counts[k] < PLAN_STATES {
+                        layers[k][counts[k]] = node;
+                        counts[k] += 1;
+                    } else if let Some(worst) = layers[k].iter_mut().max_by(|a, b| a.cost.total_cmp(&b.cost)) {
+                        if node.cost < worst.cost {
+                            *worst = node;
+                        }
+                    }
+                }
+            }
+            if counts[k] == 0 {
+                len = k; // unplayable: plan up to here
+                break;
+            }
+        }
+        if len == 0 {
+            path[0] = greedy();
+            return path[0];
+        }
+        // Walk back from the cheapest end.
+        let mut at = (0..counts[len - 1]).min_by(|&a, &b| layers[len - 1][a].cost.total_cmp(&layers[len - 1][b].cost)).unwrap_or(0);
+        for k in (0..len).rev() {
+            path[k] = layers[k][at].f;
+            at = layers[k][at].back as usize;
+        }
+        path[0]
+    }
+
+    /// How many notes from `i` the hand can plan: visible ones, up to
+    /// [`PLAN_NOTES`], stopping before a double stop (chosen on its own).
+    fn plan_len(&self, i: usize, t: f64) -> usize {
+        let visible = self.visible(t).max(i + 1);
+        (i..visible.min(i + PLAN_NOTES)).take_while(|&j| j == i || self.notes[j].double.is_none()).count()
+            * usize::from(self.notes[i].double.is_none())
+    }
+
     // ── what a faceplate sees ───────────────────────────────────────────
 
     /// Fills everything but the time and frame of a [`Snapshot`], at time
@@ -683,16 +769,32 @@ impl Performer {
         out.workload = self.workload;
         out.composure = self.composure;
         out.tuner = if sounding && self.owner.is_some_and(|i| !self.plans[i].pizz) { self.tuner(t) } else { None };
+        // What the hand means to do next: the plan from the first undecided
+        // note, as the performer would make it now.
+        let mut path = [Fingering::default(); PLAN_NOTES];
+        let first = self.plans.len();
+        let planned = if first < self.notes.len() {
+            self.finger_plan(first, t, &mut path);
+            self.plan_len(first, t).max(1)
+        } else {
+            0
+        };
         let info = |i: usize| {
             let n = &self.notes[i];
             let decision = (i < self.plans.len()).then(|| self.decision(i));
+            let intent = (i >= first && i - first < planned).then(|| {
+                let f = path[i - first];
+                Intent { string: f.string, hand: f.hand, shift: f.shift }
+            });
             NoteInfo {
                 start: n.start,
                 len: n.dur.min(OPEN / 2.0),
                 pitch: n.pitch,
                 pitch2: n.double,
                 decision,
-                open: decision.is_some_and(|d| (n.pitch - open[d.string as usize]).abs() < 0.01),
+                intent,
+                open: decision.map(|d| d.string).or(intent.map(|f| f.string))
+                    .is_some_and(|s| (n.pitch - open[s as usize]).abs() < 0.01),
             }
         };
         let now = self.owner.map_or(0, |o| o + 1);
@@ -1039,7 +1141,8 @@ impl Performer {
             .and_then(|d| choose_double(n.pitch, d, self.prev_string, self.hand, inst).map(|f| (f, d)));
         let (fingering, double) = match pair {
             Some(((f, lower), d)) => (f, Some((d + 0.02 * e * hash_bipolar(self.style.seed ^ 0xD0B1, i), lower))),
-            None => (choose_fingering(n.pitch, self.prev_string, self.hand, n.dur > 0.5 && !pizz, inst), None),
+            // The hand plans the whole visible passage, and takes its first step.
+            None => (self.finger_plan(i, t, &mut [Fingering::default(); PLAN_NOTES]), None),
         };
         let string = fingering.string;
         let crossing = self.prev_string.is_some_and(|s| s != string);
@@ -1566,7 +1669,7 @@ pub fn perform(score: &Score, inst: &Instrument, style: &Style) -> Curves {
 }
 
 /// A fingering choice: which string, where the hand ends up, how far it moved.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct Fingering {
     string: u8,
     hand: f32,
@@ -1584,30 +1687,48 @@ struct Fingering {
 fn choose_fingering(pitch: f32, prev: Option<u8>, hand: f32, avoid_open: bool, inst: &Instrument) -> Fingering {
     let mut best = Fingering { string: 0, hand, shift: 0.0 };
     let mut best_cost = f32::MAX;
-    for (s, &open) in inst.open_strings.iter().enumerate() {
-        let off = pitch - open;
-        if off < -0.01 {
-            continue;
-        }
-        let (mut cost, new_hand, shift) = if off.abs() < 0.01 {
-            (if avoid_open { 2.5 } else { 0.0 }, hand, 0.0)
-        } else if off >= hand - 0.01 && off <= hand + inst.hand_span + 0.01 {
-            (0.0, hand, 0.0)
-        } else {
-            let to = if off < hand { off } else { off - inst.hand_span }.max(1.0);
-            let shift = (to - hand).abs();
-            (1.0 + 0.25 * shift, to, shift)
-        };
-        if s < 3 {
-            cost += 0.15 * (off - 7.0).max(0.0);
-        }
-        cost += prev.map_or(0.0, |p| 0.35 * (s as f32 - p as f32).abs());
-        if cost < best_cost {
-            best_cost = cost;
-            best = Fingering { string: s as u8, hand: new_hand, shift };
+    for s in 0..inst.open_strings.len() {
+        if let Some((cost, f)) = reach_cost(pitch, prev, hand, avoid_open, 0.0, s, inst) {
+            if cost < best_cost {
+                best_cost = cost;
+                best = f;
+            }
         }
     }
     best
+}
+
+/// What playing `pitch` on string `s` costs from where the hand is (see
+/// [`choose_fingering`]), and the fingering; `None` if the string is too
+/// high. `hurry` (0..1): how little time there is to get there; a hurried
+/// shift costs up to twice as much, so shifts move to where there's time.
+fn reach_cost(
+    pitch: f32,
+    prev: Option<u8>,
+    hand: f32,
+    avoid_open: bool,
+    hurry: f32,
+    s: usize,
+    inst: &Instrument,
+) -> Option<(f32, Fingering)> {
+    let off = pitch - inst.open_strings[s];
+    if off < -0.01 {
+        return None;
+    }
+    let (mut cost, new_hand, shift) = if off.abs() < 0.01 {
+        (if avoid_open { 2.5 } else { 0.0 }, hand, 0.0)
+    } else if off >= hand - 0.01 && off <= hand + inst.hand_span + 0.01 {
+        (0.0, hand, 0.0)
+    } else {
+        let to = if off < hand { off } else { off - inst.hand_span }.max(1.0);
+        let shift = (to - hand).abs();
+        ((1.0 + 0.25 * shift) * (1.0 + hurry), to, shift)
+    };
+    if s < 3 {
+        cost += 0.15 * (off - 7.0).max(0.0);
+    }
+    cost += prev.map_or(0.0, |p| 0.35 * (s as f32 - p as f32).abs());
+    Some((cost, Fingering { string: s as u8, hand: new_hand, shift }))
 }
 
 /// A fingering for two notes on neighbouring strings (lower on `s`, upper

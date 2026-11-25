@@ -87,6 +87,7 @@ Claude reads this before choosing what to work on.
 ## Wishes
 
 - [ ] ! *(Rhodexa, 2026-11-25)* The performer should plan ahead: look at what's coming and say "I think I know what I'm going to do next", then show it on the screen and play it out (changing its mind when the music changes). Planned decisions are the core of the engine; without them it's just another violin synth. Sound first, a nice screen second.
+  - Claude (step 1, the left hand): she now fingers the whole visible passage (up to 12 notes) and plays the first step of the cheapest plan; a shift costs more when there's no time for it, so shifts move into long notes and rests. On your 15 MIDI pieces: 12% fewer shifts, 16% less hurried shifting (flower −24%, hatsune −23%). The faceplate gets her intention for every coming note (`NoteInfo::intent`: string, hand). **Listen:** `renders/ab/plan/{flower,beethoven,hatsune}-{before,after}.wav`; it should sound calmer in fast runs (fewer slides and missed landings). Next steps of planning: the bow (down-bows where the music leans, saving bow for long notes), then how each note is played.
 - [ ] *(Rhodexa, 2026-11-25)* Live playing feels responsive and sounds like a violin, but there's no way to control the attack when playing live.
 
 ## Questions for Claude
