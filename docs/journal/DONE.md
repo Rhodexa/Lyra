@@ -4,7 +4,7 @@ Everything finished from JOURNAL.md, with the commit that did it, newest
 first. Moved out of the journal (2026-11-25) so it stays short.
 
 **Octavia in Lyra (2026-11-25)**
-- [x] *(Octavia's handoff, docs/KIT-REQUIREMENTS.md part A)* Upcoming notes, latency, note ids. *→ note events carry an id (CLAP's `note_id`; live notes `NO_ID`); the `lyra.note-lookahead` extension hands a plugin the next N seconds of the song every block, ids matching the note-ons, round the loop, empty while stopped; `Plugin::latency` (`clap.latency`, not compensated yet). Octavia is listed by path from `../LyraRelated/Octavia` (HASH).*
+- [x] *(Octavia's handoff, docs/KIT-REQUIREMENTS.md part A)* Upcoming notes, latency, note ids. *→ note events carry an id (CLAP's `note_id`; live notes `NO_ID`); the `lyra.note-lookahead` extension hands a plugin the next N seconds of the song every block, ids matching the note-ons, round the loop, empty while stopped; `Plugin::latency` (`clap.latency`, not compensated yet). Octavia is listed by path from `../LyraRelated/Octavia` (7f89a15).*
 
 **Plugin kit (2026-11-25)**
 - [x] *(Octavia's handoff, docs/KIT-REQUIREMENTS.md part B)* A minimal plugin kit; synth-specific code out of `plugin_look.rs`; editors able to live in their own crates. *→ `lyra-kit` (Host, Editor, behaviour only); Fluttersine and Chrysalis editors in `crates/plugins/*/editor` with their logos; their shared frozen look in `crates/plugins/shared-look`, its style now code (d5cc71b).*
