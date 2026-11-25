@@ -86,7 +86,8 @@ Claude reads this before choosing what to work on.
 
 ## Wishes
 
-- [ ]
+- [ ] ! *(Rhodexa, 2026-11-25)* The performer should plan ahead: look at what's coming and say "I think I know what I'm going to do next", then show it on the screen and play it out (changing its mind when the music changes). Planned decisions are the core of the engine; without them it's just another violin synth. Sound first, a nice screen second.
+- [ ] *(Rhodexa, 2026-11-25)* Live playing feels responsive and sounds like a violin, but there's no way to control the attack when playing live.
 
 ## Questions for Claude
 
