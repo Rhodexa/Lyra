@@ -45,6 +45,24 @@ layout, palette, fonts and every LCD panel. It reads only parameters (through
 * **Player buttons** load the presets' four skills in one undo step; the
   LCD names the profile the faders match, else CUSTOM.
 
+## Rhodexa's changes after the port (2026-11-25; these win over the mock)
+
+* **The screen never dims.** Idle draws at full ink, like playing.
+* **Solid meter bars**, not blocks: at 0.68 the blocks beat against the
+  pixels. The tuner is a mid span (the vibrato) with a dark needle.
+* **Fingers: one mark**, a filled square wherever a finger is down, played
+  or only held. No hollow squares, no tick at the nut for open strings (a
+  dark string with no finger is played open).
+* **TOO LOW / TOO HIGH**: printed words with arrows under the neck, lit while
+  a sounding note is below the lowest open string (either note of a double
+  stop) or a finger/note is past the neck's two octaves.
+* Sharper: rectangles land on whole pixels; the logo is decoded at about
+  twice its size on the plate (it was scaled down 5× by the GPU and shimmered).
+
+**For the engine:** a note below the instrument is common (cello parts on
+the violin, MIDI bass lines). The screen now says so; what the engine plays
+for it is yours to decide (today the violin drops D3 from an A3+D3 chord).
+
 ## For Lyra (not this crate's to change)
 
 * An editor can't see the transport (playing, song position). With

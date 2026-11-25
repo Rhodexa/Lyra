@@ -48,7 +48,9 @@ const LOGO: Artwork = Artwork {
     name: "octavia-logo",
     built_in: include_bytes!("../../../docs/design/logo.palette.png"),
     file: concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/design/logo.palette.png"),
-    max_h: 200,
+    // About twice its size on the plate: scaled down further by the GPU it
+    // shimmered and looked jagged.
+    max_h: 84,
 };
 
 // ───────────────────────────────────────────────────────────── layout
@@ -323,7 +325,7 @@ fn show(ui: &mut Ui, host: &mut dyn Host) {
     p.painter.rect_filled(glass, 0.0, look::LCD[0]);
     let view = gather(&mut p);
     let glass_painter = p.painter.with_clip_rect(glass);
-    let screen = lcd::Lcd::new(&glass_painter, glass.min, glass.width() / lcd::W, !view.active);
+    let screen = lcd::Lcd::new(&glass_painter, glass.min, glass.width() / lcd::W);
     lcd::draw(&screen, &view);
 
     // ── Style · decoration ──

@@ -5,8 +5,9 @@
 //! The LCD is drawn in its own units (640×336) and shown at [`SCALE`]. It
 //! cheats: plain text with LCD shadows. Every piece of ink is painted twice,
 //! its shadow on the backplane (offset, pale), then itself. Ink shades:
-//! 0 unlit (barely there), 1 faint, 2 mid, 3 dark. While nothing plays, the
-//! dark ink is drawn mid (the last frame stays, dimmed).
+//! 0 unlit (barely there), 1 faint, 2 mid, 3 dark. The screen stays fully
+//! lit when nothing plays (Rhodexa: dimming was annoying). Rectangles land
+//! on whole pixels, so the 0.68 scale doesn't blur their edges.
 
 use crate::look::{self, galley, put, Align, LCD, LCD_FONT, LCD_SEMI};
 use egui::{vec2, Color32, Painter, Pos2, Shape, Stroke};
@@ -52,7 +53,7 @@ pub struct View {
     pub doubles: bool,
     pub performer: bool,
     pub log: bool,
-    /// Something sounds or is about to: drawn full, else dimmed.
+    /// Something sounds or is about to (lights ▶ PLAY).
     pub active: bool,
     /// The hand bracket, eased toward where the hand is.
     pub hand: f32,
@@ -65,20 +66,21 @@ pub struct Lcd<'a> {
     p: &'a Painter,
     origin: Pos2,
     k: f32,
-    dim: bool,
+    /// Physical pixels per point, to land edges on pixels.
+    ppp: f32,
     ink: [Color32; 4],
     shadow: Color32,
 }
 
 impl<'a> Lcd<'a> {
     /// The glass with its top-left at `origin`, `k` points per unit.
-    pub fn new(p: &'a Painter, origin: Pos2, k: f32, dim: bool) -> Self {
+    pub fn new(p: &'a Painter, origin: Pos2, k: f32) -> Self {
         let glass = LCD[0];
         Self {
             p,
             origin,
             k,
-            dim,
+            ppp: p.ctx().pixels_per_point(),
             ink: [look::mix(glass, LCD[1], GHOST), LCD[1], LCD[2], LCD[3]],
             shadow: look::mix(glass, LCD[2], SHADOW),
         }
@@ -88,9 +90,15 @@ impl<'a> Lcd<'a> {
         self.origin + vec2(x, y) * self.k
     }
 
+    /// [`Lcd::at`] on the nearest pixel corner.
+    fn snapped(&self, x: f32, y: f32) -> Pos2 {
+        let p = self.at(x, y);
+        let r = |v: f32| (v * self.ppp).round() / self.ppp;
+        Pos2::new(r(p.x), r(p.y))
+    }
+
     /// Paints with the shadow first (offset), then the ink.
     fn ink(&self, s: usize, draw: impl Fn(Color32, f32)) {
-        let s = if self.dim && s == 3 { 2 } else { s };
         if s > 0 {
             draw(self.shadow, SHADOW_OFF);
         }
@@ -99,7 +107,7 @@ impl<'a> Lcd<'a> {
 
     pub fn rect(&self, s: usize, x: f32, y: f32, w: f32, h: f32) {
         self.ink(s, |c, o| {
-            let r = egui::Rect::from_min_max(self.at(x + o, y + o), self.at(x + o + w, y + o + h));
+            let r = egui::Rect::from_min_max(self.snapped(x + o, y + o), self.snapped(x + o + w, y + o + h));
             self.p.rect_filled(r, 0.0, c);
         });
     }
@@ -131,8 +139,9 @@ impl<'a> Lcd<'a> {
     }
 
     /// Printed lettering: small, tracked.
-    fn printed(&self, s: usize, text: &str, x: f32, y: f32, size: f32, align: Align) {
+    fn printed(&self, s: usize, text: &str, x: f32, y: f32, size: f32, align: Align) -> f32 {
         self.text(s, text, x, y, size, align, 1.2, false);
+        self.text_w(text, size, 1.2)
     }
 
     /// Seven-segment digits (the take): `w`×`h` each, unlit segments off.
@@ -210,16 +219,17 @@ impl<'a> Lcd<'a> {
         }
     }
 
-    /// A BIOS-style meter: an outlined box, blocks inside; unlit blocks are off.
-    fn box_meter(&self, x: f32, y: f32, w: f32, h: f32, n: usize, lit: impl Fn(usize) -> bool) {
+    /// A BIOS-style meter: an outlined box with a solid bar inside, `fill`
+    /// 0..1 of the way. (Blocks were the mock's; at 0.68 they beat against
+    /// the pixels, so Rhodexa asked for solid bars.)
+    fn box_meter(&self, x: f32, y: f32, w: f32, h: f32, fill: f32) {
         self.rect(2, x, y, w, 2.0);
         self.rect(2, x, y + h - 2.0, w, 2.0);
         self.rect(2, x, y, 2.0, h);
         self.rect(2, x + w - 2.0, y, 2.0, h);
-        let (ix, iw) = (x + 4.0, w - 8.0);
-        let bw = iw / n as f32;
-        for i in (0..n).filter(|&i| lit(i)) {
-            self.rect(3, (ix + i as f32 * bw).round(), y + 4.0, bw.ceil() - 2.0, h - 8.0);
+        let fill = fill.clamp(0.0, 1.0);
+        if fill > 0.0 {
+            self.rect(3, x + 4.0, y + 4.0, (w - 8.0) * fill, h - 8.0);
         }
     }
 }
@@ -337,7 +347,7 @@ fn perf_page(lcd: &Lcd, v: &View) {
     now_panel(lcd, cur.as_ref());
     next_panel(lcd, v, cur.as_ref());
     meters(lcd, v);
-    neck_panel(lcd, v);
+    neck_panel(lcd, v, cur.as_ref());
     // Printed rules.
     lcd.rect(2, L::COL_X, L::MID, 2.0, L::NECK - L::MID - 8.0);
     lcd.rect(2, L::PAD, L::DIV, L::COL_X - L::PAD - 12.0, 2.0);
@@ -396,34 +406,31 @@ fn next_panel(lcd: &Lcd, v: &View, cur: Option<&NoteInfo>) {
 fn meters(lcd: &Lcd, v: &View) {
     let x = L::COL_X + 12.0;
     let w = W - L::PAD - x;
-    let (bx, bw, bh, n) = (x + 84.0, w - 84.0, 16.0, 32usize);
+    let (bx, bw, bh) = (x + 84.0, w - 84.0, 16.0);
     let f = &v.snap.frame;
     let sounding = f.loudness > 0.02;
     let row = |label: &str, y: f32, val: f32| {
         lcd.printed(2, label, x, y + 12.0, 9.0, Align::Left);
-        let k = (val.clamp(0.0, 1.0) * n as f32).round() as usize;
-        lcd.box_meter(bx, y, bw, bh, n, |i| i < k);
+        lcd.box_meter(bx, y, bw, bh, val);
     };
     let mut y = L::MID + 6.0;
     row("LOUDNESS", y, f.loudness * 1.5);
     y += 32.0;
     row("BRIGHTNESS", y, if sounding { f.brightness } else { 0.0 });
-    // Pitch, like a tuner over ±50 cents: the dark block is where the note
+    // Pitch, like a tuner over ±50 cents: the dark needle is where the note
     // sits, the lighter span how far the vibrato swings.
     y += 32.0;
     lcd.printed(2, "PITCH", x, y + 12.0, 9.0, Align::Left);
-    let np = 41usize;
-    let at = |c: f32| (((c + 50.0) / 100.0 * (np - 1) as f32).round() as i32).clamp(0, np as i32 - 1) as usize;
+    let (ix, iw, needle) = (bx + 4.0, bw - 8.0, 5.0);
+    let at = |c: f32| ix + ((c + 50.0) / 100.0).clamp(0.0, 1.0) * (iw - needle);
     lcd.rect(2, bx + bw / 2.0 - 1.0, y - 5.0, 2.0, 4.0);
     lcd.rect(2, bx + bw / 2.0 - 1.0, y + bh + 1.0, 2.0, 4.0);
     match v.snap.tuner {
         Some(t) => {
-            let (a, b, m) = (at(t.lo), at(t.hi), at(t.cents));
-            lcd.box_meter(bx, y, bw, bh, np, |i| i == m);
-            let (ix, iw) = (bx + 4.0, (bw - 8.0) / np as f32);
-            for i in (a..=b).filter(|&i| i != m) {
-                lcd.rect(2, (ix + i as f32 * iw).round(), y + 4.0, iw.ceil() - 2.0, bh - 8.0);
-            }
+            lcd.box_meter(bx, y, bw, bh, 0.0);
+            let (a, b) = (at(t.lo), at(t.hi));
+            lcd.rect(2, a, y + 4.0, b - a + needle, bh - 8.0);
+            lcd.rect(3, at(t.cents), y + 4.0, needle, bh - 8.0);
             let r = t.cents.round() as i32;
             let sign = if r > 0 {
                 "+"
@@ -434,7 +441,7 @@ fn meters(lcd: &Lcd, v: &View) {
             };
             lcd.text(3, &format!("{sign}{}¢", r.abs()), x + 40.0, y + 12.0, 11.0, Align::Left, 0.0, false);
         }
-        None => lcd.box_meter(bx, y, bw, bh, np, |_| false),
+        None => lcd.box_meter(bx, y, bw, bh, 0.0),
     }
     // The player. Full workload at half the engine's scale (as the mock had it).
     let off = !v.performer;
@@ -461,7 +468,7 @@ const SEMIS: f32 = 26.0;
 /// The neck, seen from the side, the whole width: nut left, highest string
 /// on top, each finger where the engine has it, the hand's reach as a
 /// bracket, the bow across the strings by the bridge.
-fn neck_panel(lcd: &Lcd, v: &View) {
+fn neck_panel(lcd: &Lcd, v: &View, cur: Option<&NoteInfo>) {
     let inst = if v.violin { octavia_core::instrument::violin() } else { octavia_core::instrument::cello() };
     let (open, span) = (inst.open_strings, inst.hand_span);
     let labels = strings(v.violin);
@@ -516,29 +523,32 @@ fn neck_panel(lcd: &Lcd, v: &View) {
             k += 1;
         }
     }
-    // The fingers, solid on a string being played, hollow on one only held.
-    // Open strings played: a tick at the nut.
+    // The fingers: a filled square wherever one is down, played or only held
+    // (Rhodexa: one mark, no hollow squares, no tick for open strings: a dark
+    // string with no finger is played open).
+    let mut beyond = false;
     for (s, state) in st.iter().enumerate() {
-        let played = matches!(state.sound, StringSound::Bowed | StringSound::Plucked);
-        let semi = match state.finger {
-            Some(p) => p - open[s],
-            None if played => 0.0,
-            None => continue,
-        };
+        let Some(p) = state.finger else { continue };
+        let semi = p - open[s];
         if semi < 0.5 {
-            lcd.rect(3, nut + 2.0, sy(s) - 6.0, 3.0, 12.0);
             continue;
         }
-        let (fx, fy) = (sx(semi) - 6.0, sy(s) - 6.0);
-        if played {
-            lcd.rect(3, fx, fy, 12.0, 12.0);
-        } else {
-            lcd.rect(3, fx, fy, 12.0, 2.0);
-            lcd.rect(3, fx, fy + 10.0, 12.0, 2.0);
-            lcd.rect(3, fx, fy, 2.0, 12.0);
-            lcd.rect(3, fx + 10.0, fy, 2.0, 12.0);
+        if semi > SEMIS + 0.5 {
+            beyond = true;
         }
+        lcd.rect(3, sx(semi) - 6.0, sy(s) - 6.0, 12.0, 12.0);
     }
+    // Notes the neck can't show: below the lowest open string, or above its
+    // two octaves. Printed words with arrows under the neck, lit when true.
+    let sounding = cur.filter(|n| v.snap.time < n.start + n.len);
+    let low = sounding.is_some_and(|n| n.pitch.min(n.pitch2.unwrap_or(n.pitch)) < open[0] - 0.5);
+    let high = beyond || sounding.is_some_and(|n| n.pitch > open[3] + SEMIS + 0.5);
+    let (wy, lo, hi) = (sy(0) + 24.0, if low { 3 } else { 0 }, if high { 3 } else { 0 });
+    lcd.poly(lo, &[(nut - 4.0, wy - 4.0), (nut + 3.0, wy - 8.0), (nut + 3.0, wy)]);
+    lcd.printed(lo, "TOO LOW", nut + 8.0, wy, 8.0, Align::Left);
+    let w = lcd.printed(hi, "TOO HIGH", end + 4.0, wy, 8.0, Align::Left);
+    let ax = end + 4.0 + w + 2.0;
+    lcd.poly(hi, &[(ax, wy - 8.0), (ax + 7.0, wy - 4.0), (ax, wy)]);
     // The bow across the strings, or a pluck.
     if st.iter().any(|s| s.sound == StringSound::Bowed) {
         lcd.rect(3, bridge + 6.0, sy(3) - 9.0, 5.0, sy(0) - sy(3) + 18.0);
