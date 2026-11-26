@@ -33,9 +33,26 @@ distances and in sound**, never in chord names or scale degrees.
    Alt+← → fixes their length right away, and that length carries to the
    next notes (like clicking a note with the mouse), so a chord progression
    is chord, chord, chord. Holding still grows notes, for feel.
-   **If it doesn't work out after real use, park it and move on to 3–4;
-   revisit later.** Judge it on real tasks: a progression, a melody, a
-   bassline, on the laptop, no mouse.
+   **Verdict (2026-11-26): it works.** "Really fun to use", "definitely
+   better than the touchpad", not perfect yet; Rhodexa will live with it and
+   collect its little bugs. **Parked as is** (not for lack of interest: to
+   try other experiments). Known rough edges: ↑↓ moves notes silently;
+   Space plays from the playhead, not the caret.
+
+   **Typing, next round (Rhodexa's ideas, for later):** grow typing into
+   *full keyboard editing*, Blender-style.
+   - **A 2D cursor**: a caret with a pitch too (a cell, not just a line), moved
+     with the arrows through steps and keys. **Shift+arrows grow a box select**
+     from it, so you pick notes in context, anywhere, without the mouse.
+   - On what's selected: Alt+← → length (as now), ↑↓ / Ctrl+↑↓ pitch, another
+     combination for **velocity**.
+   - **Deselect all like Blender**: Alt+A, or A twice (A isn't a note key).
+   - **F3 as a command palette**: type to filter (un-double, duplicate, quantize,
+     toggles like a future harmony shadow), Enter runs it. Everything in the
+     context bar reachable by name.
+   - Rhodexa: "it's a lot of keyboard mapping, but I really like the
+     concept." Design the keymap as a whole before building (the code-editor
+     and Blender habits must not collide with the note keys).
 
 ## Next
 
