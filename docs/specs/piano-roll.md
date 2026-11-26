@@ -20,12 +20,17 @@ distances and in sound**, never in chord names or scale degrees.
    - **Un-double** (context bar / F3): notes at the same moment that are
      the same note or octaves apart, keep the lowest or the highest. For
      MIDI files that double everything in octaves.
-   - **Interval tags**: while a note is dragged or placed, a thread from the
-     note before and an LCD tag: `+5`, `−3`.
-2. **Step input** (5e71292), like a tracker: STEP INPUT in the header, the
-   typing keyboard writes at a cursor. Keys held together make a chord; → is
-   a rest; → *while holding a key* makes the note longer (the tracker's
-   "hold"); Backspace erases back; Esc ends.
+   - Interval tags (a thread and `+5` while dragging) were tried and taken
+     out again: "fun, but more noise than tool".
+2. **Step input** (5e71292, revised the same day), "like typing": STEP INPUT
+   in the header, the typing keyboard writes at a cursor. Keys held together
+   make a chord; **holding** a key grows the note in time with the song's
+   tempo (the band grows with it; → while holding was the first try, it
+   didn't feel natural); → rests; ↑↓ fix the notes just typed; Backspace
+   erases back, Delete at the cursor; Home / End; Esc ends.
+   Decided: the step stays one snap after a long note (length is per note),
+   and step input doesn't grow cursors for editing old notes (the mouse does
+   that, or we'd be "rebuilding a word processor").
 
 ## Next
 

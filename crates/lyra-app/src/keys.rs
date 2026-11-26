@@ -50,6 +50,11 @@ pub enum Action {
     /// Add the control changed last to the current automation's targets.
     LinkTweaked,
     Quantize,
+    /// Backspace: like Delete, except in step input (back a step and erase).
+    Backspace,
+    /// Home / End: to the start / the end (step input's cursor).
+    Home,
+    End,
     /// Remove notes that double another (same moment, same note or an octave
     /// apart), keeping the lowest or the highest of each (piano roll).
     Undouble {
@@ -256,7 +261,10 @@ impl Keyboard {
                 _ if repeat => {}
                 Key::Space => out.push(Action::TogglePlay),
                 Key::Escape => out.push(Action::Deselect),
-                Key::Delete | Key::Backspace => out.push(Action::Delete),
+                Key::Delete => out.push(Action::Delete),
+                Key::Backspace => out.push(Action::Backspace),
+                Key::Home => out.push(Action::Home),
+                Key::End => out.push(Action::End),
                 Key::Minus => self.octave = (self.octave - 1).max(-3),
                 Key::Equals => self.octave = (self.octave + 1).min(3),
                 Key::OpenBracket => out.push(Action::PrevPattern),

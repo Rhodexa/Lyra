@@ -194,6 +194,9 @@ pub struct LyraApp {
     listening_to: Option<Listening>,
     /// Where the context menu (F3) is open, if it is.
     context_menu: Option<egui::Pos2>,
+    /// What was picked in the context menu: it goes to the area the menu was
+    /// opened for (the mouse is over the menu, not an area, when it's picked).
+    menu_pick: Option<Action>,
     /// Where the project lives on disk (None = never saved).
     path: Option<std::path::PathBuf>,
     /// The project as last saved/opened: differs from `project` = unsaved changes.
@@ -310,6 +313,7 @@ impl LyraApp {
             pending_seek: None,
             sent_loop: None,
             context_menu: None,
+            menu_pick: None,
             listening_to: None,
             recorder: crate::recorder::Recorder::default(),
             path,
@@ -769,7 +773,7 @@ impl LyraApp {
     }
 
     /// The context menu (F3): the context bar's actions, at the mouse.
-    fn context_menu(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+    fn context_menu(&mut self, ctx: &egui::Context) {
         let Some(at) = self.context_menu else { return };
         let items = self.context_items();
         // The same LCD drawer as every menu, hosted in an empty area at the mouse.
@@ -787,7 +791,7 @@ impl LyraApp {
             })
             .inner;
         if let Some((a, _)) = picked.and_then(|i| items.get(i)) {
-            actions.push(*a);
+            self.menu_pick = Some(*a);
         }
         if !ctx.memory(|m| m.any_popup_open()) {
             self.context_menu = None;
@@ -1226,6 +1230,9 @@ fn is_edit(a: Action) -> bool {
         a,
         Action::Arrow { .. }
             | Action::Delete
+            | Action::Backspace
+            | Action::Home
+            | Action::End
             | Action::SelectAll
             | Action::Deselect
             | Action::Copy
@@ -1350,7 +1357,7 @@ impl eframe::App for LyraApp {
         self.status_bar(ctx, &mut actions);
         // ── Docked: browser (left), plugin rack (right), the two areas (centre) ──
         self.docked(ctx, playing, playhead, &mut actions);
-        self.context_menu(ctx, &mut actions);
+        self.context_menu(ctx);
         // The recorder listens while its tab is on screen (or its tape runs).
         let shown = if self.bottom_open { 2 } else { 1 };
         let tape_tab = self.areas[..shown]
@@ -1406,6 +1413,9 @@ impl eframe::App for LyraApp {
         let target = self.key_target(ctx);
         for a in actions {
             self.apply(ctx, a, playing, target);
+        }
+        if let Some(a) = self.menu_pick.take() {
+            self.apply(ctx, a, playing, Some(self.key_area));
         }
 
         // New effects get their ids (automation finds them by it).

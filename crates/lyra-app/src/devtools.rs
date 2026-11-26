@@ -16,7 +16,8 @@
 //!
 //! Script steps, separated by `;`: `wait N` (frames), `move X Y` (points),
 //! `down` / `up` (left button), `rdown` / `rup` (right button), `click`,
-//! `wheel DY`, `type TEXT` (typed text, for text fields), `key NAME` (an egui key name, e.g. `Space`, `ArrowUp`),
+//! `wheel DY`, `type TEXT` (typed text, for text fields), `key NAME` (an egui key name, e.g. `Space`, `ArrowUp`;
+//! `keydown NAME` / `keyup NAME` hold it),
 //! `mods alt|shift|ctrl|none` (held modifiers, e.g. `mods alt+shift`),
 //! `log` (print the step counter). Example — drag the first volume knob up:
 //! `LYRA_SCRIPT="wait 30; move 71 134; down; move 71 120; move 71 100; up"`
@@ -106,9 +107,14 @@ impl DevTools {
                 delta: egui::vec2(0.0, num(1)),
                 modifiers: egui::Modifiers::NONE,
             }),
-            "key" => {
+            "key" | "keydown" | "keyup" => {
+                let presses: &[bool] = match parts[0] {
+                    "keydown" => &[true],
+                    "keyup" => &[false],
+                    _ => &[true, false],
+                };
                 if let Some(key) = parts.get(1).and_then(|n| egui::Key::from_name(n)) {
-                    for pressed in [true, false] {
+                    for &pressed in presses {
                         raw.events.push(egui::Event::Key {
                             key,
                             physical_key: Some(key),

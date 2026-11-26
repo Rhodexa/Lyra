@@ -370,7 +370,7 @@ impl Playlist {
         match a {
             Action::SelectAll => self.selection = (0..p.clips.len()).collect(),
             Action::Deselect => self.selection.clear(),
-            Action::Delete if !self.selection.is_empty() => {
+            Action::Delete | Action::Backspace if !self.selection.is_empty() => {
                 h.checkpoint(p);
                 let mut sel = std::mem::take(&mut self.selection);
                 sel.sort_unstable_by(|a, b| b.cmp(a));
