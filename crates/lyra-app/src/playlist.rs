@@ -418,7 +418,7 @@ impl Playlist {
                     }
                 }
             }
-            Action::Arrow { dx, dy, big } if !self.selection.is_empty() => {
+            Action::Arrow { dx, dy, big, .. } if !self.selection.is_empty() => {
                 let dt = dx as i64 * if big { 4 * TICKS_PER_BAR as i64 } else { self.snap as i64 };
                 let tracks = p.tracks.len() as i64;
                 let ok = self.selection.iter().all(|&i| {

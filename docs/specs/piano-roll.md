@@ -22,15 +22,20 @@ distances and in sound**, never in chord names or scale degrees.
      MIDI files that double everything in octaves.
    - Interval tags (a thread and `+5` while dragging) were tried and taken
      out again: "fun, but more noise than tool".
-2. **Step input** (5e71292, revised the same day), "like typing": STEP INPUT
-   in the header, the typing keyboard writes at a cursor. Keys held together
-   make a chord; **holding** a key grows the note in time with the song's
-   tempo (the band grows with it; → while holding was the first try, it
-   didn't feel natural); → rests; ↑↓ fix the notes just typed; Backspace
-   erases back, Delete at the cursor; Home / End; Esc ends.
-   Decided: the step stays one snap after a long note (length is per note),
-   and step input doesn't grow cursors for editing old notes (the mouse does
-   that, or we'd be "rebuilding a word processor").
+2. **Typing: the roll as a text editor** (an experiment, `piano_roll/typing.rs`;
+   keys listed at the top of that file). Enter starts it, Esc ends it.
+   Why: Rhodexa is fast with a mouse, but on a laptop the touchpad is "a pain
+   for anything music"; and they type code all day (Home/End, Ctrl+arrows,
+   Shift-select). So keyboard editing borrows a code editor's grammar.
+   How it got here, the same day: a tracker-style step input (5e71292) →
+   hold-to-grow (intuitive, but you over/undershoot and wait a long time for
+   long notes) → this: a caret, the typed notes stay selected so
+   Alt+← → fixes their length right away, and that length carries to the
+   next notes (like clicking a note with the mouse), so a chord progression
+   is chord, chord, chord. Holding still grows notes, for feel.
+   **If it doesn't work out after real use, park it and move on to 3–4;
+   revisit later.** Judge it on real tasks: a progression, a melody, a
+   bassline, on the laptop, no mouse.
 
 ## Next
 

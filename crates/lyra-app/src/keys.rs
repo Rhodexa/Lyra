@@ -33,6 +33,9 @@ pub enum Action {
         dx: i32,
         dy: i32,
         big: bool,
+        /// Shift / Alt held (piano roll typing: select / length).
+        shift: bool,
+        alt: bool,
     },
     Delete,
     SelectAll,
@@ -50,6 +53,8 @@ pub enum Action {
     /// Add the control changed last to the current automation's targets.
     LinkTweaked,
     Quantize,
+    /// Enter: start / stop typing notes in the piano roll.
+    ToggleTyping,
     /// Backspace: like Delete, except in step input (back a step and erase).
     Backspace,
     /// Home / End: to the start / the end (step input's cursor).
@@ -124,6 +129,17 @@ pub struct Keyboard {
     pub octave: i32,
     /// Tab presses taken out of the raw input (see `take_tabs`).
     tabs: usize,
+}
+
+/// An arrow key as an action (`big`: Ctrl held).
+fn arrow(k: Key, big: bool, m: egui::Modifiers) -> Action {
+    let (dx, dy) = match k {
+        Key::ArrowUp => (0, 1),
+        Key::ArrowDown => (0, -1),
+        Key::ArrowLeft => (-1, 0),
+        _ => (1, 0),
+    };
+    Action::Arrow { dx, dy, big, shift: m.shift, alt: m.alt }
 }
 
 /// Semitones above the lowest key (Z = C3 at octave 0).
@@ -225,10 +241,9 @@ impl Keyboard {
                         Key::E => out.push(Action::ExportWav),
                         Key::O => out.push(Action::OpenProject),
                         Key::Q => out.push(Action::Quantize),
-                        Key::ArrowUp => out.push(Action::Arrow { dx: 0, dy: 1, big: true }),
-                        Key::ArrowDown => out.push(Action::Arrow { dx: 0, dy: -1, big: true }),
-                        Key::ArrowLeft => out.push(Action::Arrow { dx: -1, dy: 0, big: true }),
-                        Key::ArrowRight => out.push(Action::Arrow { dx: 1, dy: 0, big: true }),
+                        Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight => {
+                            out.push(arrow(k, true, modifiers));
+                        }
                         _ => {}
                     }
                 }
@@ -254,16 +269,16 @@ impl Keyboard {
             let big = false; // plain or Shift: the small step
             match k {
                 // Arrows auto-repeat on purpose: hold to keep nudging.
-                Key::ArrowUp => out.push(Action::Arrow { dx: 0, dy: 1, big }),
-                Key::ArrowDown => out.push(Action::Arrow { dx: 0, dy: -1, big }),
-                Key::ArrowLeft => out.push(Action::Arrow { dx: -1, dy: 0, big }),
-                Key::ArrowRight => out.push(Action::Arrow { dx: 1, dy: 0, big }),
+                Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight => {
+                    out.push(arrow(k, big, modifiers));
+                }
                 _ if repeat => {}
                 Key::Space => out.push(Action::TogglePlay),
                 Key::Escape => out.push(Action::Deselect),
                 Key::Delete => out.push(Action::Delete),
                 Key::Backspace => out.push(Action::Backspace),
                 Key::Home => out.push(Action::Home),
+                Key::Enter => out.push(Action::ToggleTyping),
                 Key::End => out.push(Action::End),
                 Key::Minus => self.octave = (self.octave - 1).max(-3),
                 Key::Equals => self.octave = (self.octave + 1).min(3),

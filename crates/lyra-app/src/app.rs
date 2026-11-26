@@ -1086,7 +1086,7 @@ impl LyraApp {
 
     /// The typing keyboard, for a piano roll doing step input: the one keys go
     /// to, else the other area's (if it's open).
-    fn step_key(&mut self, on: bool, key: u8) {
+    fn typing_key(&mut self, on: bool, key: u8) {
         if self.project.channels.is_empty() {
             return;
         }
@@ -1095,11 +1095,11 @@ impl LyraApp {
         let open = |i: usize| i == 0 || self.bottom_open;
         let order = [self.key_area, 1 - self.key_area.min(1)];
         let Some(i) = order.into_iter().find(|&i| {
-            open(i) && self.areas[i].editor == Editor::PianoRoll && self.areas[i].piano.stepping()
+            open(i) && self.areas[i].editor == Editor::PianoRoll && self.areas[i].piano.typing()
         }) else {
             return;
         };
-        self.areas[i].piano.step_key(on, key, &mut self.project, &mut self.history, pat, ch);
+        self.areas[i].piano.typing_key(on, key, &mut self.project, &mut self.history, pat, ch);
     }
 
     /// An editing key, for the area `target`. Returns true when that area's
@@ -1143,12 +1143,12 @@ impl LyraApp {
             Action::NoteOn(key) => {
                 self.ui.live_keys.push(key);
                 self.live(Event::note_on(key, 0.8));
-                self.step_key(true, key);
+                self.typing_key(true, key);
             }
             Action::NoteOff(key) => {
                 self.ui.live_keys.retain(|&k| k != key);
                 self.live(Event::note_off(key));
-                self.step_key(false, key);
+                self.typing_key(false, key);
             }
             Action::Seek(tick) => self.pending_seek = Some(tick),
             Action::SeekPattern(tick) => self.seek_pattern(tick),
@@ -1232,6 +1232,7 @@ fn is_edit(a: Action) -> bool {
             | Action::Delete
             | Action::Backspace
             | Action::Home
+            | Action::ToggleTyping
             | Action::End
             | Action::SelectAll
             | Action::Deselect
