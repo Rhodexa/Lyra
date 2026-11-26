@@ -1214,6 +1214,7 @@ fn is_edit(a: Action) -> bool {
             | Action::Duplicate
             | Action::MakeUnique
             | Action::Quantize
+            | Action::Undouble { .. }
     )
 }
 

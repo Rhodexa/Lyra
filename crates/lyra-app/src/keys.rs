@@ -50,6 +50,11 @@ pub enum Action {
     /// Add the control changed last to the current automation's targets.
     LinkTweaked,
     Quantize,
+    /// Remove notes that double another (same moment, same note or an octave
+    /// apart), keeping the lowest or the highest of each (piano roll).
+    Undouble {
+        keep_high: bool,
+    },
     /// Move the playhead / start marker to a tick (from clicking a timeline).
     Seek(f64),
     /// Seek to a tick *inside the current pattern* (the piano roll's ruler):

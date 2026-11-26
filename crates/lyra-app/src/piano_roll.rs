@@ -15,8 +15,11 @@
 //! * while playing, placing/moving notes stays silent (no preview over the music)
 //! * **double right-click a ghost note** — switch to that channel
 //! * overview bar (very top) — drag the thumb to pan, drag its ends to zoom
-//! * ruler — click/drag to move the playhead · velocity lane — drag to paint ·
-//!   keyboard (left) — click to listen
+//! * ruler — click/drag to move the playhead · keyboard (left) — click to listen
+//! * velocity lane — drag to paint · **Shift+drag** — draw a straight line (the
+//!   notes under it follow it) · the seam above it — drag to make it taller
+//! * while dragging notes, a small LCD tag says how far (in semitones) the note
+//!   under the mouse is from the note before it, with a thread drawn between them
 //!
 //! Keys (when this window was clicked last): Delete, Ctrl+A, Ctrl+C/X/V (paste
 //! lands under the mouse, or at the playhead),
@@ -30,7 +33,11 @@ use crate::timeline::{self, Input, Overview, OverviewDrag, RowView, TimeView, VB
 use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, StrokeKind, Ui};
 use lyra_model::{theory, ChannelId, Chord, History, Note, Project, Scale, TICKS_PER_BAR, TICKS_PER_STEP};
 
-const VEL_H: f32 = 56.0;
+/// The velocity lane's starting height, and the least it can be.
+const LANE_H: f32 = 56.0;
+const LANE_MIN: f32 = 32.0;
+/// The gap between the grid and the lane: the seam you drag to resize it.
+const SEAM: f32 = 3.0;
 const BEAT: u32 = TICKS_PER_STEP * 4;
 
 pub const SNAPS: [(&str, u32); 7] =
@@ -57,7 +64,21 @@ enum Drag {
         base: Vec<usize>,
     },
     Erase,
-    Velocity,
+    /// Painting velocities; `last` = where the mouse was, so a fast stroke
+    /// still reaches every note it crossed.
+    Velocity {
+        last: Pos2,
+    },
+    /// Shift+drag in the lane: a straight line from `from`; `before` = every
+    /// note's velocity when it started (notes the line leaves go back).
+    VelLine {
+        from: Pos2,
+        before: Vec<f32>,
+    },
+    /// The seam above the lane; `grab` = mouse distance from the lane's top.
+    Lane {
+        grab: f32,
+    },
     Seek,
     /// Alt+drag on the ruler: drawing a loop region from `anchor` (ticks).
     /// `moved` false at release = it was an Alt+click, which clears the loop.
@@ -82,6 +103,8 @@ pub struct PianoRoll {
     /// Key value at the top edge (fractional = smooth scrolling).
     view_top: f32,
     row_h: f32,
+    /// The velocity lane's height (not remembered between runs).
+    lane_h: f32,
     pub snap: u32,
     pub chord: Chord,
     pub show_scale: bool,
@@ -114,6 +137,7 @@ impl Default for PianoRoll {
             time: TimeView { scroll: 0.0, ppt: 0.9 },
             view_top: 76.0,
             row_h: theme::Metrics::DEFAULT.row_h,
+            lane_h: LANE_H,
             snap: TICKS_PER_STEP,
             chord: Chord::Single,
             show_scale: true,
@@ -242,6 +266,17 @@ impl PianoRoll {
             out.push((Action::ExportBarsMidi, format!("Export {} as MIDI", crate::midi::bars_label(a, b))));
         }
         out.push((Action::ExportPatternMidi, "Export pattern as MIDI".to_string()));
+        // Only offered when there's something to un-double (MIDI files love octave doubling).
+        let id = p.channels[ch].id;
+        if self.editing == Some((pat, id)) {
+            let notes = p.patterns[pat].notes(id);
+            let among = (!self.selection.is_empty()).then_some(&self.selection[..]);
+            let n = doubled(notes, among, false).len();
+            if n > 0 {
+                out.push((Action::Undouble { keep_high: false }, format!("Un-double {n}, keep low")));
+                out.push((Action::Undouble { keep_high: true }, format!("Un-double {n}, keep high")));
+            }
+        }
         if self.looped.is_some() {
             out.push((Action::ClearLoop, "Clear loop".to_string()));
         }
@@ -337,6 +372,28 @@ impl PianoRoll {
                     notes[i].start = timeline::snap(notes[i].start as f32, snap) as u32;
                 }
             }
+            Action::Undouble { keep_high } => {
+                let notes = p.patterns[pat].notes(id);
+                let among = (!self.selection.is_empty()).then_some(&self.selection[..]);
+                let mut gone = doubled(notes, among, keep_high);
+                if gone.is_empty() {
+                    return true;
+                }
+                h.checkpoint(p);
+                // What stays selected stays selected (indices shift down past the removed ones).
+                let kept: Vec<usize> = self
+                    .selection
+                    .iter()
+                    .filter(|i| !gone.contains(i))
+                    .map(|&i| i - gone.iter().filter(|&&g| g < i).count())
+                    .collect();
+                gone.sort_unstable_by(|a, b| b.cmp(a));
+                let notes = p.patterns[pat].notes_mut(id);
+                for i in gone {
+                    notes.remove(i);
+                }
+                self.selection = kept;
+            }
             Action::Arrow { dx, dy, big } if !self.selection.is_empty() => {
                 h.checkpoint(p);
                 let notes = p.patterns[pat].notes_mut(id);
@@ -393,9 +450,15 @@ impl PianoRoll {
             pos2(overview_r.left(), overview_r.bottom() + 2.0),
             pos2(right, overview_r.bottom() + 2.0 + m.ruler_h),
         );
-        let grid = Rect::from_min_max(pos2(overview_r.left(), ruler.bottom()), pos2(right, rect.bottom() - VEL_H));
+        // The lane keeps at least a few rows of grid above it.
+        let lane_max = (rect.bottom() - ruler.bottom() - SEAM - 4.0 * self.row_h).max(LANE_MIN);
+        self.lane_h = self.lane_h.clamp(LANE_MIN, lane_max);
+        let grid = Rect::from_min_max(
+            pos2(overview_r.left(), ruler.bottom()),
+            pos2(right, rect.bottom() - self.lane_h - SEAM),
+        );
         let keys_r = Rect::from_min_max(pos2(rect.left(), grid.top()), pos2(grid.left(), grid.bottom()));
-        let vel = Rect::from_min_max(pos2(grid.left(), grid.bottom() + 3.0), pos2(right, rect.bottom()));
+        let vel = Rect::from_min_max(pos2(grid.left(), grid.bottom() + SEAM), pos2(right, rect.bottom()));
         let vbar_lock = match self.drag {
             Drag::VBar(d) => Some(d.span()),
             _ => None,
@@ -560,7 +623,13 @@ impl PianoRoll {
         }
 
         // Cursor feedback
-        if let (true, Some(pos), Drag::None) = (hovering && grid.contains(pos.unwrap_or_default()), pos, &self.drag) {
+        let on_seam = matches!(self.drag, Drag::Lane { .. })
+            || (matches!(self.drag, Drag::None) && hovering && pos.is_some_and(|p| seam(grid, vel).contains(p)));
+        if on_seam {
+            ui.ctx().set_cursor_icon(CursorIcon::ResizeVertical);
+        } else if let (true, Some(pos), Drag::None) =
+            (hovering && grid.contains(pos.unwrap_or_default()), pos, &self.drag)
+        {
             let notes = p.patterns[pat].notes(ch_id);
             if edge_hit(&view, notes, pos).is_some() {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
@@ -624,6 +693,24 @@ impl PianoRoll {
         };
         self.paint_keys(&painter, &view, keys_r, color, live_keys, &sounding, scale, root);
         self.paint_velocity(&painter, &view, vel, p, pat, ch_id, color);
+        if let (Drag::VelLine { from, .. }, Some(pos)) = (&self.drag, pos) {
+            // The ruler you're drawing with: a thin line with a dot at each end.
+            let to = pos2(pos.x, pos.y.clamp(vel.top() + 2.0, vel.bottom() - 2.0));
+            let from = pos2(from.x, from.y.clamp(vel.top() + 2.0, vel.bottom() - 2.0));
+            let lane = ui.painter_at(vel);
+            lane.line_segment([from, to], stroke(1.5, theme::TEXT));
+            for end in [from, to] {
+                lane.circle_filled(end, 3.0, theme::TEXT);
+            }
+        }
+        if on_seam {
+            // The splitter grip (the same plate as the panels' seams).
+            let c = pos2(vel.center().x, vel.top() - SEAM * 0.5);
+            theme::outlined(&painter, Rect::from_center_size(c, vec2(36.0, 8.0)), 3.0, theme::PLATE);
+        }
+        if let Drag::Move { originals, lead, .. } = &self.drag {
+            self.paint_interval(&painter, &view, p.patterns[pat].notes(ch_id), originals, *lead);
+        }
     }
 
     fn view(&self, grid: Rect) -> View {
@@ -724,7 +811,9 @@ impl PianoRoll {
     ) {
         let free = mods.alt;
         let snap = if free { 1 } else { self.snap };
-        if view.grid.contains(pos) {
+        if primary && seam(view.grid, vel).contains(pos) {
+            self.drag = Drag::Lane { grab: pos.y - vel.top() };
+        } else if view.grid.contains(pos) {
             h.checkpoint(p);
             let notes = p.patterns[pat].notes_mut(ch_id);
             if !primary {
@@ -809,7 +898,14 @@ impl PianoRoll {
             self.drag = Drag::Audition;
         } else if vel.contains(pos) && primary {
             h.checkpoint(p);
-            self.drag = Drag::Velocity;
+            if mods.shift {
+                let before = p.patterns[pat].notes(ch_id).iter().map(|n| n.velocity).collect();
+                self.drag = Drag::VelLine { from: pos, before };
+            } else {
+                self.drag = Drag::Velocity { last: pos };
+                // Paint where it was pressed, too.
+                self.drag_to_velocity(pos, pos, view, vel, p, pat, ch_id);
+            }
         }
     }
 
@@ -897,15 +993,28 @@ impl PianoRoll {
                     notes.remove(i);
                 }
             }
-            Drag::Velocity => {
-                let v = ((vel.bottom() - pos.y) / vel.height()).clamp(0.05, 1.0);
+            Drag::Velocity { last } => {
+                let from = std::mem::replace(last, pos);
+                self.drag = drag;
+                self.drag_to_velocity(from, pos, view, vel, p, pat, ch_id);
+                return;
+            }
+            Drag::VelLine { from, before } => {
+                // Notes between the ends sit on the line; the rest keep (or get back) their own.
+                let (a, b) = (from.x.min(pos.x), from.x.max(pos.x));
                 for (i, n) in notes.iter_mut().enumerate() {
-                    let near = (view.x(n.start as f32) - pos.x).abs() < 6.0;
-                    if near && (self.selection.is_empty() || self.selection.contains(&i)) {
-                        n.velocity = v;
-                    }
+                    let x = view.x(n.start as f32);
+                    let mine = self.selection.is_empty() || self.selection.contains(&i);
+                    n.velocity = match before.get(i) {
+                        Some(_) if mine && (a - 4.0..=b + 4.0).contains(&x) => line_value(*from, pos, x, vel),
+                        Some(&v) => v,
+                        None => n.velocity,
+                    };
                 }
-                self.last_vel = v;
+                self.last_vel = lane_value(pos.y, vel);
+            }
+            Drag::Lane { grab } => {
+                self.lane_h = vel.bottom() - (pos.y - *grab); // clamped in `show`
             }
             Drag::Seek => out.push(Action::SeekPattern(view.tick(pos.x).clamp(0.0, pattern_ticks - 1.0) as f64)),
             Drag::Loop { anchor, moved } => {
@@ -934,6 +1043,67 @@ impl PianoRoll {
             Drag::None => {}
         }
         self.drag = drag;
+    }
+
+    /// A velocity stroke from `a` to `b`: every note it crossed takes the
+    /// stroke's height where it crossed it.
+    #[allow(clippy::too_many_arguments)]
+    fn drag_to_velocity(
+        &mut self,
+        a: Pos2,
+        b: Pos2,
+        view: &View,
+        vel: Rect,
+        p: &mut Project,
+        pat: usize,
+        ch_id: ChannelId,
+    ) {
+        let (lo, hi) = (a.x.min(b.x) - 4.0, a.x.max(b.x) + 4.0);
+        for (i, n) in p.patterns[pat].notes_mut(ch_id).iter_mut().enumerate() {
+            let x = view.x(n.start as f32);
+            if (lo..=hi).contains(&x) && (self.selection.is_empty() || self.selection.contains(&i)) {
+                n.velocity = line_value(a, b, x, vel);
+            }
+        }
+        self.last_vel = lane_value(b.y, vel);
+    }
+
+    /// While notes are dragged: a thread from the note before to the note under
+    /// the mouse, and an LCD tag with the distance in semitones ("+7", "−3").
+    /// Intervals, not note names: that's how you hear them.
+    fn paint_interval(
+        &self,
+        painter: &egui::Painter,
+        v: &View,
+        notes: &[Note],
+        originals: &[(usize, Note)],
+        lead: usize,
+    ) {
+        let Some(n) = originals.get(lead).and_then(|(i, _)| notes.get(*i)) else { return };
+        let moving: Vec<usize> = originals.iter().map(|(i, _)| *i).collect();
+        let Some(prev) = previous_note(notes, n, &moving) else { return };
+        let r = v.note_rect(n);
+        let pr = v.note_rect(prev);
+        let a = pos2(pr.right().min(r.left()), pr.center().y);
+        let b = r.left_center();
+        painter.line_segment([a, b], stroke(1.0, theme::TEXT.gamma_multiply(0.55)));
+        painter.circle_filled(a, 2.0, theme::TEXT.gamma_multiply(0.55));
+
+        let d = n.key as i32 - prev.key as i32;
+        let text = match d {
+            0 => "0".to_string(),
+            d if d > 0 => format!("+{d}"),
+            d => format!("\u{2212}{}", -d),
+        };
+        let font = theme::label_bold(12.0);
+        let galley = painter.layout_no_wrap(text, font, theme::LCD_INK);
+        let size = vec2(galley.size().x + 10.0, 18.0);
+        // Above the note, or below it when there's no room at the top.
+        let above = r.top() - 3.0 - size.y >= v.grid.top();
+        let min = if above { pos2(r.left(), r.top() - 3.0 - size.y) } else { pos2(r.left(), r.bottom() + 3.0) };
+        let tag = Rect::from_min_size(min, size);
+        theme::lcd_panel(painter, tag);
+        painter.galley(tag.center() - galley.size() * 0.5, galley, theme::LCD_INK);
     }
 
     fn paint_grid(&self, painter: &egui::Painter, v: &View, pattern_ticks: f32, scale: Scale, root: u8) {
@@ -1119,6 +1289,69 @@ impl PianoRoll {
     }
 }
 
+/// How far apart two notes' starts may be and still count as "the same
+/// moment" when un-doubling (a played MIDI file is never exact).
+const DOUBLE_SLACK: u32 = TICKS_PER_STEP / 4;
+
+/// The notes to remove when un-doubling (indices, ascending): among the notes
+/// `among` (or all), those starting at the same moment that are the same note
+/// or an octave or more apart. Of each such group the lowest stays (or the
+/// highest); of exact copies, the longest.
+fn doubled(notes: &[Note], among: Option<&[usize]>, keep_high: bool) -> Vec<usize> {
+    let mut idx: Vec<usize> = among.map_or_else(|| (0..notes.len()).collect(), <[usize]>::to_vec);
+    idx.retain(|&i| i < notes.len());
+    idx.sort_by_key(|&i| notes[i].start);
+    let mut gone = Vec::new();
+    let mut at = 0;
+    while at < idx.len() {
+        // One moment: every note within the slack of the first one.
+        let t0 = notes[idx[at]].start;
+        let end = idx[at..].iter().position(|&i| notes[i].start > t0 + DOUBLE_SLACK).map_or(idx.len(), |k| at + k);
+        let mut moment = idx[at..end].to_vec();
+        // Best first: lowest (or highest) key, then the longest.
+        moment.sort_by_key(|&i| {
+            let k = notes[i].key as i32;
+            (if keep_high { -k } else { k }, std::cmp::Reverse(notes[i].len))
+        });
+        let mut kept_classes = [false; 12];
+        for i in moment {
+            let class = &mut kept_classes[notes[i].key as usize % 12];
+            if *class {
+                gone.push(i);
+            }
+            *class = true;
+        }
+        at = end;
+    }
+    gone.sort_unstable();
+    gone
+}
+
+/// The note "before" `n` (for the interval readout): of the notes not being
+/// moved that start earlier, the latest ones; of those, the nearest in pitch.
+fn previous_note<'a>(notes: &'a [Note], n: &Note, moving: &[usize]) -> Option<&'a Note> {
+    let earlier = || notes.iter().enumerate().filter(|(i, m)| !moving.contains(i) && m.start < n.start).map(|(_, m)| m);
+    let latest = earlier().map(|m| m.start).max()?;
+    earlier().filter(|m| m.start == latest).min_by_key(|m| (m.key as i32 - n.key as i32).abs())
+}
+
+/// The seam between the grid and the velocity lane, a little taller than
+/// drawn so it's easy to catch.
+fn seam(grid: Rect, vel: Rect) -> Rect {
+    Rect::from_min_max(pos2(grid.left(), grid.bottom() - 3.0), pos2(grid.right(), vel.top() + 3.0))
+}
+
+/// A height in the lane as a velocity.
+fn lane_value(y: f32, lane: Rect) -> f32 {
+    ((lane.bottom() - y) / (lane.height() - 4.0)).clamp(0.05, 1.0)
+}
+
+/// The velocity the line `a`–`b` gives at screen-x `x`.
+fn line_value(a: Pos2, b: Pos2, x: f32, lane: Rect) -> f32 {
+    let t = if (b.x - a.x).abs() < 0.5 { 1.0 } else { ((x - a.x) / (b.x - a.x)).clamp(0.0, 1.0) };
+    lane_value(a.y + (b.y - a.y) * t, lane)
+}
+
 /// Where a dropped file will land: a bright line down the grid.
 fn drop_line(ui: &Ui, x: f32, grid: Rect) {
     ui.painter().vline(x, grid.y_range(), stroke(2.0, theme::MINT));
@@ -1127,6 +1360,35 @@ fn drop_line(ui: &Ui, x: f32, grid: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn undouble_keeps_one_note_per_pitch_per_moment() {
+        let n = |start, len, key| Note { start, len, key, velocity: 0.8 };
+        let notes = [
+            n(0, 96, 48),  // C3: kept (lowest)
+            n(0, 96, 60),  // C4: an octave double
+            n(2, 96, 72),  // C5: double too, a hair late
+            n(0, 96, 64),  // E4: a different note, stays
+            n(96, 48, 50), // a copy pair: the longer one stays
+            n(96, 96, 50),
+            n(192, 96, 62), // alone in its moment
+        ];
+        assert_eq!(doubled(&notes, None, false), vec![1, 2, 4]);
+        assert_eq!(doubled(&notes, None, true), vec![0, 1, 4]);
+        // Only among the selection: C3 and C5 selected, C4 left alone.
+        assert_eq!(doubled(&notes, Some(&[0, 2]), false), vec![2]);
+    }
+
+    #[test]
+    fn the_note_before_is_the_latest_and_nearest() {
+        let n = |start, key| Note { start, len: 96, key, velocity: 0.8 };
+        let notes = [n(0, 40), n(96, 48), n(96, 64), n(192, 62)];
+        // Dragging the last note: the chord before it, its nearer note (64).
+        assert_eq!(previous_note(&notes, &notes[3], &[3]).map(|m| m.key), Some(64));
+        // Notes being moved don't count.
+        assert_eq!(previous_note(&notes, &notes[3], &[1, 2, 3]).map(|m| m.key), Some(40));
+        assert!(previous_note(&notes, &notes[0], &[0]).is_none());
+    }
 
     #[test]
     fn exports_take_the_selection_its_bars_or_the_pattern() {
