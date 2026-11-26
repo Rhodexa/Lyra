@@ -21,6 +21,7 @@ built before the line it depends on.
 - [x] Playlist arrangement + song mode (PAT/SONG, `L`, F5); clips repeat their pattern
 - [ ] Organ waveform for M1-style organ bass
 - [ ] Piano roll uses the shared `timeline` module (overview + ruler) like the playlist
+- [x] Piano roll: velocity lines, taller lane, un-double, interval tags, step input (see `docs/specs/piano-roll.md` for what's next: links, curves, drum lanes)
 
 ## M3: Keep it, mix it
 - [x] Save / open projects (`.lyra`, readable JSON, versioned), backup every 30 s + on quit, reopen the last project
