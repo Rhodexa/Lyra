@@ -21,6 +21,12 @@
 //! * while dragging notes, a small LCD tag says how far (in semitones) the note
 //!   under the mouse is from the note before it, with a thread drawn between them
 //!
+//! **Step input** (the STEP button): the typing keyboard writes at a cursor,
+//! like a tracker. A key places a note one snap long (keys held together: a
+//! chord) and the cursor moves on when you let go · **→** a rest · **→ while
+//! holding a key** — the note grows a step · **←** back · **Backspace** back
+//! and erase · click the ruler to put the cursor there · **Esc** — done.
+//!
 //! Keys (when this window was clicked last): Delete, Ctrl+A, Ctrl+C/X/V (paste
 //! lands under the mouse, or at the playhead),
 //! Ctrl+D or Ctrl+B (duplicate after), Ctrl+Q (quantize), ↑↓ semitone,
@@ -97,6 +103,19 @@ enum Drag {
     },
 }
 
+/// Step input's state: where the next note lands, and the notes still held.
+struct Step {
+    /// The cursor (pattern ticks).
+    at: u32,
+    /// Keys held down right now, and the notes they placed (one group: a chord).
+    held: Vec<u8>,
+    group: Vec<usize>,
+    group_start: u32,
+    group_len: u32,
+    /// The cursor moved: scroll it into view once.
+    follow: bool,
+}
+
 pub struct PianoRoll {
     /// Horizontal view: tick at the left edge, pixels per tick.
     time: TimeView,
@@ -129,6 +148,8 @@ pub struct PianoRoll {
     /// the instrument being edited (and reports trouble).
     pub dropped_midi: Option<(std::path::PathBuf, u32)>,
     playhead: f64,
+    /// Step input, while it's on.
+    step: Option<Step>,
 }
 
 impl Default for PianoRoll {
@@ -155,6 +176,7 @@ impl Default for PianoRoll {
             hover_tick: None,
             dropped_midi: None,
             playhead: 0.0,
+            step: None,
         }
     }
 }
@@ -318,6 +340,9 @@ impl PianoRoll {
         let melodic = lyra_catalog::info(&p.channels[ch].instrument).is_some_and(|i| i.melodic);
         self.sanitize(pat, id, len, melodic);
         let snap = self.snap;
+        if self.step.is_some() && self.selection.is_empty() && self.step_action(a, p, h, pat, id) {
+            return true;
+        }
         match a {
             Action::SelectAll => self.selection = (0..len).collect(),
             Action::Deselect => self.selection.clear(),
@@ -530,6 +555,16 @@ impl PianoRoll {
         let rows = grid.height() / self.row_h;
         self.view_top = self.view_top.clamp(rows.min(128.0), 128.0);
         self.time.scroll = self.time.scroll.max(0.0);
+        // Step input: keep the cursor in view when it moves (a quarter in from the left).
+        if let Some(s) = &mut self.step {
+            if std::mem::take(&mut s.follow) {
+                let x = (s.at as f32 - self.time.scroll) * self.time.ppt;
+                let len = self.snap.max(TICKS_PER_STEP) as f32 * self.time.ppt;
+                if x < 0.0 || x + len > grid.width() - 24.0 {
+                    self.time.scroll = (s.at as f32 - grid.width() * 0.25 / self.time.ppt).max(0.0);
+                }
+            }
+        }
         let view = self.view(grid);
         self.hover_tick = pos.filter(|p| hovering && grid.contains(*p)).map(|p| view.tick(p.x));
         // A MIDI file from the browser: its notes land where it's dropped (on the grid).
@@ -655,7 +690,22 @@ impl PianoRoll {
         let painter = ui.painter_at(rect);
         let play = playhead as f32;
         self.paint_grid(&painter, &view, pattern_ticks, scale, root);
+        if let Some(s) = &self.step {
+            // The step cursor: the cell the next note lands in, and a line at its start.
+            let (x0, x1) = (view.x(s.at as f32), view.x((s.at + self.step_len()) as f32));
+            let cell = Rect::from_min_max(pos2(x0, grid.top()), pos2(x1, grid.bottom()));
+            painter.rect_filled(cell.intersect(grid), cr(0), color.gamma_multiply(0.10));
+        }
         self.paint_notes(&painter, &view, p, pat, ch, color, playing.then_some(playhead));
+        if let Some(s) = &self.step {
+            let x = view.x(s.at as f32);
+            if (grid.left()..=grid.right()).contains(&x) {
+                painter.vline(x, ruler.top()..=grid.bottom(), stroke(2.0, color));
+                // A cap on the ruler, so it reads as a cursor, not the playhead.
+                let cap = Rect::from_min_size(pos2(x - 1.0, ruler.top()), vec2(8.0, 7.0));
+                painter.rect_filled(cap, cr(1), color);
+            }
+        }
         if let (Drag::Select { from, .. }, Some(pos)) = (&self.drag, pos) {
             timeline::paint_rubber_band(&painter, *from, pos);
         }
@@ -775,6 +825,12 @@ impl PianoRoll {
                 p.key_root = root;
                 p.scale = scale;
             }
+            let lit = self.step.is_some().then_some(theme::L_MINT);
+            let hint = "Step input: the typing keyboard writes notes at a cursor, one snap each. \
+                        → rests, → while holding a key makes it longer, Backspace erases back, Esc ends.";
+            if widgets::button(ui, widgets::Legend::Text("STEP INPUT"), lit, hint).clicked() {
+                self.toggle_step();
+            }
             // View options: a menu drawer with toggles.
             let resp = widgets::bare_button(ui, "VIEW", false, "What the piano roll shows");
             let rows = [
@@ -890,8 +946,13 @@ impl PianoRoll {
         } else if ruler.contains(pos) && primary {
             // The piano roll's ruler is about *this pattern*: hear it from here.
             // (In song mode the app finds where this pattern plays in the song.)
-            out.push(Action::SeekPattern(view.tick(pos.x).clamp(0.0, pattern_ticks - 1.0) as f64));
+            let tick = view.tick(pos.x).clamp(0.0, pattern_ticks - 1.0);
+            out.push(Action::SeekPattern(tick as f64));
             self.drag = Drag::Seek;
+            let snap = self.snap;
+            if let Some(s) = &mut self.step {
+                s.at = timeline::snap(tick, snap).max(0.0) as u32;
+            }
         } else if keys_r.contains(pos) && primary {
             let key = view.key(pos.y).clamp(0, 127) as u8;
             self.audition(key, out);
@@ -907,6 +968,106 @@ impl PianoRoll {
                 self.drag_to_velocity(pos, pos, view, vel, p, pat, ch_id);
             }
         }
+    }
+
+    pub fn stepping(&self) -> bool {
+        self.step.is_some()
+    }
+
+    /// Turn step input on (the cursor starts at the playhead) or off.
+    pub fn toggle_step(&mut self) {
+        self.step = match self.step {
+            Some(_) => None,
+            None => {
+                let at = timeline::snap(self.playhead as f32, self.snap).max(0.0) as u32;
+                Some(Step { at, held: Vec::new(), group: Vec::new(), group_start: at, group_len: 0, follow: true })
+            }
+        };
+    }
+
+    /// How far one step of step input goes: the snap (with snap off, the
+    /// length you used last).
+    fn step_len(&self) -> u32 {
+        if self.snap <= 1 {
+            self.default_len().max(1)
+        } else {
+            self.snap
+        }
+    }
+
+    /// A key of the typing keyboard went down or up, while step input is on:
+    /// the first key down starts a group at the cursor (more keys while it's
+    /// held join it, a chord); the last key up moves the cursor past it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn step_key(&mut self, on: bool, key: u8, p: &mut Project, h: &mut History, pat: usize, ch: usize) {
+        let id = p.channels[ch].id;
+        if self.step.is_none() || self.editing != Some((pat, id)) {
+            return;
+        }
+        let len = self.step_len();
+        let velocity = self.last_vel;
+        let Some(s) = &mut self.step else { return };
+        if on {
+            if s.held.is_empty() {
+                h.checkpoint(p);
+                s.group.clear();
+                (s.group_start, s.group_len) = (s.at, len);
+            }
+            if s.held.contains(&key) {
+                return;
+            }
+            s.held.push(key);
+            let notes = p.patterns[pat].notes_mut(id);
+            s.group.push(notes.len());
+            notes.push(Note { start: s.group_start, len: s.group_len, key, velocity });
+        } else if let Some(i) = s.held.iter().position(|&k| k == key) {
+            s.held.remove(i);
+            if s.held.is_empty() {
+                s.at = s.group_start + s.group_len;
+                s.follow = true;
+            }
+        }
+    }
+
+    /// Arrows, Backspace and Esc while step input is on (and nothing is
+    /// selected). Returns true if it used the key.
+    fn step_action(&mut self, a: Action, p: &mut Project, h: &mut History, pat: usize, id: ChannelId) -> bool {
+        let len = self.step_len();
+        let Some(s) = &mut self.step else { return false };
+        match a {
+            Action::Arrow { dx, dy: 0, big } if dx != 0 => {
+                let d = if big { BEAT } else { len };
+                if dx > 0 && !s.held.is_empty() {
+                    // Holding a key: the notes grow (a tie, in tracker words).
+                    s.group_len += d;
+                    let notes = p.patterns[pat].notes_mut(id);
+                    for &i in &s.group {
+                        if let Some(n) = notes.get_mut(i) {
+                            n.len = s.group_len;
+                        }
+                    }
+                } else if dx > 0 {
+                    s.at += d;
+                } else {
+                    s.at = s.at.saturating_sub(d);
+                }
+                s.follow = true;
+            }
+            Action::Delete => {
+                // Back a step, and erase what starts there.
+                (s.held, s.group) = (Vec::new(), Vec::new());
+                s.at = s.at.saturating_sub(len);
+                s.follow = true;
+                let (from, to) = (s.at, s.at + len);
+                if p.patterns[pat].notes(id).iter().any(|n| (from..to).contains(&n.start)) {
+                    h.checkpoint(p);
+                    p.patterns[pat].notes_mut(id).retain(|n| !(from..to).contains(&n.start));
+                }
+            }
+            Action::Deselect => self.step = None,
+            _ => return false,
+        }
+        true
     }
 
     /// A note preview while editing — silent while the song is playing.
@@ -1388,6 +1549,46 @@ mod tests {
         // Notes being moved don't count.
         assert_eq!(previous_note(&notes, &notes[3], &[1, 2, 3]).map(|m| m.key), Some(40));
         assert!(previous_note(&notes, &notes[0], &[0]).is_none());
+    }
+
+    #[test]
+    fn step_input_taps_chords_holds_rests_and_backspaces() {
+        let mut p = Project::default();
+        let lead = p.add_channel("Lead", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
+        let mut h = History::default();
+        let mut roll = PianoRoll { editing: Some((0, lead)), ..Default::default() };
+        let s = TICKS_PER_STEP;
+        roll.toggle_step();
+        let key = |roll: &mut PianoRoll, p: &mut Project, h: &mut History, on, k| roll.step_key(on, k, p, h, 0, 0);
+        // Tap, tap.
+        for k in [60, 62] {
+            key(&mut roll, &mut p, &mut h, true, k);
+            key(&mut roll, &mut p, &mut h, false, k);
+        }
+        // A chord: two keys down together, let go in any order.
+        key(&mut roll, &mut p, &mut h, true, 64);
+        key(&mut roll, &mut p, &mut h, true, 67);
+        key(&mut roll, &mut p, &mut h, false, 64);
+        assert_eq!(roll.step.as_ref().unwrap().at, 2 * s, "still held: the cursor waits");
+        key(&mut roll, &mut p, &mut h, false, 67);
+        // A rest, then a note held over two → presses: three steps long.
+        roll.action(Action::Arrow { dx: 1, dy: 0, big: false }, &mut p, &mut h, 0, 0);
+        key(&mut roll, &mut p, &mut h, true, 65);
+        roll.action(Action::Arrow { dx: 1, dy: 0, big: false }, &mut p, &mut h, 0, 0);
+        roll.action(Action::Arrow { dx: 1, dy: 0, big: false }, &mut p, &mut h, 0, 0);
+        key(&mut roll, &mut p, &mut h, false, 65);
+        let got: Vec<(u32, u32, u8)> = p.patterns[0].notes(lead).iter().map(|n| (n.start, n.len, n.key)).collect();
+        assert_eq!(got, vec![(0, s, 60), (s, s, 62), (2 * s, s, 64), (2 * s, s, 67), (4 * s, 3 * s, 65)]);
+        assert_eq!(roll.step.as_ref().unwrap().at, 7 * s);
+        // Backspace: back a step at a time, erasing what starts there.
+        for _ in 0..3 {
+            roll.action(Action::Delete, &mut p, &mut h, 0, 0);
+        }
+        assert_eq!(p.patterns[0].notes(lead).len(), 4, "the long note went");
+        assert_eq!(roll.step.as_ref().unwrap().at, 4 * s);
+        // Esc: done.
+        roll.action(Action::Deselect, &mut p, &mut h, 0, 0);
+        assert!(!roll.stepping());
     }
 
     #[test]
