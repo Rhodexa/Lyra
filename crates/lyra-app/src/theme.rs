@@ -6,7 +6,7 @@
 //! Roboto Condensed for labels and Roboto for reading text. The "Foundations"
 //! section below holds its tokens; older constants are being replaced widget by
 //! widget during the port. Fluttersine and Chrysalis don't use this module
-//! (they have their own frozen look in crates/plugins/shared-look).
+//! (they have their own frozen look in plugins/shared-look).
 
 use egui::{Color32, Context, FontFamily, FontId, Painter, Rect, Stroke, TextStyle};
 

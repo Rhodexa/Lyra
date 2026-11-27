@@ -79,7 +79,7 @@ repeat) · "Pew" (pitch macro down fast).
 
 ## Done when
 
-* Crate `crates/plugins/pipsqueak` with its `PLUGINS` entry, gathered by
+* Crate `plugins/pipsqueak/plugin` with its `PLUGINS` entry, gathered by
   `lyra-catalog`; `params.lock` updated by its test.
 * Tests: LFSR period (long mode repeats after 32767 steps, short after 127);
   a chord in chord mode makes one voice step through its keys with the

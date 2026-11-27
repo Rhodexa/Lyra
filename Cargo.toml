@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/lyra-*", "crates/plugins/*", "crates/plugins/*/editor"]
+members = [
+    # Lyra itself.
+    "crates/lyra-*",
+    # Built-in plugins: each folder in plugins/ is one plugin (see plugins/README.md).
+    "plugins/*/plugin",
+    "plugins/*/editor",
+    "plugins/shared-look",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,20 +20,20 @@ lyra-dsp    = { path = "crates/lyra-dsp" }
 lyra-catalog = { path = "crates/lyra-catalog" }
 # The plugin kit: what an editor needs from Lyra (crates/lyra-kit).
 lyra-kit = { path = "crates/lyra-kit" }
-# One crate per built-in plugin family (see crates/plugins).
-lyra-fluttersine = { path = "crates/plugins/fluttersine" }
-lyra-chrysalis   = { path = "crates/plugins/chrysalis" }
-lyra-drums       = { path = "crates/plugins/drums" }
-lyra-synth       = { path = "crates/plugins/synth" }
-lyra-sampler     = { path = "crates/plugins/sampler" }
-lyra-effects     = { path = "crates/plugins/effects" }
+# One crate per built-in plugin family (see plugins/).
+lyra-fluttersine = { path = "plugins/fluttersine/plugin" }
+lyra-chrysalis   = { path = "plugins/chrysalis/plugin" }
+lyra-drums       = { path = "plugins/drums/plugin" }
+lyra-synth       = { path = "plugins/synth/plugin" }
+lyra-sampler     = { path = "plugins/sampler/plugin" }
+lyra-effects     = { path = "plugins/effects/plugin" }
 # Plugins living in their own repos next door, listed by path.
 octavia-lyra     = { path = "../LyraRelated/Octavia/crates/octavia-lyra" }
 octavia-editor   = { path = "../LyraRelated/Octavia/crates/octavia-editor" }
 # Editors live beside their plugin; the two synths share a frozen look.
-lyra-shared-look        = { path = "crates/plugins/shared-look" }
-lyra-fluttersine-editor = { path = "crates/plugins/fluttersine/editor" }
-lyra-chrysalis-editor   = { path = "crates/plugins/chrysalis/editor" }
+lyra-shared-look        = { path = "plugins/shared-look" }
+lyra-fluttersine-editor = { path = "plugins/fluttersine/editor" }
+lyra-chrysalis-editor   = { path = "plugins/chrysalis/editor" }
 lyra-engine = { path = "crates/lyra-engine" }
 lyra-model  = { path = "crates/lyra-model" }
 

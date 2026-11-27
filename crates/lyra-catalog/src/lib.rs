@@ -1,7 +1,7 @@
 //! # lyra-catalog
 //!
 //! Which plugins Lyra knows. Every built-in lives in its own crate under
-//! `crates/plugins` and describes itself there (a `PLUGINS` list of
+//! `plugins/` and describes itself there (a `PLUGINS` list of
 //! [`PluginInfo`]: id, name, parameters, presets, how to make one); this crate
 //! only gathers those lists and looks things up by id. The engine never sees
 //! any of it: it plays whatever `Box<dyn Plugin>` it is handed.

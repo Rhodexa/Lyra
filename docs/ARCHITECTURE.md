@@ -171,7 +171,7 @@ swapped in whole with `SetFxChain`; the old chain goes back as trash. The bridge
 rebuilds a chain only when its list of effects changes. Knob moves are plain
 `SetFxParam`. Every plugin, instrument or effect, gets `Plugin::transport()`
 (tempo, playing, position) before each block: tempo-synced delays and pumps,
-and Fluttersine's synced LFOs, which lock to the song position while it plays. Effects live in `crates/plugins/effects`, and
+and Fluttersine's synced LFOs, which lock to the song position while it plays. Effects live in `plugins/effects/plugin`, and
 their editors are generated from their parameter tables, like instruments.
 
 ## Project files
@@ -240,11 +240,11 @@ note hanging. Stop clears the list and sends `AllNotesOff`.
 * Hand-made editors take over below the editor's header for one instrument id.
   Each lives in its plugin's folder and talks to Lyra only through the plugin
   kit (see "Plugin kit" below). Fluttersine (id `lyra.fluttersine`) has one:
-  `crates/plugins/fluttersine/editor` (a header with the hover
+  `plugins/fluttersine/editor` (a header with the hover
   readout, preset, logo and Tone/Time/Volume/Glide; operator / filter / LFO / MOD
   tabs on the left; MATRIX / ALGORITHMS tabs on the right; draggable envelopes
   and filter curve; flat keys; laid out with `flex`). It still only
-  edits `params`. Chrysalis (`lyra.chrysalis`) has `crates/plugins/chrysalis/editor`
+  edits `params`. Chrysalis (`lyra.chrysalis`) has `plugins/chrysalis/editor`
   (the table studio is its `studio.rs`),
   with **its own look** (the user's call: the sound is aggressive, the editor
   shouldn't whisper): teal-black panels, dark screens with glowing curves,
@@ -295,14 +295,14 @@ can't reach it.
   preset list for a popup (`presets::menu`, ink passed in), and `assets::Artwork`
   (a PNG built in and live-reloaded from the plugin's folder).
 
-Fluttersine and Chrysalis also share `crates/plugins/shared-look`: their look
+Fluttersine and Chrysalis also share `plugins/shared-look`: their look
 as it was on 2026-11-25 (colours, lights, LED, LCD, knob painter, icons,
 sizes, and the egui style written out as code). It belongs to them, not to
 the kit. A new plugin (Octavia) brings its own look and needs only the kit.
 
 ## Chrysalis (wavetable synth)
 
-`crates/plugins/chrysalis`. A table is up to 256 frames × 2048 samples, kept
+`plugins/chrysalis/plugin`. A table is up to 256 frames × 2048 samples, kept
 at 20 band-limited levels half an octave apart (level `L` keeps harmonics up
 to ⌊1024 / 2^(L/2)⌋, at 32 samples per harmonic, max 2048). An oscillator
 picks the fullest level whose top harmonic stays below Nyquist, reads the
