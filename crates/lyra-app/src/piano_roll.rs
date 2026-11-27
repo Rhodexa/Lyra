@@ -35,7 +35,7 @@ use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, S
 use lyra_model::{theory, ChannelId, Chord, History, Note, Project, Scale, TICKS_PER_BAR, TICKS_PER_STEP};
 
 /// The velocity lane's starting height, and the least it can be.
-mod links;
+mod bends;
 mod typing;
 
 const LANE_H: f32 = 56.0;
@@ -56,20 +56,18 @@ enum Drag {
         originals: Vec<(usize, Note)>,
         lead: usize,
         free: bool,
-        /// Links with one end moving: (source, its `to`, sign), so they follow.
-        relinks: Vec<(usize, i8, i32)>,
     },
-    /// Drawing a new link from note `from`'s dot.
-    LinkNew {
-        from: usize,
+    /// A bend's end dot (or a note's "pull me" dot): where the note arrives.
+    BendTo {
+        note: usize,
     },
-    /// A link's dot: when its glide starts.
-    LinkStart {
+    /// A bend's start dot: when its glide starts.
+    BendStart {
         note: usize,
         free: bool,
     },
-    /// A link's ring: its bend.
-    LinkBend {
+    /// A bend's ring: its shape.
+    BendShape {
         note: usize,
         orig: f32,
         anchor_y: f32,
@@ -380,7 +378,7 @@ impl PianoRoll {
             Action::Delete | Action::Backspace if !self.selection.is_empty() => {
                 h.checkpoint(p);
                 let sel = std::mem::take(&mut self.selection);
-                links::remove(p.patterns[pat].notes_mut(id), sel);
+                remove_notes(p.patterns[pat].notes_mut(id), sel);
             }
             Action::Duplicate if !self.selection.is_empty() => {
                 h.checkpoint(p);
@@ -420,7 +418,7 @@ impl PianoRoll {
                     .filter(|i| !gone.contains(i))
                     .map(|&i| i - gone.iter().filter(|&&g| g < i).count())
                     .collect();
-                links::remove(p.patterns[pat].notes_mut(id), gone);
+                remove_notes(p.patterns[pat].notes_mut(id), gone);
                 self.selection = kept;
             }
             Action::Arrow { dx, dy, big, .. } if !self.selection.is_empty() => {
@@ -580,13 +578,13 @@ impl PianoRoll {
             }
         }
 
-        // Double-click a link's ring: a straight glide again.
+        // Double-click a bend's ring: a straight glide again.
         if hovering && ui.input(|i| i.pointer.button_double_clicked(egui::PointerButton::Primary)) {
             if let Some(pos) = pos {
-                if let Some(links::Part::Ring(i)) = links::hit(&view, p.patterns[pat].notes(ch_id), pos) {
+                if let Some(bends::Part::Ring(i)) = bends::hit(&view, p.patterns[pat].notes(ch_id), pos) {
                     h.checkpoint(p);
-                    if let Some(l) = &mut p.patterns[pat].notes_mut(ch_id)[i].link {
-                        l.tension = 0.0;
+                    if let Some(b) = &mut p.patterns[pat].notes_mut(ch_id)[i].bend {
+                        b.tension = 0.0;
                     }
                 }
             }
@@ -665,16 +663,12 @@ impl PianoRoll {
             if matches!(self.drag, Drag::Loop { moved: false, .. }) {
                 self.looped = None; // Alt+click: no loop
             }
-            if let (Drag::LinkNew { from }, Some(pos)) = (&self.drag, pos) {
-                // Dropped on a later note: linked.
-                let view = self.view(grid);
-                let notes = p.patterns[pat].notes(ch_id);
-                let to = hit(&view, notes, pos).filter(|&t| notes.get(*from).is_some_and(|a| notes[t].start > a.start));
-                if let Some(t) = to {
-                    h.checkpoint(p);
-                    let notes = p.patterns[pat].notes_mut(ch_id);
-                    let link = links::new_link(&notes[*from], &notes[t]);
-                    notes[*from].link = Some(link);
+            if let Drag::BendTo { note } = self.drag {
+                // Let go on the note's own row: no bend.
+                if let Some(n) = p.patterns[pat].notes_mut(ch_id).get_mut(note) {
+                    if n.bend.is_some_and(|b| b.to == 0) {
+                        n.bend = None;
+                    }
                 }
             }
             self.drag = Drag::None;
@@ -689,14 +683,14 @@ impl PianoRoll {
             (hovering && grid.contains(pos.unwrap_or_default()), pos, &self.drag)
         {
             let notes = p.patterns[pat].notes(ch_id);
-            if let Some(part) = links::hit(&view, notes, pos) {
+            if let Some(part) = bends::hit(&view, notes, pos) {
                 ui.ctx().set_cursor_icon(match part {
-                    links::Part::Dot(_) => CursorIcon::ResizeHorizontal,
-                    links::Part::Ring(_) => CursorIcon::ResizeVertical,
-                    links::Part::Curve(_) => CursorIcon::Default,
+                    bends::Part::Start(_) => CursorIcon::ResizeHorizontal,
+                    bends::Part::End(_) | bends::Part::Ring(_) => CursorIcon::ResizeVertical,
+                    bends::Part::Curve(_) => CursorIcon::Default,
                 });
-            } else if self.grip_hit(&view, notes, pos).is_some() {
-                ui.ctx().set_cursor_icon(CursorIcon::Grab);
+            } else if bends::grip_hit(&view, notes, pos).is_some() {
+                ui.ctx().set_cursor_icon(CursorIcon::ResizeVertical);
             } else if edge_hit(&view, notes, pos).is_some() {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
             } else if hit(&view, notes, pos).is_some() {
@@ -724,7 +718,7 @@ impl PianoRoll {
         self.paint_typing_under(&painter, &view, color);
         self.paint_notes(&painter, &view, p, pat, ch, color, playing.then_some(playhead));
         let mouse = pos.filter(|p| hovering && grid.contains(*p));
-        self.paint_links(&painter, &view, p.patterns[pat].notes(ch_id), theme::shade(color, 1.15), mouse);
+        self.paint_bends(&painter, &view, p.patterns[pat].notes(ch_id), theme::shade(color, 1.15), mouse);
         self.paint_typing_over(&painter, &view, ruler, color);
         if let (Drag::Select { from, .. }, Some(pos)) = (&self.drag, pos) {
             timeline::paint_rubber_band(&painter, *from, pos);
@@ -892,33 +886,38 @@ impl PianoRoll {
             let notes = p.patterns[pat].notes_mut(ch_id);
             if !primary {
                 self.selection.clear();
-                // Right-click a link: unlink. A note: erase it (and keep erasing).
-                if let Some(links::Part::Dot(i) | links::Part::Ring(i) | links::Part::Curve(i)) =
-                    links::hit(view, notes, pos)
+                // Right-click a bend: gone. A note: erase it (and keep erasing).
+                if let Some(
+                    bends::Part::Start(i) | bends::Part::End(i) | bends::Part::Ring(i) | bends::Part::Curve(i),
+                ) = bends::hit(view, notes, pos)
                 {
-                    notes[i].link = None;
+                    notes[i].bend = None;
                     return;
                 }
                 if let Some(i) = hit(view, notes, pos) {
-                    links::remove(notes, vec![i]);
+                    notes.remove(i);
                 }
                 self.drag = Drag::Erase;
                 return;
             }
-            match links::hit(view, notes, pos) {
-                Some(links::Part::Dot(note)) => {
-                    self.drag = Drag::LinkStart { note, free };
+            match bends::hit(view, notes, pos) {
+                Some(bends::Part::End(note)) => {
+                    self.drag = Drag::BendTo { note };
                     return;
                 }
-                Some(links::Part::Ring(note)) => {
-                    let orig = notes[note].link.map_or(0.0, |l| l.tension);
-                    self.drag = Drag::LinkBend { note, orig, anchor_y: pos.y };
+                Some(bends::Part::Start(note)) => {
+                    self.drag = Drag::BendStart { note, free };
+                    return;
+                }
+                Some(bends::Part::Ring(note)) => {
+                    let orig = notes[note].bend.map_or(0.0, |b| b.tension);
+                    self.drag = Drag::BendShape { note, orig, anchor_y: pos.y };
                     return;
                 }
                 _ => {}
             }
-            if let Some(from) = self.grip_hit(view, notes, pos) {
-                self.drag = Drag::LinkNew { from };
+            if let Some(note) = bends::grip_hit(view, notes, pos) {
+                self.drag = Drag::BendTo { note };
                 return;
             }
             if mods.command {
@@ -957,8 +956,7 @@ impl PianoRoll {
                         self.drag = Drag::Resize { anchor_tick, originals, lead, free };
                     } else {
                         self.preview(key, out);
-                        let relinks = links::stretched(notes, &self.selection);
-                        self.drag = Drag::Move { anchor_tick, anchor_key, originals, lead, free, relinks };
+                        self.drag = Drag::Move { anchor_tick, anchor_key, originals, lead, free };
                     }
                 }
                 None => {
@@ -968,13 +966,13 @@ impl PianoRoll {
                     let (len, velocity) = (self.default_len(), self.last_vel);
                     let base = notes.len();
                     for k in self.chord.keys(key, scale, root) {
-                        notes.push(Note { start, len, key: k, velocity, link: None });
+                        notes.push(Note { start, len, key: k, velocity, bend: None });
                     }
                     self.selection = (base..notes.len()).collect();
                     let originals = self.selection.iter().map(|&j| (j, notes[j].clone())).collect();
                     let first = notes[base].key;
                     self.preview(first, out);
-                    self.drag = Drag::Move { anchor_tick, anchor_key, originals, lead: 0, free, relinks: Vec::new() };
+                    self.drag = Drag::Move { anchor_tick, anchor_key, originals, lead: 0, free };
                 }
             }
         } else if overview.rect.contains(pos) && primary {
@@ -1044,7 +1042,7 @@ impl PianoRoll {
         let pattern_ticks = (p.patterns[pat].play_length() * TICKS_PER_STEP) as f32;
         let notes = p.patterns[pat].notes_mut(ch_id);
         match &mut drag {
-            Drag::Move { anchor_tick, anchor_key, originals, lead, free, relinks } => {
+            Drag::Move { anchor_tick, anchor_key, originals, lead, free } => {
                 *free |= mods.alt; // latch: once free, free until the mouse is released
                 let snap = if *free { 1 } else { self.snap };
                 let lead_note = &originals[*lead].1;
@@ -1061,12 +1059,6 @@ impl PianoRoll {
                     if let Some(note) = notes.get_mut(*i) {
                         note.start = (n.start as i64 + dt) as u32;
                         note.key = (n.key as i32 + dk) as u8;
-                    }
-                }
-                // Links with one end moving stretch to follow it.
-                for &(i, to, sign) in relinks.iter() {
-                    if let Some(l) = notes.get_mut(i).and_then(|n| n.link.as_mut()) {
-                        l.to = (to as i32 + sign * dk).clamp(-127, 127) as i8;
                     }
                 }
                 let key = (lead_note.key as i32 + dk) as u8;
@@ -1096,15 +1088,17 @@ impl PianoRoll {
             }
             Drag::Erase => {
                 if let Some(i) = hit(view, notes, pos) {
-                    links::remove(notes, vec![i]);
+                    notes.remove(i);
                 }
             }
-            Drag::LinkNew { .. } => {} // finished when the mouse is let go
-            Drag::LinkStart { note, free } => {
+            Drag::BendTo { note } => Self::drag_bend_to(view, notes, *note, pos.y),
+            Drag::BendStart { note, free } => {
                 *free |= mods.alt;
-                self.drag_link_start(view, notes, *note, pos.x, *free);
+                self.drag_bend_start(view, notes, *note, pos.x, *free);
             }
-            Drag::LinkBend { note, orig, anchor_y } => Self::drag_link_bend(view, notes, *note, *orig, *anchor_y, pos.y),
+            Drag::BendShape { note, orig, anchor_y } => {
+                Self::drag_bend_shape(view, notes, *note, *orig, *anchor_y, pos.y)
+            }
             Drag::Velocity { last } => {
                 let from = std::mem::replace(last, pos);
                 self.drag = drag;
@@ -1401,6 +1395,15 @@ fn doubled(notes: &[Note], among: Option<&[usize]>, keep_high: bool) -> Vec<usiz
     gone
 }
 
+/// Remove notes by index (any order).
+fn remove_notes(notes: &mut Vec<Note>, mut gone: Vec<usize>) {
+    gone.sort_unstable_by(|a, b| b.cmp(a));
+    gone.dedup();
+    for i in gone {
+        notes.remove(i);
+    }
+}
+
 /// The seam between the grid and the velocity lane, a little taller than
 /// drawn so it's easy to catch.
 fn seam(grid: Rect, vel: Rect) -> Rect {
@@ -1429,7 +1432,7 @@ mod tests {
 
     #[test]
     fn undouble_keeps_one_note_per_pitch_per_moment() {
-        let n = |start, len, key| Note { start, len, key, velocity: 0.8, link: None };
+        let n = |start, len, key| Note { start, len, key, velocity: 0.8, bend: None };
         let notes = [
             n(0, 96, 48),  // C3: kept (lowest)
             n(0, 96, 60),  // C4: an octave double
@@ -1449,7 +1452,7 @@ mod tests {
     fn undouble_action_removes_them() {
         let mut p = Project::default();
         let lead = p.add_channel("Lead", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
-        let n = |key| Note { start: 0, len: 96, key, velocity: 0.8, link: None };
+        let n = |key| Note { start: 0, len: 96, key, velocity: 0.8, bend: None };
         p.patterns[0].notes_mut(lead).extend([n(48), n(60), n(72), n(64)]);
         let mut h = History::default();
         let mut roll = PianoRoll { editing: Some((0, lead)), ..Default::default() };
@@ -1467,7 +1470,7 @@ mod tests {
         let lead = p.add_channel("Lead", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
         let bass = p.add_channel("Bass", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
         let bar = TICKS_PER_BAR;
-        let n = |start, key| Note { start, len: 96, key, velocity: 0.8, link: None };
+        let n = |start, key| Note { start, len: 96, key, velocity: 0.8, bend: None };
         p.patterns[0].notes_mut(lead).extend([n(0, 60), n(bar + 96, 64), n(2 * bar, 67)]);
         p.patterns[0].notes_mut(bass).extend([n(bar, 36), n(2 * bar, 38)]);
         let mut roll = PianoRoll { editing: Some((0, lead)), selection: vec![1], ..Default::default() };

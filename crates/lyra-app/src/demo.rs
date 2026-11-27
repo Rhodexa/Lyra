@@ -30,7 +30,7 @@ fn preset(name: &str) -> Vec<f32> {
 /// A note `len` steps long starting at `step` (both may be fractional).
 fn note(step: f32, len: f32, key: u8, velocity: f32) -> Note {
     let t = TICKS_PER_STEP as f32;
-    Note { start: (step * t) as u32, len: (len * t) as u32, key, velocity, link: None }
+    Note { start: (step * t) as u32, len: (len * t) as u32, key, velocity, bend: None }
 }
 
 pub fn project() -> Project {

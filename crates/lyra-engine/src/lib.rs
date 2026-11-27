@@ -60,34 +60,19 @@ pub struct SeqNote {
     pub channel: u16,
     pub key: u8,
     pub velocity: f32,
-    /// Its place in a chain of linked notes (piano-roll glides). Only
-    /// channels whose plugin glides read it; others play notes as written.
-    pub legato: Legato,
 }
 
-/// A note's place in a chain of linked notes, for channels that glide.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub enum Legato {
-    /// A note on its own.
-    #[default]
-    Alone,
-    /// The first note of a chain: it sounds for `len` ticks, to the end of
-    /// the chain's last note, gliding as it goes (see [`SeqGlide`]).
-    Head { len: u32 },
-    /// A later note of a chain: it doesn't start, the head's sound goes on.
-    Tied,
-}
-
-/// One glide of a chain: the head's sound moves to `key`.
+/// A note's glide (a bend drawn in the piano roll): the note's sound moves
+/// to `key`. Only channels whose plugin glides hear it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SeqGlide {
     /// When the glide starts, and how long it takes (ticks).
     pub start: u32,
     pub len: u32,
     pub channel: u16,
-    /// The chain's head (its start and key: what its id is made of).
-    pub head_start: u32,
-    pub head_key: u8,
+    /// The note that glides (its start and key: what its id is made of).
+    pub note_start: u32,
+    pub note_key: u8,
     pub key: u8,
     pub tension: f32,
 }
@@ -98,7 +83,7 @@ pub struct Sequence {
     /// Loop length in ticks (0 = nothing to play).
     pub length: u32,
     pub notes: Vec<SeqNote>,
-    /// Glides of linked notes, in start order.
+    /// Notes' glides, in start order.
     pub glides: Vec<SeqGlide>,
 }
 
@@ -1159,20 +1144,13 @@ impl Engine {
 
         for note in &self.seq.notes {
             let Some(ch) = self.channels.get_mut(note.channel as usize) else { continue };
-            // On a channel that glides, a chain is one note: the head lasts to
-            // the chain's end, the rest don't start.
-            let note_len = match note.legato {
-                Legato::Tied if ch.glides => continue,
-                Legato::Head { len } if ch.glides => len,
-                _ => note.len,
-            };
             let on = note.start as f64 + if (note.start / TICKS_PER_STEP) % 2 == 1 { swing_ticks } else { 0.0 };
 
             if let Some((o, lap)) = offset_of(on) {
                 let id = note_id(note, self.laps.wrapping_add(lap));
                 // Ticks from block start to this note's end (exact, before rounding to a sample).
                 let since_start = if on >= start { on - start } else { on + len - start };
-                let end_tick = since_start + note_len as f64;
+                let end_tick = since_start + note.len as f64;
                 if end_tick < block_ticks {
                     // Ends inside this very block.
                     let off = ((end_tick / ticks_per_sample) as u32).min(n as u32 - 1).max(o);
@@ -1195,7 +1173,7 @@ impl Engine {
             }
         }
 
-        // Glides of linked notes (unswung: they belong to the line, not the grid).
+        // Notes' glides (unswung: they belong to the line, not the grid).
         let secs_per_tick = 60.0 / (self.tempo * PPQ as f64);
         for g in &self.seq.glides {
             let Some(ch) = self.channels.get_mut(g.channel as usize) else { continue };
@@ -1203,11 +1181,11 @@ impl Engine {
                 continue;
             }
             if let Some((o, lap)) = offset_of(g.start as f64) {
-                // The head's id on this pass (a chain is assumed not to
-                // cross the loop's end).
+                // The note's id on this pass (its glide is inside it, so on the
+                // same pass unless the note crosses the loop's end).
                 let lap = self.laps.wrapping_add(lap);
                 let event = Event::Glide {
-                    id: id_of(g.head_key, g.head_start, lap),
+                    id: id_of(g.note_key, g.note_start, lap),
                     key: g.key,
                     seconds: (g.len as f64 * secs_per_tick) as f32,
                     tension: g.tension,
@@ -1414,51 +1392,41 @@ mod tests {
     }
 
     #[test]
-    fn linked_notes_are_one_gliding_note_for_plugins_that_glide() {
-        // C4 for a beat, linked into E4 (a beat later, for a beat), the glide
-        // the last half beat before E4. One tick = 250 samples.
-        let head = SeqNote { legato: Legato::Head { len: 192 }, ..note(0, 96) };
-        let tied = SeqNote { key: 64, legato: Legato::Tied, ..note(96, 96) };
-        let glide = SeqGlide { start: 48, len: 48, channel: 0, head_start: 0, head_key: 60, key: 64, tension: 0.0 };
+    fn a_bent_note_glides_on_plugins_that_glide() {
+        // C4 for two beats, gliding to E4 over its second beat. One tick = 250 samples.
+        let glide = SeqGlide { start: 96, len: 96, channel: 0, note_start: 0, note_key: 60, key: 64, tension: 0.0 };
         for glides in [true, false] {
             let (mut eng, mut h) = create(48_000.0);
             let log = Arc::new(Mutex::new(Vec::new()));
             let rec = Recorder { log: log.clone(), clock: 0, glides };
             h.send(Command::AddChannel(ChannelSlot::new(Box::new(rec), 48_000.0)));
             h.send(Command::SetTempo(120.0));
-            let seq = Sequence { length: 384, notes: vec![head, tied], glides: vec![glide] };
+            let seq = Sequence { length: 384, notes: vec![note(0, 192)], glides: vec![glide] };
             h.send(Command::SetSequence(Box::new(seq)));
             run(&mut eng, 64);
             log.lock().unwrap().clear();
             h.send(Command::Play);
             run(&mut eng, 200 * 250);
             let events: Vec<(u64, Event)> = log.lock().unwrap().clone();
-            let ons: Vec<u8> = events.iter().filter_map(|(_, e)| match e {
-                Event::NoteOn { key, .. } => Some(*key),
+            let on = events.iter().find_map(|(_, e)| match e {
+                Event::NoteOn { id, .. } => Some(*id),
                 _ => None,
-            }).collect();
+            });
             let slide = events.iter().find(|(_, e)| matches!(e, Event::Glide { .. }));
             if glides {
-                assert_eq!(ons, vec![60], "the glider never starts E4");
                 let (at, e) = slide.expect("a glide");
-                let Event::Glide { key, seconds, .. } = e else { unreachable!() };
-                assert_eq!((*at / 250, *key), (48, 64));
-                assert!((seconds - 0.25).abs() < 1e-3, "half a beat at 120 bpm: {seconds}");
-                // The gliding note ends with the chain (2 beats), under its own id and key.
-                let offs: Vec<u64> = events.iter().filter_map(|(at, e)| match e {
-                    Event::NoteOff { key: 60, .. } => Some(*at / 250),
-                    _ => None,
-                }).collect();
-                assert!(offs.contains(&192), "{offs:?}");
+                let Event::Glide { key, seconds, id, .. } = e else { unreachable!() };
+                assert_eq!((*at / 250, *key), (96, 64));
+                assert_eq!(Some(*id), on, "the glide moves that very note");
+                assert!((seconds - 0.5).abs() < 1e-3, "a beat at 120 bpm: {seconds}");
             } else {
-                assert_eq!(ons, vec![60, 64], "as written");
-                assert!(slide.is_none());
+                assert!(slide.is_none(), "plugins that don't glide never see one");
             }
         }
     }
 
     fn note(start: u32, len: u32) -> SeqNote {
-        SeqNote { start, len, channel: 0, key: 60, velocity: 1.0, legato: Default::default() }
+        SeqNote { start, len, channel: 0, key: 60, velocity: 1.0 }
     }
 
     fn run(eng: &mut Engine, samples: usize) {

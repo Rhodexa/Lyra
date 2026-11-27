@@ -7,7 +7,7 @@
 
 use crate::samples::Samples;
 use lyra_engine::{
-    Arrangement, AudioLane, AudioRegion, ChannelSlot, Command, EngineHandle, FxChain, Legato, Place, SeqGlide, SeqNote, Sequence,
+    Arrangement, AudioLane, AudioRegion, ChannelSlot, Command, EngineHandle, FxChain, Place, SeqGlide, SeqNote, Sequence,
 };
 use lyra_model::{Note, Pattern, Project, TICKS_PER_STEP};
 
@@ -237,55 +237,29 @@ impl Bridge {
     }
 }
 
-/// Linked notes in one channel's notes (see `NoteLink`): each note's place
-/// in a chain, by index, and every chain's glides as
-/// (head index, start, length, key, tension), in pattern ticks.
-type Glide = (usize, u32, u32, u8, f32);
-
-fn chains(notes: &[Note]) -> (Vec<Legato>, Vec<Glide>) {
-    let n = notes.len();
-    let mut legato = vec![Legato::Alone; n];
-    let mut glides = Vec::new();
-    if notes.iter().all(|x| x.link.is_none()) {
-        return (legato, glides);
-    }
-    let next: Vec<Option<usize>> = notes.iter().map(|x| x.link_target(notes)).collect();
-    let mut tied = vec![false; n];
-    for t in next.iter().flatten() {
-        tied[*t] = true;
-    }
-    for head in (0..n).filter(|&i| next[i].is_some() && !tied[i]) {
-        let mut end = notes[head].start + notes[head].len;
-        let mut j = head;
-        // Targets always start later, so a chain can't loop; the cap is a belt.
-        for _ in 0..n {
-            let (Some(t), Some(link)) = (next[j], notes[j].link) else { break };
-            let arrive = notes[t].start;
-            // A glide can't begin before the note it leaves.
-            let len = link.glide.min(arrive - notes[j].start);
-            glides.push((head, arrive - len, len, notes[t].key, link.tension));
-            legato[t] = Legato::Tied;
-            end = end.max(arrive + notes[t].len);
-            j = t;
-        }
-        legato[head] = Legato::Head { len: end - notes[head].start };
-    }
-    (legato, glides)
+/// A bent note's glide for the engine (`at`: where the note starts in the
+/// sequence; `cut`: how much of the note plays, if a clip's end cuts it).
+fn glide_of(n: &Note, at: u32, cut: u32, channel: u16) -> Option<SeqGlide> {
+    let (start, len, key) = n.glide()?;
+    let from = start - n.start;
+    (from < cut).then(|| SeqGlide {
+        start: at + from,
+        len: len.min(cut - from),
+        channel,
+        note_start: at,
+        note_key: n.key,
+        key,
+        tension: n.bend.map_or(0.0, |b| b.tension),
+    })
 }
 
 /// Flatten a pattern into the engine's sorted note list.
 fn compile(p: &Project, pat: &Pattern) -> Sequence {
     let (mut notes, mut glides) = (Vec::new(), Vec::new());
     for (index, ch) in p.channels.iter().enumerate() {
-        let list = pat.notes(ch.id);
-        let (legato, linked) = chains(list);
-        for (n, &legato) in list.iter().zip(&legato) {
-            let (start, len, channel, key, velocity) = (n.start, n.len, index as u16, n.key, n.velocity);
-            notes.push(SeqNote { start, len, channel, key, velocity, legato });
-        }
-        for (head, start, len, key, tension) in linked {
-            let (head_start, head_key) = (list[head].start, list[head].key);
-            glides.push(SeqGlide { start, len, channel: index as u16, head_start, head_key, key, tension });
+        for n in pat.notes(ch.id) {
+            notes.push(SeqNote { start: n.start, len: n.len, channel: index as u16, key: n.key, velocity: n.velocity });
+            glides.extend(glide_of(n, n.start, n.len, index as u16));
         }
     }
     notes.sort_by_key(|n| n.start);
@@ -303,33 +277,10 @@ pub fn compile_song(p: &Project) -> Sequence {
         }
         let Some(pat) = clip.pattern().and_then(|id| p.pattern(id)) else { continue };
         for (index, ch) in p.channels.iter().enumerate() {
-            let list = pat.notes(ch.id);
-            let (legato, linked) = chains(list);
             for (at, len, n) in clip.pattern_notes(pat, ch.id) {
-                // Which of the pattern's notes this is (pattern_notes lends them out).
-                let i = (n as *const Note as usize - list.as_ptr() as usize) / std::mem::size_of::<Note>();
                 let start = clip.start + at;
-                let left = clip.len - at; // a chain is cut at the clip's end, like a note
-                let legato = match legato[i] {
-                    Legato::Head { len } => Legato::Head { len: len.min(left) },
-                    other => other,
-                };
-                notes.push(SeqNote { start, len, channel: index as u16, key: n.key, velocity: n.velocity, legato });
-                for &(_, g_start, g_len, key, tension) in linked.iter().filter(|g| g.0 == i) {
-                    let from_head = g_start - n.start;
-                    if from_head < left {
-                        let g = SeqGlide {
-                            start: start + from_head,
-                            len: g_len,
-                            channel: index as u16,
-                            head_start: start,
-                            head_key: n.key,
-                            key,
-                            tension,
-                        };
-                        glides.push(g);
-                    }
-                }
+                notes.push(SeqNote { start, len, channel: index as u16, key: n.key, velocity: n.velocity });
+                glides.extend(glide_of(n, start, len, index as u16));
             }
         }
     }
@@ -378,7 +329,7 @@ mod tests {
     fn project_with_one_note() -> Project {
         let mut p = Project::default();
         let ch = p.add_channel("k", "lyra.kick", vec![]);
-        p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 24, key: 60, velocity: 1.0, link: None });
+        p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 24, key: 60, velocity: 1.0, bend: None });
         p
     }
 
@@ -386,7 +337,7 @@ mod tests {
     fn adding_an_instrument_lets_the_others_ring_on() {
         let mut p = Project::default();
         let ch = p.add_channel("Pad", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
-        p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 4 * TICKS_PER_BAR, key: 60, velocity: 1.0, link: None });
+        p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 4 * TICKS_PER_BAR, key: 60, velocity: 1.0, bend: None });
         let (mut eng, mut h) = lyra_engine::create(48_000.0);
         let (mut bridge, mut samples) = (Bridge::default(), Samples::default());
         let mut out = vec![0.0; 2 * 4800];
@@ -463,23 +414,20 @@ mod tests {
 }
 
 #[cfg(test)]
-mod chain_tests {
+mod glide_tests {
     use super::*;
-    use lyra_model::NoteLink;
+    use lyra_model::NoteBend;
 
     #[test]
-    fn linked_notes_become_a_chain_with_its_glides() {
-        let link = |to, glide| Some(NoteLink { to, glide, tension: 0.0 });
-        let n = |start, key, link| Note { start, len: 96, key, velocity: 0.8, link };
-        // C → E (glide 48) → G (no glide: legato); a lone note between; and
-        // a link to a pitch nobody plays (ignored).
-        let notes = [n(0, 60, link(4, 48)), n(96, 64, link(3, 0)), n(200, 67, None), n(50, 50, link(1, 10)), n(192, 67, None)];
-        let (legato, glides) = chains(&notes);
-        assert_eq!(legato[0], Legato::Head { len: 288 });
-        assert_eq!(legato[1], Legato::Tied);
-        assert_eq!(legato[4], Legato::Tied, "the first G after E (192), not the later one");
-        assert_eq!(legato[2], Legato::Alone);
-        assert_eq!(legato[3], Legato::Alone);
-        assert_eq!(glides, vec![(0, 48, 48, 64, 0.0), (0, 192, 0, 67, 0.0)]);
+    fn a_bent_note_glides_inside_itself_and_a_clip_cuts_it() {
+        let bend = NoteBend { to: 7, from: 48, tension: 0.5 };
+        let n = Note { start: 96, len: 96, key: 60, velocity: 0.8, bend: Some(bend) };
+        let g = glide_of(&n, 96, 96, 2).unwrap();
+        assert_eq!((g.start, g.len, g.key, g.note_start, g.note_key, g.channel), (144, 48, 67, 96, 60, 2));
+        // In song mode at tick 1000, cut after 60 ticks: the glide is cut too.
+        let g = glide_of(&n, 1000, 60, 0).unwrap();
+        assert_eq!((g.start, g.len), (1048, 12));
+        // Cut before the glide starts: no glide.
+        assert!(glide_of(&n, 1000, 40, 0).is_none());
     }
 }

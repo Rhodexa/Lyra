@@ -67,7 +67,7 @@ fn voicing(name: &str, center: i32) -> Vec<i32> {
 }
 
 fn n(start: u32, len: u32, key: i32, velocity: f32) -> Note {
-    Note { start, len, key: key.clamp(0, 127) as u8, velocity: velocity.clamp(0.05, 1.0), link: None }
+    Note { start, len, key: key.clamp(0, 127) as u8, velocity: velocity.clamp(0.05, 1.0), bend: None }
 }
 
 // ───────────────────────────── the theme ─────────────────────────────

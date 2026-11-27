@@ -56,28 +56,21 @@ distances and in sound**, never in chord names or scale degrees.
 
 ## Next
 
-3. **Links between notes: built as a prototype (2026-11-27), try it.**
-   Hover a note: a dot past its right end; drag it onto a later note. The
-   link is drawn as the pitch's own path (along the first row, then a curve
-   into the second note); its **dot** sets when the glide starts (all the way
-   right = no glide, legato), its **ring** bends it (the automation editor's
-   curve, double-click = straight), right-click unlinks. Only **Chrysalis**
-   glides so far (`Plugin::glides`, `Event::Glide`); other synths play linked
-   notes as written. Code: `piano_roll/links.rs`, `bridge::chains`, the
-   engine's `Legato` / `SeqGlide`, `NoteLink` in the model.
-   *The original idea, for reference:* a grip on a note's right end; pull it onto the
-   next note and the two are linked. A link has a **type**:
-   - *slide*: the pitch glides (Chrysalis, Fluttersine);
-   - *slur*: connected, no new attack (Octavia: same bow; synths: legato).
-
-   A slide's **tension** bends its curve, using the automation editor's
-   bend ring (drag it up or down), so there's nothing new to learn. Each synth
-   reads a link its own way. Rhodexa's first picture was "something you pull
-   to the next note and choose the tension"; they're not sure yet, so
-   **prototype it and let them play with it before settling.**
-   Needs: `Note` gets a link (the model can change freely, pre-stable),
-   the engine sends it with the note (Octavia's KIT-REQUIREMENTS asks for
-   per-note data: "tremolo here, accent there, slur these").
+3. **Glides: a note's own bend** (2026-11-27). Hover a note: a dot past its
+   right end; **pull it up or down**: the note arrives at that pitch by its
+   end ("go to there by the end"). Drawn as the pitch's path, with the
+   arrival pitch written at the end; the start dot sets when the glide
+   begins, the ring bends it (the automation curve, double-click =
+   straight), right-click removes it. Only **Chrysalis** glides so far
+   (`Plugin::glides`, `Event::Glide`); others play the note flat. Code:
+   `piano_roll/bends.rs`, `NoteBend` in the model, `bridge::glide_of`,
+   `SeqGlide` in the engine.
+   **Why not links (tried first, same day):** linking a note *into the next
+   one* made the glide depend on other notes, and with a gap it glided out
+   of a note that had already ended. Rhodexa: "a glide is an articulation of
+   the *current* note; the note might die or have silence in the middle."
+   Joining notes without a new attack (a slur, legato) is a different
+   articulation, for later (Octavia wants it).
 4. **Channel curves in the bottom lane**: mod wheel, expression, pitch bend,
    drawn like automation (points + bend rings), under the notes. The lane
    gets tabs (`tab_row`): VEL, then the curves. Octavia needs these the most

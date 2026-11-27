@@ -29,7 +29,7 @@ fn main() {
     }
     let mut notes = vec![];
     let mut n =
-        |s: u32, c: u16, v: f32| notes.push(SeqNote { start: s * 24, len: 24, channel: c, key: 60, velocity: v, legato: Default::default() });
+        |s: u32, c: u16, v: f32| notes.push(SeqNote { start: s * 24, len: 24, channel: c, key: 60, velocity: v });
     for s in 0..16 {
         if s % 4 == 0 {
             n(s, 0, 1.0)
