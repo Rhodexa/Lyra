@@ -1,6 +1,6 @@
 //! Lyra's look, in one place.
 //!
-//! The spec is docs/design/catalog-next.html (its "Settled" index): neutral
+//! The spec is workshop/design/catalog-next.html (its "Settled" index): neutral
 //! charcoal surfaces on a dark ground, flat plates with a dark outline in their
 //! own colour, backlit "on", the dim LCD for things you change or that pop up,
 //! Roboto Condensed for labels and Roboto for reading text. The "Foundations"
@@ -351,7 +351,7 @@ pub const ICON_128: &[u8] = include_bytes!("../assets/icon_128.rgba");
 
 // ── Material: the control library ───────────────────────────────────────────
 //
-// Ported from the user's HTML studies (docs/design/HTMLSamples15112026, the
+// Ported from the user's HTML studies (workshop/design/HTMLSamples15112026, the
 // latest of each: control-library-mint-v2, multicolor-button-rack,
 // single-channel-strip-v2). Everything is seen straight from the top, lit
 // uniformly from above:

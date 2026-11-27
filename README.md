@@ -25,7 +25,7 @@ cargo run --release -- --install-desktop
 | Project | the **File** menu, top left (New is only there: no shortcut, so it can't happen by accident) · `Ctrl+O` open · `Ctrl+S` save · `Ctrl+Shift+S` save as. New, Open and closing the window ask first when there are unsaved changes. Sounds in the song's folder (or the folder above it, say a `library/` shared by a folder of songs) are saved relative to the song, so the whole folder can move; **Collect audio into the song's folder** (File menu) copies every other sound into its `audio/` |
 | Layout | Left: the browser (`F4`), in tabs: **Files** (samples and your folders), **Instruments**, **Effects**. Right (`F6`): the project's racks, in tabs: **Plugins** (instruments), **Patterns** (each showing its notes; + New, right-click to clone), **Audio** (audio clips as rack rows: mute, pan, volume, insert) and **Automation**. Click one: the next click on the arrangement places it; double-click: open it; drag it onto a track. Both fold to a strip. The centre has two **areas**: pick each one's editor (Arrangement, Piano roll, Audio clip, Automation, Mixer, Step sequencer) from the menu in its top-left corner; each area remembers its own scroll and zoom. The three layout keys in the toolbar (or `F4` / `F5` / `F6`) open and fold the left panel, the bottom area and the right panel; a folded one leaves a thin strip, click it to unfold. `F7` / `F9` open the bottom area on the piano roll / mixer. Editing keys go to the area under the mouse. Floating: `F8` instrument editor, effect windows. |
 | Pattern / song | `L`, or PAT / SONG in the top bar |
-| Design panel | `F12`: every size on a live slider; see [docs/design](docs/design/README.md) |
+| Design panel | `F12`: every size on a live slider; see [workshop/design](workshop/design/README.md) |
 | Patterns | the right panel's **Patterns** tab (+ New pattern, right-click to clone), or `[` / `]` |
 | Play notes | typing keyboard: `Z`–`M` and `Q`–`P` rows; `-` / `=` octave (shown in the top bar) |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
@@ -135,7 +135,7 @@ Lyra ships a **Starter Kit** of 65 CC0 one-shots (see `assets/samples/Starter Ki
 - [docs/manual/index.html](docs/manual/index.html): the illustrated manual, all diagrams (open in a browser)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it fits together (terse version)
 - [docs/ROADMAP.md](docs/ROADMAP.md): what's next
-- [JOURNAL.md](JOURNAL.md): wishes and friction from real use (fill it in!)
+- [workshop/JOURNAL.md](workshop/JOURNAL.md): wishes and friction from real use (fill it in!)
 
 ## License
 

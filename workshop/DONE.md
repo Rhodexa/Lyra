@@ -3,6 +3,9 @@
 Everything finished from JOURNAL.md, with the commit that did it, newest
 first. Moved out of the journal (2026-11-25) so it stays short.
 
+**Workshop split (2026-11-27)**
+- [x] *(Rhodexa)* Separate how Lyra is made from what Lyra is. *→ `workshop/` holds the journal, DONE, NOTES and the design drop-box (was `JOURNAL.md`, `docs/journal`, `docs/design`); Octavia's hand-off notes and journal are in `plugins/octavia/workshop/`; `docs/` is architecture, roadmap, manual and specs. Backup files untracked; the F12 panel no longer says "paste to Claude".*
+
 **One repo (2026-11-27)**
 - [x] *(Rhodexa)* Should Octavia and the plugins share one repo, and how should they be laid out? *→ yes: Octavia joined Lyra with its whole history (e567673); every plugin is `plugins/<name>/` with `plugin/` (what Lyra loads), optional `editor/`, and Octavia's extra `core/` + `render/`; layout and rules in `plugins/README.md`; Lyra now builds from a fresh clone; `cargo octavia …` runs the renderer (71e8e2e, 6fa97c5). Octavia's refs baselines were already stale before the move (6 of 8 differ from the pre-move build too; the move itself renders byte-identical).*
 
@@ -252,7 +255,7 @@ Browser | Arranger/PainoRoll (Swappable or on top of eachother with easy buttons
 - [x] BPM selector too little padding; pattern `< >` uncontained and different heights
   *→ every toolbar group is a captioned module; all buttons are the same height.*
 - [x] "We need a way for both of us to design that sort of thing better"
-  *→ F12 Design panel (live sliders + "Copy as code") and `docs/design/` for sketches over screenshots.*
+  *→ F12 Design panel (live sliders + "Copy as code") and `workshop/design/` for sketches over screenshots.*
 - [x] Double-click on a channel raises the editor, but the rack fights back and wins
 - [x] Alt+wheel / Ctrl+wheel backwards → Ctrl+wheel = time zoom, Alt+wheel = pitch zoom
 - [x] Copy/paste not working

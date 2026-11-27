@@ -175,7 +175,7 @@ The decisions as a table, newest at the bottom and darkest: TIME, NOTE, BOW
 * **Repaint** only while playing or while a message is showing; idle draws
   the last frame dimmed.
 * **What the LCD needs from the engine** is listed in
-  [`KIT-REQUIREMENTS.md`](KIT-REQUIREMENTS.md), section C. The mock derived
+  [`KIT-REQUIREMENTS.md`](../workshop/KIT-REQUIREMENTS.md), section C. The mock derived
   some of it from events (lift moments, held fingers); the real telemetry
   should hand it over directly.
 * **Fonts:** Roboto Condensed (Lyra has it) for the LCD; IBM Plex Mono (OFL,

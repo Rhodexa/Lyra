@@ -2,3 +2,6 @@
 *.wav
 .DS_Store
 /screenshots
+# Editor and app backups (Krita, Lyra)
+*~
+*.bak

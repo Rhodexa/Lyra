@@ -5,7 +5,7 @@
 //! UI thread however it likes. Everything here is read from the engine's
 //! own state, never reconstructed: where the fingers are, which strings
 //! ring, what was decided for each note. The contract is
-//! `docs/KIT-REQUIREMENTS.md` section C; `docs/FACEPLATE.md` says how the
+//! `workshop/KIT-REQUIREMENTS.md` section C; `docs/FACEPLATE.md` says how the
 //! screen uses it.
 
 use crate::curves::Frame;

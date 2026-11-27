@@ -5,7 +5,7 @@ pieces of work, each for its own session, each owning its own files. Read
 this, then the files it points to.
 
 **Status (2026-11-25, evening): sessions 1 and 2 are done; 3 has a first
-version (`editor`, notes in `docs/FACEPLATE-PORT.md`),
+version (`editor`, notes in `workshop/FACEPLATE-PORT.md`),
 waiting for Rhodexa's look.**
 Octavia plays from Lyra's piano roll with the generic editor
 (`plugin`). For the porter:
@@ -29,9 +29,9 @@ Octavia plays from Lyra's piano roll with the generic editor
   `JOURNAL.md`.
 * **The faceplate is designed and approved**: `docs/FACEPLATE.md` (what and
   how to port), `docs/design/faceplate.html` (the spec, playable).
-* **What Lyra must provide** is written down: `docs/KIT-REQUIREMENTS.md`
+* **What Lyra must provide** is written down: `workshop/KIT-REQUIREMENTS.md`
   (A: sound side, B: the editor kit, C: Octavia's telemetry, D: order).
-* How Lyra draws and how its plugins are split: `docs/INTEGRATION.md`.
+* How Lyra draws and how its plugins are split: `workshop/INTEGRATION.md`.
 
 ## The three sessions
 
@@ -59,8 +59,8 @@ touches Octavia's files.
   editor, draw with its own look, change parameters with undo and read its
   telemetry; and a plugin can receive upcoming notes or report latency.
 
-> Opening prompt: *"Read `../LyraRelated/Octavia/docs/HANDOFF.md` and
-> `../LyraRelated/Octavia/docs/KIT-REQUIREMENTS.md`. Build the plugin kit (B)
+> Opening prompt: *"Read `../LyraRelated/Octavia/workshop/HANDOFF.md` and
+> `../LyraRelated/Octavia/workshop/KIT-REQUIREMENTS.md`. Build the plugin kit (B)
 > and the missing sound-side pieces (A: upcoming notes, latency, note ids).
 > Octavia is the first customer; Fluttersine and Chrysalis must look and
 > behave exactly as before."*
@@ -83,7 +83,7 @@ depending on Lyra's `lyra-plugin` by path), plus the line in Lyra's
 * Done when: Octavia plays from Lyra's piano roll, its parameters automate,
   and a test reads telemetry that matches `--explain` for a score.
 
-> Opening prompt: *"Read `docs/HANDOFF.md`. Build the Lyra adapter and the
+> Opening prompt: *"Read `workshop/HANDOFF.md`. Build the Lyra adapter and the
 > telemetry (session 2). Keep the engine's test bench green; telemetry must
 > agree with `--explain` and the tapes."*
 
@@ -98,7 +98,7 @@ kit. Draws only; reads parameters and telemetry, never the engine.
 * Done when: side by side with the HTML at the same tape moment
   (`?tape=showcase&t=11.15&live`), the two match; Rhodexa approves.
 
-> Opening prompt: *"Read `docs/HANDOFF.md` and `docs/FACEPLATE.md`. Port the
+> Opening prompt: *"Read `workshop/HANDOFF.md` and `docs/FACEPLATE.md`. Port the
 > faceplate (session 3) with the kit, matching `docs/design/faceplate.html`."*
 
 ## Still open (Rhodexa's, no session needed)

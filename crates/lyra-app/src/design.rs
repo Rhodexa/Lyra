@@ -1,6 +1,6 @@
 //! The Design panel (F12): every size in `theme::Metrics` on a slider, applied
-//! live. Tune until it feels right, press "Copy as code", and paste the result
-//! to Claude or into JOURNAL.md — it drops straight into `Metrics::DEFAULT`.
+//! live. Tune until it feels right, press "Copy as code": the result drops
+//! straight into `Metrics::DEFAULT` in theme.rs.
 
 use crate::theme::{self, Metrics};
 use crate::widgets;
@@ -23,7 +23,7 @@ pub fn show(ui: &mut Ui) {
 
     ui.label(
         RichText::new(
-            "Drag the sliders and watch the app change. When it feels right, copy and paste the numbers to Claude.",
+            "Drag the sliders and watch the app change. When it feels right, \"Copy as code\" gives you the numbers for theme.rs.",
         )
         .small()
         .color(theme::TEXT_DIM),

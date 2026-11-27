@@ -5,6 +5,8 @@ things Claude noticed while building: what a feature leaves out on purpose,
 what a song needed and didn't have. Nothing here is urgent. When one starts
 to matter, it goes back into JOURNAL.md as friction or a wish.
 
+- [ ] *(Sharing prep, 2026-11-27)* `LYRA_SCREENSHOT` writes uncompressed PNGs (8.6 MB at 1920×1126); the mockups in `workshop/design` came out of it. Compress before screenshots go in the README, or git keeps the heavy ones forever.
+
 - [ ] *(Octavia in Lyra, 2026-11-25)* The generic instrument editor cuts choice labels short: Octavia's Instrument and Patch read "CE…" and "AR…" in their dropdowns (the value under them is whole). Octavia gets her own faceplate soon, but other plugins with longer choices will hit it.
 
 - [ ] *(Octavia in Lyra, 2026-11-25)* Plugins can report latency (`Plugin::latency`), but Lyra doesn't compensate it. Nothing built in needs it today (Octavia gets look-ahead instead); hosted CLAP plugins with latency will.

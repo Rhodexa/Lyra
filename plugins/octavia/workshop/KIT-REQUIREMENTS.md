@@ -3,7 +3,7 @@
 A handoff for the Lyra session that builds the minimal plugin kit. Written
 from Octavia's side on 2026-11-25. It says *what* is needed and why, not how
 Lyra should build it; that's the Lyra session's call. Background (how Lyra
-draws, how built-ins are split today): `docs/INTEGRATION.md`.
+draws, how built-ins are split today): `workshop/INTEGRATION.md`.
 
 Octavia is a **built-in** for now (compiled into Lyra, living in its own
 folder). Everything below is CLAP-shaped so that a CLAP build stays

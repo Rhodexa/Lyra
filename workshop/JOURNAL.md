@@ -32,7 +32,7 @@ no marks would default to not urgent or 'coding teams judges'
 ---
 
 ## Noticed by Claude
-*Only what needs you: a question or something to try. Claude's longer notes (known limits, leftovers) are in [docs/journal/NOTES.md](docs/journal/NOTES.md); finished items in [docs/journal/DONE.md](docs/journal/DONE.md).*
+*Only what needs you: a question or something to try. Claude's longer notes (known limits, leftovers) are in [NOTES.md](NOTES.md); finished items in [DONE.md](DONE.md).*
 
 - [ ] *(from chat, 2026-11-16)* The instrument window's top bar (name field, "Lyra FM", mixer dropdown) looks out of place above the Fluttersine rack: restyle it in the plate language, later. Also still open: rename "Lyra FM" to Fluttersine (one word in `lyra-dsp`).
 - [ ] Remember sizes / zoom between runs? You'd rather Lyra remembered as little as possible (2026-11-22), so this waits until a size really bothers you. "Copy as code" in F12 and I'll make your numbers the defaults.
