@@ -110,7 +110,7 @@ impl PianoRoll {
             t.held.push(key);
             let notes = p.patterns[pat].notes_mut(id);
             t.group.push(notes.len());
-            notes.push(Note { start: t.group_start, len: t.group_len, key, velocity });
+            notes.push(Note { start: t.group_start, len: t.group_len, key, velocity, link: None });
             self.selection = t.group.clone();
         } else if let Some(i) = t.held.iter().position(|&k| k == key).filter(|_| !on) {
             t.held.remove(i);

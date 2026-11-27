@@ -155,7 +155,7 @@ fn riser() -> Vec<f32> {
 }
 
 fn n(start: u32, len: u32, key: i32, velocity: f32) -> Note {
-    Note { start, len, key: key.clamp(0, 127) as u8, velocity: velocity.clamp(0.05, 1.0) }
+    Note { start, len, key: key.clamp(0, 127) as u8, velocity: velocity.clamp(0.05, 1.0), link: None }
 }
 
 /// i – iv – VI – V in D minor: (bass root, triad).

@@ -42,6 +42,18 @@ pub enum Event {
     },
     /// Silence everything quickly (transport stop, choke groups, panic).
     AllNotesOff,
+    /// Extension `lyra.note-glide` (only for plugins whose `glides()` says
+    /// yes): the sounding note `id` glides to `key`, arriving `seconds` from
+    /// now (0: the pitch just changes, legato). `tension` shapes the way:
+    /// 0 straight, > 0 starts slow and arrives fast, < 0 leaves fast and
+    /// settles slowly (-1..1). The note keeps its id and ends with its own
+    /// NoteOff (same id, its first key).
+    Glide {
+        id: NoteId,
+        key: u8,
+        seconds: f32,
+        tension: f32,
+    },
 }
 
 impl Event {
@@ -344,6 +356,12 @@ pub trait Plugin: Send {
     /// Lyra doesn't compensate yet; it gives look-ahead instead.
     fn latency(&self) -> u32 {
         0
+    }
+    /// Extension `lyra.note-glide`: true if this plugin understands
+    /// `Event::Glide`. Then notes linked in the piano roll reach it as one
+    /// note that glides; otherwise they arrive as written. Asked once.
+    fn glides(&self) -> bool {
+        false
     }
 }
 

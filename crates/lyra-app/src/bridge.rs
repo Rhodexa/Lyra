@@ -7,9 +7,9 @@
 
 use crate::samples::Samples;
 use lyra_engine::{
-    Arrangement, AudioLane, AudioRegion, ChannelSlot, Command, EngineHandle, FxChain, Place, SeqNote, Sequence,
+    Arrangement, AudioLane, AudioRegion, ChannelSlot, Command, EngineHandle, FxChain, Legato, Place, SeqGlide, SeqNote, Sequence,
 };
-use lyra_model::{Pattern, Project, TICKS_PER_STEP};
+use lyra_model::{Note, Pattern, Project, TICKS_PER_STEP};
 
 /// What the engine should loop: one pattern, or the whole arrangement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -237,41 +237,105 @@ impl Bridge {
     }
 }
 
+/// Linked notes in one channel's notes (see `NoteLink`): each note's place
+/// in a chain, by index, and every chain's glides as
+/// (head index, start, length, key, tension), in pattern ticks.
+type Glide = (usize, u32, u32, u8, f32);
+
+fn chains(notes: &[Note]) -> (Vec<Legato>, Vec<Glide>) {
+    let n = notes.len();
+    let mut legato = vec![Legato::Alone; n];
+    let mut glides = Vec::new();
+    if notes.iter().all(|x| x.link.is_none()) {
+        return (legato, glides);
+    }
+    let next: Vec<Option<usize>> = notes.iter().map(|x| x.link_target(notes)).collect();
+    let mut tied = vec![false; n];
+    for t in next.iter().flatten() {
+        tied[*t] = true;
+    }
+    for head in (0..n).filter(|&i| next[i].is_some() && !tied[i]) {
+        let mut end = notes[head].start + notes[head].len;
+        let mut j = head;
+        // Targets always start later, so a chain can't loop; the cap is a belt.
+        for _ in 0..n {
+            let (Some(t), Some(link)) = (next[j], notes[j].link) else { break };
+            let arrive = notes[t].start;
+            // A glide can't begin before the note it leaves.
+            let len = link.glide.min(arrive - notes[j].start);
+            glides.push((head, arrive - len, len, notes[t].key, link.tension));
+            legato[t] = Legato::Tied;
+            end = end.max(arrive + notes[t].len);
+            j = t;
+        }
+        legato[head] = Legato::Head { len: end - notes[head].start };
+    }
+    (legato, glides)
+}
+
 /// Flatten a pattern into the engine's sorted note list.
 fn compile(p: &Project, pat: &Pattern) -> Sequence {
-    let mut notes = Vec::new();
+    let (mut notes, mut glides) = (Vec::new(), Vec::new());
     for (index, ch) in p.channels.iter().enumerate() {
-        for n in pat.notes(ch.id) {
-            notes.push(SeqNote { start: n.start, len: n.len, channel: index as u16, key: n.key, velocity: n.velocity });
+        let list = pat.notes(ch.id);
+        let (legato, linked) = chains(list);
+        for (n, &legato) in list.iter().zip(&legato) {
+            let (start, len, channel, key, velocity) = (n.start, n.len, index as u16, n.key, n.velocity);
+            notes.push(SeqNote { start, len, channel, key, velocity, legato });
+        }
+        for (head, start, len, key, tension) in linked {
+            let (head_start, head_key) = (list[head].start, list[head].key);
+            glides.push(SeqGlide { start, len, channel: index as u16, head_start, head_key, key, tension });
         }
     }
     notes.sort_by_key(|n| n.start);
-    Sequence { length: pat.play_length() * TICKS_PER_STEP, notes }
+    glides.sort_by_key(|g| g.start);
+    Sequence { length: pat.play_length() * TICKS_PER_STEP, notes, glides }
 }
 
 /// Flatten the whole playlist: every clip plays its pattern from the clip's
 /// start, repeating it to fill the clip and cutting notes at the clip's end.
 pub fn compile_song(p: &Project) -> Sequence {
-    let mut notes = Vec::new();
+    let (mut notes, mut glides) = (Vec::new(), Vec::new());
     for clip in &p.clips {
         if p.tracks.get(clip.track).is_some_and(|t| t.mute) {
             continue;
         }
         let Some(pat) = clip.pattern().and_then(|id| p.pattern(id)) else { continue };
         for (index, ch) in p.channels.iter().enumerate() {
+            let list = pat.notes(ch.id);
+            let (legato, linked) = chains(list);
             for (at, len, n) in clip.pattern_notes(pat, ch.id) {
-                notes.push(SeqNote {
-                    start: clip.start + at,
-                    len,
-                    channel: index as u16,
-                    key: n.key,
-                    velocity: n.velocity,
-                });
+                // Which of the pattern's notes this is (pattern_notes lends them out).
+                let i = (n as *const Note as usize - list.as_ptr() as usize) / std::mem::size_of::<Note>();
+                let start = clip.start + at;
+                let left = clip.len - at; // a chain is cut at the clip's end, like a note
+                let legato = match legato[i] {
+                    Legato::Head { len } => Legato::Head { len: len.min(left) },
+                    other => other,
+                };
+                notes.push(SeqNote { start, len, channel: index as u16, key: n.key, velocity: n.velocity, legato });
+                for &(_, g_start, g_len, key, tension) in linked.iter().filter(|g| g.0 == i) {
+                    let from_head = g_start - n.start;
+                    if from_head < left {
+                        let g = SeqGlide {
+                            start: start + from_head,
+                            len: g_len,
+                            channel: index as u16,
+                            head_start: start,
+                            head_key: n.key,
+                            key,
+                            tension,
+                        };
+                        glides.push(g);
+                    }
+                }
             }
         }
     }
     notes.sort_by_key(|n| n.start);
-    Sequence { length: p.song_length(), notes }
+    glides.sort_by_key(|g| g.start);
+    Sequence { length: p.song_length(), notes, glides }
 }
 
 /// Every audio clip on the playlist as a region the engine plays. Samples
@@ -314,7 +378,7 @@ mod tests {
     fn project_with_one_note() -> Project {
         let mut p = Project::default();
         let ch = p.add_channel("k", "lyra.kick", vec![]);
-        p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 24, key: 60, velocity: 1.0 });
+        p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 24, key: 60, velocity: 1.0, link: None });
         p
     }
 
@@ -322,7 +386,7 @@ mod tests {
     fn adding_an_instrument_lets_the_others_ring_on() {
         let mut p = Project::default();
         let ch = p.add_channel("Pad", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
-        p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 4 * TICKS_PER_BAR, key: 60, velocity: 1.0 });
+        p.patterns[0].notes_mut(ch).push(Note { start: 0, len: 4 * TICKS_PER_BAR, key: 60, velocity: 1.0, link: None });
         let (mut eng, mut h) = lyra_engine::create(48_000.0);
         let (mut bridge, mut samples) = (Bridge::default(), Samples::default());
         let mut out = vec![0.0; 2 * 4800];
@@ -395,5 +459,27 @@ mod tests {
         assert!((r.gain - 0.251).abs() < 0.01, "half, then -6 dB, got {}", r.gain);
         assert!(r.trim.1 <= 0.3);
         assert_eq!(r.fade_in, (0.005, 0.0), "new clips fade 5 ms at each end");
+    }
+}
+
+#[cfg(test)]
+mod chain_tests {
+    use super::*;
+    use lyra_model::NoteLink;
+
+    #[test]
+    fn linked_notes_become_a_chain_with_its_glides() {
+        let link = |to, glide| Some(NoteLink { to, glide, tension: 0.0 });
+        let n = |start, key, link| Note { start, len: 96, key, velocity: 0.8, link };
+        // C → E (glide 48) → G (no glide: legato); a lone note between; and
+        // a link to a pitch nobody plays (ignored).
+        let notes = [n(0, 60, link(4, 48)), n(96, 64, link(3, 0)), n(200, 67, None), n(50, 50, link(1, 10)), n(192, 67, None)];
+        let (legato, glides) = chains(&notes);
+        assert_eq!(legato[0], Legato::Head { len: 288 });
+        assert_eq!(legato[1], Legato::Tied);
+        assert_eq!(legato[4], Legato::Tied, "the first G after E (192), not the later one");
+        assert_eq!(legato[2], Legato::Alone);
+        assert_eq!(legato[3], Legato::Alone);
+        assert_eq!(glides, vec![(0, 48, 48, 64, 0.0), (0, 192, 0, 67, 0.0)]);
     }
 }

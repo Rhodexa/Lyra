@@ -113,7 +113,7 @@ fn midi(p: &Project, title: &str) -> Vec<u8> {
         let mine: Vec<lyra_model::Note> = notes
             .iter()
             .filter(|n| n.0 == i)
-            .map(|n| lyra_model::Note { start: n.1, len: n.2, key: n.3, velocity: n.4 })
+            .map(|n| lyra_model::Note { start: n.1, len: n.2, key: n.3, velocity: n.4, link: None })
             .collect();
         if mine.is_empty() {
             continue;
@@ -1042,7 +1042,7 @@ mod tests {
         let keys = p.add_channel("Keys", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
         let _silent = p.add_channel("Silent", "lyra.synth", lyra_catalog::default_params("lyra.synth"));
         for (i, k) in [60u8, 64, 67].iter().enumerate() {
-            p.patterns[0].notes_mut(keys).push(Note { start: i as u32 * 96, len: 96, key: *k, velocity: 1.0 });
+            p.patterns[0].notes_mut(keys).push(Note { start: i as u32 * 96, len: 96, key: *k, velocity: 1.0, link: None });
         }
         let id = p.patterns[0].id;
         p.add_clip(Clip::of_pattern(id, 0, 0, TICKS_PER_BAR));

@@ -44,6 +44,39 @@ pub struct Note {
     pub len: u32,
     pub key: u8,
     pub velocity: f32,
+    /// Glides on into a later note (see [`NoteLink`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<NoteLink>,
+}
+
+/// A note linked to a later one: one sound that glides from this note's
+/// pitch to the other's, arriving as the other note starts (and goes on as
+/// that note). Synths that can't glide play the two notes as written.
+///
+/// The other note is found by its pitch, `to` semitones away: the first note
+/// of that pitch starting after this one. So linked notes moved together stay
+/// linked, and a target moved in time stays found.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NoteLink {
+    /// Semitones from this note to the one it glides into.
+    pub to: i8,
+    /// How long the glide takes, in ticks, ending where the other note starts
+    /// (0: no glide, the pitch just changes: a slur, legato).
+    pub glide: u32,
+    /// The glide's shape: 0 = straight, > 0 starts slow and arrives fast,
+    /// < 0 leaves fast and settles slowly (-1..1).
+    pub tension: f32,
+}
+
+impl Note {
+    /// The note this one links to (an index into `notes`), if any.
+    pub fn link_target(&self, notes: &[Note]) -> Option<usize> {
+        let link = self.link?;
+        let key = self.key as i32 + link.to as i32;
+        (0..notes.len())
+            .filter(|&i| notes[i].key as i32 == key && notes[i].start > self.start)
+            .min_by_key(|&i| notes[i].start)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -130,7 +163,7 @@ impl Pattern {
         let existing = notes.iter().position(|n| n.start == start);
         match (on, existing) {
             (true, None) => {
-                notes.push(Note { start, len: TICKS_PER_STEP, key: DEFAULT_KEY, velocity });
+                notes.push(Note { start, len: TICKS_PER_STEP, key: DEFAULT_KEY, velocity, link: None });
                 notes.sort_by_key(|n| n.start);
                 true
             }
@@ -148,7 +181,7 @@ impl Pattern {
         let notes = self.notes.entry(ch).or_default();
         notes.clear();
         for step in (0..length).step_by(every.max(1) as usize) {
-            notes.push(Note { start: step * TICKS_PER_STEP, len: TICKS_PER_STEP, key: DEFAULT_KEY, velocity: 0.8 });
+            notes.push(Note { start: step * TICKS_PER_STEP, len: TICKS_PER_STEP, key: DEFAULT_KEY, velocity: 0.8, link: None });
         }
     }
 }
@@ -876,7 +909,7 @@ mod tests {
     fn patterns_grow_and_shrink_with_their_notes() {
         let mut p = Pattern::new(1, "t");
         assert_eq!(p.play_length(), 16, "empty = one bar");
-        p.notes_mut(1).push(Note { start: 2 * TICKS_PER_BAR + 5, len: 10, key: 60, velocity: 1.0 });
+        p.notes_mut(1).push(Note { start: 2 * TICKS_PER_BAR + 5, len: 10, key: 60, velocity: 1.0, link: None });
         assert_eq!(p.play_length(), 48, "a note in bar 3 makes it 3 bars");
         p.notes_mut(1).clear();
         assert_eq!(p.play_length(), 16, "and it shrinks back");
@@ -884,7 +917,7 @@ mod tests {
         assert_eq!(p.play_length(), 32, "min_length is a floor");
         p.min_length = 16;
         // A note that starts in bar 1 but rings into bar 2 makes it 2 bars...
-        p.notes_mut(1).push(Note { start: TICKS_PER_BAR - 24, len: 48, key: 60, velocity: 1.0 });
+        p.notes_mut(1).push(Note { start: TICKS_PER_BAR - 24, len: 48, key: 60, velocity: 1.0, link: None });
         assert_eq!(p.play_length(), 32, "a note crossing the bar line lengthens the pattern");
         // ...but one that ends exactly on the bar line doesn't.
         p.notes_mut(1)[0].len = 24;
@@ -944,8 +977,8 @@ mod tests {
     #[test]
     fn a_pattern_clip_is_a_window_onto_its_pattern_repeated() {
         let mut pat = Pattern::new(1, "p"); // one bar: notes on beats 1 and 3
-        pat.notes_mut(9).push(Note { start: 0, len: 24, key: 60, velocity: 1.0 });
-        pat.notes_mut(9).push(Note { start: 2 * 96, len: 24, key: 62, velocity: 1.0 });
+        pat.notes_mut(9).push(Note { start: 0, len: 24, key: 60, velocity: 1.0, link: None });
+        pat.notes_mut(9).push(Note { start: 2 * 96, len: 24, key: 62, velocity: 1.0, link: None });
         let mut c = Clip::of_pattern(1, 0, 0, 2 * TICKS_PER_BAR);
         let at = |c: &Clip| c.pattern_notes(&pat, 9).map(|(t, _, n)| (t, n.key)).collect::<Vec<_>>();
         assert_eq!(at(&c), vec![(0, 60), (192, 62), (384, 60), (576, 62)], "repeats");

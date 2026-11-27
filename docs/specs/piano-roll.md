@@ -56,7 +56,16 @@ distances and in sound**, never in chord names or scale degrees.
 
 ## Next
 
-3. **Links between notes.** A grip on a note's right end; pull it onto the
+3. **Links between notes: built as a prototype (2026-11-27), try it.**
+   Hover a note: a dot past its right end; drag it onto a later note. The
+   link is drawn as the pitch's own path (along the first row, then a curve
+   into the second note); its **dot** sets when the glide starts (all the way
+   right = no glide, legato), its **ring** bends it (the automation editor's
+   curve, double-click = straight), right-click unlinks. Only **Chrysalis**
+   glides so far (`Plugin::glides`, `Event::Glide`); other synths play linked
+   notes as written. Code: `piano_roll/links.rs`, `bridge::chains`, the
+   engine's `Legato` / `SeqGlide`, `NoteLink` in the model.
+   *The original idea, for reference:* a grip on a note's right end; pull it onto the
    next note and the two are linked. A link has a **type**:
    - *slide*: the pitch glides (Chrysalis, Fluttersine);
    - *slur*: connected, no new attack (Octavia: same bow; synths: legato).

@@ -29,7 +29,7 @@ fn main() {
     }
     let mut notes = vec![];
     let mut n =
-        |s: u32, c: u16, v: f32| notes.push(SeqNote { start: s * 24, len: 24, channel: c, key: 60, velocity: v });
+        |s: u32, c: u16, v: f32| notes.push(SeqNote { start: s * 24, len: 24, channel: c, key: 60, velocity: v, legato: Default::default() });
     for s in 0..16 {
         if s % 4 == 0 {
             n(s, 0, 1.0)
@@ -43,7 +43,7 @@ fn main() {
             n(s, 2, 0.5)
         }
     }
-    h.send(Command::SetSequence(Box::new(Sequence { length: 16 * 24, notes })));
+    h.send(Command::SetSequence(Box::new(Sequence { length: 16 * 24, notes, glides: Vec::new() })));
     h.send(Command::SetTempo(124.0));
     h.send(Command::Play);
 

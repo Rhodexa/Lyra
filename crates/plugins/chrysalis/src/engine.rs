@@ -6,7 +6,7 @@ use crate::params::{dest, ft, lfo_mode, p, src, warp, PARAMS};
 use crate::table::{builtin, Table, GUARD, IMPORTED};
 use crate::telemetry::{Report, Telemetry};
 use lyra_dsp::{poly_blep, round_fast, sin_turns, svf, svf_coeffs, tanh_fast, wrap, Rng, SYNC_BEATS};
-use lyra_plugin::{Event, ParamGroup, ParamInfo, Plugin, ProcessContext, SampleData, Transport};
+use lyra_plugin::{Event, NoteId, ParamGroup, ParamInfo, Plugin, ProcessContext, SampleData, Transport};
 use std::f32::consts::SQRT_2;
 use std::sync::Arc;
 
@@ -502,6 +502,33 @@ impl FilterState {
     }
 }
 
+/// A glide drawn in the piano roll: from one pitch to another over a time,
+/// shaped by its tension.
+#[derive(Clone, Copy)]
+struct Slide {
+    from: f32,
+    to: f32,
+    /// 0..1 along the way, and how far each control tick goes.
+    t: f32,
+    step: f32,
+    tension: f32,
+}
+
+impl Slide {
+    /// How far along the pitch way (0..1) it is at `t`: the same curve as
+    /// Lyra's automation and fades (`lyra_engine::fade_curve`), so a glide
+    /// sounds the way the roll draws it. Tension > 0 starts slow and arrives
+    /// fast, < 0 leaves fast and settles slowly.
+    fn shape(&self) -> f32 {
+        let c = self.tension * 6.0;
+        if c.abs() < 1e-3 {
+            self.t
+        } else {
+            (c * self.t).exp_m1() / c.exp_m1()
+        }
+    }
+}
+
 struct Voice {
     active: bool,
     gate: bool,
@@ -515,6 +542,10 @@ struct Voice {
     /// Current pitch (gliding toward `target`), in semitones.
     semi: f32,
     target: f32,
+    /// The sequenced note it plays (for glides from the piano roll).
+    id: NoteId,
+    /// A piano-roll glide under way: it moves `semi` instead of the glide knob.
+    slide: Option<Slide>,
     osc: [OscState; 2],
     sub_ph: f32,
     sub_inc: f32,
@@ -571,6 +602,8 @@ impl Voice {
             rnd: 0.0,
             semi: 60.0,
             target: 60.0,
+            id: lyra_plugin::NO_ID,
+            slide: None,
             osc: [OscState::default(); 2],
             sub_ph: 0.0,
             sub_inc: 0.0,
@@ -656,8 +689,14 @@ impl Voice {
         }
         let m = &self.m;
 
-        // Pitch (with glide).
-        if self.semi != self.target {
+        // Pitch: a piano-roll glide, or the glide knob's.
+        if let Some(s) = &mut self.slide {
+            s.t = (s.t + s.step).min(1.0);
+            self.semi = s.from + (s.to - s.from) * s.shape();
+            if s.t >= 1.0 {
+                (self.semi, self.target, self.slide) = (s.to, s.to, None);
+            }
+        } else if self.semi != self.target {
             self.semi += (self.target - self.semi) * q.glide_k;
             if (self.target - self.semi).abs() < 1e-4 {
                 self.semi = self.target;
@@ -1175,11 +1214,12 @@ impl Chrysalis {
         quietest_released.unwrap_or_else(|| (0..MAX_VOICES).min_by_key(|&i| self.voices[i].serial).unwrap_or(0))
     }
 
-    fn start(&mut self, slot: usize, key: u8, velocity: f32, retrig: bool, glide: bool) {
+    fn start(&mut self, slot: usize, key: u8, velocity: f32, retrig: bool, glide: bool, id: NoteId) {
         let q = &*self.q;
         let tables = tables(q, &self.imported);
         let v = &mut self.voices[slot];
         let fresh = !v.active;
+        (v.id, v.slide) = (id, None);
         v.key = key;
         v.target = key as f32;
         if !glide {
@@ -1224,7 +1264,7 @@ impl Chrysalis {
         v.ctrl(q, tables, self.lfo, self.sr, fresh);
     }
 
-    fn note_on(&mut self, key: u8, velocity: f32) {
+    fn note_on(&mut self, key: u8, velocity: f32, id: NoteId) {
         // A phrase LFO starts over on the first note after silence.
         if !self.voices.iter().any(|v| v.gate) {
             for l in 0..4 {
@@ -1247,10 +1287,10 @@ impl Chrysalis {
             self.stack[self.stack_len] = key;
             self.stack_len += 1;
             let glide = self.q.glide_on && self.voices[0].active && (legato || self.q.glide_always);
-            self.start(0, key, velocity, !legato, glide);
+            self.start(0, key, velocity, !legato, glide, id);
         } else {
             let slot = self.pick_voice();
-            self.start(slot, key, velocity, true, false);
+            self.start(slot, key, velocity, true, false, id);
         }
     }
 
@@ -1290,8 +1330,19 @@ impl Chrysalis {
 
     fn handle(&mut self, e: Event) {
         match e {
-            Event::NoteOn { key, velocity, .. } => self.note_on(key, velocity.clamp(0.0, 1.0)),
+            Event::NoteOn { key, velocity, id } => self.note_on(key, velocity.clamp(0.0, 1.0), id),
             Event::NoteOff { key, .. } => self.note_off(key),
+            Event::Glide { id, key, seconds, tension } => {
+                // The voice playing that note (mono: the one voice) moves on.
+                let csr = self.sr / CR as f32;
+                let mono = self.q.mono;
+                let found = self.voices.iter_mut().enumerate().find(|(i, v)| v.active && v.gate && (v.id == id || mono && *i == 0));
+                if let Some((_, v)) = found {
+                    let step = if seconds > 0.0 { 1.0 / (seconds * csr) } else { 1.0 };
+                    let from = v.semi;
+                    v.slide = Some(Slide { from, to: key as f32, t: 0.0, step, tension: tension.clamp(-1.0, 1.0) });
+                }
+            }
             Event::AllNotesOff => {
                 self.stack_len = 0;
                 for v in self.voices.iter_mut().filter(|v| v.active) {
@@ -1368,6 +1419,10 @@ impl Chrysalis {
     pub(crate) fn voice_key(&self, v: usize) -> u8 {
         self.voices[v].key
     }
+    #[cfg(test)]
+    pub(crate) fn voice_semi(&self, v: usize) -> f32 {
+        self.voices[v].semi
+    }
 }
 
 /// Oscillator 1's and 2's tables: a built-in, or the import (Basic if there is none).
@@ -1386,6 +1441,9 @@ fn tables<'a>(q: &Prep, imported: &'a Option<Arc<Table>>) -> [&'a Table; 2] {
 impl Plugin for Chrysalis {
     fn name(&self) -> &'static str {
         "Chrysalis"
+    }
+    fn glides(&self) -> bool {
+        true
     }
     fn params(&self) -> &'static [ParamInfo] {
         &PARAMS

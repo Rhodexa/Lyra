@@ -60,6 +60,36 @@ pub struct SeqNote {
     pub channel: u16,
     pub key: u8,
     pub velocity: f32,
+    /// Its place in a chain of linked notes (piano-roll glides). Only
+    /// channels whose plugin glides read it; others play notes as written.
+    pub legato: Legato,
+}
+
+/// A note's place in a chain of linked notes, for channels that glide.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Legato {
+    /// A note on its own.
+    #[default]
+    Alone,
+    /// The first note of a chain: it sounds for `len` ticks, to the end of
+    /// the chain's last note, gliding as it goes (see [`SeqGlide`]).
+    Head { len: u32 },
+    /// A later note of a chain: it doesn't start, the head's sound goes on.
+    Tied,
+}
+
+/// One glide of a chain: the head's sound moves to `key`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SeqGlide {
+    /// When the glide starts, and how long it takes (ticks).
+    pub start: u32,
+    pub len: u32,
+    pub channel: u16,
+    /// The chain's head (its start and key: what its id is made of).
+    pub head_start: u32,
+    pub head_key: u8,
+    pub key: u8,
+    pub tension: f32,
 }
 
 /// A compiled, read-only loop of notes the engine plays.
@@ -68,6 +98,8 @@ pub struct Sequence {
     /// Loop length in ticks (0 = nothing to play).
     pub length: u32,
     pub notes: Vec<SeqNote>,
+    /// Glides of linked notes, in start order.
+    pub glides: Vec<SeqGlide>,
 }
 
 /// A stretch of audio on the song timeline (an audio clip on the playlist).
@@ -278,6 +310,8 @@ pub struct ChannelSlot {
     /// forecast handed to it each block.
     lookahead: f64,
     upcoming: Vec<UpcomingNote>,
+    /// The plugin understands `Event::Glide`: linked notes reach it as one.
+    glides: bool,
     buf_l: Vec<f32>,
     buf_r: Vec<f32>,
     volume: f32,
@@ -295,9 +329,11 @@ impl ChannelSlot {
     pub fn new(mut plugin: Box<dyn Plugin>, sample_rate: f32) -> Box<Self> {
         plugin.activate(sample_rate);
         let lookahead = plugin.note_lookahead().clamp(0.0, 10.0);
+        let glides = plugin.glides();
         Box::new(Self {
             plugin,
             lookahead,
+            glides,
             upcoming: Vec::with_capacity(if lookahead > 0.0 { MAX_UPCOMING } else { 0 }),
             events: Vec::with_capacity(MAX_EVENTS_PER_BLOCK),
             pending: Vec::with_capacity(MAX_PENDING_LIVE),
@@ -542,7 +578,12 @@ impl Shared {
 /// forecast, its note-on and its note-off, and stable while other notes are
 /// edited (it comes from the note's own key and place, not its index).
 fn note_id(note: &SeqNote, lap: u32) -> NoteId {
-    let mut x = (note.key as u64) | (note.start as u64) << 8 | (lap as u64) << 40;
+    id_of(note.key, note.start, lap)
+}
+
+/// A note's id from its key and start (see `note_id`).
+fn id_of(key: u8, start: u32, lap: u32) -> NoteId {
+    let mut x = (key as u64) | (start as u64) << 8 | (lap as u64) << 40;
     // splitmix64's finaliser
     x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
@@ -929,7 +970,15 @@ impl Engine {
             let ChannelSlot { plugin, events, buf_l, buf_r, lookahead, upcoming, .. } = &mut **ch;
             // AllNotesOff sorts before a NoteOn at the same sample, so a choke
             // never kills the note that's starting right then. (In-place sort: no allocation.)
-            events.sort_unstable_by_key(|e| (e.offset, !matches!(e.event, Event::AllNotesOff)));
+            // At one sample: AllNotesOff first, glides last (after the note-on they move).
+            events.sort_unstable_by_key(|e| {
+                let rank = match e.event {
+                    Event::AllNotesOff => 0,
+                    Event::Glide { .. } => 2,
+                    _ => 1,
+                };
+                (e.offset, rank)
+            });
             plugin.transport(transport);
             if *lookahead > 0.0 {
                 plugin.upcoming(upcoming);
@@ -1110,13 +1159,20 @@ impl Engine {
 
         for note in &self.seq.notes {
             let Some(ch) = self.channels.get_mut(note.channel as usize) else { continue };
+            // On a channel that glides, a chain is one note: the head lasts to
+            // the chain's end, the rest don't start.
+            let note_len = match note.legato {
+                Legato::Tied if ch.glides => continue,
+                Legato::Head { len } if ch.glides => len,
+                _ => note.len,
+            };
             let on = note.start as f64 + if (note.start / TICKS_PER_STEP) % 2 == 1 { swing_ticks } else { 0.0 };
 
             if let Some((o, lap)) = offset_of(on) {
                 let id = note_id(note, self.laps.wrapping_add(lap));
                 // Ticks from block start to this note's end (exact, before rounding to a sample).
                 let since_start = if on >= start { on - start } else { on + len - start };
-                let end_tick = since_start + note.len as f64;
+                let end_tick = since_start + note_len as f64;
                 if end_tick < block_ticks {
                     // Ends inside this very block.
                     let off = ((end_tick / ticks_per_sample) as u32).min(n as u32 - 1).max(o);
@@ -1136,6 +1192,27 @@ impl Engine {
                 if ch.choke > 0 && self.chokes.len() < self.chokes.capacity() {
                     self.chokes.push((o, ch.choke, note.channel as usize));
                 }
+            }
+        }
+
+        // Glides of linked notes (unswung: they belong to the line, not the grid).
+        let secs_per_tick = 60.0 / (self.tempo * PPQ as f64);
+        for g in &self.seq.glides {
+            let Some(ch) = self.channels.get_mut(g.channel as usize) else { continue };
+            if !ch.glides || ch.events.len() >= ch.events.capacity() {
+                continue;
+            }
+            if let Some((o, lap)) = offset_of(g.start as f64) {
+                // The head's id on this pass (a chain is assumed not to
+                // cross the loop's end).
+                let lap = self.laps.wrapping_add(lap);
+                let event = Event::Glide {
+                    id: id_of(g.head_key, g.head_start, lap),
+                    key: g.key,
+                    seconds: (g.len as f64 * secs_per_tick) as f32,
+                    tension: g.tension,
+                };
+                ch.events.push(TimedEvent { offset: o, event });
             }
         }
 
@@ -1295,6 +1372,8 @@ mod tests {
     struct Recorder {
         log: Arc<Mutex<Vec<(u64, Event)>>>,
         clock: u64,
+        /// Says it understands glides (`lyra.note-glide`).
+        glides: bool,
     }
 
     impl Plugin for Recorder {
@@ -1306,6 +1385,9 @@ mod tests {
         }
         fn set_param(&mut self, _: u32, _: f32) {}
         fn activate(&mut self, _: f32) {}
+        fn glides(&self) -> bool {
+            self.glides
+        }
         fn process(&mut self, ctx: ProcessContext<'_>) {
             let mut log = self.log.lock().unwrap(); // a Mutex is fine in a *test* plugin
             for e in ctx.events {
@@ -1323,7 +1405,7 @@ mod tests {
     fn setup() -> (Engine, EngineHandle, Log) {
         let (mut eng, mut h) = create(48_000.0);
         let log = Arc::new(Mutex::new(Vec::new()));
-        h.send(Command::AddChannel(ChannelSlot::new(Box::new(Recorder { log: log.clone(), clock: 0 }), 48_000.0)));
+        h.send(Command::AddChannel(ChannelSlot::new(Box::new(Recorder { log: log.clone(), clock: 0, glides: false }), 48_000.0)));
         h.send(Command::SetTempo(120.0));
         let mut out = vec![0.0; 2 * 64];
         eng.process(&mut out, 2); // apply setup commands
@@ -1331,8 +1413,52 @@ mod tests {
         (eng, h, log)
     }
 
+    #[test]
+    fn linked_notes_are_one_gliding_note_for_plugins_that_glide() {
+        // C4 for a beat, linked into E4 (a beat later, for a beat), the glide
+        // the last half beat before E4. One tick = 250 samples.
+        let head = SeqNote { legato: Legato::Head { len: 192 }, ..note(0, 96) };
+        let tied = SeqNote { key: 64, legato: Legato::Tied, ..note(96, 96) };
+        let glide = SeqGlide { start: 48, len: 48, channel: 0, head_start: 0, head_key: 60, key: 64, tension: 0.0 };
+        for glides in [true, false] {
+            let (mut eng, mut h) = create(48_000.0);
+            let log = Arc::new(Mutex::new(Vec::new()));
+            let rec = Recorder { log: log.clone(), clock: 0, glides };
+            h.send(Command::AddChannel(ChannelSlot::new(Box::new(rec), 48_000.0)));
+            h.send(Command::SetTempo(120.0));
+            let seq = Sequence { length: 384, notes: vec![head, tied], glides: vec![glide] };
+            h.send(Command::SetSequence(Box::new(seq)));
+            run(&mut eng, 64);
+            log.lock().unwrap().clear();
+            h.send(Command::Play);
+            run(&mut eng, 200 * 250);
+            let events: Vec<(u64, Event)> = log.lock().unwrap().clone();
+            let ons: Vec<u8> = events.iter().filter_map(|(_, e)| match e {
+                Event::NoteOn { key, .. } => Some(*key),
+                _ => None,
+            }).collect();
+            let slide = events.iter().find(|(_, e)| matches!(e, Event::Glide { .. }));
+            if glides {
+                assert_eq!(ons, vec![60], "the glider never starts E4");
+                let (at, e) = slide.expect("a glide");
+                let Event::Glide { key, seconds, .. } = e else { unreachable!() };
+                assert_eq!((*at / 250, *key), (48, 64));
+                assert!((seconds - 0.25).abs() < 1e-3, "half a beat at 120 bpm: {seconds}");
+                // The gliding note ends with the chain (2 beats), under its own id and key.
+                let offs: Vec<u64> = events.iter().filter_map(|(at, e)| match e {
+                    Event::NoteOff { key: 60, .. } => Some(*at / 250),
+                    _ => None,
+                }).collect();
+                assert!(offs.contains(&192), "{offs:?}");
+            } else {
+                assert_eq!(ons, vec![60, 64], "as written");
+                assert!(slide.is_none());
+            }
+        }
+    }
+
     fn note(start: u32, len: u32) -> SeqNote {
-        SeqNote { start, len, channel: 0, key: 60, velocity: 1.0 }
+        SeqNote { start, len, channel: 0, key: 60, velocity: 1.0, legato: Default::default() }
     }
 
     fn run(eng: &mut Engine, samples: usize) {
@@ -1394,7 +1520,7 @@ mod tests {
         )))])));
         // A one-bar loop (2 s at 120 bpm) of four quarter notes.
         let notes = (0..4).map(|b| SeqNote { key: 60 + b as u8, ..note(b * 96, 48) }).collect();
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes, glides: Vec::new() })));
         h.send(Command::Play);
         run(&mut eng, 48_000 * 5); // two and a half passes
         let (log, said) = (log.lock().unwrap(), said.lock().unwrap());
@@ -1432,7 +1558,7 @@ mod tests {
             Box::new(seer),
             48_000.0,
         )))])));
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(192, 48)] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(192, 48)], glides: Vec::new() })));
         run(&mut eng, 10_000);
         assert!(said.lock().unwrap().is_empty(), "stopped");
         h.send(Command::Play);
@@ -1442,7 +1568,7 @@ mod tests {
         said.lock().unwrap().clear();
         h.send(Command::SetSequence(Box::new(Sequence {
             length: 384,
-            notes: vec![SeqNote { key: 62, ..note(192, 48) }],
+            notes: vec![SeqNote { key: 62, ..note(192, 48) }], glides: Vec::new(),
         })));
         run(&mut eng, 512);
         let said = said.lock().unwrap();
@@ -1452,7 +1578,7 @@ mod tests {
     #[test]
     fn note_off_lands_at_note_end() {
         let (mut eng, mut h, log) = setup();
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(0, 48)] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(0, 48)], glides: Vec::new() })));
         h.send(Command::Play);
         run(&mut eng, 48 * 250 + 1000);
         let log = log.lock().unwrap();
@@ -1465,10 +1591,10 @@ mod tests {
     #[test]
     fn deleting_a_sounding_note_still_releases_it() {
         let (mut eng, mut h, log) = setup();
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(0, 96)] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(0, 96)], glides: Vec::new() })));
         h.send(Command::Play);
         run(&mut eng, 5_000); // note is now sounding
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] }))); // user deletes it
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![], glides: Vec::new() }))); // user deletes it
         run(&mut eng, 30_000);
         let log = log.lock().unwrap();
         assert!(log.iter().any(|(_, e)| matches!(e, Event::NoteOff { key: 60, .. })), "the note must not hang");
@@ -1477,15 +1603,15 @@ mod tests {
     #[test]
     fn a_kept_channel_rings_on_when_another_is_added_before_it() {
         let (mut eng, mut h, log) = setup();
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(0, 96)] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(0, 96)], glides: Vec::new() })));
         h.send(Command::Play);
         run(&mut eng, 5_000); // the note is sounding
         let other: Log = Arc::default();
-        let fresh = ChannelSlot::new(Box::new(Recorder { log: other.clone(), clock: 0 }), 48_000.0);
+        let fresh = ChannelSlot::new(Box::new(Recorder { log: other.clone(), clock: 0, glides: false }), 48_000.0);
         h.send(Command::Arrange(Arrangement::new(vec![Place::Fresh(Some(fresh)), Place::Keep(0)])));
         // The note's channel moved to index 1; the sequence follows it.
         let moved = SeqNote { channel: 1, ..note(0, 96) };
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![moved] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![moved], glides: Vec::new() })));
         run(&mut eng, 30_000);
         let log = log.lock().unwrap();
         assert!(!log.iter().any(|(_, e)| matches!(e, Event::AllNotesOff)), "not cut off");
@@ -1500,7 +1626,7 @@ mod tests {
         let (mut eng, mut h, log) = setup();
         // A note on each beat; loop the second beat only (ticks 96..192).
         let notes = (0..4).map(|b| SeqNote { key: 60 + b as u8, ..note(b * 96, 24) }).collect();
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes, glides: Vec::new() })));
         h.send(Command::SetLoop(Some((96.0, 192.0))));
         h.send(Command::Play);
         run(&mut eng, 3 * 96 * 250 - 1000); // just under three passes (96 ticks = 24 000 samples)
@@ -1554,7 +1680,7 @@ mod tests {
     fn a_live_note_chokes_its_group() {
         let (mut eng, mut h, log) = setup();
         let open: Log = Arc::default();
-        h.send(Command::AddChannel(ChannelSlot::new(Box::new(Recorder { log: open.clone(), clock: 0 }), 48_000.0)));
+        h.send(Command::AddChannel(ChannelSlot::new(Box::new(Recorder { log: open.clone(), clock: 0, glides: false }), 48_000.0)));
         h.send(Command::SetMix { channel: 0, volume: 0.8, pan: 0.0, mute: false, choke: 1 });
         h.send(Command::SetMix { channel: 1, volume: 0.8, pan: 0.0, mute: false, choke: 1 });
         h.send(Command::Live { channel: 0, event: Event::note_on(42, 1.0) });
@@ -1595,7 +1721,7 @@ mod tests {
     fn audio_plays_where_it_sits_and_from_the_middle_after_a_seek() {
         let (mut eng, mut h, _) = setup();
         // At 120 bpm a tick is 250 samples: the region covers samples 24_000..36_000.
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![], glides: Vec::new() })));
         h.send(Command::SetAudio(Box::new(AudioLane { regions: vec![region(96.0, 144.0)] })));
         h.send(Command::SetMasterVolume(1.0));
         h.send(Command::Play);
@@ -1614,7 +1740,7 @@ mod tests {
         let (mut eng, mut h, _) = setup();
         let mut r = region(0.0, 192.0); // one second
         r.fade_in = (0.5, 0.0);
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![], glides: Vec::new() })));
         h.send(Command::SetAudio(Box::new(AudioLane { regions: vec![r] })));
         h.send(Command::SetMasterVolume(1.0));
         h.send(Command::Play);
@@ -1660,7 +1786,7 @@ mod tests {
         let set = Arc::new(Mutex::new(Vec::new()));
         h.send(Command::AddChannel(ChannelSlot::new(Box::new(Knobs(set.clone())), 48_000.0)));
         h.send(Command::SetTempo(120.0)); // a bar = 384 ticks = 2 s = 96 000 samples
-        h.send(Command::SetSequence(Box::new(Sequence { length: 768, notes: vec![] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 768, notes: vec![], glides: Vec::new() })));
         // A ramp from 0 to 1 over the first bar; the knob itself rests at 0.2.
         let lane = AutoLane {
             addr: Addr::Param { channel: 0, id: 0 },
@@ -1691,7 +1817,7 @@ mod tests {
         let mut r = region(0.0, 96.0);
         r.data = Arc::new(SampleData { sample_rate: 48_000.0, left: ramp.clone(), right: ramp });
         r.reverse = true;
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![], glides: Vec::new() })));
         h.send(Command::SetAudio(Box::new(AudioLane { regions: vec![r] })));
         h.send(Command::SetMasterVolume(1.0));
         h.send(Command::Play);
@@ -1714,7 +1840,7 @@ mod tests {
         let mut r = region(0.0, 384.0);
         r.from = 0.5;
         r.trim = (0.0, 0.75);
-        h.send(Command::SetSequence(Box::new(Sequence { length: 768, notes: vec![] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 768, notes: vec![], glides: Vec::new() })));
         h.send(Command::SetAudio(Box::new(AudioLane { regions: vec![r] })));
         h.send(Command::SetMasterVolume(1.0));
         h.send(Command::Play);
@@ -1727,7 +1853,7 @@ mod tests {
     fn note_crossing_the_loop_end_is_released_after_wrapping() {
         let (mut eng, mut h, log) = setup();
         // Starts 24 ticks before the loop end, lasts 48: ends 24 ticks into the next loop.
-        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(360, 48)] })));
+        h.send(Command::SetSequence(Box::new(Sequence { length: 384, notes: vec![note(360, 48)], glides: Vec::new() })));
         h.send(Command::Play);
         run(&mut eng, 384 * 250 + 24 * 250 + 2_000);
         let log = log.lock().unwrap();

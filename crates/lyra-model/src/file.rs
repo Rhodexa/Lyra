@@ -46,7 +46,7 @@ mod tests {
     fn round_trip_keeps_everything() {
         let mut p = Project::default();
         let ch = p.add_channel("Bass", "lyra.synth", vec![0.0, 1.0, 0.5]);
-        p.patterns[0].notes_mut(ch).push(Note { start: 48, len: 36, key: 45, velocity: 0.9 });
+        p.patterns[0].notes_mut(ch).push(Note { start: 48, len: 36, key: 45, velocity: 0.9, link: None });
         p.add_pattern();
         let id = p.patterns[0].id;
         p.clips.push(Clip::of_pattern(id, 2, TICKS_PER_BAR, 4 * TICKS_PER_BAR));

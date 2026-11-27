@@ -51,10 +51,10 @@ fn melody(tune: &str, shift: i32, cuts: bool) -> Vec<Note> {
             // a third up, kept in the key (keys are in D, or E when shifted by 2)
             let in_key = |k: u8| SCALE.iter().any(|&s| (s + shift).rem_euclid(12) == k as i32 % 12);
             let grace = if in_key(key + 3) { key + 3 } else { key + 4 };
-            v.push(Note { start, len: 5, key: grace, velocity: vel * 0.8 });
-            v.push(Note { start: start + 6, len: len - 6, key, velocity: vel });
+            v.push(Note { start, len: 5, key: grace, velocity: vel * 0.8, link: None });
+            v.push(Note { start: start + 6, len: len - 6, key, velocity: vel, link: None });
         } else {
-            v.push(Note { start, len, key, velocity: vel });
+            v.push(Note { start, len, key, velocity: vel, link: None });
         }
     }
     v
@@ -74,7 +74,7 @@ fn third_below(tune: &str, shift: i32) -> Vec<Note> {
                 start: t.step * STEP,
                 len: t.len * STEP - 3,
                 key: (key + shift) as u8,
-                velocity: accent(t.step) * 0.9,
+                velocity: accent(t.step) * 0.9, link: None,
             }
         })
         .collect()
@@ -97,8 +97,8 @@ fn bass(chords: &str, shift: i32) -> Vec<Note> {
     for (i, c) in chords.split_whitespace().enumerate() {
         let (root, _) = chord(c);
         let at = i as u32 * 4 * STEP;
-        v.push(Note { start: at, len: 2 * STEP - 6, key: (root + shift) as u8, velocity: 1.0 });
-        v.push(Note { start: at + 2 * STEP, len: 2 * STEP - 6, key: (root + 7 + shift) as u8, velocity: 0.8 });
+        v.push(Note { start: at, len: 2 * STEP - 6, key: (root + shift) as u8, velocity: 1.0, link: None });
+        v.push(Note { start: at + 2 * STEP, len: 2 * STEP - 6, key: (root + 7 + shift) as u8, velocity: 0.8, link: None });
     }
     v
 }
@@ -111,14 +111,14 @@ fn arp(chords: &str, shift: i32) -> Vec<Note> {
         let at = i as u32 * 4 * STEP;
         for k in 0..(4 * STEP / 8) {
             let key = triad[k as usize % 3] + shift;
-            v.push(Note { start: at + k * 8, len: 7, key: key as u8, velocity: if k % 3 == 0 { 0.9 } else { 0.7 } });
+            v.push(Note { start: at + k * 8, len: 7, key: key as u8, velocity: if k % 3 == 0 { 0.9 } else { 0.7 }, link: None });
         }
     }
     v
 }
 
 fn hits(steps: &[(u32, f32)]) -> Vec<Note> {
-    steps.iter().map(|&(s, vel)| Note { start: s * STEP, len: STEP, key: 60, velocity: vel }).collect()
+    steps.iter().map(|&(s, vel)| Note { start: s * STEP, len: STEP, key: 60, velocity: vel, link: None }).collect()
 }
 
 // ───────────────────────────── the sounds ─────────────────────────────
@@ -225,8 +225,8 @@ fn build() -> Project {
         vec![(
             ch_drone,
             vec![
-                Note { start: 0, len: 2 * TICKS_PER_BAR, key: 50, velocity: 0.8 },
-                Note { start: 0, len: 2 * TICKS_PER_BAR, key: 57, velocity: 0.7 },
+                Note { start: 0, len: 2 * TICKS_PER_BAR, key: 50, velocity: 0.8, link: None },
+                Note { start: 0, len: 2 * TICKS_PER_BAR, key: 57, velocity: 0.7, link: None },
             ],
         )],
     );
@@ -236,8 +236,8 @@ fn build() -> Project {
         vec![(
             ch_drone,
             vec![
-                Note { start: 0, len: 2 * TICKS_PER_BAR, key: 52, velocity: 0.8 },
-                Note { start: 0, len: 2 * TICKS_PER_BAR, key: 59, velocity: 0.7 },
+                Note { start: 0, len: 2 * TICKS_PER_BAR, key: 52, velocity: 0.8, link: None },
+                Note { start: 0, len: 2 * TICKS_PER_BAR, key: 59, velocity: 0.7, link: None },
             ],
         )],
     );
@@ -273,12 +273,12 @@ fn build() -> Project {
         let ab = pat(&mut p, &format!("Arp B ({key})"), vec![(ch_arp, arp(CHORDS_B, shift))]);
         parts.push((a, a_hi, b, ha, hb, ba, bb, aa, ab));
     }
-    let long = |key: u8, vel: f32| Note { start: 0, len: TICKS_PER_BAR - 12, key, velocity: vel };
+    let long = |key: u8, vel: f32| Note { start: 0, len: TICKS_PER_BAR - 12, key, velocity: vel, link: None };
     let ending = pat(
         &mut p,
         "Ending",
         vec![
-            (ch_lead, vec![Note { start: 0, len: 5, key: 83, velocity: 0.8 }, Note { start: 6, ..long(80, 1.0) }]),
+            (ch_lead, vec![Note { start: 0, len: 5, key: 83, velocity: 0.8, link: None }, Note { start: 6, ..long(80, 1.0) }]),
             (ch_harm, vec![long(76, 0.9)]),
             (ch_bass, vec![long(52, 1.0)]),
             (

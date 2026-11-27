@@ -357,7 +357,7 @@ impl Playlist {
                 .notes
                 .iter()
                 .filter(|n| n.channel as usize == i)
-                .map(|n| lyra_model::Note { start: n.start, len: n.len, key: n.key, velocity: n.velocity })
+                .map(|n| lyra_model::Note { start: n.start, len: n.len, key: n.key, velocity: n.velocity, link: None })
                 .collect();
             (c.name.clone(), crate::midi::section(&notes, from, to))
         });

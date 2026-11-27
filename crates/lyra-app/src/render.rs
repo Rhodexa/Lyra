@@ -255,7 +255,7 @@ mod tests {
         p.bpm = 120.0;
         let kick = p.add_channel("Kick", "lyra.kick", lyra_catalog::default_params("lyra.kick"));
         let hat = p.add_channel("Hat / open", "lyra.hihat", lyra_catalog::default_params("lyra.hihat"));
-        p.patterns[0].notes_mut(kick).push(Note { start: 0, len: 24, key: 60, velocity: 1.0 });
+        p.patterns[0].notes_mut(kick).push(Note { start: 0, len: 24, key: 60, velocity: 1.0, link: None });
         let id = p.patterns[0].id;
         p.add_clip(Clip::of_pattern(id, 0, 0, 2 * TICKS_PER_BAR));
         let _ = hat; // a channel with no notes: no stem for it

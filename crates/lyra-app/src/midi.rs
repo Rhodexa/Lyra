@@ -228,7 +228,7 @@ pub fn read(bytes: &[u8]) -> Result<Song, String> {
                 .iter()
                 .map(|&(start, end, key, vel)| {
                     let (s, e) = (to_lyra(start), to_lyra(end));
-                    Note { start: s, len: e.saturating_sub(s).max(1), key, velocity: vel as f32 / 127.0 }
+                    Note { start: s, len: e.saturating_sub(s).max(1), key, velocity: vel as f32 / 127.0, link: None }
                 })
                 .collect();
             notes.sort_by_key(|n| (n.start, n.key));
@@ -313,7 +313,7 @@ mod tests {
     use super::*;
 
     fn n(start: u32, len: u32, key: u8) -> Note {
-        Note { start, len, key, velocity: 100.0 / 127.0 }
+        Note { start, len, key, velocity: 100.0 / 127.0, link: None }
     }
 
     #[test]
