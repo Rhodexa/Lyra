@@ -175,7 +175,7 @@ impl Octavia {
     fn event(&mut self, event: Event) {
         let e = &mut self.engines[self.active];
         match event {
-            Event::Glide { .. } => {} // no glides (Plugin::glides is false)
+            Event::NoteExpression { .. } => {} // no note expressions yet
             Event::NoteOn { key, velocity, id } => e.note_on(id, key as f32, velocity),
             Event::NoteOff { key, id } => e.note_off(id, key as f32),
             Event::AllNotesOff => e.all_off(),
