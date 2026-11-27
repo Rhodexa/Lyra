@@ -587,7 +587,7 @@ mod probe {
     #[ignore]
     fn how_loud_are_the_parts() {
         let inst = cello();
-        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../scores/prelude.txt")).unwrap();
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../scores/prelude.txt")).unwrap();
         let c = perform(&Score::parse(&text).unwrap(), &inst, &Style::default());
         let sr = 48_000.0;
         let at = |f: usize| (f as f64 * sr as f64 / FRAME_RATE).round() as usize;

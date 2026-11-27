@@ -1,0 +1,4 @@
+[alias]
+# Octavia's command-line renderer, from anywhere in the repo:
+#   cd plugins/octavia && cargo octavia scores/lament.txt
+octavia = "run --release -q -p octavia-render --"

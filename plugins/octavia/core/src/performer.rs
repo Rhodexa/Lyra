@@ -2086,7 +2086,7 @@ mod tests {
     #[test]
     fn streaming_matches_offline() {
         let inst = cello();
-        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../scores/lament.txt")).unwrap();
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../scores/lament.txt")).unwrap();
         let score = Score::parse(&text).unwrap();
         let style = Style::default();
         let offline = perform(&score, &inst, &style);

@@ -102,7 +102,7 @@ automatically during playback. Notes whose length is unknown until note-off
    Small: curves in, overtone levels out. CPU inference written by hand.
 7. Maybe a learned performer, if the rules plateau.
 
-Where to start reading the engine: `crates/octavia-core/src/lib.rs` (the
+Where to start reading the engine: `core/src/lib.rs` (the
 pipeline), `performer.rs` (all the rules, each documented at the top),
 `render.rs` (`Engine`, `Sound`), then `JOURNAL.md` for why each rule exists.
 

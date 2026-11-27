@@ -7,6 +7,19 @@ members = [
     "plugins/*/plugin",
     "plugins/*/editor",
     "plugins/shared-look",
+    # Octavia's extra parts: its plugin-free engine and the command-line renderer.
+    "plugins/octavia/core",
+    "plugins/octavia/render",
+]
+# Plain `cargo run/build/test` = everything but Octavia's renderer, so `cargo run`
+# still means Lyra. The renderer: `cargo octavia …` (.cargo/config.toml);
+# `cargo test --workspace` tests it too.
+default-members = [
+    "crates/lyra-*",
+    "plugins/*/plugin",
+    "plugins/*/editor",
+    "plugins/shared-look",
+    "plugins/octavia/core",
 ]
 
 [workspace.package]
@@ -27,9 +40,10 @@ lyra-drums       = { path = "plugins/drums/plugin" }
 lyra-synth       = { path = "plugins/synth/plugin" }
 lyra-sampler     = { path = "plugins/sampler/plugin" }
 lyra-effects     = { path = "plugins/effects/plugin" }
-# Plugins living in their own repos next door, listed by path.
-octavia-lyra     = { path = "../LyraRelated/Octavia/crates/octavia-lyra" }
-octavia-editor   = { path = "../LyraRelated/Octavia/crates/octavia-editor" }
+# Octavia: a plugin-free engine (core) that plugin/ adapts for Lyra.
+octavia-core     = { path = "plugins/octavia/core" }
+octavia-lyra     = { path = "plugins/octavia/plugin" }
+octavia-editor   = { path = "plugins/octavia/editor" }
 # Editors live beside their plugin; the two synths share a frozen look.
 lyra-shared-look        = { path = "plugins/shared-look" }
 lyra-fluttersine-editor = { path = "plugins/fluttersine/editor" }
@@ -51,9 +65,15 @@ serde_json = "1"
 rfd = "0.18"
 hound = "3.5"
 claxon = "0.4"
+png = "0.18"
 
 # Audio code is unusable unoptimized; keep debug builds fast but debuggable.
 [profile.dev]
 opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
+# Octavia's engine renders whole pieces in its tests; it always ran at 2.
+[profile.dev.package.octavia-core]
+opt-level = 2
+[profile.dev.package.octavia-render]
+opt-level = 2

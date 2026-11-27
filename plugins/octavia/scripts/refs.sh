@@ -9,7 +9,7 @@
 # live in midi/ (not committed either); missing ones are skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-cargo build --release --quiet
+cargo build --release --quiet -p octavia-render
 out=renders/refs
 mkdir -p "$out"
 
@@ -35,7 +35,7 @@ for r in "${refs[@]}"; do
   dir=$out/$name
   mkdir -p "$dir"
   # shellcheck disable=SC2086
-  ./target/release/octavia "$input" $opts --explain -o "$dir" | grep -E '^ +[0-9]' >"$dir/decisions.txt"
+  ../../target/release/octavia "$input" $opts --explain -o "$dir" | grep -E '^ +[0-9]' >"$dir/decisions.txt"
   if [[ ${1:-} == --accept || ! -f $dir/baseline.txt ]]; then
     cp "$dir/decisions.txt" "$dir/baseline.txt"
     echo "$name: baseline saved ($(wc -l <"$dir/decisions.txt") notes)"

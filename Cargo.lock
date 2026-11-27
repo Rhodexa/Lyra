@@ -2144,6 +2144,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "octavia-render"
+version = "0.1.0"
+dependencies = [
+ "hound",
+ "octavia-core",
+ "png",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

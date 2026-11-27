@@ -4,7 +4,7 @@
 # (e.g. scripts/render-midis.sh --player student).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-cargo build --release --quiet
+cargo build --release --quiet -p octavia-render
 out=renders/midi
 mkdir -p "$out"
 for f in midi/*.mid; do
@@ -17,5 +17,5 @@ for f in midi/*.mid; do
     *) opts="" ;;
   esac
   # shellcheck disable=SC2086
-  ./target/release/octavia "$f" $opts "$@" -o "$out" | grep -E '^[^ ].*[0-9.]+ s, ' | cut -d'|' -f1
+  ../../target/release/octavia "$f" $opts "$@" -o "$out" | grep -E '^[^ ].*[0-9.]+ s, ' | cut -d'|' -f1
 done

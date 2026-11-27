@@ -7,6 +7,5 @@ license.workspace = true
 
 [dependencies]
 octavia-core.workspace = true
-# Lyra's plugin interface, from the Lyra repo next door. Lyra lists this
-# crate in its own Cargo.toml by path; nothing here moves.
-lyra-plugin = { path = "../../../../Lyra/crates/lyra-plugin" }
+# Lyra's plugin interface.
+lyra-plugin.workspace = true

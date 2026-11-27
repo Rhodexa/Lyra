@@ -5,10 +5,10 @@ pieces of work, each for its own session, each owning its own files. Read
 this, then the files it points to.
 
 **Status (2026-11-25, evening): sessions 1 and 2 are done; 3 has a first
-version (`crates/octavia-editor`, notes in `docs/FACEPLATE-PORT.md`),
+version (`editor`, notes in `docs/FACEPLATE-PORT.md`),
 waiting for Rhodexa's look.**
 Octavia plays from Lyra's piano roll with the generic editor
-(`crates/octavia-lyra`). For the porter:
+(`plugin`). For the porter:
 
 * Telemetry: `octavia_core::telemetry::Snapshot` (plain data). The editor
   gets it with `plugin.telemetry()` → downcast to `octavia_lyra::Telemetry`
@@ -67,7 +67,7 @@ touches Octavia's files.
 
 ### 2. Octavia session: the adapter and the telemetry (this repo)
 
-Owns: `octavia-core` and a new adapter crate here (`crates/octavia-lyra`,
+Owns: `octavia-core` and a new adapter crate here (`plugin`,
 depending on Lyra's `lyra-plugin` by path), plus the line in Lyra's
 `Cargo.toml` that lists it.
 
@@ -89,7 +89,7 @@ depending on Lyra's `lyra-plugin` by path), plus the line in Lyra's
 
 ### 3. Faceplate port session (after 1 and 2)
 
-Owns: Octavia's editor crate (here, e.g. `crates/octavia-editor`) using the
+Owns: Octavia's editor crate (here, e.g. `editor`) using the
 kit. Draws only; reads parameters and telemetry, never the engine.
 
 * Port `docs/design/faceplate.html` function by function, as

@@ -46,8 +46,8 @@ pub const EDITOR: lyra_kit::Editor = lyra_kit::Editor { plugin: octavia_lyra::ID
 /// within a second.
 const LOGO: Artwork = Artwork {
     name: "octavia-logo",
-    built_in: include_bytes!("../../../docs/design/logo.palette.png"),
-    file: concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/design/logo.palette.png"),
+    built_in: include_bytes!("../../docs/design/logo.palette.png"),
+    file: concat!(env!("CARGO_MANIFEST_DIR"), "/../docs/design/logo.palette.png"),
     // About twice its size on the plate: scaled down further by the GPU it
     // shimmered and looked jagged.
     max_h: 84,

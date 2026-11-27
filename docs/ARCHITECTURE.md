@@ -9,8 +9,8 @@ lyra-app ─────► lyra-model      project data + undo            (no a
    │  │
    │  └───────► lyra-catalog    which plugins exist, by id
    │               │
-   │               ├──► plugins/fluttersine, chrysalis, drums, synth, sampler, effects
-   │               │        │  (each: its DSP, its params, its presets)
+   │               ├──► plugins/*/plugin  fluttersine, chrysalis, octavia, drums, synth, sampler, effects
+   │               │        │  (each: its DSP, its params, its presets; layout in plugins/README.md)
    │               │        └──► lyra-dsp   shared building blocks (SVF, FFT, fast sine, noise, sync lengths)
    │               ▼
    └──► lyra-engine ──────► lyra-plugin     the ONE plugin interface (trait Plugin)
@@ -26,7 +26,7 @@ code that reads them.
 |---|---|---|
 | `lyra-plugin` | `Plugin` trait, `Event`, `ParamInfo`, `PluginInfo` | depend on anything |
 | `lyra-dsp` | small DSP pieces every plugin may use | know about any plugin |
-| `plugins/*` | one plugin family each: its sound, parameters, presets | know about the engine, the UI or each other |
+| `plugins/*` | one plugin each: `plugin/` (sound, parameters, presets), optional `editor/`, `core/` | know about the engine, the UI or each other |
 | `lyra-catalog` | the list of built-ins, lookups by id | contain DSP |
 | `lyra-engine` | audio thread: sequencer, channel mixing, FIFOs | allocate, lock or block in `process` |
 | `lyra-model` | `Project`, `Pattern`, `Note`, `History` | know about audio or UI |

@@ -7,13 +7,12 @@ license.workspace = true
 
 [dependencies]
 # What an editor may know of Lyra: the kit (parameters with undo, telemetry,
-# knob behaviour, live-reloaded artwork). From the Lyra repo next door; Lyra
-# lists this crate in its own Cargo.toml by path.
-lyra-kit = { path = "../../../../Lyra/crates/lyra-kit" }
-lyra-plugin = { path = "../../../../Lyra/crates/lyra-plugin" }
+# knob behaviour, live-reloaded artwork).
+lyra-kit.workspace = true
+lyra-plugin.workspace = true
 # The parameter table, presets and the telemetry type.
-octavia-lyra = { path = "../octavia-lyra" }
+octavia-lyra.workspace = true
 # Pure data and helpers: the snapshot, the instruments' strings and hand span.
 octavia-core.workspace = true
-# Must match Lyra's egui exactly (Lyra's Cargo.toml pins it).
-egui = "=0.31.1"
+# Lyra's pinned egui.
+egui.workspace = true

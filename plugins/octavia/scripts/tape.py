@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs/design/tapes"
-BIN = ROOT / "target/release/octavia"
+BIN = ROOT / "../../target/release/octavia"  # Lyra's shared target/
 STEP = 4  # curves are 250 frames/s; keep every 4th = 62.5 frames/s
 
 NOTE = re.compile(
@@ -41,7 +41,7 @@ def main():
     if local:
         args.remove("--local")
         OUT = OUT / "local"
-    subprocess.run(["cargo", "build", "--release", "-q"], cwd=ROOT, check=True)
+    subprocess.run(["cargo", "build", "--release", "-q", "-p", "octavia-render"], cwd=ROOT, check=True)
     OUT.mkdir(parents=True, exist_ok=True)
     for score in args:
         tape(Path(score), extra)

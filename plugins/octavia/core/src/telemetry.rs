@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn every_decision_shown_is_the_one_explain_prints() {
-        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../scores/showcase.txt")).unwrap();
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../scores/showcase.txt")).unwrap();
         let s = Score::parse(&text).unwrap();
         let explain = render_score(&s, &cello(), &Style::default(), 48_000.0, 0.0).decisions;
         let snaps = snapshots(&s);
@@ -148,7 +148,7 @@ mod tests {
 
     #[test]
     fn coming_notes_show_the_hands_plan_and_it_is_kept() {
-        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../scores/showcase.txt")).unwrap();
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../scores/showcase.txt")).unwrap();
         let s = Score::parse(&text).unwrap();
         let explain = render_score(&s, &cello(), &Style::default(), 48_000.0, 0.0).decisions;
         let snaps = snapshots(&s);

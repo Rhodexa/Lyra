@@ -2,13 +2,23 @@
 
 An expressive string player for the CPU: it reads notes and articulations,
 decides how a cellist would play them, and plays them on a modelled cello
-(or violin). A sibling of [Lyra](../../Lyra). Design: [docs/DESIGN.md](docs/DESIGN.md).
+(or violin). One of [Lyra](../../README.md)'s built-in instruments, and also a
+command-line renderer of its own. Design: [docs/DESIGN.md](docs/DESIGN.md).
+
+| folder | what | knows Lyra? |
+|---|---|---|
+| `core/` | the engine: player + instrument | no, no dependencies at all |
+| `plugin/` | Octavia as a Lyra instrument (parameters, presets, notes in, audio out) | yes |
+| `editor/` | the faceplate, in Octavia's own look | yes |
+| `render/` | the `octavia` command-line renderer below | no |
 
 ## Try it
 
+From this folder (`cargo octavia` is an alias for the renderer):
+
 ```sh
-cargo run --release -- scores/lament.txt scores/prelude.txt scores/articulations.txt
-cargo run --release -- scores/violin-air.txt --instrument violin
+cargo octavia scores/lament.txt scores/prelude.txt scores/articulations.txt
+cargo octavia scores/violin-air.txt --instrument violin
 ```
 
 Everything lands in `renders/`:
@@ -36,7 +46,7 @@ Useful A/B switches: `--expression 0` (deadpan, rules off), `--vibrato 0`,
 To compare with a real recording (kept in `ext_sample/`, never committed):
 
 ```sh
-cargo run --release -- analyze ext_sample/cello.wav   # same numbers + spectrogram
+cargo octavia analyze ext_sample/cello.wav   # same numbers + spectrogram
 ```
 
 ## Piano rolls
@@ -45,17 +55,17 @@ A `.roll` is just what a piano roll holds (start, length, key, velocity), and
 Octavia infers every articulation from it:
 
 ```sh
-cargo run --release -- roll scores/prelude.txt          # strip a score's marks into prelude.roll
-cargo run --release -- scores/prelude.roll -o renders/inferred
-cargo run --release -- scores/prelude.roll --pizz       # the pizzicato patch
+cargo octavia roll scores/prelude.txt          # strip a score's marks into prelude.roll
+cargo octavia scores/prelude.roll -o renders/inferred
+cargo octavia scores/prelude.roll --pizz       # the pizzicato patch
 ```
 
 ## MIDI files
 
 ```sh
-cargo run --release -- midi-info song.mid               # which track is what
-cargo run --release -- song.mid --track 2               # one line from track 2
-cargo run --release -- song.mid --bottom --transpose -12
+cargo octavia midi-info song.mid               # which track is what
+cargo octavia song.mid --track 2               # one line from track 2
+cargo octavia song.mid --bottom --transpose -12
 ```
 
 Chords collapse to their top note (`--bottom` for the lowest), keeping the
@@ -93,4 +103,4 @@ D3+A3:h                 # + a double stop (two strings at once)
 
 ## License
 
-MIT OR Apache-2.0, at your option.
+MIT OR Apache-2.0, at your option, like the rest of Lyra.

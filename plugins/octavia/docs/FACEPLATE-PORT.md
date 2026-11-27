@@ -6,7 +6,7 @@ from `JOURNAL.md` so the two sessions never edit the same file at once.
 
 ## Where the port is (2026-11-25)
 
-First version done: `crates/octavia-editor`, registered in Lyra
+First version done: `editor`, registered in Lyra
 (`plugin_host::EDITORS`). Side by side with `faceplate.html` it matches the
 layout, palette, fonts and every LCD panel. It reads only parameters (through
 `lyra_kit::Host`) and `octavia_lyra::Telemetry`; it never touches the engine.
@@ -16,7 +16,7 @@ layout, palette, fonts and every LCD panel. It reads only parameters (through
 * `lib.rs`: the plate's layout (the HTML's CSS arithmetic) and the wiring.
 * Logo: read straight from `docs/design/logo.palette.png` (built in, and
   live-reloaded while Lyra runs from source: rerun `recolor.py`, it shows).
-* Fonts bundled in `crates/octavia-editor/assets/fonts` (OFL): IBM Plex Mono
+* Fonts bundled in `editor/assets/fonts` (OFL): IBM Plex Mono
   700/600 for the plate, Roboto Condensed 700/600 for the LCD.
 
 ## Where it differs from the mock, and why
