@@ -6,7 +6,7 @@ use crate::params::{dest, ft, lfo_mode, p, src, warp, PARAMS};
 use crate::table::{builtin, Table, GUARD, IMPORTED};
 use crate::telemetry::{Report, Telemetry};
 use lyra_dsp::{poly_blep, round_fast, sin_turns, svf, svf_coeffs, tanh_fast, wrap, Rng, SYNC_BEATS};
-use lyra_plugin::{Event, NoteId, ParamGroup, ParamInfo, Plugin, ProcessContext, SampleData, Transport};
+use lyra_plugin::{Event, Expression, NoteId, ParamGroup, ParamInfo, Plugin, ProcessContext, SampleData, Transport};
 use std::f32::consts::SQRT_2;
 use std::sync::Arc;
 
@@ -502,33 +502,6 @@ impl FilterState {
     }
 }
 
-/// A glide drawn in the piano roll: from one pitch to another over a time,
-/// shaped by its tension.
-#[derive(Clone, Copy)]
-struct Slide {
-    from: f32,
-    to: f32,
-    /// 0..1 along the way, and how far each control tick goes.
-    t: f32,
-    step: f32,
-    tension: f32,
-}
-
-impl Slide {
-    /// How far along the pitch way (0..1) it is at `t`: the same curve as
-    /// Lyra's automation and fades (`lyra_engine::fade_curve`), so a glide
-    /// sounds the way the roll draws it. Tension > 0 starts slow and arrives
-    /// fast, < 0 leaves fast and settles slowly.
-    fn shape(&self) -> f32 {
-        let c = self.tension * 6.0;
-        if c.abs() < 1e-3 {
-            self.t
-        } else {
-            (c * self.t).exp_m1() / c.exp_m1()
-        }
-    }
-}
-
 struct Voice {
     active: bool,
     gate: bool,
@@ -542,10 +515,12 @@ struct Voice {
     /// Current pitch (gliding toward `target`), in semitones.
     semi: f32,
     target: f32,
-    /// The sequenced note it plays (for glides from the piano roll).
+    /// The sequenced note it plays (note expressions find it by this).
     id: NoteId,
-    /// A piano-roll glide under way: it moves `semi` instead of the glide knob.
-    slide: Option<Slide>,
+    /// The note's tuning expression (semitones, from the host: bends drawn
+    /// in the piano roll), and where it is on its way there (smoothed).
+    tune: f32,
+    tune_to: f32,
     osc: [OscState; 2],
     sub_ph: f32,
     sub_inc: f32,
@@ -603,7 +578,8 @@ impl Voice {
             semi: 60.0,
             target: 60.0,
             id: lyra_plugin::NO_ID,
-            slide: None,
+            tune: 0.0,
+            tune_to: 0.0,
             osc: [OscState::default(); 2],
             sub_ph: 0.0,
             sub_inc: 0.0,
@@ -689,20 +665,23 @@ impl Voice {
         }
         let m = &self.m;
 
-        // Pitch: a piano-roll glide, or the glide knob's.
-        if let Some(s) = &mut self.slide {
-            s.t = (s.t + s.step).min(1.0);
-            self.semi = s.from + (s.to - s.from) * s.shape();
-            if s.t >= 1.0 {
-                (self.semi, self.target, self.slide) = (s.to, s.to, None);
+        // Pitch: the glide knob's glide, plus the note's tuning expression
+        // (the host sends a value every block; following it over ~3 ms
+        // turns the steps into a line).
+        if self.tune != self.tune_to {
+            let k = 1.0 - (-(CR as f32) / (0.003 * sr)).exp();
+            self.tune += (self.tune_to - self.tune) * k;
+            if (self.tune_to - self.tune).abs() < 1e-4 {
+                self.tune = self.tune_to;
             }
-        } else if self.semi != self.target {
+        }
+        if self.semi != self.target {
             self.semi += (self.target - self.semi) * q.glide_k;
             if (self.target - self.semi).abs() < 1e-4 {
                 self.semi = self.target;
             }
         }
-        let pitch = self.semi + 24.0 * m[dest::PITCH];
+        let pitch = self.semi + self.tune + 24.0 * m[dest::PITCH];
 
         for o in 0..2 {
             let op = &q.osc[o];
@@ -1219,7 +1198,8 @@ impl Chrysalis {
         let tables = tables(q, &self.imported);
         let v = &mut self.voices[slot];
         let fresh = !v.active;
-        (v.id, v.slide) = (id, None);
+        // A new note: its expressions start neutral (as in CLAP).
+        (v.id, v.tune, v.tune_to) = (id, 0.0, 0.0);
         v.key = key;
         v.target = key as f32;
         if !glide {
@@ -1332,17 +1312,15 @@ impl Chrysalis {
         match e {
             Event::NoteOn { key, velocity, id } => self.note_on(key, velocity.clamp(0.0, 1.0), id),
             Event::NoteOff { key, .. } => self.note_off(key),
-            Event::Glide { id, key, seconds, tension } => {
-                // The voice playing that note (mono: the one voice) moves on.
-                let csr = self.sr / CR as f32;
+            Event::NoteExpression { id, expression: Expression::Tuning, value, .. } => {
+                // The voice playing that note (mono: the one voice).
                 let mono = self.q.mono;
-                let found = self.voices.iter_mut().enumerate().find(|(i, v)| v.active && v.gate && (v.id == id || mono && *i == 0));
-                if let Some((_, v)) = found {
-                    let step = if seconds > 0.0 { 1.0 / (seconds * csr) } else { 1.0 };
-                    let from = v.semi;
-                    v.slide = Some(Slide { from, to: key as f32, t: 0.0, step, tension: tension.clamp(-1.0, 1.0) });
+                let voice = self.voices.iter_mut().enumerate().find(|(i, v)| v.active && (v.id == id || mono && *i == 0));
+                if let Some((_, v)) = voice {
+                    v.tune_to = value.clamp(-120.0, 120.0);
                 }
             }
+            Event::NoteExpression { .. } => {} // tuning only, so far
             Event::AllNotesOff => {
                 self.stack_len = 0;
                 for v in self.voices.iter_mut().filter(|v| v.active) {
@@ -1420,8 +1398,9 @@ impl Chrysalis {
         self.voices[v].key
     }
     #[cfg(test)]
+    /// A voice's pitch in semitones (with its tuning expression).
     pub(crate) fn voice_semi(&self, v: usize) -> f32 {
-        self.voices[v].semi
+        self.voices[v].semi + self.voices[v].tune
     }
 }
 
@@ -1441,9 +1420,6 @@ fn tables<'a>(q: &Prep, imported: &'a Option<Arc<Table>>) -> [&'a Table; 2] {
 impl Plugin for Chrysalis {
     fn name(&self) -> &'static str {
         "Chrysalis"
-    }
-    fn glides(&self) -> bool {
-        true
     }
     fn params(&self) -> &'static [ParamInfo] {
         &PARAMS

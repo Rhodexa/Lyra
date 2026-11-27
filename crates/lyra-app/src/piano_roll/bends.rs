@@ -15,7 +15,9 @@
 //!   arrives fast, or the other way). **Double-click**: straight again.
 //! * **right-click** the curve or a dot — no bend.
 //!
-//! Synths that glide (Chrysalis so far) play it; others play the note flat.
+//! Plugins hear it CLAP-style, as the note's *tuning* expression (semitones,
+//! sent every block while it moves). Chrysalis follows it so far; plugins
+//! that don't know note expressions play the note flat.
 
 use super::{PianoRoll, View};
 use crate::theme::stroke;

@@ -63,9 +63,14 @@ distances and in sound**, never in chord names or scale degrees.
    with the arrival pitch written at the end; the start dot sets when the glide
    begins, the ring bends it (the automation curve, double-click =
    straight), right-click removes it. Only **Chrysalis** glides so far
-   (`Plugin::glides`, `Event::Glide`); others play the note flat. Code:
-   `piano_roll/bends.rs`, `NoteBend` in the model, `bridge::glide_of`,
-   `SeqGlide` in the engine.
+   as a **CLAP-style note expression**: the engine draws the curve and sends
+   the note's *tuning* (semitones) every block while it moves
+   (`Event::NoteExpression`, `Expression::Tuning`); others play the note
+   flat. No "glide" concept at the plugin interface (an early version had a
+   `Glide` ramp event: a Lyra invention, replaced the same day). Per-note
+   curves (5) will be more expressions through the same path. Code:
+   `piano_roll/bends.rs`, `NoteBend` in the model, `bridge::bend_of`,
+   `SeqBend` in the engine.
    **Why not links (tried first, same day):** linking a note *into the next
    one* made the glide depend on other notes, and with a gap it glided out
    of a note that had already ended. Rhodexa: "a glide is an articulation of

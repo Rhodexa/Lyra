@@ -372,7 +372,7 @@ impl Synth {
 
     fn handle(&mut self, e: Event) {
         match e {
-            Event::Glide { .. } => {} // no glides (Plugin::glides is false)
+            Event::NoteExpression { .. } => {} // no note expressions yet
             Event::NoteOn { key, velocity, .. } => self.note_on(key, velocity),
             Event::NoteOff { key, .. } => {
                 for v in self.voices.iter_mut().filter(|v| v.key == key && v.stage != Stage::Off) {

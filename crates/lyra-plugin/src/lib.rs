@@ -42,18 +42,39 @@ pub enum Event {
     },
     /// Silence everything quickly (transport stop, choke groups, panic).
     AllNotesOff,
-    /// Extension `lyra.note-glide` (only for plugins whose `glides()` says
-    /// yes): the sounding note `id` glides to `key`, arriving `seconds` from
-    /// now (0: the pitch just changes, legato). `tension` shapes the way:
-    /// 0 straight, > 0 starts slow and arrives fast, < 0 leaves fast and
-    /// settles slowly (-1..1). The note keeps its id and ends with its own
-    /// NoteOff (same id, its first key).
-    Glide {
+    /// A note expression, like CLAP's `CLAP_EVENT_NOTE_EXPRESSION`: one
+    /// sounding note (`id`, its `key`) gets a new value for one of its own
+    /// expressions. The host draws the curve and sends values as it goes
+    /// (every block while it moves); the plugin follows them, smoothing.
+    /// Every expression starts at its neutral value with each new note.
+    /// Plugins that don't know an expression ignore it.
+    NoteExpression {
         id: NoteId,
         key: u8,
-        seconds: f32,
-        tension: f32,
+        expression: Expression,
+        value: f32,
     },
+}
+
+/// What a note expression changes (CLAP's note expression ids, with their
+/// ranges and neutral values).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Expression {
+    /// Gain, 0..4 (linear; 1 neutral).
+    Volume,
+    /// 0 left, 0.5 centre (neutral), 1 right.
+    Pan,
+    /// Pitch offset in semitones, -120..120 (0 neutral). Bends drawn in the
+    /// piano roll arrive as this.
+    Tuning,
+    /// 0..1 (0 neutral).
+    Vibrato,
+    /// 0..1.
+    Expression,
+    /// 0..1.
+    Brightness,
+    /// 0..1.
+    Pressure,
 }
 
 impl Event {
@@ -356,12 +377,6 @@ pub trait Plugin: Send {
     /// Lyra doesn't compensate yet; it gives look-ahead instead.
     fn latency(&self) -> u32 {
         0
-    }
-    /// Extension `lyra.note-glide`: true if this plugin understands
-    /// `Event::Glide`. Then notes linked in the piano roll reach it as one
-    /// note that glides; otherwise they arrive as written. Asked once.
-    fn glides(&self) -> bool {
-        false
     }
 }
 

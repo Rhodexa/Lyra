@@ -43,7 +43,7 @@ fn main() {
             n(s, 2, 0.5)
         }
     }
-    h.send(Command::SetSequence(Box::new(Sequence { length: 16 * 24, notes, glides: Vec::new() })));
+    h.send(Command::SetSequence(Box::new(Sequence { length: 16 * 24, notes, bends: Vec::new() })));
     h.send(Command::SetTempo(124.0));
     h.send(Command::Play);
 

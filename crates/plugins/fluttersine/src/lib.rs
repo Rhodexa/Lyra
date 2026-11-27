@@ -1852,7 +1852,7 @@ impl Fm {
 
     fn handle(&mut self, e: Event) {
         match e {
-            Event::Glide { .. } => {} // no glides (Plugin::glides is false)
+            Event::NoteExpression { .. } => {} // no note expressions yet
             Event::NoteOn { key, velocity, .. } => self.note_on(key, velocity.clamp(0.0, 1.0)),
             Event::NoteOff { key, .. } => self.note_off(key),
             Event::AllNotesOff => {

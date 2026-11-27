@@ -80,7 +80,7 @@ impl Kick {
 impl MonoSource for Kick {
     fn handle(&mut self, e: Event) {
         match e {
-            Event::Glide { .. } => {} // no glides (Plugin::glides is false)
+            Event::NoteExpression { .. } => {} // no note expressions yet
             Event::NoteOn { key, velocity, .. } => {
                 let p = &self.p;
                 self.voices[self.next] = KickVoice {
@@ -197,7 +197,7 @@ impl Snare {
 impl MonoSource for Snare {
     fn handle(&mut self, e: Event) {
         match e {
-            Event::Glide { .. } => {} // no glides (Plugin::glides is false)
+            Event::NoteExpression { .. } => {} // no note expressions yet
             Event::NoteOn { key, velocity, .. } => {
                 let p = &self.p;
                 let snap = p[2];
@@ -313,7 +313,7 @@ impl Clap {
 impl MonoSource for Clap {
     fn handle(&mut self, e: Event) {
         match e {
-            Event::Glide { .. } => {} // no glides (Plugin::glides is false)
+            Event::NoteExpression { .. } => {} // no note expressions yet
             Event::NoteOn { key, velocity, .. } => {
                 let p = &self.p;
                 self.voices[self.next] = ClapVoice {
@@ -430,7 +430,7 @@ impl Hat {
 impl MonoSource for Hat {
     fn handle(&mut self, e: Event) {
         match e {
-            Event::Glide { .. } => {} // no glides (Plugin::glides is false)
+            Event::NoteExpression { .. } => {} // no note expressions yet
             Event::NoteOn { key, velocity, .. } => {
                 let p = &self.p;
                 self.voices[self.next] = HatVoice {

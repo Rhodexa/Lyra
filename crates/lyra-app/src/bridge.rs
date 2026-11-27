@@ -7,7 +7,7 @@
 
 use crate::samples::Samples;
 use lyra_engine::{
-    Arrangement, AudioLane, AudioRegion, ChannelSlot, Command, EngineHandle, FxChain, Place, SeqGlide, SeqNote, Sequence,
+    Arrangement, AudioLane, AudioRegion, ChannelSlot, Command, EngineHandle, FxChain, Place, SeqBend, SeqNote, Sequence,
 };
 use lyra_model::{Note, Pattern, Project, TICKS_PER_STEP};
 
@@ -237,40 +237,40 @@ impl Bridge {
     }
 }
 
-/// A bent note's glide for the engine (`at`: where the note starts in the
+/// A bent note's bend for the engine (`at`: where the note starts in the
 /// sequence; `cut`: how much of the note plays, if a clip's end cuts it).
-fn glide_of(n: &Note, at: u32, cut: u32, channel: u16) -> Option<SeqGlide> {
+fn bend_of(n: &Note, at: u32, cut: u32, channel: u16) -> Option<SeqBend> {
     let (start, len, key) = n.glide()?;
     let from = start - n.start;
-    (from < cut).then(|| SeqGlide {
+    (from < cut).then(|| SeqBend {
         start: at + from,
         len: len.min(cut - from),
         channel,
         note_start: at,
         note_key: n.key,
-        key,
+        semitones: key as f32 - n.key as f32,
         tension: n.bend.map_or(0.0, |b| b.tension),
     })
 }
 
 /// Flatten a pattern into the engine's sorted note list.
 fn compile(p: &Project, pat: &Pattern) -> Sequence {
-    let (mut notes, mut glides) = (Vec::new(), Vec::new());
+    let (mut notes, mut bends) = (Vec::new(), Vec::new());
     for (index, ch) in p.channels.iter().enumerate() {
         for n in pat.notes(ch.id) {
             notes.push(SeqNote { start: n.start, len: n.len, channel: index as u16, key: n.key, velocity: n.velocity });
-            glides.extend(glide_of(n, n.start, n.len, index as u16));
+            bends.extend(bend_of(n, n.start, n.len, index as u16));
         }
     }
     notes.sort_by_key(|n| n.start);
-    glides.sort_by_key(|g| g.start);
-    Sequence { length: pat.play_length() * TICKS_PER_STEP, notes, glides }
+    bends.sort_by_key(|b| b.start);
+    Sequence { length: pat.play_length() * TICKS_PER_STEP, notes, bends }
 }
 
 /// Flatten the whole playlist: every clip plays its pattern from the clip's
 /// start, repeating it to fill the clip and cutting notes at the clip's end.
 pub fn compile_song(p: &Project) -> Sequence {
-    let (mut notes, mut glides) = (Vec::new(), Vec::new());
+    let (mut notes, mut bends) = (Vec::new(), Vec::new());
     for clip in &p.clips {
         if p.tracks.get(clip.track).is_some_and(|t| t.mute) {
             continue;
@@ -280,13 +280,13 @@ pub fn compile_song(p: &Project) -> Sequence {
             for (at, len, n) in clip.pattern_notes(pat, ch.id) {
                 let start = clip.start + at;
                 notes.push(SeqNote { start, len, channel: index as u16, key: n.key, velocity: n.velocity });
-                glides.extend(glide_of(n, start, len, index as u16));
+                bends.extend(bend_of(n, start, len, index as u16));
             }
         }
     }
     notes.sort_by_key(|n| n.start);
-    glides.sort_by_key(|g| g.start);
-    Sequence { length: p.song_length(), notes, glides }
+    bends.sort_by_key(|b| b.start);
+    Sequence { length: p.song_length(), notes, bends }
 }
 
 /// Every audio clip on the playlist as a region the engine plays. Samples
@@ -414,7 +414,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod glide_tests {
+mod bend_tests {
     use super::*;
     use lyra_model::NoteBend;
 
@@ -422,16 +422,16 @@ mod glide_tests {
     fn a_bent_note_glides_inside_itself_and_a_clip_cuts_it() {
         let bend = NoteBend { semitones: 7, start: 48, arrive: None, tension: 0.5 };
         let n = Note { start: 96, len: 96, key: 60, velocity: 0.8, bend: Some(bend) };
-        let g = glide_of(&n, 96, 96, 2).unwrap();
-        assert_eq!((g.start, g.len, g.key, g.note_start, g.note_key, g.channel), (144, 48, 67, 96, 60, 2));
+        let g = bend_of(&n, 96, 96, 2).unwrap();
+        assert_eq!((g.start, g.len, g.semitones, g.note_start, g.note_key, g.channel), (144, 48, 7.0, 96, 60, 2));
         // In song mode at tick 1000, cut after 60 ticks: the glide is cut too.
-        let g = glide_of(&n, 1000, 60, 0).unwrap();
+        let g = bend_of(&n, 1000, 60, 0).unwrap();
         assert_eq!((g.start, g.len), (1048, 12));
         // Cut before the glide starts: no glide.
-        assert!(glide_of(&n, 1000, 40, 0).is_none());
+        assert!(bend_of(&n, 1000, 40, 0).is_none());
         // Arriving early (60 ticks in): the glide is 12 ticks, then it holds.
         let early = Note { bend: Some(NoteBend { arrive: Some(60), ..bend }), ..n };
-        let g = glide_of(&early, 96, 96, 0).unwrap();
+        let g = bend_of(&early, 96, 96, 0).unwrap();
         assert_eq!((g.start, g.len), (144, 12));
     }
 }

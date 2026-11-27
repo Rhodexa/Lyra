@@ -348,23 +348,34 @@ fn mono_legato_steps_pitch_without_restarting() {
 }
 
 #[test]
-fn piano_roll_glides_move_the_note_without_restarting() {
-    use lyra_plugin::Event;
+fn the_tuning_expression_bends_the_note_without_restarting() {
+    use lyra_plugin::{Event, Expression};
+    let tune = |id, value| TimedEvent {
+        offset: 0,
+        event: Event::NoteExpression { id, key: 60, expression: Expression::Tuning, value },
+    };
     for mono in [0.0, 1.0] {
         let mut c = with(&[(p::MODE, mono), (p::env(0, p::E_DECAY), 0.05), (p::env(0, p::E_SUSTAIN), 0.5)]);
         let start = TimedEvent { offset: 0, event: Event::NoteOn { key: 60, velocity: 0.9, id: 7 } };
         render(&mut c, &[start], 0.3);
         let before = c.voice_env(0);
-        // Over 0.2 s, straight: halfway there after 0.1 s, there after 0.2 s.
-        let glide = Event::Glide { id: 7, key: 72, seconds: 0.2, tension: 0.0 };
-        render(&mut c, &[TimedEvent { offset: 0, event: glide }], 0.1);
-        assert!((c.voice_semi(0) - 66.0).abs() < 0.5, "halfway: {}", c.voice_semi(0));
-        render(&mut c, &[], 0.15);
-        assert_eq!(c.voice_semi(0), 72.0);
+        // The host's values as a bend goes up an octave, a block at a time.
+        for k in 1..=12 {
+            render(&mut c, &[tune(7, k as f32)], 0.01);
+        }
+        render(&mut c, &[], 0.05);
+        assert!((c.voice_semi(0) - 72.0).abs() < 1e-3, "an octave up: {}", c.voice_semi(0));
         assert!((c.voice_env(0) - before).abs() < 1e-3, "no restart");
-        // It ends with its own note-off (its first key).
+        // Another note's expression doesn't touch it (poly).
+        if mono == 0.0 {
+            render(&mut c, &[tune(99, -5.0)], 0.05);
+            assert!((c.voice_semi(0) - 72.0).abs() < 1e-3);
+        }
+        // It ends with its own note-off; the next note starts untuned.
         render(&mut c, &[off(60)], 2.0);
         assert_eq!(c.active_voices(), 0);
+        render(&mut c, &[on(60)], 0.05);
+        assert_eq!(c.voice_semi(0), 60.0);
     }
 }
 
