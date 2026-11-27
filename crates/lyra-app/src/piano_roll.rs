@@ -57,9 +57,11 @@ enum Drag {
         lead: usize,
         free: bool,
     },
-    /// A bend's end dot (or a note's "pull me" dot): where the note arrives.
+    /// A bend's arrival dot (or a note's "pull me" dot): where and when the
+    /// note arrives.
     BendTo {
         note: usize,
+        free: bool,
     },
     /// A bend's start dot: when its glide starts.
     BendStart {
@@ -663,10 +665,10 @@ impl PianoRoll {
             if matches!(self.drag, Drag::Loop { moved: false, .. }) {
                 self.looped = None; // Alt+click: no loop
             }
-            if let Drag::BendTo { note } = self.drag {
+            if let Drag::BendTo { note, .. } = self.drag {
                 // Let go on the note's own row: no bend.
                 if let Some(n) = p.patterns[pat].notes_mut(ch_id).get_mut(note) {
-                    if n.bend.is_some_and(|b| b.to == 0) {
+                    if n.bend.is_some_and(|b| b.semitones == 0) {
                         n.bend = None;
                     }
                 }
@@ -686,7 +688,8 @@ impl PianoRoll {
             if let Some(part) = bends::hit(&view, notes, pos) {
                 ui.ctx().set_cursor_icon(match part {
                     bends::Part::Start(_) => CursorIcon::ResizeHorizontal,
-                    bends::Part::End(_) | bends::Part::Ring(_) => CursorIcon::ResizeVertical,
+                    bends::Part::End(_) => CursorIcon::Move,
+                    bends::Part::Ring(_) => CursorIcon::ResizeVertical,
                     bends::Part::Curve(_) => CursorIcon::Default,
                 });
             } else if bends::grip_hit(&view, notes, pos).is_some() {
@@ -902,7 +905,7 @@ impl PianoRoll {
             }
             match bends::hit(view, notes, pos) {
                 Some(bends::Part::End(note)) => {
-                    self.drag = Drag::BendTo { note };
+                    self.drag = Drag::BendTo { note, free };
                     return;
                 }
                 Some(bends::Part::Start(note)) => {
@@ -917,7 +920,7 @@ impl PianoRoll {
                 _ => {}
             }
             if let Some(note) = bends::grip_hit(view, notes, pos) {
-                self.drag = Drag::BendTo { note };
+                self.drag = Drag::BendTo { note, free };
                 return;
             }
             if mods.command {
@@ -1091,7 +1094,10 @@ impl PianoRoll {
                     notes.remove(i);
                 }
             }
-            Drag::BendTo { note } => Self::drag_bend_to(view, notes, *note, pos.y),
+            Drag::BendTo { note, free } => {
+                *free |= mods.alt;
+                self.drag_bend_to(view, notes, *note, pos, *free);
+            }
             Drag::BendStart { note, free } => {
                 *free |= mods.alt;
                 self.drag_bend_start(view, notes, *note, pos.x, *free);

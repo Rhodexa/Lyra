@@ -49,16 +49,19 @@ pub struct Note {
     pub bend: Option<NoteBend>,
 }
 
-/// A note that glides: an articulation of the note itself, "be there by the
-/// end". It starts at its own pitch, and from `from` ticks into the note it
-/// glides to `to` semitones away, arriving as the note ends. It knows nothing
-/// of other notes. Synths that can't glide play the note flat.
+/// A note that glides: an articulation of the note itself. It starts at its
+/// own pitch; `start` ticks into the note it glides `semitones` away,
+/// arriving `arrive` ticks into the note (None: as the note ends, even after
+/// it's resized), and holds that pitch to its end. It knows nothing of other
+/// notes. Synths that can't glide play the note flat.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NoteBend {
-    /// Semitones away from the note's own pitch, where it arrives.
-    pub to: i8,
-    /// When the glide starts, in ticks from the note's start.
-    pub from: u32,
+    /// Where it arrives: semitones away from the note's own pitch.
+    pub semitones: i8,
+    /// When the glide starts and arrives, in ticks from the note's start.
+    pub start: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrive: Option<u32>,
     /// Its shape: 0 = straight, > 0 starts slow and arrives fast, < 0 leaves
     /// fast and settles slowly (-1..1; the automation editor's curve).
     pub tension: f32,
@@ -69,9 +72,10 @@ impl Note {
     /// key it arrives at (None: no bend).
     pub fn glide(&self) -> Option<(u32, u32, u8)> {
         let b = self.bend?;
-        let from = b.from.min(self.len);
-        let key = (self.key as i32 + b.to as i32).clamp(0, 127) as u8;
-        Some((self.start + from, self.len - from, key))
+        let arrive = b.arrive.unwrap_or(self.len).min(self.len);
+        let start = b.start.min(arrive);
+        let key = (self.key as i32 + b.semitones as i32).clamp(0, 127) as u8;
+        Some((self.start + start, arrive - start, key))
     }
 }
 

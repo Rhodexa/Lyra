@@ -420,7 +420,7 @@ mod glide_tests {
 
     #[test]
     fn a_bent_note_glides_inside_itself_and_a_clip_cuts_it() {
-        let bend = NoteBend { to: 7, from: 48, tension: 0.5 };
+        let bend = NoteBend { semitones: 7, start: 48, arrive: None, tension: 0.5 };
         let n = Note { start: 96, len: 96, key: 60, velocity: 0.8, bend: Some(bend) };
         let g = glide_of(&n, 96, 96, 2).unwrap();
         assert_eq!((g.start, g.len, g.key, g.note_start, g.note_key, g.channel), (144, 48, 67, 96, 60, 2));
@@ -429,5 +429,9 @@ mod glide_tests {
         assert_eq!((g.start, g.len), (1048, 12));
         // Cut before the glide starts: no glide.
         assert!(glide_of(&n, 1000, 40, 0).is_none());
+        // Arriving early (60 ticks in): the glide is 12 ticks, then it holds.
+        let early = Note { bend: Some(NoteBend { arrive: Some(60), ..bend }), ..n };
+        let g = glide_of(&early, 96, 96, 0).unwrap();
+        assert_eq!((g.start, g.len), (144, 12));
     }
 }

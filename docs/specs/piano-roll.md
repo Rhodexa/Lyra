@@ -58,8 +58,9 @@ distances and in sound**, never in chord names or scale degrees.
 
 3. **Glides: a note's own bend** (2026-11-27). Hover a note: a dot past its
    right end; **pull it up or down**: the note arrives at that pitch by its
-   end ("go to there by the end"). Drawn as the pitch's path, with the
-   arrival pitch written at the end; the start dot sets when the glide
+   end ("go to there by the end"); drag that dot sideways and it arrives
+   earlier, then holds the new pitch to its end. Drawn as the pitch's path,
+   with the arrival pitch written at the end; the start dot sets when the glide
    begins, the ring bends it (the automation curve, double-click =
    straight), right-click removes it. Only **Chrysalis** glides so far
    (`Plugin::glides`, `Event::Glide`); others play the note flat. Code:
@@ -70,7 +71,8 @@ distances and in sound**, never in chord names or scale degrees.
    of a note that had already ended. Rhodexa: "a glide is an articulation of
    the *current* note; the note might die or have silence in the middle."
    Joining notes without a new attack (a slur, legato) is a different
-   articulation, for later (Octavia wants it).
+   articulation, for later. For Octavia it's *her* call: with look-ahead she
+   sees a glide arriving at the next note's pitch and can choose to slur.
 4. **Channel curves in the bottom lane**: mod wheel, expression, pitch bend,
    drawn like automation (points + bend rings), under the notes. The lane
    gets tabs (`tab_row`): VEL, then the curves. Octavia needs these the most

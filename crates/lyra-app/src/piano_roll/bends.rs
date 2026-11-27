@@ -4,9 +4,11 @@
 //!
 //! * hover a note: a **dot** past its right end. **Drag it up or down**: where
 //!   the note arrives (in semitones; let go on its own row: no bend).
-//! * the bend is drawn as the pitch's way: along the note's row, then a curve
-//!   up or down to its end, with the pitch it arrives at written there.
-//! * the **dot at the end** — drag up/down: where it arrives
+//! * the bend is drawn as the pitch's way: along the note's row, a curve up
+//!   or down, then the new pitch held to the note's end (written there).
+//! * the **dot where it arrives** — up/down: which pitch; sideways: when it
+//!   gets there (at first, the note's end, and it stays at the end when the
+//!   note is resized; arrive earlier and the note holds the new pitch)
 //! * the **dot where the curve begins** — drag sideways: when the glide starts
 //!   (at first, with the note). **Alt**: off the grid.
 //! * the **ring** on the curve — drag up/down: bend it (starts slow and
@@ -30,7 +32,7 @@ const GRIP_OUT: f32 = 7.0;
 
 /// Where a bend is on screen.
 pub(super) struct Shape {
-    /// The pitch's way: along the note's row, then the glide.
+    /// The pitch's way: along the note's row, the glide, the new pitch held.
     pub way: Vec<Pos2>,
     /// The dot where the glide starts, the dot where it arrives, and the ring
     /// halfway along (none when the glide is too short or flat to bend).
@@ -51,13 +53,17 @@ pub(super) fn shape(v: &View, notes: &[Note], i: usize) -> Option<Shape> {
     let row = |key: u8| v.y(key) + v.row_h * 0.5;
     let (ya, yb) = (row(n.key), row(key));
     let (x0, x1) = (v.x(from as f32), v.x((from + len) as f32));
+    let note_end = v.x((n.start + n.len) as f32);
     let mut way = vec![pos2(v.x(n.start as f32), ya)];
     for k in 0..=24 {
         let t = k as f32 / 24.0;
         way.push(pos2(x0 + (x1 - x0) * t, ya + (yb - ya) * lyra_engine::fade_curve(t, tension)));
     }
-    let end = pos2(x1 + GRIP_OUT, yb);
-    way.push(end);
+    // Arriving at the very end, the dot sits just past it (where it was
+    // pulled from, clear of the resize edge); earlier, right where it arrives.
+    let at_end = from + len >= n.start + n.len;
+    let end = if at_end { pos2(x1 + GRIP_OUT, yb) } else { pos2(x1, yb) };
+    way.push(pos2(note_end.max(end.x), yb));
     let mid = lyra_engine::fade_curve(0.5, tension);
     let ring = (x1 - x0 >= 18.0 && (yb - ya).abs() >= v.row_h).then(|| pos2((x0 + x1) * 0.5, ya + (yb - ya) * mid));
     let span = Rect::from_two_pos(pos2(x0, ya), pos2(x1, yb));
@@ -124,9 +130,9 @@ impl PianoRoll {
             if let Some(r) = s.ring {
                 waveform::paint_tension(painter, r, color, hot == Some(Part::Ring(i)), waveform::SMALL);
             }
-            // Where it arrives, like a note's own name.
+            // The pitch it arrives at, after the held line, like a note's name.
             if v.row_h >= 10.0 {
-                let at = s.end + egui::vec2(7.0, 0.0);
+                let at = pos2(s.way.last().map_or(s.end.x, |p| p.x) + 7.0, s.end.y);
                 painter.text(at, Align2::LEFT_CENTER, theory::note_name(s.key), FontId::proportional(9.0), color);
             }
         }
@@ -142,12 +148,16 @@ impl PianoRoll {
         }
     }
 
-    /// Dragging the end dot: where the note arrives (the row under the mouse).
-    pub(super) fn drag_bend_to(v: &View, notes: &mut [Note], i: usize, y: f32) {
+    /// Dragging the arrival dot: which pitch (the row under the mouse), and
+    /// when (snapped unless `free`; at or past the note's end: at its end).
+    pub(super) fn drag_bend_to(&self, v: &View, notes: &mut [Note], i: usize, pos: Pos2, free: bool) {
+        let snap = if free { 1 } else { self.snap };
         let Some(n) = notes.get_mut(i) else { return };
-        let to = (v.key(y) - n.key as i32).clamp(-127, 127) as i8;
-        let b = n.bend.get_or_insert(NoteBend { to: 0, from: 0, tension: 0.0 });
-        b.to = to;
+        let semitones = (v.key(pos.y) - n.key as i32).clamp(-127, 127) as i8;
+        let b = n.bend.get_or_insert(NoteBend { semitones: 0, start: 0, arrive: None, tension: 0.0 });
+        b.semitones = semitones;
+        let at = timeline::snap(v.tick(pos.x), snap).max(n.start as f32) as u32 - n.start;
+        b.arrive = (at < n.len).then_some(at.max(b.start.min(n.len)));
     }
 
     /// Dragging the start dot: when the glide starts (snapped unless `free`).
@@ -156,7 +166,7 @@ impl PianoRoll {
         let snap = if free { 1 } else { self.snap };
         let at = timeline::snap(v.tick(x), snap).clamp(n.start as f32, (n.start + n.len) as f32) as u32;
         if let Some(b) = &mut n.bend {
-            b.from = at - n.start;
+            b.start = (at - n.start).min(b.arrive.unwrap_or(n.len));
         }
     }
 
