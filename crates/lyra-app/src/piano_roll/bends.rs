@@ -13,6 +13,8 @@
 //!   (at first, with the note). **Alt**: off the grid.
 //! * the **ring** on the curve — drag up/down: bend it (starts slow and
 //!   arrives fast, or the other way). **Double-click**: straight again.
+//!   New bends get the last shape you made (or of the last bent note you
+//!   clicked), as new notes get the last length.
 //! * **right-click** the curve or a dot — no bend.
 //!
 //! Plugins hear it CLAP-style, as the note's *tuning* expression (semitones,
@@ -156,7 +158,8 @@ impl PianoRoll {
         let snap = if free { 1 } else { self.snap };
         let Some(n) = notes.get_mut(i) else { return };
         let semitones = (v.key(pos.y) - n.key as i32).clamp(-127, 127) as i8;
-        let b = n.bend.get_or_insert(NoteBend { semitones: 0, start: 0, arrive: None, tension: 0.0 });
+        let tension = self.last_tension;
+        let b = n.bend.get_or_insert(NoteBend { semitones: 0, start: 0, arrive: None, tension });
         b.semitones = semitones;
         let at = timeline::snap(v.tick(pos.x), snap).max(n.start as f32) as u32 - n.start;
         b.arrive = (at < n.len).then_some(at.max(b.start.min(n.len)));

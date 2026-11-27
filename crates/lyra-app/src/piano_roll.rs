@@ -136,6 +136,9 @@ pub struct PianoRoll {
     /// Default lengths for new notes: [drum channels, melodic channels].
     last_len: [u32; 2],
     last_vel: f32,
+    /// The bend shape new bends get: the last one shaped, or of the last
+    /// bent note clicked (like the length).
+    last_tension: f32,
     clipboard: Vec<Note>,
     drag: Drag,
     audition: Option<u8>,
@@ -169,6 +172,7 @@ impl Default for PianoRoll {
             looped: None,
             last_len: [TICKS_PER_STEP, TICKS_PER_STEP * 2],
             last_vel: 0.8,
+            last_tension: 0.0,
             clipboard: Vec::new(),
             drag: Drag::None,
             audition: None,
@@ -587,6 +591,7 @@ impl PianoRoll {
                     h.checkpoint(p);
                     if let Some(b) = &mut p.patterns[pat].notes_mut(ch_id)[i].bend {
                         b.tension = 0.0;
+                        self.last_tension = 0.0;
                     }
                 }
             }
@@ -955,6 +960,9 @@ impl PianoRoll {
                     let key = notes[lead_i].key;
                     self.set_default_len(len); // "use this length from now on"
                     self.last_vel = velocity;
+                    if let Some(b) = notes[lead_i].bend {
+                        self.last_tension = b.tension;
+                    }
                     if near_edge {
                         self.drag = Drag::Resize { anchor_tick, originals, lead, free };
                     } else {
@@ -1103,7 +1111,10 @@ impl PianoRoll {
                 self.drag_bend_start(view, notes, *note, pos.x, *free);
             }
             Drag::BendShape { note, orig, anchor_y } => {
-                Self::drag_bend_shape(view, notes, *note, *orig, *anchor_y, pos.y)
+                Self::drag_bend_shape(view, notes, *note, *orig, *anchor_y, pos.y);
+                if let Some(b) = notes.get(*note).and_then(|n| n.bend) {
+                    self.last_tension = b.tension;
+                }
             }
             Drag::Velocity { last } => {
                 let from = std::mem::replace(last, pos);
