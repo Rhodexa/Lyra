@@ -3,6 +3,9 @@
 Everything finished from JOURNAL.md, with the commit that did it, newest
 first. Moved out of the journal (2026-11-25) so it stays short.
 
+**One repo (2026-11-27)**
+- [x] *(Rhodexa)* Should Octavia and the plugins share one repo, and how should they be laid out? *→ yes: Octavia joined Lyra with its whole history (e567673); every plugin is `plugins/<name>/` with `plugin/` (what Lyra loads), optional `editor/`, and Octavia's extra `core/` + `render/`; layout and rules in `plugins/README.md`; Lyra now builds from a fresh clone; `cargo octavia …` runs the renderer (71e8e2e, 6fa97c5). Octavia's refs baselines were already stale before the move (6 of 8 differ from the pre-move build too; the move itself renders byte-identical).*
+
 **Octavia in Lyra (2026-11-25)**
 - [x] *(Octavia's handoff, session 3)* The faceplate port. *→ `octavia-editor` (in Octavia's repo, commit 30c7bd7) is her editor: the plate, its controls and the live performer screen from her telemetry; Lyra lists it in one line, and the generic preset dropdown hides for every hand-made editor (251f15f). Differences from the mock: Octavia's `docs/FACEPLATE-PORT.md`.*
 - [x] *(Octavia's handoff, docs/KIT-REQUIREMENTS.md part A)* Upcoming notes, latency, note ids. *→ note events carry an id (CLAP's `note_id`; live notes `NO_ID`); the `lyra.note-lookahead` extension hands a plugin the next N seconds of the song every block, ids matching the note-ons, round the loop, empty while stopped; `Plugin::latency` (`clap.latency`, not compensated yet). Octavia is listed by path from `../LyraRelated/Octavia` (7f89a15).*
