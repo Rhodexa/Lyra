@@ -17,8 +17,8 @@ const fn hex(v: u32) -> Color32 {
 }
 
 // ── The character palette (colors.css) ──
-pub const COAT: Color32 = hex(0xBDB4AE);
-pub const COAT_OUTLINE: Color32 = hex(0x988F89);
+pub const COAT: Color32 = hex(0xbcb4ae);
+pub const COAT_OUTLINE: Color32 = hex(0x76706c);
 pub const MANE: Color32 = hex(0x423C3C);
 pub const MANE_OUTLINE: Color32 = hex(0x231A20);
 pub const BOW_TIE: Color32 = hex(0xE07ED4);
