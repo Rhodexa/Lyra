@@ -1,0 +1,7 @@
+# The lament's first phrases, up two octaves, for --instrument violin.
+tempo 60
+mp
+D5:q. E5:e F5:q A5:q
+< (Bb5:h A5:q) G5:q mf
+(F5:q. G5:e) A5:q D6:q
+> (C6:q Bb5:e A5:e) G5:h p

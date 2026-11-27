@@ -1,0 +1,11 @@
+# Bowed tremolo (~): the bow shakes on one long note. Compare with the
+# plain long notes, and hear it swell, and on two strings at once.
+tempo 60
+mp
+D3:w                    # plain
+~D3:w                   # shaken
+p < ~A2:w ~A2:w ff      # a tremolo swell
+> ~D3+A3:w p            # on two strings
+r:h
+mf
+(E3:q F3 G3) ~A3:h.     # a line arriving on a tremolo

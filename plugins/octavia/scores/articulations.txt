@@ -1,0 +1,10 @@
+# One of each, so they can be compared side by side.
+tempo 96
+mf
+C3:q D3 E3 F3                          # separate bows (detache)
+(G3:q F3 E3 D3)                        # one bow (slur)
+'C3:e 'D3 'E3 'F3 'G3 'A3 'B3 'C4      # staccato
+^G3:q ^E3 ^C3 r                        # accents
+-C3:h -G3                              # tenuto
+pizz G2:q D3 G3 B3 arco                # pizzicato
+p < C3:w f                             # one long swelling note

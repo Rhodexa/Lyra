@@ -1,0 +1,371 @@
+//! `octavia` — render a score (or hand-edited curves) to sound and pictures.
+
+mod analyze;
+mod midi;
+mod plot;
+mod reverb;
+
+use octavia_core::{render, render_score, Curves, Instrument, Score, Skill, Style};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+const USAGE: &str = "\
+usage: octavia <score.txt | curves.csv>... [options]
+       octavia midi-info <file.mid>...    list a MIDI file's tracks
+       octavia analyze <file.wav>...      measure any recording the same way
+
+  -o DIR             where to write (default: renders/)
+  --instrument NAME  cello (default) or violin
+  --expression X     0 = deadpan, 1 = normal, 2 = a lot
+  --vibrato X        vibrato depth scale (default 1)
+  --bright X         character: 0 = natural cello (default), 1 = bright and powerful
+  --breath X         steady bow noise under the tone (default 1; try 0.5 .. 3)
+  --player NAME      concert (default), student, virtuoso or session
+  --intonation X     skill 0..1: landing in tune, correcting misses
+  --dexterity X      skill 0..1: how hard fast notes and shifts feel
+  --bowing X         skill 0..1: clean starts, steady contact
+  --composure X      skill 0..1: staying calm under load
+  --seed N           a different take of the same performance
+  --pizz             the pizzicato patch: pluck every note
+  --tremolo          the tremolo patch: shake the bow on every note of 1/4 s or more
+  --track N          MIDI: which track (default: the busiest; see midi-info)
+  --channel N        MIDI: only this channel (1-16)
+  --bottom           MIDI: in chords, keep the lowest note (default: highest)
+  --transpose N      MIDI: shift by N semitones (default: fit the range by octaves)
+  --no-doubles       MIDI: never keep a second chord note as a double stop
+  --raw-velocity     MIDI: use velocities as written (default: typical velocity = mf)
+  --explain          print how each note was played
+  --dry              no room reverb
+  --sr N             sample rate (default 48000)
+
+writes NAME.wav, NAME.curves.csv, NAME.curves.png, NAME.spec.png
+a .roll input is a bare piano roll (start, length, key, velocity): Octavia
+infers every articulation. a .csv input skips the performer and plays the
+curves as written.
+
+       octavia roll <score.txt>...        write NAME.roll next to each score:
+                                          the same notes with every hint removed";
+
+struct Args {
+    inputs: Vec<PathBuf>,
+    out: PathBuf,
+    instrument: String,
+    style: Style,
+    dry: bool,
+    sr: f32,
+    bright: f32,
+    track: Option<usize>,
+    channel: Option<u8>,
+    bottom: bool,
+    transpose: Option<i32>,
+    doubles: bool,
+    explain: bool,
+    raw_velocity: bool,
+}
+
+fn parse_args() -> Result<Args, String> {
+    let mut a = Args {
+        inputs: Vec::new(),
+        out: PathBuf::from("renders"),
+        instrument: "cello".into(),
+        style: Style::default(),
+        dry: false,
+        sr: 48_000.0,
+        bright: 0.0,
+        track: None,
+        channel: None,
+        bottom: false,
+        transpose: None,
+        doubles: true,
+        explain: false,
+        raw_velocity: false,
+    };
+    let mut it = std::env::args().skip(1);
+    while let Some(arg) = it.next() {
+        let mut val = |name: &str| it.next().ok_or(format!("{name} needs a value"));
+        match arg.as_str() {
+            "-h" | "--help" => return Err(String::new()),
+            "-o" => a.out = val("-o")?.into(),
+            "--instrument" => a.instrument = val("--instrument")?,
+            "--expression" => a.style.expression = val("--expression")?.parse().map_err(|_| "bad --expression")?,
+            "--vibrato" => a.style.vibrato = val("--vibrato")?.parse().map_err(|_| "bad --vibrato")?,
+            "--bright" => a.bright = val("--bright")?.parse().map_err(|_| "bad --bright")?,
+            "--breath" => a.style.breath = val("--breath")?.parse().map_err(|_| "bad --breath")?,
+            "--player" => {
+                let name = val("--player")?;
+                a.style.skill = Skill::profile(&name).ok_or(format!("no player {name:?} (concert, student, virtuoso, session)"))?;
+            }
+            "--intonation" => a.style.skill.intonation = val("--intonation")?.parse().map_err(|_| "bad --intonation")?,
+            "--dexterity" => a.style.skill.dexterity = val("--dexterity")?.parse().map_err(|_| "bad --dexterity")?,
+            "--bowing" => a.style.skill.bowing = val("--bowing")?.parse().map_err(|_| "bad --bowing")?,
+            "--composure" => a.style.skill.composure = val("--composure")?.parse().map_err(|_| "bad --composure")?,
+            "--seed" => a.style.seed = val("--seed")?.parse().map_err(|_| "bad --seed")?,
+            "--sr" => a.sr = val("--sr")?.parse().map_err(|_| "bad --sr")?,
+            "--dry" => a.dry = true,
+            "--pizz" => a.style.pizzicato = true,
+            "--tremolo" => a.style.tremolo = true,
+            "--bottom" => a.bottom = true,
+            "--no-doubles" => a.doubles = false,
+            "--explain" => a.explain = true,
+            "--raw-velocity" => a.raw_velocity = true,
+            "--track" => a.track = Some(val("--track")?.parse().map_err(|_| "bad --track")?),
+            "--channel" => {
+                let c: u8 = val("--channel")?.parse().map_err(|_| "bad --channel")?;
+                a.channel = Some(c.clamp(1, 16) - 1);
+            }
+            "--transpose" => a.transpose = Some(val("--transpose")?.parse().map_err(|_| "bad --transpose")?),
+            s if s.starts_with('-') => return Err(format!("unknown option {s}")),
+            s => a.inputs.push(s.into()),
+        }
+    }
+    if a.inputs.is_empty() {
+        return Err(String::new());
+    }
+    Ok(a)
+}
+
+fn main() {
+    let all: Vec<String> = std::env::args().collect();
+    if all.get(1).is_some_and(|a| a == "roll") {
+        let mut failed = false;
+        for p in &all[2..] {
+            let path = Path::new(p);
+            let result = std::fs::read_to_string(path).map_err(|e| e.to_string()).and_then(|text| {
+                let tempo = text
+                    .lines()
+                    .find_map(|l| l.trim().strip_prefix("tempo ").and_then(|v| v.split_whitespace().next()?.parse().ok()))
+                    .unwrap_or(90.0);
+                let roll = Score::parse(&text)?.to_roll(tempo);
+                let out = path.with_extension("roll");
+                std::fs::write(&out, roll).map_err(|e| e.to_string())?;
+                println!("{}", out.display());
+                Ok(())
+            });
+            if let Err(e) = result {
+                eprintln!("{p}: {e}");
+                failed = true;
+            }
+        }
+        std::process::exit(failed as i32);
+    }
+    if all.get(1).is_some_and(|a| a == "midi-info") {
+        let mut failed = false;
+        for p in &all[2..] {
+            match std::fs::read(p).map_err(|e| e.to_string()).and_then(|b| midi::parse(&b)) {
+                Ok(m) => print!("{p}\n{}", midi::describe(&m)),
+                Err(e) => {
+                    eprintln!("{p}: {e}");
+                    failed = true;
+                }
+            }
+        }
+        std::process::exit(failed as i32);
+    }
+    if all.get(1).is_some_and(|a| a == "analyze") {
+        let mut failed = false;
+        for p in &all[2..] {
+            if let Err(e) = analyze_file(Path::new(p)) {
+                eprintln!("{p}: {e}");
+                failed = true;
+            }
+        }
+        std::process::exit(failed as i32);
+    }
+    let args = match parse_args() {
+        Ok(a) => a,
+        Err(e) => {
+            if !e.is_empty() {
+                eprintln!("{e}\n");
+            }
+            eprintln!("{USAGE}");
+            std::process::exit(2);
+        }
+    };
+    let Some(inst) = Instrument::by_name(&args.instrument) else {
+        eprintln!("no instrument called {:?} (try cello or violin)", args.instrument);
+        std::process::exit(2);
+    };
+    if let Err(e) = std::fs::create_dir_all(&args.out) {
+        eprintln!("can't create {}: {e}", args.out.display());
+        std::process::exit(1);
+    }
+    let mut failed = false;
+    for input in &args.inputs {
+        if let Err(e) = run(input, &args, &inst) {
+            eprintln!("{}: {e}", input.display());
+            failed = true;
+        }
+    }
+    if failed {
+        std::process::exit(1);
+    }
+}
+
+fn run(input: &Path, args: &Args, inst: &Instrument) -> Result<(), String> {
+    let ext = input.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let is_midi = ext == "mid" || ext == "midi";
+    let text = if is_midi { String::new() } else { std::fs::read_to_string(input).map_err(|e| e.to_string())? };
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("out").trim_end_matches(".curves").to_string();
+    let is_curves = input.extension().is_some_and(|e| e == "csv");
+
+    let t0 = Instant::now();
+    let (score, curves, mono, decisions) = if is_curves {
+        let curves = Curves::from_csv(&text)?;
+        let mono = render(&curves, inst, args.sr, args.style.seed, args.bright);
+        (None, curves, mono, Vec::new())
+    } else {
+        let score = if is_midi {
+            let file = midi::parse(&std::fs::read(input).map_err(|e| e.to_string())?)?;
+            let pick = midi::Pick {
+                track: args.track,
+                channel: args.channel,
+                voice: if args.bottom { midi::Voice::Bottom } else { midi::Voice::Top },
+                transpose: args.transpose,
+                range: (inst.open_strings[0], inst.open_strings[3] + 24.0),
+                doubles: args.doubles,
+                raw_velocity: args.raw_velocity,
+            };
+            let (score, what) = midi::to_line(&file, &pick)?;
+            println!("{stem}: {what}");
+            // The line Octavia actually plays, at 60 bpm (1 beat = 1 second).
+            let roll = args.out.join(format!("{stem}.roll"));
+            std::fs::write(&roll, score.to_roll(60.0)).map_err(|e| e.to_string())?;
+            score
+        } else if ext == "roll" {
+            Score::parse_roll(&text)?
+        } else {
+            Score::parse(&text)?
+        };
+        let r = render_score(&score, inst, &args.style, args.sr, args.bright);
+        (Some(score), r.curves, r.audio, r.decisions)
+    };
+    let t_render = t0.elapsed();
+    if let (true, Some(s)) = (args.explain, &score) {
+        const STRINGS: [&str; 4] = ["IV", "III", "II", "I"];
+        println!("  start    length  note        how        string  hand  load calm   (↓ down-bow, ↑ up-bow)");
+        let mut shifts = 0;
+        for (n, d) in s.notes.iter().zip(&decisions) {
+            let dbl = match (d.double, n.double) {
+                (true, Some(p)) => format!("+{}", octavia_core::score::pitch_name(p)),
+                _ => String::new(),
+            };
+            let open = (n.pitch - inst.open_strings[d.string as usize]).abs() < 0.01;
+            let moved = if d.shift > 0.0 {
+                shifts += 1;
+                format!("  shift {:.0}", d.shift)
+            } else {
+                String::new()
+            };
+            println!(
+                "  {:7.3}s {:>5.3}s  {:<4}{:<7} {:<10} {:<3} {:<4} {:>3.0}  {:>4.0} {:>4.0}{}",
+                n.start,
+                n.dur,
+                octavia_core::score::pitch_name(n.pitch),
+                dbl,
+                format!("{}{:?}", if d.down { "↓" } else { "↑" }, d.played),
+                STRINGS[d.string as usize],
+                if open { "open" } else { "" },
+                d.hand,
+                d.workload * 100.0,
+                d.composure * 100.0,
+                moved
+            );
+        }
+        println!("  ({} notes, {} hand shifts; strings: IV = lowest … I = highest)", decisions.len(), shifts);
+    }
+
+    // Room, then a fixed gain so loudness differences between renders are real.
+    let mut left = Vec::with_capacity(mono.len());
+    let mut right = Vec::with_capacity(mono.len());
+    let mut room = reverb::Reverb::new(args.sr, 1.9);
+    for &x in &mono {
+        let (wl, wr) = if args.dry { (0.0, 0.0) } else { room.tick(x) };
+        left.push(0.9 * x + 0.16 * wl);
+        right.push(0.9 * x + 0.16 * wr);
+    }
+    let peak = left.iter().chain(&right).fold(0.0f32, |m, v| m.max(v.abs()));
+    let gain = if peak > 0.89 { 0.89 / peak } else { 1.0 };
+
+    let base = args.out.join(&stem);
+    let wav = base.with_extension("wav");
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: args.sr as u32,
+        bits_per_sample: 24,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut w = hound::WavWriter::create(&wav, spec).map_err(|e| e.to_string())?;
+    for (l, r) in left.iter().zip(&right) {
+        for v in [l, r] {
+            w.write_sample(((v * gain).clamp(-1.0, 1.0) * 8_388_607.0) as i32).map_err(|e| e.to_string())?;
+        }
+    }
+    w.finalize().map_err(|e| e.to_string())?;
+    if !is_curves {
+        std::fs::write(with_suffix(&base, ".curves.csv"), curves.to_csv()).map_err(|e| e.to_string())?;
+    }
+    plot::curves_png(&curves, score.as_ref(), &decisions, &with_suffix(&base, ".curves.png")).map_err(|e| e.to_string())?;
+    plot::spectrogram_png(&mono, args.sr, &with_suffix(&base, ".spec.png")).map_err(|e| e.to_string())?;
+
+    let secs = mono.len() as f64 / args.sr as f64;
+    let r = analyze::report(&mono, args.sr);
+    println!("{}", octave_line(&r));
+    println!(
+        "{stem}: {secs:.1} s, {} notes | sound {:.0} ms = {:.0}x real time | \
+         dry peak {:+.1} dBFS, rms {:+.1} dB{} | centroid {:.0} Hz, presence(2-5k/0.1-1k) {:+.1} dB, air(8-16k/1-4k) {:+.1} dB",
+        score.as_ref().map_or(0, |s| s.notes.len()),
+        t_render.as_secs_f64() * 1e3,
+        secs / t_render.as_secs_f64().max(1e-9),
+        r.peak_db,
+        r.rms_db,
+        if gain < 1.0 { format!(", wav trimmed {:+.1} dB", 20.0 * gain.log10()) } else { String::new() },
+        r.centroid_hz,
+        r.presence_db,
+        r.air_db,
+    );
+    Ok(())
+}
+
+fn with_suffix(base: &Path, suffix: &str) -> PathBuf {
+    let mut s = base.as_os_str().to_owned();
+    s.push(suffix);
+    PathBuf::from(s)
+}
+
+fn octave_line(r: &analyze::Report) -> String {
+    let names = ["63", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+    let cells: Vec<String> = names.iter().zip(r.octaves).map(|(n, v)| format!("{n}:{v:+.0}")).collect();
+    format!("  octaves (dB) {} | noise floor {:+.1} dB", cells.join(" "), r.floor_db)
+}
+
+/// Measures a recording the same way renders are measured, and draws its spectrogram.
+fn analyze_file(path: &Path) -> Result<(), String> {
+    let mut reader = hound::WavReader::open(path).map_err(|e| e.to_string())?;
+    let spec = reader.spec();
+    let ch = spec.channels.max(1) as usize;
+    let interleaved: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Float => reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect(),
+        hound::SampleFormat::Int => {
+            let scale = 1.0 / (1u64 << (spec.bits_per_sample - 1)) as f32;
+            reader.samples::<i32>().map(|s| s.unwrap_or(0) as f32 * scale).collect()
+        }
+    };
+    let mono: Vec<f32> = interleaved.chunks(ch).map(|c| c.iter().sum::<f32>() / ch as f32).collect();
+    let sr = spec.sample_rate as f32;
+    let r = analyze::report(&mono, sr);
+    let out = with_suffix(&path.with_extension(""), ".spec.png");
+    plot::spectrogram_png(&mono, sr, &out).map_err(|e| e.to_string())?;
+    println!(
+        "{}: {:.1} s | peak {:+.1} dBFS, rms {:+.1} dB | centroid {:.0} Hz, presence(2-5k/0.1-1k) {:+.1} dB, air(8-16k/1-4k) {:+.1} dB\n{}\n  spectrogram: {}",
+        path.display(),
+        mono.len() as f32 / sr,
+        r.peak_db,
+        r.rms_db,
+        r.centroid_hz,
+        r.presence_db,
+        r.air_db,
+        octave_line(&r),
+        out.display()
+    );
+    Ok(())
+}

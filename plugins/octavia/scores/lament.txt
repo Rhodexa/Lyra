@@ -1,0 +1,15 @@
+# An original slow melody in D minor, for the cello. Tests: vibrato, shifts,
+# swells on long notes, hairpins, a cadence home.
+tempo 60
+mp
+D3:q. E3:e F3:q A3:q
+< (Bb3:h A3:q) G3:q mf
+(F3:q. G3:e) A3:q D4:q
+> (C4:q Bb3:e A3:e) G3:h p
+r:q
+mp
+A2:q. (Bb2:e C3:q) E3:q
+< (F3:e G3:e A3:q) D4:h f
+> (C#4:q. D4:e) E4:q A3:q mp
+(Bb3:q A3:e G3:e) F3:q (E3:q
+D3:w) p

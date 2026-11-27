@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Octavia Faceplate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=Roboto+Condensed:wght@400;600;700&family=Chakra+Petch:wght@500;600;700&family=Nunito:wght@900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="colors.css">
+<!--
+  Octavia · the faceplate, designed here (HTML first, Lyra last).
+  Octavia's own look: nothing comes from Lyra's widgets or theme.
+  The vibe: a synth made to be cheap. Blocky, flat, square, hard offset
+  shadows, few decorations. Slightly off, not badly made, never polished.
+  Colours: ONLY the tokens in colors.css. Sizes and fonts: the tokens below,
+  set live by the tuner.
+  Port rule: everything must be drawable with egui's painter (rects, circles,
+  lines, polygons, text). The LCD is one canvas: segments (polygons), printed
+  pictures (rects, lines), and plain text where information is dense; every
+  piece of ink casts a shadow on the backplane.
+  The LCD plays "tapes": real renders of our scores (scripts/tape.py).
+  Draft 1 (the dot-matrix LCD) is in git: ddb7dcf.
+-->
+<style>
+:root{
+  /* ── sizes (tuner) ── */
+  --plate-r:0px;           /* plate corners */
+  --btn-r:0px;             /* button corners */
+  --drop:6px;              /* hard cartoon shadow under the plate */
+  --btn-drop:2px;          /* …and under buttons */
+  --purf:3px;              /* purfling line width */
+  --ol:2px;                /* outline on every control */
+  --knob:58px;
+  --fader-h:128px;
+  --gap:6px;
+  --label-font:'IBM Plex Mono',ui-monospace,monospace;
+  --mark-font:'Nunito',system-ui,sans-serif;
+  /* ── around the plate (this page only, not Octavia) ── */
+  --page:#1f1c1e; --page-card:#2a2629; --page-ink:#dedde8; --page-dim:#a29aa0;
+}
+*{box-sizing:border-box}
+html,body{background:var(--page)}
+body{margin:0;color:var(--page-ink);font:14px/1.5 system-ui,sans-serif}
+main{max-width:1100px;margin:auto;padding:24px 16px 80px}
+h1{font-size:24px;margin:0 0 4px} h2{font-size:18px;margin:34px 0 6px} h3{font-size:14px;margin:14px 0 6px}
+p,li{color:var(--page-dim);max-width:820px} b{color:var(--page-ink)}
+code{font:12px ui-monospace,monospace;color:var(--page-ink)}
+.card{background:var(--page-card);border-radius:8px;padding:14px 16px;margin-top:10px}
+.draft{display:inline-block;font:700 10px ui-monospace,monospace;letter-spacing:.08em;padding:2px 7px;border-radius:3px;background:var(--bow-tie);color:var(--mane-outline);vertical-align:3px;margin-left:8px}
+table{border-collapse:collapse;font-size:13px} td,th{padding:4px 10px;border-bottom:1px solid #0004;text-align:left;vertical-align:top}
+th{color:var(--page-dim);font-weight:600}
+
+/* ── the bench: tape player around the plate (not part of Octavia) ── */
+.bench{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 12px;font-size:13px;color:var(--page-dim)}
+.bench select,.bench button{background:var(--page-card);color:var(--page-ink);border:1px solid #000a;border-radius:4px;padding:5px 10px;font:13px system-ui}
+.bench button{min-width:80px;cursor:pointer}
+.bench input[type=range]{flex:1;min-width:160px}
+.bench output{font:12px ui-monospace,monospace;color:var(--page-ink);min-width:90px}
+.stage{overflow-x:auto;padding:4px 0 16px}
+
+/* ═════════ THE PLATE ═════════ */
+.plate{
+  width:max-content;margin:0 auto;padding:24px 28px 22px;border-radius:var(--plate-r);
+  background:var(--chassis);color:var(--text-primary);
+  border:var(--ol) solid var(--mane-outline);
+  box-shadow:var(--drop) var(--drop) 0 var(--mane-outline);
+  font-family:var(--label-font);user-select:none;-webkit-user-select:none;position:relative;
+}
+/* purfling: the inlaid double line on a violin's edge, in its woods */
+.purf{position:absolute;pointer-events:none;inset:7px;border:var(--purf) solid var(--violin-wood);border-radius:var(--plate-r)}
+.purf::after{content:"";position:absolute;inset:calc(var(--purf) + 2px);border:calc(var(--purf) * .6) solid var(--violin-body);border-radius:var(--plate-r)}
+.plate.nopurf .purf{display:none}
+.head{display:flex;align-items:center;gap:12px;margin-bottom:14px;position:relative}
+.mark{display:flex;align-items:center;gap:10px}
+.logo{display:block;height:68px;margin:-8px 0 -6px -8px}
+.word{font:900 38px/1 var(--mark-font);letter-spacing:-.02em;color:var(--text-primary)}
+.sub{font:600 9px/1 var(--label-font);letter-spacing:.2em;text-transform:uppercase;color:var(--text-secondary);margin-top:6px}
+.head .grow{flex:1}
+
+.bezel{background:var(--lcd-bezel);border:var(--ol) solid var(--mane-outline);padding:10px;display:inline-block;position:relative}
+.bezel canvas{display:block;outline:var(--ol) solid var(--chassis-inset)}
+.under{display:flex;justify-content:space-between;align-items:center;margin:12px 0 2px;position:relative}
+
+.sect{display:flex;align-items:center;gap:10px;margin:16px 0 10px;font:700 10px/1 var(--label-font);letter-spacing:.18em;text-transform:uppercase;color:var(--text-primary);position:relative}
+.sect::after{content:"";flex:1;height:var(--ol);background:var(--text-primary)}
+.sect i{font-style:normal;color:var(--text-secondary);letter-spacing:.1em}
+.body{display:grid;grid-template-columns:auto auto;gap:6px 30px;align-items:start;position:relative}
+.cell{display:flex;flex-direction:column;position:relative}
+.sw[data-choice=patch] .btn{flex:1}
+.sw.vert{flex-direction:column}
+.sw.vert .btn{width:118px}
+.row{display:flex;gap:var(--gap);align-items:flex-end;position:relative}
+.cap{font:700 9px/1 var(--label-font);letter-spacing:.12em;text-transform:uppercase;color:var(--text-primary);text-align:center;white-space:nowrap}
+.cap.dim{color:var(--text-secondary);font-weight:600;letter-spacing:.08em}
+.ctl{display:grid;justify-items:center;gap:7px;touch-action:none}
+
+/* buttons: flat blocks with a hard shadow; pressed = pushed into it */
+.sw{display:inline-flex;gap:3px;padding:3px;border-radius:var(--btn-r);background:var(--chassis-inset);border:var(--ol) solid var(--mane-outline)}
+.btn{height:30px;min-width:58px;padding:0 12px;border-radius:var(--btn-r);cursor:pointer;
+  font:700 10px/1 var(--label-font);letter-spacing:.12em;text-transform:uppercase;
+  background:var(--control);color:var(--text-inverse);border:var(--ol) solid var(--mane-outline)}
+.btn:hover{filter:brightness(1.15)}
+.btn.on{background:var(--accent);border-color:var(--mane-outline);color:var(--mane-outline)}
+.btn.solo{box-shadow:var(--btn-drop) var(--btn-drop) 0 var(--mane-outline)}
+.btn.solo:active{transform:translate(var(--btn-drop),var(--btn-drop));box-shadow:none}
+.btn.sm{height:24px;min-width:30px;padding:0 8px}
+
+.knob svg,.fader svg{display:block;cursor:ns-resize}
+.fader{min-width:66px}
+.fader .cap{letter-spacing:.06em}
+
+.foot{display:flex;justify-content:space-between;margin-top:18px;font:700 8px/1 var(--label-font);letter-spacing:.2em;text-transform:uppercase;color:var(--text-secondary);position:relative}
+
+/* tuner */
+.tuner{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px 24px}
+.tuner label{display:grid;grid-template-columns:110px 1fr 60px;gap:8px;align-items:center;font-size:12px;color:var(--page-dim)}
+.tuner output{font:12px ui-monospace,monospace;color:var(--page-ink)}
+.tuner select{background:var(--page);color:var(--page-ink);border:1px solid #000a;border-radius:3px;padding:3px;font:12px system-ui}
+.tuner h3{grid-column:1/-1;margin:6px 0 0;color:var(--page-ink)}
+#glyphs{display:block;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Octavia · faceplate <span class="draft">APPROVED</span></h1>
+<p>The instrument page Octavia shows inside Lyra: a synth made to be cheap. Drawn from <code>colors.css</code> and the brief in <code>docs/FACEPLATE.md</code>. Press <b>Play</b>: the LCD is driven by a <b>real render</b> (the engine's decisions, ringing strings and curves, plus its sound), the same data the telemetry will carry. Touch a control and its value shows on the LCD.</p>
+
+<div class="card">
+  <h3 style="margin-top:0">Settled</h3>
+  <ul style="margin:0;padding-left:20px">
+    <li>The vibe: blocky and flat, square corners, hard shadows, few decorations; slightly off, never polished.</li>
+    <li>LCD colours: <code>--lcd-0…3</code> (the lavender set).</li>
+    <li>The LCD cheats: plain text with LCD shadows (the colours and shadows sell it, not segment shapes); segments only for the take. Unlit things are off or barely there, never half-lit.</li>
+    <li>Meters are BIOS-style outlined boxes with blocks taller than wide; no curves.</li>
+    <li>Knobs round, in a wide dark groove with the pink value inside; faders for the four skills.</li>
+    <li>The neck along the bottom, seen from the side: fingers at the engine's real pitch, solid when played, hollow when held, slide trails; the hand's reach as a bracket.</li>
+    <li>The plate: screen at 0.68 beside style; player and voice below. Every tuner default here is settled (2026-11-25).</li>
+    <li>Logo: <code>logo.palette.png</code> (Rhodexa's art on the palette). Port guide: <code>docs/FACEPLATE.md</code>.</li>
+  </ul>
+</div>
+
+<div class="bench">
+  <label>tape <select id="tape"></select></label>
+  <button id="play">▶ Play</button>
+  <input id="scrub" type="range" min="0" max="1" step="0.001" value="0">
+  <output id="clock">0.0 s</output>
+  <span>Space plays · Shift-drag for fine · double-click resets</span>
+</div>
+
+<div class="stage">
+<div class="plate" id="plate">
+  <div class="purf"></div>
+  <div class="head">
+    <div class="mark">
+      <div>
+        <img class="logo" src="logo.palette.png" alt="octavia">
+      </div>
+    </div>
+    <div class="grow"></div>
+    <div class="sw" data-choice="instrument"></div>
+  </div>
+
+  <div class="body">
+    <div class="bezel"><canvas id="lcd"></canvas></div>
+    <div class="cell">
+      <div class="sect" style="margin-top:0">style <i>· decoration</i></div>
+      <div class="row" id="style" style="margin-bottom:14px"></div>
+      <button class="btn solo" data-toggle="performer" style="height:34px">performer</button>
+      <div class="sect">screen</div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div class="sw" data-choice="page"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="cap dim">take</span>
+          <button class="btn sm solo" id="take-dn">−</button><button class="btn sm solo" id="take-up">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="sect">player <i>· ability</i></div>
+      <div class="row" style="align-items:flex-start;gap:22px">
+        <div class="sw vert" data-choice="player"></div>
+        <div class="row" id="skills"></div>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="sect">voice</div>
+      <div class="row" style="align-items:center;gap:16px;margin-bottom:12px">
+        <div class="row" id="voice"></div>
+        <div class="ctl"><button class="btn solo" data-toggle="doubles" style="height:34px;line-height:1.25">double<br>stops</button><div class="cap dim">two strings</div></div>
+      </div>
+      <div class="ctl" style="justify-items:stretch"><div class="sw" data-choice="patch" style="display:flex"></div><div class="cap dim">patch</div></div>
+    </div>
+  </div>
+
+  <div class="foot"><span>rhodune! lab</span></div>
+</div>
+</div>
+
+<h2>Tuner</h2>
+<p>Every value writes a token; your settings stay in this browser. <b>Copy</b> gives me the numbers.</p>
+<div class="card"><div class="tuner" id="tuner"></div>
+  <p style="margin:10px 0 0"><button id="copy">Copy settings</button> <button id="reset">Reset</button> <span id="copied"></span></p></div>
+
+<h2>The LCD, part by part</h2>
+<div class="card">
+<table>
+<tr><th>where</th><th>what</th><th>from</th></tr>
+<tr><td>top</td><td>the message (the player, or the control you're touching and its value; PERF OFF) · take, the one segment display left</td><td>parameters</td></tr>
+<tr><td>printed words</td><td>lit when true: instrument, patch, double stops, grit (the bow scratching), page, playing</td><td>parameters, frames</td></tr>
+<tr><td>the note</td><td>the note being played and how</td><td>latest decision</td></tr>
+<tr><td>the neck</td><td>along the bottom, seen from the side: nut on the left, highest string on top. The bowed string dark, strings left ringing grey. Each finger where it really is, from the engine's pitch frame by frame (intonation, vibrato, slides; two octaves of room), with a fading trail when it has just slid: solid while its string is played, hollow while it's only held (a note ringing into a rest until the engine lifts the finger, a string crossed away from still ringing). The hand's reach as a bracket sliding above, the bow across by the bridge</td><td>decision, hand, ring events</td></tr>
+<tr><td>next</td><td>what the performer has already planned (the look-ahead), each with its bow mark (⊓ down, V up) and string. Beside it, the bow's way now: ⊓↓ or V↑</td><td>upcoming notes, decision</td></tr>
+<tr><td>meters</td><td>BIOS-style boxes: loudness (GRIT lights when the bow scratches), brightness, pitch (a tuner: the dark block is where the note sits, the light span is the vibrato, ±50 cents), workload, calm</td><td>frames, decisions</td></tr>
+<tr><td>LOG page</td><td>the decisions as text, like <code>--explain</code></td><td>decision ring buffer</td></tr>
+</table>
+</div>
+
+<h2>Open questions</h2>
+<div class="card">
+<table>
+<tr><th>question</th><th>this draft does</th><th>alternatives</th></tr>
+<tr><td>Her on the plate?</td><td>The bow tie as the logo mark, purfling in her violin's woods</td><td>her face beside the wordmark, or peeking over the LCD's bezel</td></tr>
+<tr><td>Knobs or faders?</td><td>Faders for the four skills (they read as a profile), knobs for style and voice</td><td>all knobs (more compact)</td></tr>
+<tr><td>The neck</td><td>Along the bottom, from the side, fingers at their real places</td><td>no picture, just "STRING D"</td></tr>
+</table>
+<p>The tapes were rendered with the default settings, so moving the controls changes the plate and the LCD's labels but not the performance playing. In Lyra the performance will follow them.</p>
+</div>
+</main>
+
+<audio id="audio" preload="auto"></audio>
+<script src="tapes/showcase.js"></script>
+<script src="tapes/prelude.js"></script>
+<script src="tapes/lament.js"></script>
+<script src="tapes/violin-air.js"></script>
+<script src="tapes/local/index.js"></script>  <!-- optional: MIDI tapes, git-ignored -->
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const root = document.documentElement;
+const css = n => getComputedStyle(root).getPropertyValue(n).trim();
+
+/* ═════════════════ PARAMETERS (the plugin's table) ═════════════════ */
+const PARAMS = {
+  intonation:{min:0,max:1,def:.90,abbr:'INTN',name:'intonation'},
+  dexterity: {min:0,max:1,def:.85,abbr:'DEXT',name:'dexterity'},
+  bowing:    {min:0,max:1,def:.88,abbr:'BOWG',name:'bowing'},
+  composure: {min:0,max:1,def:.80,abbr:'CALM',name:'composure'},
+  expression:{min:0,max:2,def:1,  abbr:'EXPR',name:'expression'},
+  vibrato:   {min:0,max:2,def:1,  abbr:'VIBR',name:'vibrato'},
+  breath:    {min:0,max:3,def:1,  abbr:'BRTH',name:'breath'},
+  bright:    {min:0,max:1,def:0,  abbr:'CHAR',name:'character',lo:'natural',hi:'bright'},
+};
+const CHOICES = {
+  player:['concert','student','virtuoso','session'],
+  instrument:['cello','violin'],
+  patch:['arco','pizz','trem'],
+  page:['perf','log'],
+};
+const PROFILES = { // performer.rs Skill::profile
+  concert:[.90,.85,.88,.80], student:[.60,.50,.65,.45], virtuoso:[.98,.98,.96,.92], session:[.85,.90,.92,.95] };
+const SKILLS = ['intonation','dexterity','bowing','composure'];
+const state = {player:'concert',instrument:'cello',patch:'arco',page:'perf',doubles:true,performer:true,take:1};
+for (const k in PARAMS) state[k] = PARAMS[k].def;
+const ui = {}; // redraw callbacks
+
+/* ═════════════════ TUNER ═════════════════ */
+const TUNE = [
+  {h:'LCD'},
+  {k:'ghost',label:'unlit words',min:0,max:1,step:.05,def:.15,unit:''},
+  {k:'shadow',label:'ink shadow',min:0,max:1,step:.05,def:.5,unit:''},
+  {k:'shoff',label:'shadow offset',min:0,max:4,step:.5,def:2,unit:'px'},
+  {k:'lcdscale',label:'screen size',min:.5,max:1,step:.02,def:.68,unit:''},
+  {k:'mintext',label:'smallest text',min:8,max:14,step:.5,def:11.5,unit:'px'},
+  {k:'lcdfont',label:'LCD text font',opts:['Roboto Condensed','IBM Plex Mono','Chakra Petch'],def:'Roboto Condensed'},
+  {h:'Plate'},
+  {k:'--plate-r',label:'plate corners',min:0,max:30,step:1,def:0,unit:'px'},
+  {k:'--btn-r',label:'button corners',min:0,max:10,step:1,def:0,unit:'px'},
+  {k:'--drop',label:'plate shadow',min:0,max:14,step:1,def:6,unit:'px'},
+  {k:'--btn-drop',label:'button shadow',min:0,max:5,step:1,def:2,unit:'px'},
+  {k:'--ol',label:'outline',min:1,max:4,step:.5,def:2,unit:'px'},
+  {k:'--purf',label:'purfling width',min:1,max:6,step:.5,def:3,unit:'px'},
+  {k:'purfling',label:'purfling',opts:['on','off'],def:'on'},
+  {h:'Controls'},
+  {k:'--knob',label:'knob size',min:40,max:76,step:2,def:58,unit:'px'},
+  {k:'arc',label:'knob arc',opts:['on','off'],def:'on'},
+  {k:'--fader-h',label:'fader travel',min:80,max:180,step:4,def:128,unit:'px'},
+  {k:'--gap',label:'control gap',min:0,max:30,step:1,def:6,unit:'px'},
+  {k:'--label-font',label:'label font',opts:["'IBM Plex Mono'","'Roboto Condensed'","'Chakra Petch'"],def:"'IBM Plex Mono'"},
+];
+const TKEY = 'octavia-faceplate-tuner-4';
+let tune = {};
+try { tune = JSON.parse(localStorage.getItem(TKEY) || '{}') || {}; } catch (e) { tune = {}; }
+const tv = k => (k in tune ? tune[k] : TUNE.find(t => t.k === k).def);
+function applyTune() {
+  for (const t of TUNE) if (t.k && t.k.startsWith('--')) root.style.setProperty(t.k, t.opts ? tv(t.k) + ', sans-serif' : tv(t.k) + t.unit);
+  $('#plate').classList.toggle('nopurf', tv('purfling') !== 'on');
+  try { localStorage.setItem(TKEY, JSON.stringify(tune)); } catch (e) {}
+  for (const f of Object.values(ui)) f();
+  readColors(); sizeLcd();
+}
+function buildTuner() {
+  const host = $('#tuner'); host.innerHTML = '';
+  for (const t of TUNE) {
+    if (t.h) { const h = document.createElement('h3'); h.textContent = t.h; host.append(h); continue; }
+    const l = document.createElement('label');
+    l.append(t.label);
+    let inp;
+    if (t.opts) { inp = document.createElement('select'); for (const o of t.opts) inp.add(new Option(o.replace(/'/g, ''), o)); }
+    else { inp = document.createElement('input'); inp.type = 'range'; inp.min = t.min; inp.max = t.max; inp.step = t.step; }
+    inp.value = tv(t.k);
+    const out = document.createElement('output'); out.textContent = t.opts ? '' : tv(t.k) + t.unit;
+    inp.oninput = () => { tune[t.k] = t.opts ? inp.value : +inp.value; if (!t.opts) out.textContent = inp.value + t.unit; applyTune(); };
+    l.append(inp, out); host.append(l);
+  }
+}
+$('#copy').onclick = () => {
+  const o = {}; for (const t of TUNE) if (t.k) o[t.k] = tv(t.k);
+  const s = JSON.stringify(o, null, 1);
+  (navigator.clipboard ? navigator.clipboard.writeText(s) : Promise.reject()).then(() => $('#copied').textContent = 'copied', () => $('#copied').textContent = s);
+};
+$('#reset').onclick = () => { tune = {}; buildTuner(); applyTune(); };
+
+/* ═════════════════ CONTROLS ═════════════════ */
+function touched(k) { say(PARAMS[k].abbr + ' ' + state[k].toFixed(2)); }
+function setParam(k, v) {
+  const p = PARAMS[k];
+  state[k] = Math.min(p.max, Math.max(p.min, v));
+  if (SKILLS.includes(k)) { // a skill moved: still a profile?
+    const hit = Object.entries(PROFILES).find(([n, s]) => s.every((x, i) => Math.abs(x - state[SKILLS[i]]) < 1e-6));
+    state.player = hit ? hit[0] : null;
+    ui.player && ui.player();
+  }
+  ui[k] && ui[k](); touched(k);
+}
+// drag behaviour shared by knobs and faders: vertical, Shift fine, wheel, double-click resets
+function dragger(el, k, pxPerRange) {
+  el.addEventListener('pointerdown', e => {
+    el.setPointerCapture(e.pointerId); let y = e.clientY;
+    const mv = ev => { const p = PARAMS[k]; const dy = y - ev.clientY; y = ev.clientY;
+      setParam(k, state[k] + dy / pxPerRange() * (p.max - p.min) * (ev.shiftKey ? .1 : 1)); };
+    const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); };
+    el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); touched(k);
+  });
+  el.addEventListener('wheel', e => { e.preventDefault(); const p = PARAMS[k];
+    setParam(k, state[k] + Math.sign(-e.deltaY) * (p.max - p.min) * (e.shiftKey ? .01 : .05)); }, {passive:false});
+  el.addEventListener('dblclick', () => setParam(k, PARAMS[k].def));
+  el.addEventListener('pointerenter', () => touched(k));
+}
+const NS = 'http://www.w3.org/2000/svg';
+const svgEl = (tag, a) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
+function arcPath(cx, cy, r, a0, a1) {
+  const p = a => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const [x0, y0] = p(a0), [x1, y1] = p(a1);
+  return `M${x0} ${y0} A${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${x1} ${y1}`;
+}
+function knob(host, k) {
+  const p = PARAMS[k];
+  const c = document.createElement('div'); c.className = 'ctl knob';
+  const svg = svgEl('svg', {});
+  c.append(svg);
+  const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = p.name; c.append(cap);
+  if (p.lo) { const r = document.createElement('div'); r.className = 'cap dim'; r.style.cssText = 'display:flex;justify-content:space-between;width:100%;gap:8px;margin-top:-3px'; r.innerHTML = `<span>${p.lo}</span><span>${p.hi}</span>`; c.append(r); }
+  host.append(c);
+  const draw = () => {
+    const S = parseFloat(css('--knob')), ol = parseFloat(css('--ol'));
+    svg.setAttribute('width', S); svg.setAttribute('height', S); svg.innerHTML = '';
+    const cx = S / 2, cy = S / 2, a0 = Math.PI * .75, a1 = Math.PI * 2.25;
+    const v = (state[k] - p.min) / (p.max - p.min), av = a0 + (a1 - a0) * v;
+    const rb = S * .31, ra = S * .43;
+    if (tv('arc') === 'on') { // a wide dark groove, the value in pink inside it
+      svg.append(svgEl('path', {d: arcPath(cx, cy, ra, a0, a1), fill: 'none', stroke: 'var(--mane-outline)', 'stroke-width': S * .13}));
+      if (v > .005) svg.append(svgEl('path', {d: arcPath(cx, cy, ra, a0, av), fill: 'none', stroke: 'var(--accent)', 'stroke-width': S * .07}));
+    }
+    svg.append(svgEl('circle', {cx, cy, r: rb, fill: 'var(--control)', stroke: 'var(--mane-outline)', 'stroke-width': ol}));
+    svg.append(svgEl('line', {x1: cx + rb * .3 * Math.cos(av), y1: cy + rb * .3 * Math.sin(av), x2: cx + rb * .85 * Math.cos(av), y2: cy + rb * .85 * Math.sin(av),
+      stroke: 'var(--accent)', 'stroke-width': Math.max(3, S * .07)}));
+  };
+  ui[k] = draw; draw();
+  dragger(svg, k, () => 200);
+}
+function fader(host, k) {
+  const p = PARAMS[k];
+  const c = document.createElement('div'); c.className = 'ctl fader';
+  const svg = svgEl('svg', {}); c.append(svg);
+  const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = p.name; c.append(cap);
+  host.append(c);
+  const draw = () => {
+    const H = parseFloat(css('--fader-h')), ol = parseFloat(css('--ol'));
+    const W = 44, ch = 16, top = ch / 2 + 2, bot = top + H;
+    svg.setAttribute('width', W); svg.setAttribute('height', bot + ch / 2 + 4); svg.innerHTML = '';
+    for (let i = 0; i <= 10; i++) { const y = Math.round(top + H * i / 10);
+      svg.append(svgEl('rect', {x: i % 5 ? 4 : 0, width: i % 5 ? 6 : 10, y: y - 1, height: 2, fill: 'var(--text-primary)'})); }
+    svg.append(svgEl('rect', {x: W / 2 - 4 + 3, y: top - 3, width: 8, height: H + 6, fill: 'var(--control-track)'}));
+    const v = (state[k] - p.min) / (p.max - p.min), y = Math.round(bot - H * v);
+    svg.append(svgEl('rect', {x: W / 2 - 2 + 3, y, width: 4, height: bot - y, fill: 'var(--accent)'}));
+    svg.append(svgEl('rect', {x: 16, y: y - ch / 2 + 2, width: W - 18, height: ch, fill: 'var(--mane-outline)'}));
+    svg.append(svgEl('rect', {x: 14, y: y - ch / 2, width: W - 18, height: ch, fill: 'var(--control)', stroke: 'var(--mane-outline)', 'stroke-width': ol}));
+    svg.append(svgEl('rect', {x: 17, y: y - 1.5, width: W - 24, height: 3, fill: 'var(--accent)'}));
+  };
+  ui[k] = draw; draw();
+  dragger(svg, k, () => parseFloat(css('--fader-h')));
+}
+function choice(name) {
+  const host = document.querySelector(`[data-choice=${name}]`);
+  const draw = () => { host.innerHTML = '';
+    for (const o of CHOICES[name]) { const b = document.createElement('button');
+      b.className = 'btn' + (state[name] === o ? ' on' : ''); b.textContent = o;
+      b.onclick = () => pick(name, o); host.append(b); } };
+  ui[name] = draw; draw();
+}
+function pick(name, o) {
+  state[name] = o;
+  if (name === 'player') { PROFILES[o].forEach((v, i) => { state[SKILLS[i]] = v; ui[SKILLS[i]](); }); say(o.toUpperCase()); }
+  else if (name !== 'page') say(o.toUpperCase());
+  ui[name]();
+}
+function toggle(name) {
+  const b = document.querySelector(`[data-toggle=${name}]`);
+  const draw = () => b.classList.toggle('on', !!state[name]);
+  b.onclick = () => { state[name] = !state[name]; draw();
+    say(name === 'performer' ? (state.performer ? 'PERF ON' : 'PERF OFF') : (state.doubles ? 'DBL ON' : 'DBL OFF')); };
+  ui[name] = draw; draw();
+}
+function setTake(d) { state.take = Math.min(99, Math.max(1, state.take + d)); say('TAKE ' + String(state.take).padStart(2, '0')); }
+$('#take-dn').onclick = () => setTake(-1); $('#take-up').onclick = () => setTake(1);
+
+SKILLS.forEach(k => fader($('#skills'), k));
+['expression', 'vibrato', 'breath'].forEach(k => knob($('#style'), k));
+knob($('#voice'), 'bright');
+Object.keys(CHOICES).forEach(choice);
+toggle('performer'); toggle('doubles');
+
+/* ═════════════════ LCD: ink ═════════════════ */
+// Every piece of ink is drawn twice: its shadow on the backplane (offset,
+// pale), then itself. 0 = unlit (ghost, usually invisible), 1 faint, 2 mid, 3 dark.
+let C = {};
+function hex(c) { const m = c.replace('#', ''); return [0, 2, 4].map(i => parseInt(m.slice(i, i + 2), 16)); }
+function mix(a, b, t) { const A = hex(a), B = hex(b); return '#' + A.map((x, i) => Math.round(x + (B[i] - x) * t).toString(16).padStart(2, '0')).join(''); }
+function readColors() {
+  const g = css('--lcd-background'), l = css('--lcd-inactive'), m = css('--lcd-secondary'), d = css('--lcd-foreground');
+  C = {glass: g, ink: [mix(g, l, tv('ghost')), l, m, d], shadow: mix(g, m, tv('shadow') * .55)};
+}
+const W = 640, H = 336;
+const cvs = $('#lcd'); let ctx = cvs.getContext('2d');
+let dim = false;
+// the screen is drawn in its own units (W×H) and shown at 'screen size'
+function sizeLcd() {
+  const dpr = window.devicePixelRatio || 1, k = tv('lcdscale');
+  cvs.width = Math.round(W * k * dpr); cvs.height = Math.round(H * k * dpr);
+  cvs.style.width = Math.round(W * k) + 'px'; cvs.style.height = Math.round(H * k) + 'px';
+  ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
+}
+const shade = s => (dim && s === 3 ? 2 : s);
+// ink(s, draw): draw(fill) is called with the shadow, then with the ink
+function ink(s, draw) {
+  s = shade(s);
+  if (s === 0 && tv('ghost') === 0) return;
+  const o = tv('shoff');
+  if (s > 0 && tv('shadow') > 0 && o > 0) { ctx.save(); ctx.translate(o, o); ctx.fillStyle = ctx.strokeStyle = C.shadow; draw(); ctx.restore(); }
+  ctx.fillStyle = ctx.strokeStyle = C.ink[s]; draw();
+}
+const rect = (s, x, y, w, h) => ink(s, () => ctx.fillRect(x, y, w, h));
+const poly = (s, pts) => ink(s, () => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); });
+function text(s, str, x, y, size, opts = {}) {
+  ink(s, () => {
+    ctx.font = `${opts.weight || 700} ${Math.max(size, tv('mintext'))}px "${tv('lcdfont')}"`;
+    ctx.textAlign = opts.align || 'left'; ctx.textBaseline = 'alphabetic';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = (opts.track || 0) + 'px';
+    ctx.fillText(str, x, y);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  });
+}
+const textW = (str, size, track = 0) => { ctx.font = `700 ${Math.max(size, tv('mintext'))}px "${tv('lcdfont')}"`; return ctx.measureText(str).width + track * str.length; };
+
+/* ═════════════════ LCD: 7-segment digits (the take) ═════════════════ */
+const S7 = {'0':'a b c d e f','1':'b c','2':'a b g e d','3':'a b c d g','4':'f g b c','5':'a f g c d',
+  '6':'a f e d c g','7':'a b c','8':'a b c d e f g','9':'a b c d f g',' ':''};
+function digits(str, x, y, w, h) {
+  const t = Math.max(2, w * .22), g = t * .28, xl = t / 2, xr = w - t / 2, yt = t / 2, yb = h - t / 2, ym = h / 2;
+  const Hs = (x0, x1, yy) => { x0 += g; x1 -= g; return [[x0, yy], [x0 + t / 2, yy - t / 2], [x1 - t / 2, yy - t / 2], [x1, yy], [x1 - t / 2, yy + t / 2], [x0 + t / 2, yy + t / 2]]; };
+  const Vs = (xx, y0, y1) => { y0 += g; y1 -= g; return [[xx, y0], [xx + t / 2, y0 + t / 2], [xx + t / 2, y1 - t / 2], [xx, y1], [xx - t / 2, y1 - t / 2], [xx - t / 2, y0 + t / 2]]; };
+  const P = {a: Hs(xl, xr, yt), d: Hs(xl, xr, yb), g: Hs(xl, xr, ym), f: Vs(xl, yt, ym), e: Vs(xl, ym, yb), b: Vs(xr, yt, ym), c: Vs(xr, ym, yb)};
+  [...str].forEach((ch, i) => { const ox = x + i * w * 1.35, on = new Set((S7[ch] ?? '').split(' '));
+    for (const s in P) if (on.has(s)) poly(3, P[s].map(([px, py]) => [ox + px, y + py])); });   // unlit segments: off
+}
+
+/* ═════════════════ LCD: printed marks ═════════════════ */
+// the string player's own bow marks: ⊓ down-bow, V up-bow (drawn, so every font has them)
+function bowMark(s, dir, x, y, size) {
+  const t = Math.max(1.5, size * .16);
+  if (dir === 'down') { rect(s, x, y, size, t * 1.6); rect(s, x, y, t, size); rect(s, x + size - t, y, t, size); }
+  else { poly(s, [[x, y], [x + t * 1.3, y], [x + size / 2, y + size - t * 1.6], [x + size / 2, y + size]]);
+         poly(s, [[x + size, y], [x + size - t * 1.3, y], [x + size / 2, y + size - t * 1.6], [x + size / 2, y + size]]); }
+}
+// BIOS-style meter: an outlined box, blocks inside; unlit blocks are simply off
+function boxMeter(x, y, w, h, n, lit) {
+  rect(2, x, y, w, 2); rect(2, x, y + h - 2, w, 2); rect(2, x, y, 2, h); rect(2, x + w - 2, y, 2, h);
+  const ix = x + 4, iw = w - 8, bw = iw / n;
+  for (let i = 0; i < n; i++) if (lit(i)) rect(3, Math.round(ix + i * bw), y + 4, Math.ceil(bw) - 2, h - 8);
+}
+
+/* ═════════════════ LCD: what it shows ═════════════════ */
+const STRINGS = {cello:['C', 'G', 'D', 'A'], violin:['G', 'D', 'A', 'E']};
+const HOW = {Fresh:'FROM SILENCE', NewBow:'NEW BOW', Slurred:'SLURRED', Staccato:'STACCATO', Bounced:'BOUNCED', Tremolo:'TREMOLO', Plucked:'PLUCKED'};
+const SHORT = {Fresh:'START', NewBow:'NEW', Slurred:'SLUR', Staccato:'STAC', Bounced:'BOUNCE', Tremolo:'TREM', Plucked:'PIZZ'};
+const ROMAN = ['IV', 'III', 'II', 'I'];
+const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const midi = n => { const m = n.match(/^([A-G]#?)(-?\d)$/); return NAMES.indexOf(m[1]) + 12 * (+m[2] + 1); };
+const noteName = n => n.note + (n.note2 ? '+' + n.note2 : '');
+
+let tape = null, hand = 0, lastT = 0;
+function noteAt(t) { let cur = null; for (const n of tape.notes) { if (n.t <= t + 1e-6) cur = n; else break; } return cur; }
+function frameAt(t, key) { const f = tape.frames[key]; return f[Math.max(0, Math.min(f.length - 1, Math.round(t * tape.fps)))]; }
+function string2Of(n) { if (!n.note2) return -1; const i = Math.round((n.t + n.len * .5) * tape.fps); return tape.frames.string2[Math.min(i, tape.frames.string2.length - 1)]; }
+function ringLevel(t, s) { // how much a string left by the bow still rings
+  let lv = 0;
+  for (const r of tape.rings) { if (r.t > t) break; if (r.string !== s || r.t < t - 2) continue;
+    const dur = r.open ? 1.8 : .12 + .5 * r.bright;
+    if (r.stop <= t) continue;
+    lv = Math.max(lv, r.level * (1 - (t - r.t) / dur)); }
+  return lv;
+}
+
+// layout of the glass (px)
+const L = {pad: 14, msg: 30, ann: 52, rule: 60, mid: 68, colX: 318, div: 108, neck: 232};
+function printed(s, str, x, y, size = 10, align) { text(s, str, x, y, size, {track: 1.2, align}); }
+
+function nowPanel(cur) {
+  if (!cur) return;
+  const x = L.pad, y = L.mid + 30;
+  text(3, noteName(cur), x, y, 30);
+  text(3, HOW[cur.how] || cur.how, x + 128, y - 4, 18, {track: .5});
+}
+
+// the neck, seen from the side, the whole width of the glass: nut on the left,
+// the highest string on top, each finger where it really stops the string
+// (semitones above the open string), the hand's reach as a bracket above,
+// the bow across the strings by the bridge
+const OPEN = {cello: [36, 43, 50, 57], violin: [55, 62, 69, 76]};
+const SPAN = {cello: 4, violin: 6};   // instrument.rs hand_span: how far the fingers reach
+const SEMIS = 26;
+function neckPanel(t, cur, playing) {
+  const inst = tape.instrument in OPEN ? tape.instrument : 'cello';
+  const labels = STRINGS[inst], open = OPEN[inst];
+  const nut = L.pad + 22, end = W - L.pad - 70, bridge = W - L.pad - 40;
+  const sy = s => L.neck + 26 + (3 - s) * 16;
+  const sx = semi => nut + 6 + Math.min(SEMIS, semi) * (end - nut - 6) / SEMIS;
+  const loud = frameAt(t, 'loudness'), str = frameAt(t, 'string'), p2 = frameAt(t, 'pitch2'), str2 = frameAt(t, 'string2');
+  const plucking = cur && cur.how === 'Plucked' && t < cur.t + .25;
+  const bowed = new Set();
+  if (loud > .02 && !(cur && cur.how === 'Plucked')) { bowed.add(str); if (p2 > 0) bowed.add(str2); }
+  // printed: the nut, the bridge, a mark per semitone, the octaves doubled
+  rect(2, nut - 4, sy(3) - 6, 5, sy(0) - sy(3) + 12);
+  rect(1, bridge - 1, sy(3) - 6, 2, sy(0) - sy(3) + 12);
+  for (let k = 1; k <= SEMIS; k++) { const big = k % 12 === 0; rect(big ? 2 : 1, sx(k) - 1, sy(0) + 8, 2, big ? 6 : 3); }
+  printed(2, '8va', sx(12), sy(0) + 24, 8, 'center'); printed(2, '15ma', sx(24), sy(0) + 24, 8, 'center');
+  // the strings: bowed dark and thick, ringing grey, idle faint
+  for (let s = 0; s < 4; s++) {
+    const ring = ringLevel(t, s);
+    const st = bowed.has(s) || (plucking && cur.string === s) ? 3 : ring > .04 ? 2 : 1;
+    const wdt = (s < 2 ? 3 : 2) + (st === 3 ? 1 : 0);
+    rect(st, nut, sy(s) - wdt / 2, bridge + 14 - nut, wdt);
+    text(st === 1 ? 2 : 3, labels[s], L.pad, sy(s) + 5, 13);
+  }
+  // the hand's reach (hand_span semitones from where it sits), sliding on shifts
+  const target = cur ? cur.hand : 0, dt = Math.min(.1, Math.abs(t - lastT));
+  hand += (target - hand) * (dt > 0 && playing ? 1 - Math.exp(-dt * 14) : 1);
+  const hx0 = sx(hand), hx1 = sx(hand + SPAN[inst]), hy = sy(3) - 14;
+  rect(2, hx0, hy, hx1 - hx0, 2); rect(2, hx0, hy, 2, 5); rect(2, hx1 - 2, hy, 2, 5);
+  // the fingers, as the engine has them: solid on a string being played, hollow
+  // on one only held: a note ringing into a rest until the engine lifts the
+  // finger, or a string crossed away from that still rings at its stopped pitch
+  const fingers = [];
+  if (cur) {
+    const playingNow = t < cur.t + cur.len;
+    // where the finger really is: the engine's pitch, frame by frame (intonation,
+    // vibrato, slides), not the written note
+    const fp = (s, n, key, skey) => cur.how !== 'Plucked' && frameAt(t, skey) === s && frameAt(t, key) > 0 ? frameAt(t, key) : midi(n);
+    if (playingNow || t < cur.lift)
+      for (const [s, n, key, skey] of [[cur.string, cur.note, 'pitch', 'string'], [string2Of(cur), cur.note2, 'pitch2', 'string2']])
+        if (s >= 0 && n) fingers.push([s, fp(s, n, key, skey) - open[s], playingNow]);
+    // a slide: the engine slides only on a legato note that shifts the hand on the
+    // same string (the hand travels, or a big expressive shift). The trail follows
+    // the real pitch path from the last note and fades over half a second.
+    const i = tape.notes.indexOf(cur), prev = tape.notes[i - 1], age = (t - cur.t) / .5;
+    if (prev && cur.how === 'Slurred' && cur.shift > 0 && prev.string === cur.string && age < 1) {
+      const s = cur.string, xa = sx(midi(prev.note) - open[s]), xb = sx(frameAt(t, 'pitch') - open[s]);
+      const x0 = Math.min(xa, xb), x1 = Math.max(xa, xb), every = age < .4 ? 1 : age < .7 ? 2 : 4;
+      for (let x = x0, k = 0; x <= x1; x += 4, k++) if (k % every === 0) rect(2, x - 1.5, sy(s) - 3, 3, 6);
+    }
+  }
+  for (const r of tape.rings) {
+    if (r.t > t) break;
+    if (r.open || r.t < t - 2 || t >= r.stop || t >= r.t + .12 + .5 * r.bright) continue;
+    if (!fingers.some(f => f[0] === r.string)) fingers.push([r.string, r.pitch - open[r.string], false]);
+  }
+  for (const [s, semi, solid] of fingers) {
+    if (semi < .5) { rect(3, nut + 2, sy(s) - 6, 3, 12); continue; }   // open: a tick at the nut
+    const fx = sx(semi) - 6, fy = sy(s) - 6;
+    if (solid) rect(3, fx, fy, 12, 12);
+    else { rect(3, fx, fy, 12, 2); rect(3, fx, fy + 10, 12, 2); rect(3, fx, fy, 2, 12); rect(3, fx + 10, fy, 2, 12); }
+  }
+  // the bow across the strings, or a pluck
+  if (bowed.size) rect(3, bridge + 6, sy(3) - 9, 5, sy(0) - sy(3) + 18);
+  else if (plucking) { const y = sy(cur.string); poly(3, [[bridge + 4, y - 7], [bridge + 14, y], [bridge + 4, y + 7]]); }
+}
+
+function nextPanel(t, cur) {
+  const labels = STRINGS[tape.instrument] || STRINGS.cello;
+  const x = L.pad, y = L.div + 20;
+  printed(2, 'NEXT', x, y, 9);
+  const up = tape.notes.filter(n => n.t > t + 1e-3).slice(0, 4);
+  up.forEach((n, i) => {
+    const yy = y + 19 + i * 19, s = i === 0 ? 3 : 2;
+    text(s, noteName(n), x, yy, 15);
+    bowMark(n.how === 'Plucked' ? 0 : s, n.dir, x + 66, yy - 10, 10);
+    text(s, SHORT[n.how] || n.how, x + 82, yy, 12, {track: .5});
+    text(s, labels[n.string], x + 150, yy, 12);
+  });
+  if (!up.length) text(1, 'END', x, y + 19, 14);
+  // the bow's way now, big, along the bow as the neck draws it: ⊓↓ down-bow, V↑ up-bow
+  const ax = 204, by = y + 44, bowing = cur && cur.how !== 'Plucked' && frameAt(t, 'loudness') > .02;
+  const dn = bowing && cur.dir === 'down' ? 3 : 0, upb = bowing && cur.dir === 'up' ? 3 : 0;
+  bowMark(dn, 'down', ax, by - 7, 14);
+  poly(dn, [[ax + 22, by - 16], [ax + 28, by - 16], [ax + 28, by + 4], [ax + 34, by + 4], [ax + 25, by + 16], [ax + 16, by + 4], [ax + 22, by + 4]]);
+  poly(upb, [[ax + 62, by + 16], [ax + 68, by + 16], [ax + 68, by - 4], [ax + 74, by - 4], [ax + 65, by - 16], [ax + 56, by - 4], [ax + 62, by - 4]]);
+  bowMark(upb, 'up', ax + 80, by - 7, 14);
+}
+
+// the right side: BIOS-style meters, an outlined box with blocks taller than wide
+function meters(t, cur) {
+  const x = L.colX + 12, w = W - L.pad - x, bx = x + 84, bw = w - 84, bh = 16, n = 32;
+  const loud = frameAt(t, 'loudness'), sounding = loud > .02;
+  const row = (label, y, v) => { printed(2, label, x, y + 12, 9); const k = Math.round(v * n); boxMeter(bx, y, bw, bh, n, i => i < k); };
+  let y = L.mid + 6;
+  row('LOUDNESS', y, Math.min(1, loud * 1.5));
+  y += 32; row('BRIGHTNESS', y, sounding ? Math.min(1, frameAt(t, 'brightness')) : 0);
+  // pitch: like a tuner. The dark block is where the note sits (smoothed, the onset
+  // glide ignored), the lighter span is how far the vibrato swings. ±50 cents.
+  y += 32;
+  printed(2, 'PITCH', x, y + 12, 9);
+  const np = 41, at = c => Math.max(0, Math.min(np - 1, Math.round((c + 50) / 100 * (np - 1))));
+  let lo = null, hi = null, sum = 0, cnt = 0;
+  if (cur && cur.how !== 'Plucked' && sounding) {
+    const target = midi(cur.note), from = Math.max(cur.t + .08, t - .15);
+    for (let tt = from; tt <= t + 1e-6; tt += 1 / tape.fps) {
+      if (frameAt(tt, 'loudness') < .02) continue;
+      const c = (frameAt(tt, 'pitch') - target) * 100;
+      if (Math.abs(c) > 100) continue;   // still gliding in from the last note
+      lo = lo === null ? c : Math.min(lo, c); hi = hi === null ? c : Math.max(hi, c); sum += c; cnt++;
+    }
+  }
+  rect(2, bx + bw / 2 - 1, y - 5, 2, 4); rect(2, bx + bw / 2 - 1, y + bh + 1, 2, 4);   // the centre, printed
+  if (cnt) {
+    const mean = sum / cnt, a = at(lo), b = at(hi), m = at(mean);
+    boxMeter(bx, y, bw, bh, np, i => i === m);
+    const ix = bx + 4, iw = (bw - 8) / np;
+    for (let i = a; i <= b; i++) if (i !== m) rect(2, Math.round(ix + i * iw), y + 4, Math.ceil(iw) - 2, bh - 8);
+    const r = Math.round(mean); text(3, (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r) + '¢', x + 40, y + 12, 11);
+  } else boxMeter(bx, y, bw, bh, np, () => false);
+  // the player
+  const off = !state.performer;
+  y += 32; row('WORKLOAD', y, off || !cur ? 0 : Math.min(1, cur.load / 50));
+  y += 32; row('CALM', y, off ? 0 : cur ? cur.calm / 100 : 1);
+  if (off) text(3, 'PERFORMER OFF', x + w, L.neck - 8, 11, {align: 'right', track: 1});
+}
+
+function perfPage(t, playing) {
+  const cur = noteAt(t);
+  nowPanel(cur);
+  nextPanel(t, cur);
+  meters(t, cur);
+  neckPanel(t, cur, playing);
+  rect(2, L.colX, L.mid, 2, L.neck - L.mid - 8);     // printed rules
+  rect(2, L.pad, L.div, L.colX - L.pad - 12, 2);
+  rect(2, L.pad, L.neck, W - 2 * L.pad, 2);
+}
+
+function logPage(t) {
+  const cols = [['TIME', 0], ['NOTE', 50], ['BOW', 110], ['HOW', 142], ['STRING', 256], ['HAND', 318], ['LOAD', 368], ['CALM', 418], ['SHIFT', 470]];
+  const x = L.pad, y = L.mid + 12;
+  for (const [h, dx] of cols) printed(2, h, x + dx, y, 9);
+  rect(2, L.pad, y + 5, W - 2 * L.pad, 2);
+  const rows = 10, done = tape.notes.filter(n => n.t <= t + 1e-6).slice(-rows);
+  done.forEach((n, i) => {
+    const s = i === done.length - 1 ? 3 : 2, yy = y + 24 + (rows - done.length + i) * 19;
+    const cells = [n.t.toFixed(2), noteName(n), '', HOW[n.how] || n.how,
+                   ROMAN[n.string] + (n.open ? ' open' : ''), String(n.hand), String(n.load), String(n.calm), n.shift ? '+' + n.shift : ''];
+    cells.forEach((c, j) => text(s, c, x + cols[j][1], yy, 14, {weight: j === 1 || j === 3 ? 700 : 600}));
+    if (n.how !== 'Plucked') bowMark(s, n.dir, x + cols[2][1] + 4, yy - 10, 10);
+  });
+  if (!done.length) text(1, 'NO NOTES YET', x, y + 60, 14);
+}
+
+/* ═════════════════ LCD: the whole glass ═════════════════ */
+let msg = {text: '', until: 0};
+function say(str) { msg = {text: str, until: performance.now() + 1600}; }
+function drawLcd(t, playing) {
+  dim = !playing;
+  ctx.fillStyle = C.glass; ctx.fillRect(0, 0, W, H);
+  const idle = !state.performer ? 'PERF OFF' : (state.player || 'custom');
+  text(3, (performance.now() < msg.until ? msg.text : idle).toUpperCase(), L.pad, L.msg, 22, {track: 2});
+  // take: the one place the segments stay
+  const tx = W - L.pad - 2 * 14 * 1.35 + 4;
+  digits(String(state.take).padStart(2, '0'), tx, L.msg - 22, 14, 24);
+  printed(2, 'TAKE', tx - 8, L.msg, 9, 'right');
+  // printed annunciators: lit when true, barely there when not
+  let x = L.pad;
+  const items = [['CELLO', state.instrument === 'cello'], ['VIOLIN', state.instrument === 'violin'], null,
+    ['ARCO', state.patch === 'arco'], ['PIZZ', state.patch === 'pizz'], ['TREM', state.patch === 'trem'], null,
+    ['DOUBLE', state.doubles], null, ['GRIT', frameAt(t, 'grit') > .12 && frameAt(t, 'loudness') > .02], null, ['PERF', state.page === 'perf'], ['LOG', state.page === 'log'], null, ['▶ PLAY', playing]];
+  for (const it of items) { if (!it) { x += 14; continue; }
+    printed(it[1] ? 3 : 0, it[0], x, L.ann, 10); x += textW(it[0], 10, 1.2) + 10; }
+  rect(2, L.pad, L.rule, W - 2 * L.pad, 2);
+  if (state.page === 'perf') perfPage(t, playing); else logPage(t);
+}
+
+/* ═════════════════ the bench: tapes and time ═════════════════ */
+const audio = $('#audio');
+let playing = false, pausedAt = 0;
+const TAPE_NAMES = Object.keys(window.TAPES || {});
+for (const n of TAPE_NAMES) $('#tape').add(new Option(n, n));
+const LOCAL = (window.LOCAL_TAPES || []).filter(n => !TAPE_NAMES.includes(n));
+for (const n of LOCAL) $('#tape').add(new Option(n + ' (midi)', n));
+function loadTape(name, at = 0) {
+  if (!TAPES[name]) { // a local tape: load it the first time it's picked
+    const sc = document.createElement('script'); sc.src = `tapes/local/${name}.js`;
+    sc.onload = () => loadTape(name, at); document.head.append(sc); return;
+  }
+  tape = TAPES[name]; hand = 0;
+  audio.src = LOCAL.includes(name) ? `tapes/local/${name}.ogg` : `tapes/${name}.ogg`;
+  if (!tape.prepared) { // when each ringing string is stopped by the next note on it
+    tape.rings.sort((a, b) => a.t - b.t);
+    for (const r of tape.rings) { const nx = tape.notes.find(n => n.t > r.t + .01 && (n.string === r.string || string2Of(n) === r.string)); r.stop = nx ? nx.t : 1e9; }
+    // when the finger leaves a note that rings into a rest: the engine's lift
+    // (the open string takes over, or just a tap), or the next note
+    tape.notes.forEach((n, i) => {
+      const end = n.t + n.len, next = tape.notes[i + 1] ? tape.notes[i + 1].t : 1e9;
+      const ring = tape.rings.find(r => r.open && r.string === n.string && r.t > end - .01 && r.t < next);
+      const tap = (tape.taps || []).find(p => p.t > end && p.t < next - .1);
+      n.lift = Math.min(next, ring ? ring.t : 1e9, tap ? tap.t : 1e9);
+      if (n.open || n.how === 'Plucked') n.lift = Math.min(n.lift, end);
+    });
+    tape.prepared = true;
+  }
+  $('#scrub').max = tape.frames.pitch.length / tape.fps;
+  if (state.instrument !== tape.instrument) { state.instrument = tape.instrument; ui.instrument(); }
+  stop(); pausedAt = at; say(name.slice(0, 8));
+}
+const now = () => playing ? audio.currentTime : pausedAt;
+function play() { if (!tape) return; audio.currentTime = pausedAt; audio.play().catch(() => {}); playing = true; $('#play').textContent = '❚❚ Pause'; }
+function stop() { pausedAt = audio.currentTime || pausedAt; audio.pause(); playing = false; $('#play').textContent = '▶ Play'; }
+$('#play').onclick = () => playing ? stop() : play();
+audio.onended = () => stop();
+$('#tape').onchange = e => loadTape(e.target.value);
+$('#scrub').oninput = e => { pausedAt = +e.target.value; if (playing) audio.currentTime = pausedAt; };
+addEventListener('keydown', e => { if (e.code === 'Space' && !/INPUT|SELECT|BUTTON/.test(e.target.tagName)) { e.preventDefault(); playing ? stop() : play(); } });
+
+function tick() {
+  const t = now();
+  if (tape) { drawLcd(t, playing || LIVE); $('#scrub').value = t; $('#clock').textContent = t.toFixed(1) + ' s'; }
+  lastT = t;
+  requestAnimationFrame(tick);
+}
+
+/* ═════════════════ go ═════════════════ */
+buildTuner(); sizeLcd(); applyTune();
+// ?tape=showcase&t=9.2&page=log&live : open on a moment (live = drawn as if playing)
+const Q = new URLSearchParams(location.search);
+const first = TAPE_NAMES.includes(Q.get('tape')) || LOCAL.includes(Q.get('tape')) ? Q.get('tape') : TAPE_NAMES[0];
+if (first) { $('#tape').value = first; loadTape(first, +(Q.get('t') || 0)); msg.until = 0; }
+if (Q.has('page')) state.page = Q.get('page'), ui.page();
+const LIVE = Q.has('live');
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

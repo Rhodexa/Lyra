@@ -1,0 +1,8 @@
+[package]
+name = "octavia-core"
+description = "Octavia: an expressive string player and the instrument it plays. No dependencies, no plugin format."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
